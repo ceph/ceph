@@ -15,6 +15,8 @@
 #ifndef _SIMPLERADOSSTRIPER_H
 #define _SIMPLERADOSSTRIPER_H
 
+#include <condition_variable>
+#include <mutex>
 #include <queue>
 #include <string_view>
 #include <thread>
