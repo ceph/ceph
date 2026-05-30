@@ -982,20 +982,24 @@ void Cache::commit_replace_extent(
 
 }
 
-void Cache::invalidate_extent(
-    Transaction& t,
-    CachedExtent& extent)
+void Cache::invalidate_extent_readers(
+  Transaction &t,
+  CachedExtent &extent,
+  bool ool_written_only)
 {
-  if (!extent.may_conflict()) {
-    assert(extent.read_transactions.empty());
-    extent.set_invalid(t);
-    return;
-  }
-
-  LOG_PREFIX(Cache::invalidate_extent);
+  LOG_PREFIX(Cache::invalidate_extent_readers);
   bool do_conflict_log = true;
   std::vector<Transaction*> invalidated_trans;
   for (auto &&i: extent.read_transactions) {
+    // For no_conflict_publish txns: only invalidate transactions that have
+    // already written their OOL extents to disk. These cannot be safely
+    // merged in-memory, as their persisted state would override the rewritten
+    // result and cause lost updates.
+    bool should_invalidate = !ool_written_only ||
+                             i.t->ool_written;
+    if (likely(!should_invalidate)) {
+      continue;
+    }
     if (!i.t->conflicted) {
       if (do_conflict_log) {
         SUBDEBUGT(seastore_t, "conflict begin -- {}", t, extent);
@@ -1013,6 +1017,20 @@ void Cache::invalidate_extent(
     trans->retired_set.clear();
     trans->views.clear();
   }
+}
+
+void Cache::invalidate_extent(
+    Transaction& t,
+    CachedExtent& extent)
+{
+  if (!extent.may_conflict()) {
+    assert(extent.read_transactions.empty());
+    extent.set_invalid(t);
+    return;
+  }
+
+  invalidate_extent_readers(t, extent, false);
+
   extent.set_invalid(t);
 }
 
@@ -1392,6 +1410,7 @@ record_t Cache::prepare_record(
     if (should_use_no_conflict_publish(t, i->get_type())) {
       i->new_committer(t);
       i->committer->block_trans(t);
+      invalidate_extent_readers(t, *i->prior_instance, true);
     }
     assert(i->is_exist_mutation_pending() ||
 	   i->prior_instance);
@@ -1674,6 +1693,7 @@ record_t Cache::prepare_record(
       assert(i->committer);
       auto &committer = *i->committer;
       committer.block_trans(t);
+      invalidate_extent_readers(t, *i->prior_instance, true);
       i->get_prior_instance()->set_io_wait(
         CachedExtent::extent_state_t::CLEAN,
         should_use_no_conflict_publish(t, i->get_type()));
@@ -1710,6 +1730,7 @@ record_t Cache::prepare_record(
       i->get_prior_instance()->committer = i->committer;
       auto &committer = *i->committer;
       committer.block_trans(t);
+      invalidate_extent_readers(t, *i->prior_instance, true);
       i->get_prior_instance()->set_io_wait(
         CachedExtent::extent_state_t::CLEAN, true);
     }
@@ -2039,6 +2060,7 @@ void Cache::complete_commit(
       committer.commit_state();
       committer.sync_checksum();
       committer.commit_and_share_paddr();
+      invalidate_extent_readers(t, prior, true);
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
       }
@@ -2132,6 +2154,7 @@ void Cache::complete_commit(
       auto &prior = *i->prior_instance;
       prior.pending_for_transaction = TRANS_ID_NULL;
       ceph_assert(prior.is_valid());
+      invalidate_extent_readers(t, prior, true);
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
       }

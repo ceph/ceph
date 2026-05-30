@@ -612,6 +612,19 @@ TransactionManager::do_submit_transaction(
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
   ool_start = std::chrono::steady_clock::now();
+  if (!allocated_extents.empty()) {
+    // TODO: for now, this is only effective for rbm backends, which is
+    // enough. Because:
+    // 1. no_conflict_publish doesn't affect the logical extents for now.
+    // 2. in the case of segmented backends, backref/lba nodes are always
+    //    inline written, which means all of its backref/lba nodes are
+    //    written after the contents have already been merged.
+    //
+    // This should be made effective for all kinds of backends if any of
+    // the above condition doesn't hold anymore.
+    tref.ool_written = true;
+  }
+
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;

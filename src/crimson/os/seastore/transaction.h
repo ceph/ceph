@@ -549,6 +549,7 @@ public:
     conflicted = false;
     need_wait_visibility = false;
     force_rewrite_conflict = false;
+    ool_written = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
@@ -669,6 +670,7 @@ public:
 
   bool need_wait_visibility = false;
   bool force_rewrite_conflict = false;
+  bool ool_written = false;
 
   using update_copied_lba_key_func_t =
     std::function<void (Transaction&, laddr_t, paddr_t)>;
