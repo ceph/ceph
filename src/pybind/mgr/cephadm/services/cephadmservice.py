@@ -19,6 +19,7 @@ from ceph.deployment.service_spec import (
     InitContainerSpec,
     MONSpec,
     RGWSpec,
+    SMBSpec,
     ServiceSpec,
     CertificateSource,
     RequiresCertificatesEntry
@@ -357,6 +358,32 @@ class CephadmService(metaclass=ABCMeta):
             tls_creds = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host, label=label)
         return tls_creds
+
+    def _get_certificates_from_spec_ssl_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        feature: Optional[str] = None
+    ) -> TLSCredentials:
+        assert svc_spec
+        smbspec = cast(SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        ssl_certs = getattr(smbspec, "ssl_certificates", None)
+        if not ssl_certs:
+            logger.debug("No ssl_certificates defined in spec for service '%s'", svc_spec.service_name)
+            return EMPTY_TLS_CREDENTIALS
+
+        feature_key = feature if feature is not None else ""
+        ssl_params = smbspec.ssl_certificates.get(feature_key)
+
+        if not ssl_params:
+            logger.debug("No SSL parameters found for feature '%s' in service '%s'", feature_key, svc_spec.service_name)
+            return EMPTY_TLS_CREDENTIALS
+
+        return TLSCredentials(
+            cert=ssl_params.ssl_cert if ssl_params.ssl_cert is not None else "",
+            key=ssl_params.ssl_key if ssl_params.ssl_key is not None else "",
+            ca_cert=ssl_params.ssl_ca_cert if ssl_params.ssl_ca_cert is not None else "",
+        )
 
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
