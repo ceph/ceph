@@ -6,23 +6,28 @@ env:
 jobs:
   pr-triage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Assign labels based on modified files
-        # https://github.com/marketplace/actions/labeler?version=v4.0.2
-        uses: actions/labeler@5c7539237e04b714afd8ad9b4aed733815b9fab4
+        # https://github.com/marketplace/actions/labeler?version=v6.1.0
+        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213
         with:
-          sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
-        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.5.0
-        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c
+        # https://github.com/marketplace/actions/add-to-project?version=v2.0.0
+        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd
         with:
           project-url: https://github.com/orgs/ceph/projects/2
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           labeled: dashboard
-      - name: Assign milestone based on target brach name
-        # https://github.com/marketplace/actions/pull-request-milestone?version=v1.3.0
-        uses: iyu/actions-milestone@e93115c90ff7bcddee71086e9253f1b6a5f4b48a
+      - name: Assign milestone based on target branch name
+        # https://github.com/marketplace/actions/pull-request-milestone?version=v1.4.0
+        # Still node20; runs on Node 24 via FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 until upstream ships node24.
+        uses: iyu/actions-milestone@f55ad3e690fadc4ee0afd8f660a43ca71715379d
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
