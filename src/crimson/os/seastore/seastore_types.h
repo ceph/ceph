@@ -2756,34 +2756,6 @@ constexpr bool is_modify_transaction(transaction_type_t type) {
       is_background_transaction(type));
 }
 
-/**
- * should_use_no_conflict_publish()
- *
- * Returns true when this (transaction source, extent type) pair should take
- * the no-conflict publish path (i.e avoid invalidate-and-retry and use the
- * committer + visibility hand-off).
- *
- * Currently true for:
- *  - rewrite (background) transactions, for any non-root extent
- *
- *  To be expanded to:
- *  - user (txn_manager) transactions that mutate LBA nodes
- *  - Onode/Omap nodes
- */
-constexpr bool should_use_no_conflict_publish(transaction_type_t txn_type,
-                                              extent_types_t ext_type) {
-  // keep classic handling for ROOT
-  if (is_root_type(ext_type)) {
-    return false;
-  }
-
-  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
-  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
-
-  return is_rewrite_transaction(txn_type);
-}
-
-
 // Note: It is possible to statically introduce structs for OOL, which must be
 // more efficient, but that requires to specialize the RecordSubmitter as well.
 // Let's delay this optimization until necessary.
