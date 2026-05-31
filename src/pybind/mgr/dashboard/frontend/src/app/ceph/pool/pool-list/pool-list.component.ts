@@ -46,23 +46,27 @@ const BASE_URL = 'pool';
 })
 export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent)
-  table: TableComponent;
+  table!: TableComponent;
   @ViewChild('poolUsageTpl', { static: true })
-  poolUsageTpl: TemplateRef<any>;
+  poolUsageTpl!: TemplateRef<any>;
+
+  @ViewChild('poolNameTpl', { static: true })
+  poolNameTpl!: TemplateRef<any>;
 
   @ViewChild('poolConfigurationSourceTpl')
-  poolConfigurationSourceTpl: TemplateRef<any>;
+  poolConfigurationSourceTpl!: TemplateRef<any>;
 
-  pools: Pool[];
-  columns: CdTableColumn[];
+  pools: Pool[] = [];
+  columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
-  tableActions: CdTableAction[];
+  tableActions: CdTableAction[] = [];
   tableStatus = new TableStatusViewCache();
   cacheTiers: any[] = [];
   monAllowPoolDelete = false;
-  ecProfileList: ErasureCodeProfile[];
+  ecProfileList: ErasureCodeProfile[] = [];
+  viewUrl = '/pool/view';
 
   constructor(
     private poolService: PoolService,
@@ -132,7 +136,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         prop: 'pool_name',
         name: $localize`Name`,
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.poolNameTpl
       },
       {
         prop: 'data_protection',
@@ -212,7 +216,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
             return this.poolService.getList();
           })
         ),
-      undefined,
+      (resp: any) => resp,
       (pools) => {
         this.pools = this.transformPoolsData(pools);
         this.tableStatus = new TableStatusViewCache();
@@ -284,10 +288,10 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
       const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
-        stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
+          stats[stat] = pool.stats?.[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
-      pool['usage'] = stats.percent_used.latest;
+        pool['usage'] = stats.percent_used?.latest ?? 0;
 
       if (
         !pool.cdExecuting &&
@@ -297,7 +301,10 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].rates = pool.stats[stat].rates.map((point: any) => point[1]);
+        const statData = pool.stats?.[stat] || emptyStat;
+        statData.rates = statData.rates.map((point: any) => point[1]);
+        const poolStats = pool.stats || (pool.stats = {} as PoolStats);
+        poolStats[stat] = statData;
       });
       pool.cdIsBinary = true;
 

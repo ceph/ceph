@@ -12,6 +12,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CrushRuleFormModalComponent } from './crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
+import { PoolDetailsBreadcrumbResolver } from './pool-details/pool-details-breadcrumb.resolver';
+import { PoolDetailsSectionComponent } from './pool-details/pool-details-section.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
 import {
@@ -85,7 +87,8 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     PoolFormComponent,
     ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
-    PoolDetailsComponent
+    PoolDetailsComponent,
+    PoolDetailsSectionComponent
   ]
 })
 export class PoolModule {
@@ -113,6 +116,34 @@ export class PoolModule {
 
 const routes: Routes = [
   { path: '', component: PoolListComponent },
+  {
+    path: 'view/:name',
+    component: PoolDetailsComponent,
+    data: { breadcrumbs: PoolDetailsBreadcrumbResolver },
+    children: [
+      { path: '', redirectTo: 'details', pathMatch: 'full' },
+      {
+        path: 'details',
+        component: PoolDetailsSectionComponent,
+        data: { breadcrumbs: 'Details', section: 'details' }
+      },
+      {
+        path: 'performance-details',
+        component: PoolDetailsSectionComponent,
+        data: { breadcrumbs: 'Performance Details', section: 'performance-details' }
+      },
+      {
+        path: 'configuration',
+        component: PoolDetailsSectionComponent,
+        data: { breadcrumbs: 'Configuration', section: 'configuration' }
+      },
+      {
+        path: 'cache-tiers-details',
+        component: PoolDetailsSectionComponent,
+        data: { breadcrumbs: 'Cache Tiers Details', section: 'cache-tiers-details' }
+      }
+    ]
+  },
   {
     path: URLVerbs.CREATE,
     component: PoolFormComponent,

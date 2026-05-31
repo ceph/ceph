@@ -1,81 +1,70 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewEncapsulation } from '@angular/core';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 
-import _ from 'lodash';
+import { Subscription } from 'rxjs';
 
-import { PoolService } from '~/app/shared/api/pool.service';
-import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
-import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
-import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 
 @Component({
   selector: 'cd-pool-details',
   templateUrl: './pool-details.component.html',
   styleUrls: ['./pool-details.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
-export class PoolDetailsComponent implements OnChanges {
-  @Input()
-  cacheTiers: any[];
-  @Input()
-  permissions: Permissions;
-  @Input()
-  selection: any;
+export class PoolDetailsComponent implements OnInit, OnDestroy {
+  private sub = new Subscription();
+  public readonly basePath = '/pool/view';
+  poolName = '';
+  sidebarItems: SidebarItem[] = [];
 
-  cacheTierColumns: Array<CdTableColumn> = [];
-  // 'stats' won't be shown as the pure stat numbers won't tell the user much,
-  // if they are not converted or used in a chart (like the ones available in the pool listing)
-  omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
+  constructor(private route: ActivatedRoute, private authStorageService: AuthStorageService) {}
 
-  poolDetails: object;
-  selectedPoolConfiguration: RbdConfigurationEntry[];
-
-  constructor(private poolService: PoolService) {
-    this.cacheTierColumns = [
-      {
-        prop: 'pool_name',
-        name: $localize`Name`,
-        flexGrow: 3
-      },
-      {
-        prop: 'cache_mode',
-        name: $localize`Cache Mode`,
-        flexGrow: 2
-      },
-      {
-        prop: 'cache_min_evict_age',
-        name: $localize`Min Evict Age`,
-        flexGrow: 2
-      },
-      {
-        prop: 'cache_min_flush_age',
-        name: $localize`Min Flush Age`,
-        flexGrow: 2
-      },
-      {
-        prop: 'target_max_bytes',
-        name: $localize`Target Max Bytes`,
-        flexGrow: 2
-      },
-      {
-        prop: 'target_max_objects',
-        name: $localize`Target Max Objects`,
-        flexGrow: 2
-      }
-    ];
+  ngOnInit(): void {
+    const permissions = this.authStorageService.getPermissions();
+    this.sub.add(
+      this.route.paramMap.subscribe((pm: ParamMap) => {
+        this.poolName = pm.get('name') ?? '';
+        this.buildSidebarItems(permissions);
+      })
+    );
   }
 
-  ngOnChanges() {
-    if (this.selection) {
-      this.poolService
-        .getConfiguration(this.selection.pool_name)
-        .subscribe((poolConf: RbdConfigurationEntry[]) => {
-          CdHelperClass.updateChanged(this, { selectedPoolConfiguration: poolConf });
-        });
-      CdHelperClass.updateChanged(this, {
-        poolDetails: _.omit(this.selection, this.omittedPoolAttributes)
+  ngOnDestroy(): void {
+    this.sub.unsubscribe();
+  }
+
+  private buildSidebarItems(permissions: any): void {
+    const items: SidebarItem[] = [
+      {
+        label: $localize`Details`,
+        route: [this.basePath, this.poolName, 'details'],
+        routerLinkActiveOptions: { exact: true }
+      }
+    ];
+
+    if (permissions.grafana?.read) {
+      items.push({
+        label: $localize`Performance Details`,
+        route: [this.basePath, this.poolName, 'performance-details'],
+        routerLinkActiveOptions: { exact: true }
       });
     }
+
+    items.push(
+      {
+        label: $localize`Configuration`,
+        route: [this.basePath, this.poolName, 'configuration'],
+        routerLinkActiveOptions: { exact: true }
+      },
+      {
+        label: $localize`Cache Tiers Details`,
+        route: [this.basePath, this.poolName, 'cache-tiers-details'],
+        routerLinkActiveOptions: { exact: true }
+      }
+    );
+
+    this.sidebarItems = items;
   }
 }
