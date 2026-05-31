@@ -16,11 +16,9 @@ from typing import (
 )
 
 from mgr_module import HandleCommandResult
-from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
 from ceph.smb.constants import (
-    KEYBRIDGE, 
+    KEYBRIDGE,
     REMOTE_CONTROL,
-    FEATURES,
 )
 
 from ceph.deployment.service_spec import (
@@ -151,11 +149,12 @@ class SMBService(CephService):
         )
         return daemon_spec
 
-    def _feature_tls_filename(self, feature: str) -> Optional[str]:
+    @staticmethod
+    def _feature_tls_filename(feature: str) -> Optional[str]:
         return {
-                KEYBRIDGE: "keybridge",
-                REMOTE_CONTROL: "remote_control"
-            }.get(feature)
+            KEYBRIDGE: "keybridge",
+            REMOTE_CONTROL: "remote_control"
+        }.get(feature)
 
     def generate_config(
         self, daemon_spec: CephadmDaemonDeploySpec
@@ -166,7 +165,6 @@ class SMBService(CephService):
         smb_spec = cast(
             SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
         )
-        ssl_certificates = smb_spec.ssl_certificates or {}
         config_blobs: Dict[str, Any] = {}
 
         config_blobs['cluster_id'] = smb_spec.cluster_id
@@ -195,8 +193,7 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
-        if smb_spec.ssl_certificates and 'ssl' in smb_spec.ssl_certificates:
-            self.get_certificates(daemon_spec, ca_cert_required=True)
+        self.get_certificates(daemon_spec, ca_cert_required=True)
         for support_feature in smb_spec.features:
             feature = self._feature_tls_filename(support_feature)
             if feature is not None:
