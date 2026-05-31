@@ -17,6 +17,7 @@
 
 #include "include/neorados/RADOS.hpp"
 
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include "rgw_sal_store.h"
@@ -973,14 +974,41 @@ public:
 };
 
 class RadosRestoreSerializer : public StoreRestoreSerializer {
+  const DoutPrefixProvider* dpp = nullptr;   // captured in try_lock()
+  optional_yield y = null_yield;             // captured in try_lock() (no default ctor)
   librados::IoCtx& ioctx;
   ::rados::cls::lock::Lock lock;
 
+  /*
+   * Lock renewal state. This serializer's ctor gets no yield/executor, so
+   * ex/timer/cond are set up in try_lock() from y; timer and cond are optional
+   * because each needs an executor at construction.
+   */
+  boost::asio::any_io_executor ex;
+  using Timer = boost::asio::basic_waitable_timer<ceph::coarse_mono_clock>;
+  std::optional<Timer> timer;
+  boost::asio::cancellation_signal signal;
+  std::mutex mutex;
+  std::optional<ceph::async::async_cond<>> cond;
+  bool renew_started = false;
+  bool renew_canceled = false;
+  boost::asio::cancellation_signal* lock_lost_signal = nullptr;
+  void start_renewal(ceph::timespan dur);
+  void stop_renewal();
+  void signal_lock_lost();
+
 public:
-  RadosRestoreSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
+  RadosRestoreSerializer(RadosStore* store, const std::string& oid,
+                         const std::string& lock_name, const std::string& cookie);
+  ~RadosRestoreSerializer() override;
+
+  void handle_lock_renewal_failed();
 
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual void set_lock_lost_signal(boost::asio::cancellation_signal* signal) override {
+    lock_lost_signal = signal;
+  }
 };
 
 class RadosRestore : public StoreRestore {

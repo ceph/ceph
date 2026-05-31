@@ -302,6 +302,43 @@ updated with the downloaded data, and its ``HEAD`` object will be modified accor
 
 
 
+Restore Processor Tunables
+--------------------------
+
+Cloud restores are carried out asynchronously by a background processor that
+walks per-shard work queues. Its behavior is governed by the following
+configuration options:
+
+``rgw_restore_processor_period``
+   The amount of time between the start of consecutive runs of the restore
+   processor (default 15 minutes).
+
+``rgw_restore_lock_max_time``
+   How long a processor holds the per-shard lock before it must renew it
+   (default 90 seconds). The processor renews the lock in the background for
+   as long as it is draining a shard. Each processor run attempts every shard
+   once. If a shard still has backlog after this interval, the processor stops
+   that shard after the current batch is safely requeued and trimmed, then
+   unlocks it and moves on to the next shard.
+
+``rgw_restore_max_objs``
+   The number of shards (RADOS objects) used to store in-progress restore
+   entries (default 32). This bounds how many shards can be processed in
+   parallel.
+
+``rgw_restore_max_concurrent_io``
+   The number of objects a single shard restores concurrently (default 16).
+   The processor fetches several objects from the cloud endpoint at once to
+   drain a backlog faster; keep this modest to avoid overloading or being
+   rate-limited by the cloud endpoint.
+
+``rgw_restore_batch_size``
+   The number of restore entries the processor lists, restores, and trims as a
+   single batch while draining a shard (default 100). Larger batches trim less
+   often.
+
+
+
 Future Work
 -----------
 

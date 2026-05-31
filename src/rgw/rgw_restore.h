@@ -25,6 +25,9 @@
 #include <atomic>
 #include <tuple>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
 static constexpr std::string_view restore_oid_prefix = "restore";
@@ -84,6 +87,11 @@ class Restore : public DoutPrefixProvider {
     ceph::mutex lock = ceph::make_mutex("RestoreWorker");
     ceph::condition_variable cond;
 
+    // set (under lock) only while a cycle is running, so stop() can cancel it
+    boost::asio::io_context* cur_context = nullptr;
+    boost::asio::cancellation_signal* cur_signal = nullptr;
+    void cancel_current_cycle_locked();
+
   public:
 
     using lock_guard = std::lock_guard<std::mutex>;
@@ -95,6 +103,7 @@ class Restore : public DoutPrefixProvider {
       return std::string{"restore_thrd: "}; // + std::to_string(ix);
     }
     void *entry() override;
+    void set_lock_lost_signal(rgw::sal::RestoreSerializer& serializer);
     void stop();
 
     friend class Restore;

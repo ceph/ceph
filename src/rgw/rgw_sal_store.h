@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "rgw_sal.h"
 
 /**
@@ -459,13 +461,18 @@ public:
 class StoreRestoreSerializer : public RestoreSerializer {
 
 protected:
+  std::atomic<bool> locked;
   std::string oid;
 
 public:
-  StoreRestoreSerializer() {}
-  StoreRestoreSerializer(std::string _oid) : oid(_oid) {}
+  StoreRestoreSerializer() : locked(false) {}
+  StoreRestoreSerializer(std::string _oid) : locked(false), oid(_oid) {}
 
   virtual ~StoreRestoreSerializer() = default;
+  virtual void clear_locked() override {
+    locked = false;
+  }
+  virtual bool is_locked() const override { return locked; }
   virtual void print(std::ostream& out) const override { out << oid; }
 };
 

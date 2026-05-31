@@ -3230,6 +3230,13 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                 bucket->get_info(), get_obj(),
                                 tier_config, days, in_progress, size, dpp, y);
 
+  if (ret == -ECANCELED && yield_cancelled(y)) {
+    // cancellation leaves HEAD as-is; the restore worker will retry later
+    ldpp_dout(dpp, 10) << "Restore of object(" << get_key() << ") from the cloud endpoint("
+                       << endpoint << ") was canceled" << dendl;
+    return ret;
+  }
+
   if (ret < 0) { //failed to restore
     ldpp_dout(dpp, 0) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
 
@@ -4965,14 +4972,138 @@ RadosRestoreSerializer::RadosRestoreSerializer(RadosStore* store, const std::str
   lock.set_cookie(cookie);
 }
 
+RadosRestoreSerializer::~RadosRestoreSerializer()
+{
+  // stop the renewal coroutine if unlock() wasn't called
+  stop_renewal();
+}
+
+void RadosRestoreSerializer::signal_lock_lost()
+{
+  if (lock_lost_signal) {
+    auto* sig = lock_lost_signal;
+    boost::asio::post(ex,
+        [sig] { sig->emit(boost::asio::cancellation_type::terminal); });
+  }
+}
+
+void RadosRestoreSerializer::handle_lock_renewal_failed()
+{
+  clear_locked();
+  signal_lock_lost();
+}
+
+static void restore_renewal(const DoutPrefixProvider* dpp,
+                            RadosRestoreSerializer& serializer,
+                            librados::IoCtx& ioctx,
+                            const std::string& oid,
+                            rados::cls::lock::Lock lock,
+                            auto& timer,
+                            ceph::timespan dur,
+                            boost::asio::yield_context yield)
+{
+  const ceph::timespan renew_every = dur / 2;
+  lock.set_duration(dur);
+  lock.set_must_renew(true);
+
+  // run the renewal loop until canceled
+  while (yield.get_cancellation_state().cancelled() == boost::asio::cancellation_type::none) {
+    boost::system::error_code ec;
+    timer.expires_after(renew_every);
+    timer.async_wait(yield[ec]);
+    if (ec) {
+      break;
+    }
+
+    librados::ObjectWriteOperation op;
+    op.assert_exists();
+    lock.lock_exclusive(&op);
+    int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield);
+    if (ret < 0) {
+      if (ret == -ECANCELED &&
+          yield.get_cancellation_state().cancelled() != boost::asio::cancellation_type::none) {
+        break;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: restore lock renewal on " << oid
+          << " failed with " << ret << "; aborting shard processing." << dendl;
+      serializer.handle_lock_renewal_failed();
+      return;
+    }
+    ldpp_dout(dpp, 20) << "restore: renewed lock on " << oid << dendl;
+  }
+  ldpp_dout(dpp, 20) << "RestoreSerializer lock renewal canceled" << dendl;
+}
+
+void RadosRestoreSerializer::start_renewal(ceph::timespan dur)
+{
+  std::lock_guard guard{mutex};
+  renew_started = true;
+
+  // spawn the renewal coroutine; it notifies cond on completion
+  struct renewal_completion {
+    std::mutex& mutex;
+    ceph::async::async_cond<>& cond;
+    bool& done;
+
+    void operator()(std::exception_ptr) {
+      auto lock = std::unique_lock{mutex};
+      done = true;
+      cond.notify(lock);
+    }
+  };
+  auto completion = renewal_completion{mutex, *cond, renew_canceled};
+
+  using namespace boost::asio;
+  spawn(ex,
+      [this, dur] (yield_context yield) {
+        restore_renewal(this->dpp, *this, ioctx, oid, this->lock,
+                        *timer, dur, yield);
+      }, bind_cancellation_slot(signal.slot(),
+                                bind_executor(ex, std::move(completion))));
+}
+
+void RadosRestoreSerializer::stop_renewal()
+{
+  std::unique_lock guard{mutex};
+  if (!renew_started || // never started
+      renew_canceled) { // already done
+    return;
+  }
+
+  // signal cancellation
+  boost::asio::post(ex, [this] {
+      signal.emit(boost::asio::cancellation_type::terminal); });
+
+  // wait for notification of completion (renewal only runs under a real yield)
+  boost::system::error_code ec_ignored;
+  cond->async_wait(guard, y.get_yield_context()[ec_ignored]);
+}
+
 int RadosRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
+  this->dpp = dpp;
+  librados::ObjectWriteOperation op;
   lock.set_duration(dur);
-  return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
+  lock.lock_exclusive(&op);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);   // yields if y is real
+  if (ret == 0) {
+    locked = true;
+    if (y) {                           // guard BEFORE touching y.get_yield_context()
+      this->y = y;
+      ex = boost::asio::make_strand(y.get_yield_context().get_executor());
+      timer.emplace(ex);
+      cond.emplace(ex);
+      start_renewal(dur);
+    }
+  }
+  return ret;
 }
 
 int RadosRestoreSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
 {
+  // stop the renewal coroutine before releasing, so it can't race the unlock
+  stop_renewal();
+
   librados::ObjectWriteOperation op;
   op.assert_exists();
   lock.unlock(&op);
@@ -5057,9 +5188,13 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::deque<ceph::buffer::list>&& items) {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+    if (y) {
+      fifos[index]->push(dpp, items, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      fifos[index]->push(dpp, items, ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5074,9 +5209,13 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+    if (y) {
+      fifos[index]->push(dpp, std::move(bl), y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5125,10 +5264,13 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
+  if (!y) {
+    maybe_warn_about_blocking(dpp);
+  }
   try {
-    auto [lentries, lmark] = fifos[index]->list(dpp, marker,
-			  	 restore_entries, ceph::async::use_blocked);
+    auto [lentries, lmark] = y
+        ? fifos[index]->list(dpp, marker, restore_entries, y.get_yield_context())
+        : fifos[index]->list(dpp, marker, restore_entries, ceph::async::use_blocked);
     entries.clear();
 
     for (const auto& entry : lentries) {
@@ -5186,9 +5328,13 @@ int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    if (y) {
+      fifos[index]->trim(dpp, std::string(marker), false, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    }
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]
