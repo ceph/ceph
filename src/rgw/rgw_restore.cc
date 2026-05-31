@@ -22,7 +22,9 @@
 #include "common/split.h"
 #include <common/errno.h>
 #include "include/random.h"
-#include "cls/lock/cls_lock_client.h"
+#include "common/async/lease.h"
+#include "common/async/yield_context.h"
+#include "common/error_code.h"
 #include "rgw_perf_counters.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
@@ -42,6 +44,15 @@
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "common/ceph_time.h"
+
+#include <unordered_set>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include "common/async/spawn_throttle.h"
+#include "rgw_asio_thread.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_restore
@@ -217,39 +228,49 @@ static inline std::ostream& operator<<(std::ostream &os, RestoreEntry& ent) {
   return os;
 }
 
-void Restore::RestoreWorker::stop()
-{
-  std::lock_guard l{lock};
-  cond.notify_all();
-}
-
-bool Restore::going_down()
-{
-  return down_flag;
-}
-
 void Restore::start_processor()
 {
-  worker = std::make_unique<Restore::RestoreWorker>(this, cct, this);
-  worker->create("rgw_restore");
+  // single thread: process_locked's spawn_throttle children share batch state
+  // without a lock, relying on a single-threaded executor
+  proc_pool.start(1, [] { is_asio_thread = true; });
+  proc_started = true;
+  boost::asio::spawn(proc_pool.get_executor(),
+      [this] (boost::asio::yield_context yield) { process_cycles(yield); },
+      boost::asio::bind_cancellation_slot(proc_signal.slot(),
+      [this] (std::exception_ptr eptr) {
+        if (!eptr)
+          return;
+        try {
+          std::rethrow_exception(eptr);
+        } catch (const boost::system::system_error& e) {
+          if (e.code() != boost::asio::error::operation_aborted)
+            ldpp_dout(this, -1) << "ERROR: restore processor coroutine exited: "
+                                << e.what() << dendl;
+        } catch (const std::exception& e) {
+          ldpp_dout(this, -1) << "ERROR: restore processor coroutine exited: "
+                              << e.what() << dendl;
+        }
+      }));
 }
 
 void Restore::stop_processor()
 {
-  down_flag = true;
-  if (worker) {
-    worker->stop();
-    worker->join();
+  if (proc_started) {
+    // cancellation_signal isn't thread-safe; emit it on a pool thread
+    boost::asio::post(proc_pool.get_executor(),
+        [this] { proc_signal.emit(boost::asio::cancellation_type::terminal); });
+    proc_pool.finish();   // unwinds the coroutine, then joins the pool thread
+    proc_started = false;
   }
-  worker.reset(nullptr);
 }
 
 void Restore::wake_worker()
 {
-  if (worker) {
-    std::lock_guard lock(worker->lock);
-    worker->cond.notify_one();
-  }
+  if (!proc_started)
+    return;
+  // the timer must be cancelled on its own io_context thread
+  boost::asio::post(proc_pool.get_executor(),
+      [this] { proc_timer.cancel(); });
 }
 
 unsigned Restore::get_subsys() const
@@ -270,58 +291,47 @@ int Restore::choose_oid(const RestoreEntry& e) {
   return static_cast<int>(index);
 }
 
-void *Restore::RestoreWorker::entry() {
-  do {
-    ceph_timespec start = ceph::real_clock::to_ceph_timespec(real_clock::now());
-    int r = 0;
-    r = restore->process(this, null_yield);
-    if (r < 0) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ": ERROR: restore process() returned error r=" << r << dendl;	    
-    }
-    if (restore->going_down())
-      break;
-    ceph_timespec end = ceph::real_clock::to_ceph_timespec(real_clock::now());
-    auto d = end - start;
-    end = d;
+void Restore::process_cycles(boost::asio::yield_context yield)
+{
+  using Clock = ceph::coarse_mono_clock;
+  yield.throw_if_cancelled(true);
+  // spawn() reports completion by suspending one last time, so a pending
+  // cancellation would make throw_if_cancelled() throw past the coroutine
+  // frame and terminate the process. disarm it before the coroutine exits
+  auto disarm = make_scope_guard([&yield] { yield.throw_if_cancelled(false); });
+
+  while (!yield_cancelled(yield)) {
+    const auto start = Clock::now();
+
+    process(yield);   // errors are logged at the point of failure
+
     int secs = cct->_conf->rgw_restore_processor_period;
+    if (secs <= 0)
+      secs = secs_in_a_day;                         // avoid a busy-loop on misconfiguration
 
-    if (secs < d)
-      continue; // next round
-
-    std::unique_lock locker{lock};
-    cond.wait_for(locker, std::chrono::seconds(secs));
-  } while (!restore->going_down());
-
-  return NULL;
-
+    // start-to-start period: a deadline already in the past fires immediately
+    const auto next = start + std::chrono::seconds(secs);
+    proc_timer.expires_at(next);
+    boost::system::error_code ec;
+    proc_timer.async_wait(yield[ec]);   // cancellation -> ec, loop exits via yield_cancelled
+  }
 }
 
-int Restore::process(RestoreWorker* worker, optional_yield y)
+int Restore::process(boost::asio::yield_context yield)
 {
   int max_secs = cct->_conf->rgw_restore_lock_max_time;
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, y);
+    int ret = process(index, max_secs, yield);
+    if (ret == -EBUSY)
+      continue;                        // another RGW holds this shard; try the next one
     if (ret < 0)
-      return ret;
+      return ret;                      // -ECANCELED (cancellation) or a real error: stop the cycle
   }
   return 0;
 }
-
-// unique_lock expects an unlock() taking no arguments, but
-// RadosRestoreSerializer::unlock() requires two. create an adapter that binds these
-// additional args
-struct RestoreLockAdapter {
-  rgw::sal::RestoreSerializer& serializer;
-  const DoutPrefixProvider* dpp = nullptr;
-  optional_yield y;
-
-  void unlock() {
-    serializer.unlock(dpp, y);
-  }
-};
 
 /* 
  * Given an index, fetch a list of restore entries to process. After each
@@ -330,117 +340,202 @@ struct RestoreLockAdapter {
  * While processing the entries, if any of their restore operation is still in
  * progress, such entries are added back to the list.
  */ 
-int Restore::process(int index, int max_secs, optional_yield y)
+int Restore::process(int index, int max_secs, boost::asio::yield_context yield)
 {
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": process entered index="	
-		      << index << ", max_secs=" << max_secs << dendl;
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__
+                      << ": process entered index=" << index << dendl;
 
-  /* list used to gather still IN_PROGRESS */
-  std::vector<RestoreEntry> r_entries;
-
-  std::unique_ptr<rgw::sal::RestoreSerializer> serializer =
-  			sal_restore->get_serializer(std::string(restore_index_lock_name),
-				       	std::string(obj_names[index]),
-					worker->thr_name());
-  utime_t end = ceph_clock_now();
-
-  /* max_secs should be greater than zero. We don't want a zero max_secs
-   * to be translated as no timeout, since we'd then need to break the
-   * lock and that would require a manual intervention. In this case
-   * we can just wait it out. */
-
-  if (max_secs <= 0)
+  if (max_secs <= 0) {
     return -EAGAIN;
-
-  end += max_secs;
-  const ceph::timespan time = std::chrono::seconds(max_secs);
-  int ret = serializer->try_lock(this, time, y);
-  if (ret == -EBUSY || ret == -EEXIST) {
-    /* already locked by another lc processor */
-    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": failed to acquire lock on "	 
-		       << obj_names[index] << dendl;
-    return -EBUSY;
   }
-  if (ret < 0)
-    return 0;
 
-  auto lock_adapter = RestoreLockAdapter{*serializer, this, y};
-  std::unique_lock<RestoreLockAdapter> lock(lock_adapter, std::adopt_lock);
+  const ceph::timespan lock_dur = std::chrono::seconds(max_secs);
+
+  /*
+   * Renewal shares this single worker io_context: a cloud restore's blocking
+   * put-drain (null_yield in restore_obj_from_cloud) can starve it, so a RADOS
+   * write stall past the lease TTL may lapse the shard lock mid-restore.
+   */
+  try {
+    auto lock = sal_restore->get_lock_client(
+        yield.get_executor(),
+        std::string(restore_index_lock_name),
+        std::string(obj_names[index]),
+        std::string(restore_lock_cookie));
+    return ceph::async::with_lease(*lock, lock_dur, yield,
+        [&] (boost::asio::yield_context ly) {
+          return process_locked(index, max_secs, ly);
+        });
+  } catch (const ceph::async::lease_aborted& e) {
+    // renewal failed, or the shard was cancelled after the body started
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__
+                       << ": lock lease aborted on " << obj_names[index]
+                       << ": " << e.code().message() << dendl;
+    return ceph::from_error_code(e.code());
+  } catch (const boost::system::system_error& e) {
+    // reported directly (not wrapped in lease_aborted) => lock acquisition
+    // failed and the body never ran
+    const int ret = ceph::from_error_code(e.code());
+    if (ret == -ECANCELED) {
+      throw;                             // propagate cancellation
+    }
+    if (ret == -EBUSY || ret == -EEXIST) {
+      ldpp_dout(this, 0) << __PRETTY_FUNCTION__
+                         << ": failed to acquire lock on "
+                         << obj_names[index] << dendl;
+      return -EBUSY;
+    }
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__
+                       << ": lock-acquire error on " << obj_names[index]
+                       << " (ret=" << ret << "); skipping shard" << dendl;
+    return 0;
+  } catch (const std::exception& e) {
+    // bad_alloc etc. would otherwise escape the worker thread and terminate the
+    // daemon; stop the cycle cleanly instead
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": unexpected exception on shard "
+                       << obj_names[index] << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+// per-shard FIFO body, run under with_lease()
+int Restore::process_locked(int index, int max_secs, boost::asio::yield_context yield)
+{
+  yield.throw_if_cancelled(true);
+  // spawn() reports completion by suspending one last time, so a pending
+  // cancellation would make throw_if_cancelled() throw past the coroutine
+  // frame and terminate the process. disarm it before the coroutine exits
+  auto disarm = make_scope_guard([&yield] { yield.throw_if_cancelled(false); });
+  int ret = 0;
+
+  utime_t end = ceph_clock_now();
+  end += max_secs;
+
+  // clamp signed first: a negative value would wrap to a huge size_t (config min is 1)
+  const size_t io_limit = static_cast<size_t>(
+      std::max<int64_t>(1, cct->_conf->rgw_restore_max_concurrent_io));
+  const int max_entries = std::max<int>(1,
+      static_cast<int>(cct->_conf->rgw_restore_batch_size));
+
   std::string marker;
   std::string next_marker;
   bool truncated = false;
 
+  /*
+   * Keys re-queued this cycle; re-encountering one means we wrapped -> stop.
+   * Full identity needed because the shard hash ignores tenant/namespace.
+   */
+  std::unordered_set<std::string> requeued;
+  auto entry_key = [](const RestoreEntry& e) {
+    const auto& b = e.bucket; const auto& k = e.obj_key;
+    return b.tenant + '\0' + b.name + '\0' + b.bucket_id + '\0'
+         + k.ns + '\0' + k.name + '\0' + k.instance;
+  };
+
   do {
-    int max = 100;
     std::vector<RestoreEntry> entries;
 
-    ret = sal_restore->list(this, y, index, marker, &next_marker, max, entries, &truncated);
+    ret = sal_restore->list(this, yield, index, marker, &next_marker, max_entries, entries, &truncated);
     ldpp_dout(this, 20) << __PRETTY_FUNCTION__ <<
       ": list on shard:" << obj_names[index] << " returned:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", marker='" << marker << "'" <<
-      ", next_marker='" << next_marker << "'" << dendl;
+      ", marker='" << marker << "'" << ", next_marker='" << next_marker << "'" << dendl;
+    if (ret < 0) {
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to list entries on "
+                          << obj_names[index] << " (ret=" << ret << ")" << dendl;
+      return ret;
+    }
+    if (entries.size() == 0)
+      break;                       // caught up
 
-    if (ret < 0)
-      goto done;
+    std::vector<RestoreEntry> batch_inprog;   // shared, no lock (single-threaded io_context)
+    int batch_err = 0;                        // first hard (non-ENOENT) error in the batch
+    bool wrapped = false;
 
-    if (entries.size() == 0) {
-      lock.unlock();
-      return 0;
+    {
+      ceph::async::spawn_throttle workpool{yield, io_limit};
+      std::unordered_set<std::string> seen_in_batch;
+      try {
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+          const std::string k = entry_key(*iter);
+          if (requeued.count(k)) { wrapped = true; break; }
+          // coalesce dups: the FIFO can hold an object twice; running both would race it
+          if (!seen_in_batch.insert(k).second)
+            continue;
+
+          workpool.spawn(
+            [this, index, &batch_inprog, &batch_err, e = *iter]
+            (boost::asio::yield_context ey) mutable {
+              ey.throw_if_cancelled(true);
+              // spawn() reports completion by suspending one last time, so a
+              // pending cancellation would make throw_if_cancelled() throw past
+              // the coroutine frame and terminate the process. disarm it before
+              // the coroutine exits
+              auto disarm = make_scope_guard(
+                  [&ey] { ey.throw_if_cancelled(false); });
+              int r = process_restore_entry(e, ey);
+              if (!r && e.status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+                batch_inprog.push_back(e);
+                ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": re-queueing entry: '"
+                                    << e << "' on shard:" << obj_names[index] << dendl;
+              } else if (r < 0 && r != -ENOENT && !batch_err) {
+                batch_err = r;     // tolerated -ENOENT (missing bucket/obj) is ignored
+              }
+            });
+        }
+        workpool.wait();           // join every child
+      } catch (...) {
+        // a cancelled child can still resume through the -ECANCELED return
+        // path and touch batch state; join every child before this frame
+        // unwinds
+        yield.throw_if_cancelled(false);
+        workpool.cancel();
+        try {
+          workpool.wait();
+        } catch (...) {}           // stragglers' aborts; the original error propagates
+        yield.throw_if_cancelled(true);
+        throw;
+      }
+    }
+
+    if (batch_err < 0)
+      return batch_err;            // hard error: do NOT trim
+    if (wrapped)
+      return ret;                  // wrapped batch: leave untrimmed for next cycle
+
+    /*
+     * Add-before-trim: re-queue in-progress entries before trimming, so a failure leaves
+     * the originals in the FIFO (no loss; at worst a benign dup). Re-queued markers sort
+     * beyond next_marker, so the inclusive trim won't remove them. The FIFO add/trim carry
+     * no cls lock; cross-RGW shard exclusivity rests on the advisory lease alone.
+     */
+    if (!batch_inprog.empty()) {
+      ret = sal_restore->add_entries(this, yield, index, batch_inprog);
+      if (ret < 0) {
+        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to re-queue "
+                            << batch_inprog.size() << " in-progress entries on "
+                            << obj_names[index] << dendl;
+        return ret;                // originals not trimmed -> no loss; surface error
+      }
+      for (auto& e : batch_inprog)
+        requeued.insert(entry_key(e));
     }
 
     marker = next_marker;
-    std::vector<RestoreEntry>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      RestoreEntry entry = *iter;
-
-      ret = process_restore_entry(entry, y);
-
-      if (!ret && entry.status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-      	 r_entries.push_back(entry);
-         ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": re-pushing entry: '" << entry
-		 	 << "' on shard:"
-  	  	         << obj_names[index] << dendl;	 
-      }
-
-      // Skip the entry of object/bucket which no longer exists
-      if (ret < 0 && (ret != -ENOENT))
-        goto done;
-
-      ///process all entries, trim and re-add
-      utime_t now = ceph_clock_now();
-      if (now >= end) {
-        goto done;
-      }
-
-      if (going_down()) {
- 	// leave early, even if tag isn't removed, it's ok since it
-	// will be picked up next time around
-	goto done;
-      }
-    }
-  } while (truncated);
-
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
-		 	 << "' on shard:"
-  	  	         << obj_names[index] << dendl;    
-  ret = sal_restore->trim_entries(this, y, index, marker);
-  if (ret < 0) {
-    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
-  }
-
-  if (!r_entries.empty()) {
-    ret = sal_restore->add_entries(this, y, index, r_entries);
+    ret = sal_restore->trim_entries(this, yield, index, marker);
     if (ret < 0) {
-      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
-  	  	           << obj_names[index] << dendl;
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "
+                          << obj_names[index] << dendl;
+      return ret;
     }
-  }
+    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimmed till marker: '" << marker
+                        << "' on shard:" << obj_names[index] << dendl;
 
-  r_entries.clear();
-
-done:
-  lock.unlock();
+    // deadline checked only at the batch boundary, so a started batch always
+    // makes progress (worst-case overshoot: one batch of max_entries)
+    if (ceph_clock_now() >= end)
+      break;
+  } while (truncated);
 
   return ret;
 }
@@ -458,6 +553,21 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   // mark in_progress as false if the entry is being processed first time
   bool in_progress = ((entry.status == rgw::sal::RGWRestoreStatus::None) ? false : true);
 
+  // finalize a fully-attempted entry: record failure, then wake any GET waiters.
+  // a cancellation exception unwinds past this, leaving the entry queued, so it
+  // runs only on a real completion, never on shutdown.
+  auto finish = [&] (int r) -> int {
+    if (r < 0) {
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry
+                          << "' failed" << r << dendl;
+      entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
+    }
+    if (waiter_registry && !in_progress) {
+      waiter_registry->notify_completion(entry.bucket, entry.obj_key, r >= 0, r);
+    }
+    return r;
+  };
+
   // Ensure its the same source zone processing temp entries as we do not
   // replicate temp restored copies
   if (days) { // temp copy
@@ -470,7 +580,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
 
   // fill in the details from entry
   // bucket, obj, days, state=in_progress
-  ret = driver->load_bucket(this, entry.bucket, &bucket, null_yield);
+  ret = driver->load_bucket(this, entry.bucket, &bucket, y);
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_bucket for "
 	   		<< bucket->get_name()	  
@@ -479,7 +589,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   }
   obj = bucket->get_object(entry.obj_key);
 
-  ret = obj->load_obj_state(this, null_yield, true);
+  ret = obj->load_obj_state(this, y, true);
 
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_object for "
@@ -519,7 +629,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
 
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to fetch tier placement handle, target_placement = " << target_placement << ", for zonegroup = " << driver->get_zone()->get_zonegroup().get_name() << ", ret = " << ret << dendl;
-    goto done;	  
+    return finish(ret);
   } else {
     ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": getting tier placement handle"
 	   		 << " cloud tier for " <<	  
@@ -530,20 +640,24 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: not s3 tier type - "
 	   		<< tier->get_tier_type() << 	  
                       " for storage class " << target_placement.storage_class << dendl;
-    goto done;
+    return finish(ret);
   }
 
   uint64_t size;
   // now go ahead with restoring object
   ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress, size, 
 		  		      this, y);
+  if (ret == -ECANCELED && yield_cancelled(y)) {
+    // cancelled: HEAD left as-is, entry stays queued for retry
+    return ret;
+  }
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of object(" << obj->get_key() << ") failed" << ret << dendl;	  
     auto reset_ret = set_cloud_restore_status(this, obj.get(), y, rgw::sal::RGWRestoreStatus::RestoreFailed);
     if (reset_ret < 0) {
       ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status ad RestoreFailed failed for object(" << obj->get_key() << ") " << reset_ret << dendl;	    
     }
-    goto done;
+    return finish(ret);
   }
 
   if (in_progress) {
@@ -565,24 +679,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
                       {rgw::notify::ObjectRestoreCompleted}, y);
   }
 
-done:
-  if (ret < 0) {
-    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry << "' failed" << ret << dendl;	  
-    entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
-  }
-
-  // Notify any waiting GET requests
-  if (waiter_registry && !in_progress) {
-    bool success = (ret >= 0);
-    waiter_registry->notify_completion(
-      entry.bucket,
-      entry.obj_key,
-      success,
-      ret
-    );
-  }
-
-  return ret;
+  return finish(ret);
 }
 
 time_t Restore::thread_stop_at()

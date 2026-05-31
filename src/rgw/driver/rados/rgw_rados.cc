@@ -5678,7 +5678,13 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   bufferlist t, t_tier;
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
-  auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
+  /*
+   * The cloud fetch delivers data on the libcurl reqs_thread, so put-object
+   * writes run there, not on the restore coroutine. null_yield gives a
+   * thread-safe BlockingAioThrottle; a yielding throttle would abort when
+   * driven from the curl thread.
+   */
+  auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, null_yield);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
 
@@ -5691,7 +5697,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 
   uint64_t olh_epoch = 0; // read it from attrs fetched from cloud below
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
+                                  owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, null_yield, no_trace);
  
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;

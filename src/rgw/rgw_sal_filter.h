@@ -1066,20 +1066,6 @@ public:
 						       const std::string& cookie) override;
 };
 
-class FilterRestoreSerializer : public RestoreSerializer {
-
-protected:
-  std::unique_ptr<RestoreSerializer> next;
-
-public:
-  FilterRestoreSerializer(std::unique_ptr<RestoreSerializer> _next) : next(std::move(_next)) {}
-  virtual ~FilterRestoreSerializer() = default;
-  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override
- 	{ return next->unlock(dpp, y); }
-  virtual void print(std::ostream& out) const override { return next->print(out); }
-};
-
 class FilterRestore : public Restore {
 
 protected:
@@ -1104,8 +1090,9 @@ public:
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) override;
 
-  /** Get a serializer for lifecycle */
-  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+  /** Get a lock client for restore shard processing */
+  virtual std::unique_ptr<ceph::async::LockClient> get_lock_client(
+                                boost::asio::any_io_executor ex,
 		  		const std::string& lock_name,
 				const std::string& oid,
 				const std::string& cookie) override;

@@ -19,6 +19,7 @@
 #include <boost/range/end.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/cancellation_type.hpp>
 
 #include "acconfig.h"
 
@@ -44,3 +45,14 @@ class optional_yield {
 
 // type tag object to construct an empty optional_yield
 static constexpr optional_yield::empty_t null_yield{};
+
+/// true if the optional_yield carries a yield_context whose cancellation was
+/// requested; false for an empty (null) yield
+inline bool yield_cancelled(optional_yield y)
+{
+  if (!y) {
+    return false;
+  }
+  return y.get_yield_context().cancelled() !=
+         boost::asio::cancellation_type::none;
+}

@@ -614,6 +614,35 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_restore_max_concurrent_io
+  type: int
+  level: advanced
+  desc: Max concurrent cloud-restore operations per shard
+  long_desc: The maximum number of restore operations (cloud object fetches) the restore
+    processor runs concurrently while draining a single shard, using a coroutine work
+    pool. Concurrent fetches overlap cloud-fetch latency and aggregate per-connection
+    download bandwidth, so higher values drain a backlog faster. The gains taper off once
+    local RADOS write throughput or the cloud endpoint's aggregate rate limit becomes the
+    bottleneck, and higher values put more load on the cloud-storage endpoint.
+  fmt_desc: The number of cloud-restore operations processed concurrently per restore shard.
+  default: 16
+  min: 1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_restore_batch_size
+  type: int
+  level: advanced
+  desc: Max restore entries processed per batch while draining a shard
+  long_desc: The number of restore entries the restore processor lists, restores, and
+    trims as a single batch per shard. Larger batches trim (and update FIFO metadata)
+    less often.
+  fmt_desc: The number of restore entries processed as one batch per restore shard.
+  default: 100
+  min: 1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced
