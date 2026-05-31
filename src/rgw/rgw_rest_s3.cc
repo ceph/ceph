@@ -4961,23 +4961,9 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key
       if (delete_marker) {
         ops_log_entry.marker_version_id = marker_version_id;
       }
-      if (!quiet) {
-        s->formatter->open_object_section("Deleted");
-        s->formatter->dump_string("Key", key.name);
-        if (!key.instance.empty()) {
-            s->formatter->dump_string("VersionId", key.instance);
-        }
-        if (delete_marker) {
-            s->formatter->dump_bool("DeleteMarker", true);
-            s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
-        }
-        s->formatter->close_section();
-      }
     } else if (ret < 0) {
       struct rgw_http_error r;
       int err_no;
-
-      s->formatter->open_object_section("Error");
 
       err_no = -ret;
       rgw_get_errno_s3(&r, err_no);
@@ -4985,15 +4971,35 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key
       ops_log_entry.error = true;
       ops_log_entry.http_status = r.http_ret;
       ops_log_entry.error_message = r.s3_code;
-
-      s->formatter->dump_string("Key", key.name);
-      s->formatter->dump_string("VersionId", key.instance);
-      s->formatter->dump_string("Code", r.s3_code);
-      s->formatter->dump_string("Message", r.s3_code);
-      s->formatter->close_section();
     }
 
-    ops_log_entries.push_back(std::move(ops_log_entry));
+    {
+      std::lock_guard<std::mutex> lck(mtx_partial_response);
+
+      if (ret == 0) {
+        if (!quiet) {
+          s->formatter->open_object_section("Deleted");
+          s->formatter->dump_string("Key", key.name);
+          if (!key.instance.empty()) {
+              s->formatter->dump_string("VersionId", key.instance);
+          }
+          if (delete_marker) {
+              s->formatter->dump_bool("DeleteMarker", true);
+              s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
+          }
+          s->formatter->close_section();
+        }
+      } else if (ret < 0) {
+        s->formatter->open_object_section("Error");
+        s->formatter->dump_string("Key", key.name);
+        s->formatter->dump_string("VersionId", key.instance);
+        s->formatter->dump_string("Code", ops_log_entry.error_message);
+        s->formatter->dump_string("Message", ops_log_entry.error_message);
+        s->formatter->close_section();
+      }
+
+      ops_log_entries.push_back(std::move(ops_log_entry));
+    }
   }
 }
 
