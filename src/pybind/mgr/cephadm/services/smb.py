@@ -16,11 +16,8 @@ from typing import (
 )
 
 from mgr_module import HandleCommandResult
-from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
 from ceph.smb.constants import (
-    KEYBRIDGE, 
-    REMOTE_CONTROL,
-    FEATURES,
+    SMB_FEATURE_SUPPORTS_SSL,
 )
 
 from ceph.deployment.service_spec import (
@@ -152,21 +149,15 @@ class SMBService(CephService):
         )
         return daemon_spec
 
-    def _feature_tls_filename(self, feature: str) -> Optional[str]:
-        return {
-                KEYBRIDGE: "keybridge",
-                REMOTE_CONTROL: "remote_control"
-            }.get(feature)
-
     # Flat SSL fields on SMBSpec per feature, used as a fallback when
     # ssl_certificates is not set (backward compatibility).
     _FEATURE_FLAT_ATTRS: Dict[str, Tuple[str, str, str]] = {
-        REMOTE_CONTROL: (
+        "remote_control": (
             'remote_control_ssl_cert',
             'remote_control_ssl_key',
             'remote_control_ca_cert',
         ),
-        KEYBRIDGE: (
+        "keybridge": (
             'keybridge_kmip_ssl_cert',
             'keybridge_kmip_ssl_key',
             'keybridge_kmip_ca_cert',
@@ -177,7 +168,6 @@ class SMBService(CephService):
         self,
         daemon_spec: CephadmDaemonDeploySpec,
         smb_spec: SMBSpec,
-        support_feature: str,
         feature: str,
     ) -> TLSCredentials:
         feature_creds = self.get_certificates(
@@ -185,7 +175,7 @@ class SMBService(CephService):
         )
         if feature_creds:
             return feature_creds
-        flat_attrs = self._FEATURE_FLAT_ATTRS.get(support_feature)
+        flat_attrs = self._FEATURE_FLAT_ATTRS.get(feature)
         if flat_attrs is None:
             return EMPTY_TLS_CREDENTIALS
         cert_attr, key_attr, ca_attr = flat_attrs
@@ -225,7 +215,6 @@ class SMBService(CephService):
         smb_spec = cast(
             SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
         )
-        ssl_certificates = smb_spec.ssl_certificates or {}
         config_blobs: Dict[str, Any] = {}
 
         config_blobs['cluster_id'] = smb_spec.cluster_id
@@ -254,11 +243,10 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
-        for support_feature in smb_spec.features:
-            feature = self._feature_tls_filename(support_feature)
-            if feature is not None:
+        for feature in smb_spec.ssl_certificates.keys():
+            if feature is not None and feature in SMB_FEATURE_SUPPORTS_SSL:
                 feature_creds = self._get_feature_certs(
-                    daemon_spec, smb_spec, support_feature, feature
+                    daemon_spec, smb_spec, feature
                 )
                 if feature_creds:
                     files = config_blobs.setdefault('files', {})
