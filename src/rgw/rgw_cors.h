@@ -91,6 +91,11 @@ public:
   void dump_origins();
   void dump(Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len);
+  bool matches_method(const char *req_meth);
+  bool matches_preflight_headers(const char *req_hdrs);
+  bool matches(const char *origin,
+               const char *req_meth,
+               const char *req_hdrs);
 };
 WRITE_CLASS_ENCODER(RGWCORSRule)
 
@@ -121,6 +126,9 @@ class RGWCORSConfiguration
   }
   void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
+  RGWCORSRule * match_rule(const char *origin,
+                           const char *req_meth,
+                           const char *req_hdrs);
   void erase_host_name_rule(std::string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r) {
