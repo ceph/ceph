@@ -140,6 +140,13 @@ else:
             status = getattr(response, "status", None)
             error_message = getattr(response, "error_message", None)
 
+            # Normalize the response so callers do not see a non-zero status in
+            # a successful HTTP response.
+            if status == errno.EREMOTE:
+                response.status = 0
+                if hasattr(response, "error_message"):
+                    response.error_message = ""
+                return response
             if status not in (None, 0):
                 raise DashboardException(
                     msg=error_message or "NVMeoF operation failed",
