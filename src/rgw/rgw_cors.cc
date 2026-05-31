@@ -50,6 +50,7 @@ void RGWCORSRule::dump(Formatter *f) const
   encode_json("AllowedOrigin", allowed_origins, f);
   encode_json("AllowedHeader", allowed_hdrs, f);
   encode_json("ExposeHeader", exposable_hdrs, f);
+  f->close_section();//CORSRule
 }
 
 void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
@@ -79,6 +80,59 @@ list<RGWCORSRule> RGWCORSRule::generate_test_instances()
   o.back().allowed_hdrs.insert("accept-language");
   o.back().exposable_hdrs.push_back("x-rgw-something");
   return o;
+}
+
+int RGWCORSRule::create_rule(const char *allow_origins, const char *allow_headers,
+                  const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age)
+{
+  std::set<std::string> o, h;
+  std::list<std::string> e;
+  unsigned long a = CORS_MAX_AGE_INVALID;
+  const uint8_t flags = ("*"s == allowed_methods)? RGW_CORS_ALL:get_multi_cors_method_flags(allowed_methods);
+
+  int nr_invalid_names = 0;
+  auto add_host = [&nr_invalid_names, &o] (auto host) {
+    if (validate_name_string(host) == 0) {
+      o.emplace(std::string{host});
+    } else {
+      nr_invalid_names++;
+    }
+  };
+  for_each_substr(allow_origins, ";,= \t", add_host);
+  if (o.empty() || nr_invalid_names > 0) {
+    return -EINVAL;
+  }
+
+  if (allow_headers) {
+    int nr_invalid_headers = 0;
+    auto add_header = [&nr_invalid_headers, &h] (auto allow_header) {
+      if (validate_name_string(allow_header) == 0) {
+        h.emplace(std::string{allow_header});
+      } else {
+        nr_invalid_headers++;
+      }
+    };
+    for_each_substr(allow_headers, ";,= \t", add_header);
+    if (h.empty() || nr_invalid_headers > 0) {
+      return -EINVAL;
+    }
+  }
+
+  if (expose_headers) {
+    for_each_substr(expose_headers, ";,= \t",
+        [&e] (auto expose_header) {
+          e.emplace_back(std::string(expose_header));
+        });
+  }
+  if (max_age) {
+    char *end = NULL;
+    a = strtoul(max_age, &end, 10);
+    if (a == ULONG_MAX)
+      a = CORS_MAX_AGE_INVALID;
+  }
+
+  rule = RGWCORSRule(o, h, e, flags, a);
+  return 0;
 }
 
 /*
