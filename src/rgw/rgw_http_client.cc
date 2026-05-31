@@ -15,6 +15,9 @@
 #include "rgw_http_errors.h"
 #include "common/async/completion.h"
 #include "common/RefCountedObj.h"
+#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/cancellation_type.hpp>
 
 #include "rgw_coroutine.h"
 
@@ -56,6 +59,7 @@ struct rgw_http_req_data : public RefCountedObject {
   using Signature = void(boost::system::error_code);
   using Completion = ceph::async::Completion<Signature>;
   std::unique_ptr<Completion> completion;
+  boost::asio::cancellation_slot cancel_slot;
 
   rgw_http_req_data() : id(-1) {
     // FIPS zeroization audit 20191115: this memset is not security related.
@@ -67,6 +71,24 @@ struct rgw_http_req_data : public RefCountedObject {
                   CompletionToken&& token) {
     return boost::asio::async_initiate<CompletionToken, Signature>(
         [this, &lock] (auto handler, auto ex) {
+          cancel_slot = boost::asio::get_associated_cancellation_slot(handler);
+          if (cancel_slot.is_connected()) {
+            cancel_slot.assign([this]
+                               (boost::asio::cancellation_type) {
+              /*
+               * No extra ref needed: wait()'s caller holds one for the op's
+               * lifetime, and cancel_slot.clear() in wait() drops this handler
+               * before wait() returns. Snapshot under the lock, then call
+               * remove_request() without it (reqs_lock is ordered before lock).
+               */
+              RGWHTTPManager* m = nullptr;
+              {
+                std::lock_guard l{this->lock};
+                if (!done) { m = mgr; }
+              }
+              if (m) { m->remove_request(this); }
+            });
+          }
           completion = Completion::create(ex, std::move(handler));
           lock.unlock(); // unlock before suspend
         }, token, ex);
@@ -81,6 +103,9 @@ struct rgw_http_req_data : public RefCountedObject {
       auto& yield = y.get_yield_context();
       boost::system::error_code ec;
       async_wait(yield.get_executor(), l, yield[ec]);
+      if (cancel_slot.is_connected()) {
+        cancel_slot.clear();   // back on the io thread; drop the handler on its own thread
+      }
       return -ec.value();
     }
     maybe_warn_about_blocking(dpp);
@@ -1006,8 +1031,11 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client)
 
 int RGWHTTPManager::remove_request(RGWHTTPClient *client)
 {
-  rgw_http_req_data *req_data = client->get_req_data();
+  return remove_request(client->get_req_data());
+}
 
+int RGWHTTPManager::remove_request(rgw_http_req_data *req_data)
+{
   if (!is_started) {
     unlink_request(req_data);
     return 0;

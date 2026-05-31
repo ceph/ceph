@@ -375,6 +375,8 @@ enum RGWHTTPRequestSetState {
 };
 
 class RGWHTTPManager {
+  friend struct rgw_http_req_data;
+
   struct set_state {
     rgw_http_req_data *req;
     int bitmask;
@@ -409,6 +411,7 @@ class RGWHTTPManager {
   void _finish_request(rgw_http_req_data *req_data, int r);
   void _set_req_state(set_state& ss);
   int link_request(rgw_http_req_data *req_data);
+  int remove_request(rgw_http_req_data *req_data);
 
   void manage_pending_requests();
 
