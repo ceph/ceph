@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check Pull Request
-      uses: JJ/github-pr-contains-action@526dfe784d8604ea1c39b6c26609074de95b1ffd  # releases/v14.1
+      uses: JJ/github-pr-contains-action@ea09c8a108fe34a2c1bbd81c261cc3a6aa0717f2 # releases/v14.1.1
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       with:
         github-token: ${{github.token}}
         diffDoesNotContain: "GNU General Public License"
