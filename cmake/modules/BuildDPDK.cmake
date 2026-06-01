@@ -120,10 +120,10 @@ function(do_export_dpdk dpdk_dir)
   # target
   file(MAKE_DIRECTORY ${DPDK_INCLUDE_DIR})
 
-  if(NOT TARGET dpdk::cflags)
-    add_library(dpdk::cflags INTERFACE IMPORTED)
+  if(NOT TARGET DPDK::cflags)
+    add_library(DPDK::cflags INTERFACE IMPORTED)
     if (dpdk_rte_CFLAGS)
-      set_target_properties(dpdk::cflags PROPERTIES
+      set_target_properties(DPDK::cflags PROPERTIES
         INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
     endif()
   endif()
@@ -159,31 +159,31 @@ function(do_export_dpdk dpdk_dir)
   endif()
 
   foreach(c ${dpdk_components})
-    add_library(dpdk::${c} STATIC IMPORTED)
-    add_dependencies(dpdk::${c} dpdk-ext)
+    add_library(DPDK::${c} STATIC IMPORTED)
+    add_dependencies(DPDK::${c} dpdk-ext)
     set(dpdk_${c}_LIBRARY
       "${dpdk_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}rte_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    set_target_properties(dpdk::${c} PROPERTIES
+    set_target_properties(DPDK::${c} PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES ${DPDK_INCLUDE_DIR}
-      INTERFACE_LINK_LIBRARIES dpdk::cflags
+      INTERFACE_LINK_LIBRARIES DPDK::cflags
       IMPORTED_LOCATION "${dpdk_${c}_LIBRARY}")
-    list(APPEND DPDK_LIBRARIES dpdk::${c})
+    list(APPEND DPDK_LIBRARIES DPDK::${c})
     list(APPEND DPDK_ARCHIVES "${dpdk_${c}_LIBRARY}")
   endforeach()
 
   if(NUMA_FOUND)
     set(dpdk_numa " -Wl,-lnuma")
   endif()
-  add_library(dpdk::dpdk INTERFACE IMPORTED)
-  add_dependencies(dpdk::dpdk
+  add_library(DPDK::dpdk INTERFACE IMPORTED)
+  add_dependencies(DPDK::dpdk
     ${DPDK_LIBRARIES})
   # workaround for https://gitlab.kitware.com/cmake/cmake/issues/16947
-  set_target_properties(dpdk::dpdk PROPERTIES
+  set_target_properties(DPDK::dpdk PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${DPDK_INCLUDE_DIR}
     INTERFACE_LINK_LIBRARIES
     "-Wl,--whole-archive $<JOIN:${DPDK_ARCHIVES}, > -Wl,--no-whole-archive ${dpdk_numa} -Wl,-lpthread,-ldl")
   if(dpdk_rte_CFLAGS)
-    set_target_properties(dpdk::dpdk PROPERTIES
+    set_target_properties(DPDK::dpdk PROPERTIES
       INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
   endif()
 endfunction()
@@ -193,7 +193,7 @@ function(build_dpdk dpdk_dir)
   if(NOT TARGET dpdk-ext)
     do_build_dpdk(${dpdk_dir})
   endif()
-  if(NOT TARGET dpdk::dpdk)
+  if(NOT TARGET DPDK::dpdk)
     do_export_dpdk(${dpdk_dir})
   endif()
 endfunction()
