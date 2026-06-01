@@ -58,6 +58,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_debug.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueAdmin.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/OnodeScan.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/OnodeReformat.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
 
 # Merge alienstore + alien-common into a single archive.  The common sources

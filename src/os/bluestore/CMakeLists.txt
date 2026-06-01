@@ -21,7 +21,8 @@ add_library(bluestore OBJECT
   Compression.cc
   OnodeScan.cc
   BlueAdmin.cc
-  BlueEnv.cc)
+  BlueEnv.cc
+  OnodeReformat.cc)
 
 target_link_libraries(bluestore
   PRIVATE

@@ -65,6 +65,7 @@
 #include "Writer.h"
 #include "Compression.h"
 #include "BlueAdmin.h"
+#include "OnodeReformat.h"
 #include "extblkdev/ExtBlkDevPlugin.h"
 
 #if defined(WITH_LTTNG)
@@ -12855,97 +12856,9 @@ int BlueStore::set_collection_opts(
   return 0;
 }
 
-struct OnodeReformatEngine {
-  bool enabled = false;
-  std::string args;
-  std::function<bool(std::string_view)> validate = nullptr;
-  std::function<bool(std::string_view)> execute = nullptr;
-  OnodeReformatEngine() {}
-  OnodeReformatEngine(std::function<bool(std::string_view)> _validate,
-                      std::function<bool(std::string_view)> _execute) :
-    validate(_validate), execute(_execute) {
-  }
-};
-
-class OnodeReformatContext {
-public:
-  enum {
-    // This is effectively an engine priority, i.e. the order engines are called in.
-    RECOMPRESS_ENGINE = 0,
-    DEFRAGMENT_ENGINE = 1,
-    MAX_ENGINES
-  };
-private:
-
-  size_t enabled_engines_count = 0;
-  std::array<OnodeReformatEngine, OnodeReformatContext::MAX_ENGINES> engines;
-
-  bool to_be_applied = false;
-  BlueStore::WriteContext wctx;
-  span_stat_t span_stat;
-  Allocator* alloc = nullptr;
-  PExtentVectorSlicer* prealloc_slicer = nullptr; // pointer to the one from wctx if configured
-public:
-  ~OnodeReformatContext() {
-    clear();
-  }
-  void setup_engines(const std::array<OnodeReformatEngine, OnodeReformatContext::MAX_ENGINES>& e) {
-    engines = e;
-  }
-  void setup_allocations(Allocator* _alloc, PExtentVector&& _p, uint32_t _total) {
-    ceph_assert(!prealloc_slicer); // repetitive assignments aren't allowed
-    alloc = _alloc;
-    prealloc_slicer = &wctx.prealloc_slicer;
-    prealloc_slicer->setup(std::move(_p), _total);
-  }
-
-  bool is_enabled() const { return enabled_engines_count > 0; }
-  bool is_applied() const { return to_be_applied; }
-  BlueStore::WriteContext& get_write_context() { return wctx; }
-  span_stat_t& access_span_stats() {
-    return span_stat;
-  }
-  const span_stat_t& get_span_stats() const {
-    return span_stat;
-  }
-
-  void maybe_enable_engine(int pri, std::string_view args) {
-    ceph_assert(pri >= 0 && pri < MAX_ENGINES);
-    if (!engines[pri].enabled && engines[pri].validate(args)) {
-      engines[pri].enabled = true;
-      engines[pri].args = args;
-      enabled_engines_count++;
-    }
-  }
-  void exec_engines() {
-    int i = 0;
-    for(auto e : engines) {
-    i++;
-      if (e.enabled && e.execute(e.args)) {
-        to_be_applied = true;
-        break;
-      }
-    }
-  }
-  void clear() {
-    PExtentVector to_release;
-    if (prealloc_slicer && alloc && !prealloc_slicer->end() && prealloc_slicer->slice(to_release) > 0) {
-      alloc->release(to_release);
-    }
-    enabled_engines_count = 0;
-    for (auto e : engines) {
-      e.enabled = false;
-    }
-    to_be_applied = false;
-    wctx.reset();
-  }
-};
-
 void BlueStore::_maybe_need_reformat_onode(OnodeReformatContext& reformat_ctx,
   Collection* c)
 {
-  reformat_ctx.clear();
-
   std::string opt_reformat;
   c->pool_opts.get(pool_opts_t::DEEP_SCRUB_REFORMAT, &opt_reformat);
   boost::char_separator<char> sep(";,"); // Delimiters are semicolon and comma
@@ -13023,133 +12936,21 @@ int BlueStore::read(
   if (!c->exists)
     return -ENOENT;
 
-  OnodeReformatContext reformat_ctx;
-  auto basic_validate_reformat = [&](std::string_view args) ->bool {
-    bool will_reformat = false;
-    if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
-      // for the sake of simplicity do not apply data reformatting to reads
-      // unaligned at the beginning. Having unaligned tail is OK.
-      will_reformat = p2nphase(offset, min_alloc_size) == 0;
-      if (!will_reformat) {
-	dout(15) << "reformat '" << args << "'"
-	  << " skipped due to unaligned read bounds "
-	  << p2nphase(offset, min_alloc_size) << " "
-	  << p2nphase(offset + length, min_alloc_size)
-	  << dendl;
-      } else {
-	dout(15) << "reformat '" << args << "'"
-	  << " enabled "
-	  << dendl;
-      }
-    }
-    return will_reformat;
-  };
-  auto exec_recompress = [&](std::string_view args) -> bool {
-    const auto& span_stat = reformat_ctx.get_span_stats();
-    auto& wctx = reformat_ctx.get_write_context();
-    bool will_do = wctx.compress && span_stat.allocated > 0;
-    if (will_do) {
-      uint64_t need = 0;
-      auto bl_it = bl.begin();
-      uint64_t offs = offset;
-      uint64_t old_allocated = span_stat.allocated + span_stat.allocated_compressed;
-      while (bl_it != bl.end()) {
-
-	BlobRef blob = c->new_blob();
-	bufferlist from_bl;
-	uint64_t l = std::min(wctx.target_blob_size, uint64_t(bl_it.get_remaining()));
-	uint64_t res_len = l;
-	if (l >= min_alloc_size) {
-	  l = p2align(l, min_alloc_size);
-	  bl_it.copy(l, from_bl);
-
-	  //FIXME: add zero detection
-	  auto& wi = wctx.write(offs, blob, l, 0, from_bl, 0, l, false, true);
-
-	  res_len = from_bl.length();
-	  if (l > min_alloc_size &&
-	    wctx.compressor->compress(from_bl, wi.compressed_bl, wi.compressor_message) == 0) {
-
-	    res_len = wi.compressed_bl.length();
-	    // don't set wi.compress_len and wi.compressed as this is redundant
-	    // at this point, to be assigned in _do_alloc_write if needed.
-	  }
-	  dout(20) << " reformat: " << " precompress : 0x"
-	    << std::hex << offs << "~" << l << "->" << res_len
-	    << std::dec << " " << *blob
-	    << dendl;
-	} else {
-	  bl_it += l;
-	  dout(20) << " reformat: " << " precompress : 0x"
-	    << std::hex << offs << "~" << l << "-> remaining tail"
-	    << dendl;
-	}
-	need += p2roundup(res_len, min_alloc_size);
-	offs += l;
-	will_do = need < old_allocated;
-      }
-
-      // At this point will_do indicates if we definitely want recompression,
-      // will skip the remaining reformatting then.
-
-      // Keep compressed blobs until final processing no matter if we decided to
-      // enforce recompression or not. In the latter case they can be chosen
-      // for different engine optimization(s) or be rejected prior to writing out.
-      wctx.precompressed = true;
-      dout(10) << " reformat:'" << args << "'"
-	<< " need 0x"
-	<< std::hex << need << " vs. old_allocated 0x" << old_allocated << std::dec
-	<< " apply: " << will_do
-	<< dendl;
-
-      logger->inc(l_bluestore_reformat_compress_attempted);
-      if (!will_do)
-	logger->inc(l_bluestore_reformat_compress_omitted);
-    }
-    return will_do;
-  };
-  auto exec_defragment = [&](std::string_view args) -> bool {
-    bool will_do = false;
-    const auto& span_stat = reformat_ctx.get_span_stats();
-    auto need = p2roundup(length, min_alloc_size);
-    size_t frags = 0;
-    int64_t preallocated = 0;
-    if (span_stat.frags > 1) {
-      logger->inc(l_bluestore_reformat_defragment_attempted);
-      PExtentVector prealloc;
-      prealloc.reserve(need / min_alloc_size + 1);
-      auto start = mono_clock::now();
-      preallocated = alloc->allocate(
-	need, min_alloc_size, need,
-	0, &prealloc);
-      log_latency("allocator@_prepare_reformat",
-	l_bluestore_allocator_lat,
-	mono_clock::now() - start,
-	cct->_conf->bluestore_log_op_age);
-      will_do = preallocated >= (int64_t)need && prealloc.size() < span_stat.frags;
-      if (will_do) {
-	frags = prealloc.size();
-	reformat_ctx.setup_allocations(alloc, std::move(prealloc), preallocated);
-      } else {
-	logger->inc(l_bluestore_reformat_defragment_omitted);
-      }
-    }
-    dout(10) << " reformat:'" << args << "'"
-      << " preallocated: 0x" << std::hex << preallocated << std::dec
-      << " old frags:" << span_stat.frags
-      << " new frags:" << frags
-      << " apply: " << will_do
-      << dendl;
-    return will_do;
-  };
-
-  const std::array<OnodeReformatEngine, OnodeReformatContext::MAX_ENGINES>
-    engines = {
-      OnodeReformatEngine(basic_validate_reformat, exec_recompress),
-      OnodeReformatEngine(basic_validate_reformat, exec_defragment),
-    };
-  reformat_ctx.setup_engines(engines);
-
+  OnodeReformatContext reformat_ctx(this, logger); // don't want to add new getter
+                                                   // for BlueStore::logger,
+						   // hence pass it from here
+  reformat_ctx.add_engine(
+    OnodeReformatContext::RECOMPRESS_ENGINE,
+    new OnodeReformatBasicValidateAction(
+      offset, length, op_flags, min_alloc_size),
+    new OnodeReformatRecompressAction(
+      c, offset, length, bl, min_alloc_size));
+  reformat_ctx.add_engine(
+    OnodeReformatContext::DEFRAGMENT_ENGINE,
+    new OnodeReformatBasicValidateAction(
+      offset, length, op_flags, min_alloc_size),
+    new OnodeReformatDefragmentAction(
+      offset, length, min_alloc_size));
   return _do_read(c, oid, offset, length, bl, op_flags, reformat_ctx);
 }
 
