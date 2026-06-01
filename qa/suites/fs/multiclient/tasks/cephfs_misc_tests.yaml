@@ -13,3 +13,4 @@ overrides:
       - responding to mclientcaps
       - RECENT_CRASH
       - MON_DOWN
+      - DISPATCH_QUEUE_THROTTLE

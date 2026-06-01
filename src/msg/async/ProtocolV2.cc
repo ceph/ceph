@@ -1643,6 +1643,10 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
 
   const size_t cur_msg_size = get_current_msg_size();
   if (cur_msg_size) {
+    Messenger* msgr = connection->dispatch_queue->get_messenger();
+    //update max if it's changed in the conf. Expecting qa tests would change ms_dispatch_throttle_bytes.
+    connection->dispatch_queue->dispatch_throttler.reset_max(msgr->dispatch_throttle_bytes.load());
+
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
             cur_msg_size)) {
       ldout(cct, 1)
@@ -1651,6 +1655,20 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
           << connection->dispatch_queue->dispatch_throttler.get_current() << "/"
           << connection->dispatch_queue->dispatch_throttler.get_max()
           << " failed, just wait." << dendl;
+      ceph::coarse_mono_time throttle_now = ceph::coarse_mono_clock::now();
+      std::chrono::seconds configured_interval = msgr->dispatch_throttle_log_interval.load();
+      if (configured_interval.count()) {
+        if (std::chrono::duration_cast<std::chrono::seconds>(throttle_now - throttle_prev_log) >=
+            configured_interval) {
+          //Cluster logging that throttling is occurring.
+          Dispatcher::ThrottleInfo tinfo;
+          tinfo.takenslots = connection->dispatch_queue->dispatch_throttler.get_current();
+          tinfo.maxslots = connection->dispatch_queue->dispatch_throttler.get_max();
+          tinfo.failedrequests = connection->dispatch_queue->dispatch_throttler.get_failed();
+          msgr->ms_deliver_throttle(ms_throttle_t::DISPATCH_QUEUE, tinfo);
+          throttle_prev_log = throttle_now;
+        }
+      }
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
@@ -1659,6 +1677,15 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
                                                   connection->wakeup_handler));
       }
       return nullptr;
+    }
+    else {
+      //Don't deliver ms_throttle_t::NONE forever. Limit it for THROTTLE_DELIVER_INTERVAL seconds
+      //since the last ms_throttle_t::DISPATCH_QUEUE delivery.
+      if (std::chrono::duration_cast<std::chrono::seconds>
+          (ceph::coarse_mono_clock::now() - throttle_prev_log) <= THROTTLE_DELIVER_INTERVAL) {
+        Dispatcher::ThrottleInfo tinfo = {0, 0, 0};
+        msgr->ms_deliver_throttle(ms_throttle_t::NONE, tinfo);
+      }
     }
   }
 
