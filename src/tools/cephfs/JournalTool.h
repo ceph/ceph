@@ -74,6 +74,11 @@ class JournalTool : public MDSUtility
         bool const dry_run,
         std::set<inodeno_t> *consumed_inos);
 
+    struct BoundaryMatch {
+      uint64_t pos = std::numeric_limits<uint64_t>::max();
+      unsigned int event_type = 0;
+    };
+
     // Splicing
     int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);
 
@@ -93,8 +98,12 @@ class JournalTool : public MDSUtility
     // executed on all ranks.
     bool can_execute_for_all_ranks(const std::string &mode,
                                    const std::string &command);
+
+  std::string_view get_event_name_str(unsigned int event_type);
+
   public:
     static void usage();
+    int recover_header(bool dry_run);
 
     JournalTool() :
       rank(0), other_pool(false)

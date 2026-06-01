@@ -51,7 +51,7 @@ void JournalTool::usage()
     << "      import <path> [--force]\n"
     << "      export <path>\n"
     << "      reset [--force] <--yes-i-really-really-mean-it>\n"
-    << "  cephfs-journal-tool [options] header <get|set> <field> <value>\n"
+    << "  cephfs-journal-tool [options] header {<get|set> <field> <value> | <recover> [--force]}\n"
     << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]\n"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
     << "    <selector>:\n"
@@ -329,7 +329,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
   }
 
   if (argv.empty()) {
-    derr << "Missing header command, must be [get|set]" << dendl;
+    derr << "Missing header command, must be [get|set|recover]" << dendl;
     return -EINVAL;
   }
   std::vector<const char *>::iterator arg = argv.begin();
@@ -386,6 +386,22 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     output.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
+  } else if (command == std::string("recover")) {
+    bool dry_run = true;
+    if (arg != argv.end()) {
+      if (std::string_view(*arg) == "--force") {
+        dry_run = false;
+        ++arg;
+      } else {
+        std::cerr << "Unknown argument trailing recover: " << *arg << std::endl;
+        return -EINVAL;
+      }
+    }
+    if (arg != argv.end()) {
+      std::cerr << "Too many arguments passed to recover command." << std::endl;
+      return -EINVAL;
+    }
+    return recover_header(dry_run);
   } else {
     derr << "Bad header command '" << command << "'" << dendl;
     return -EINVAL;
@@ -1372,3 +1388,162 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
   return r;
 }
 
+/**
+ * Returns a string view representation of journal events
+ * @param event_type the type of journal event
+ * @returns a string view of event_type
+ */
+std::string_view JournalTool::get_event_name_str(unsigned int event_type)
+{
+  switch (event_type) {
+    case EVENT_SUBTREEMAP:      return "EVENT_SUBTREEMAP";
+    case EVENT_SUBTREEMAP_TEST: return "EVENT_SUBTREEMAP_TEST";
+    case EVENT_LID:             return "EVENT_LID";
+    case EVENT_RESETJOURNAL:    return "EVENT_RESETJOURNAL";
+    default:                    return "EVENT_UNKNOWN";
+  }
+}
+
+/**
+ * Analyzes journal corruptions and repositions header markers (write_pos, expire_pos)
+ * safely to resolve broken log segments.
+ * @params dry_run only displays the Proposed Journal Header Updates.
+ * @returns 0 if success, error code otherwise.
+ */
+int JournalTool::recover_header(bool dry_run)
+{
+  dout(4) << "Starting journal header recover analysis (dry_run="
+          << std::boolalpha << dry_run << ")" << dendl;
+
+  JournalFilter filter("mdlog");
+  JournalScanner js(input, rank, type, filter);
+
+  // First do a header scan (full=false), so that we could do error reporting
+  int r = js.scan(false);
+  if (r < 0) {
+    derr << "Failed to parse initial journal status: " << cpp_strerror(r) << dendl;
+    return -EIO;
+  }
+
+  if (!js.header_present) {
+    derr << "Journal header object is missing entirely, cannot execute recovery" << dendl;
+    return -EIO;
+  }
+
+  if (!js.header_valid) {
+    // Check if the invalidity is due to a completely unrecognized/corrupt header
+    if (js.header->magic != CEPH_FS_ONDISK_MAGIC) {
+      derr << "Critical failure: Invalid journal magic number ('"
+           << js.header->magic << "'). This does not appear to be a valid CephFS journal."
+           << dendl;
+      return -EINVAL;
+    }
+    // If magic is correct, the invalidity is just offset inconsistency
+    dout(1) << "Journal header is present but marked invalid due to offset inconsistencies. "
+            << "Attempting analytical recovery from stream base..." << dendl;
+  }
+
+  uint64_t first_pos = std::numeric_limits<uint64_t>::max();
+  uint64_t last_pos = 0;
+  uint64_t last_raw_size = 0;
+  uint64_t expected_next_pos = 0;
+  bool is_first = true;
+  BoundaryMatch boundary_match;
+
+  // Events scan: execute events dynamically via the new callback interface.
+  r = js.scan_events([&](uint64_t pos, JournalScanner::EventRecord& er) {
+    if (is_first) {
+      first_pos = pos;
+    } else if (expected_next_pos != pos) {
+      // Alert the user
+      std::cerr << "warning: Discontinuity detected in journal offsets. Expected: 0x"
+                << std::hex << expected_next_pos << ", Found: 0x" << pos << std::dec
+                << ". Attempting to skip gap and continue recovery..." << std::endl;
+      // Log it
+      dout(1) << "warning: Discontinuity detected in journal offsets. Expected: 0x"
+              << std::hex << expected_next_pos << ", Found: 0x" << pos << std::dec << dendl;
+    }
+    is_first = false;
+    expected_next_pos = pos + er.raw_size;
+
+    // Tracks the absolute last element seen in log timeline stream
+    last_pos = pos;
+    last_raw_size = er.raw_size;
+
+    // Check for the earliest major alignment boundary block
+    if (boundary_match.pos == std::numeric_limits<uint64_t>::max()) {
+      if (er.log_event) {
+        const unsigned int type = er.log_event->get_type();
+        if (type == EVENT_SUBTREEMAP ||
+            type == EVENT_SUBTREEMAP_TEST ||
+            type == EVENT_LID        ||
+            type == EVENT_RESETJOURNAL) {
+          boundary_match.event_type = type;
+          boundary_match.pos = pos;
+        }
+      }
+    }
+  });
+
+  if (r < 0) {
+    derr << "Failed streaming scan over journal objects: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (is_first) {
+    derr << "No events discovered in scanned journal stream. Nothing to recover." << dendl;
+    return -ENOENT;
+  }
+
+  if (boundary_match.pos == std::numeric_limits<uint64_t>::max()) {
+    derr << "Critical failure: No valid major segment boundary event found in logs." << dendl;
+    return -EIO;
+  }
+
+  // Save the current values for the logs
+  const auto old_trimmed_pos = js.header->trimmed_pos;
+  const auto old_expire_pos  = js.header->expire_pos;
+  const auto old_write_pos   = js.header->write_pos;
+  const auto old_read_pos    = js.header->unused_field;
+
+  // Calculate new parameters
+  uint64_t obj_size = js.header->layout.object_size;
+  if (obj_size == 0) {
+    obj_size = 4194304; // 4MB fallback
+  }
+  if (js.header_present && old_trimmed_pos <= first_pos) {
+    js.header->trimmed_pos = old_trimmed_pos; // Safest: keep the known good boundary
+  } else {
+    js.header->trimmed_pos = first_pos - (first_pos % obj_size); // Fallback: force alignment
+  }
+  js.header->expire_pos   = boundary_match.pos;
+  js.header->write_pos    = last_pos + last_raw_size;
+  js.header->unused_field = boundary_match.pos;
+
+  // Output
+  std::cout << "Proposed Journal Header Updates:" << std::endl << std::hex
+            << "  trimmed_pos: 0x" << old_trimmed_pos << " -> 0x" << js.header->trimmed_pos << std::endl
+            << "  expire_pos:  0x" << old_expire_pos  << " -> 0x" << js.header->expire_pos  << std::endl
+            << "  read_pos:    0x" << old_read_pos    << " -> 0x" << js.header->unused_field << std::endl
+            << "  write_pos:   0x" << old_write_pos   << " -> 0x" << js.header->write_pos   << std::endl << std::dec
+            << "  Target event type at proposed read_pos: " << get_event_name_str(boundary_match.event_type) << std::endl;
+
+  if (dry_run) {
+    std::cout << "Dry-run mode enabled. Header modifications skipped." << std::endl;
+    return 0;
+  }
+
+  // Save changes to RADOS
+  dout(4) << "Serializing modified header to pool layer..." << dendl;
+  bufferlist header_bl;
+  encode(*(js.header), header_bl);
+  r = output.write_full(js.obj_name(0), header_bl);
+  if (r < 0) {
+    derr << "Failed writing updated journal header object: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  dout(4) << "RADOS header mutation finalized successfully." << dendl;
+  std::cout << "Successfully recovered journal header." << std::endl;
+  return 0;
+}
