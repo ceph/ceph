@@ -730,8 +730,6 @@ inline void BlueStore::Writer::_schedule_io_masked(
         op->op = bluestore_deferred_op_t::OP_WRITE;
         op->extents.emplace_back(bluestore_pextent_t(disk_position, chunk_size));
         op->data = ddata;
-        bstore->logger->inc(l_bluestore_issued_deferred_writes);
-        bstore->logger->inc(l_bluestore_issued_deferred_write_bytes, ddata.length());
       }
       disk_position += chunk_size;
       data_left -= chunk_size;
@@ -773,8 +771,6 @@ inline void BlueStore::Writer::_schedule_io(
       op->op = bluestore_deferred_op_t::OP_WRITE;
       op->extents = disk_extents;
       op->data = data;
-      bstore->logger->inc(l_bluestore_issued_deferred_writes);
-      bstore->logger->inc(l_bluestore_issued_deferred_write_bytes, data.length());
     } else {
       for (const auto& loc : disk_extents) {
         bufferlist data_chunk;
