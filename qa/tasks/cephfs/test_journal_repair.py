@@ -638,3 +638,70 @@ wait
             raise RuntimeError("Expected journal import to fail")
         finally:
             self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
+
+    def test_recover_header(self):
+        """
+        Validates the discovery of segment boundaries, dry-run reporting,
+        and header field modification (trimmed_pos, expire_pos, write_pos) via --force.
+        """
+        # Generate metadata events in the journal
+        log.info("Creating file system activity to populate the journal...")
+        test_dir = "header_recover_test_dir"
+        self.mount_a.run_shell(["mkdir", "-p", test_dir])
+        for i in range(20):
+            self.mount_a.run_shell(["touch", f"{test_dir}/file_{i}"])
+
+        # Flush entries out of memory into the RADOS journal objects
+        self.mount_a.run_shell(["sync"])
+
+        # Fail the filesystem. JournalTool explicitly fails with -EPERM if the filesystem is active.
+        log.info("Fail the filesystem to run offline journal operations...")
+        self.fs.fail()
+
+        # Test Dry-Run Mode
+        log.info("Executing recover_header in dry-run mode (without --force)...")
+        dry_run_output = self.fs.journal_tool(["header", "recover"], 0)
+        log.info(f"Dry-run output:\n{dry_run_output}")
+
+        # Assert against outputs printed in JournalTool::recover_header
+        self.assertIn("Proposed Journal Header Updates:", dry_run_output)
+        self.assertIn("trimmed_pos:", dry_run_output)
+        self.assertIn("expire_pos:", dry_run_output)
+        self.assertIn("read_pos:", dry_run_output)
+        self.assertIn("write_pos:", dry_run_output)
+        self.assertIn("Target event type at proposed read_pos:", dry_run_output)
+        self.assertIn("Dry-run mode enabled. Header modifications skipped.", dry_run_output)
+
+        # Test Mutation Mode (--force)
+        log.info("Executing recover_header with --force to commit changes to RADOS...")
+        mutation_output = self.fs.journal_tool(["header", "recover", "--force"], 0)
+        log.info(f"Mutation output:\n{mutation_output}")
+
+        # Verify the success indicators printed upon successful RADOS synchronization
+        self.assertIn("Proposed Journal Header Updates:", mutation_output)
+        self.assertIn("trimmed_pos:", mutation_output)
+        self.assertIn("expire_pos:", mutation_output)
+        self.assertIn("read_pos:", mutation_output)
+        self.assertIn("write_pos:", mutation_output)
+        self.assertIn("Successfully recovered journal header.", mutation_output)
+        self.assertNotIn("Dry-run mode enabled", mutation_output)
+
+        # Verify Header Persistence via 'header get'
+        log.info("Fetching updated header to confirm correctness...")
+        header_raw = self.fs.journal_tool(["header", "get"], 0)
+        header_json = json.loads(header_raw)
+        log.info(f"Persisted Header JSON: {header_json}")
+        # Ensure critical positions are non-zero/valid after the realignment
+        self.assertGreater(header_json["write_pos"], 0)
+        self.assertGreaterEqual(header_json["expire_pos"], 0)
+
+        # Bring the filesystem back up
+        log.info("Verify file system stability post-recovery...")
+        self.fs.set_joinable()
+        # Wait for the daemons report healthy and active
+        self.fs.wait_for_daemons()
+
+        # Ensure data can still be read without MDS crashing
+        log.info("Verifying that directory contents are readable...")
+        dir_list = self.mount_a.run_shell(["ls", test_dir])
+        self.assertIn("file_19", dir_list.stdout.getvalue().strip())

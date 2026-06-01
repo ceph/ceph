@@ -89,3 +89,5 @@ $BIN event splice summary
 $BIN journal reset --yes-i-really-really-mean-it
 cephfs-table-tool all reset session
 
+$BIN header recover #dry-run
+$BIN header recover --force #mutation
