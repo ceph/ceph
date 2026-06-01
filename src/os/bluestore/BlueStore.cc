@@ -18284,10 +18284,18 @@ int BlueStore::_do_remove(
     nogen.hobj.snap = CEPH_NOSNAP;
   OnodeRef h = c->get_onode(nogen, false);
 
-  if (!h || !h->exists) {
-    return 0;
+  if (h && h->exists) {
+    return _maybe_unshare_on_remove(txc, c, h, std::move(maybe_unshared_blobs));
   }
+  return 0;
+}
 
+int BlueStore::_maybe_unshare_on_remove(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& h,
+  std::set<SharedBlob*>&& maybe_unshared_blobs)
+{
   //Populate the extent map structure from DB; required for shared blob processing below.
   h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
