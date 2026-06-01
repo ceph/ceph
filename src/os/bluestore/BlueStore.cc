@@ -18316,7 +18316,12 @@ int BlueStore::_maybe_unshare_on_remove(
 	sb->loaded &&
 	maybe_unshared_blobs.count(sb)) {
       if (b.is_compressed()) {
-	expect[sb].get(0, b.get_ondisk_size());
+        b.map(0, b.get_ondisk_size(), [&](uint64_t off, uint64_t len) {
+            expect[sb].get(off, len);
+            return 0;
+          });
+        // Do not account second time.
+        maybe_unshared_blobs.erase(sb);
       } else {
 	// todo: it seems to be an overkill to go through map()
 	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
@@ -18329,7 +18334,7 @@ int BlueStore::_maybe_unshare_on_remove(
 
   // expect has now refs set exactly as .head is using it
   vector<SharedBlob*> unshared_blobs;
-  unshared_blobs.reserve(maybe_unshared_blobs.size());
+  unshared_blobs.reserve(expect.size());
   for (auto& p : expect) {
     dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
     if (p.first->persistent->ref_map == p.second) {
