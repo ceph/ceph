@@ -4,6 +4,71 @@ Squid
 
 Squid is the 19th stable release of Ceph.
 
+v19.2.4 Squid
+=============
+This is the fourth backport release in the Squid series.
+We recommend that all Squid users update to this release.
+
+Release Date
+------------
+
+June 1, 2026
+
+Notable Changes
+---------------
+
+OSD / BlueStore
+---------------
+
+* BlueFS: Increased the default WAL volume size to 1GB to prevent ENOSPC failures.
+* Volume Selection: Fixed the usage of bluestore_volume_selection_reserved_factor and updated row naming conventions in RocksDBBlueFSVolumeSelector.
+* Health: Added a time_added field to mon_info_t to prevent freshly added monitors from incorrectly triggering a MON_DOWN health status.
+* Tooling: Updated monmaptool to correctly respect set features when adding addresses.
+
+RADOS / Manager (mgr)
+---------------------
+
+* RADOS pybind: Fixed a parameter reversal bug in WriteOp.zero() where offset and length were swapped when calling the underlying C API.
+* Daemon Health: Modified the manager to clear health metrics for down or out OSDs instead of removing them entirely from the daemon state.
+* Autoscaler: Updated pg_autoscale_mode logic to accurately reflect the no_autoscale flag in both standard and JSON command outputs.
+
+RADOS Gateway (RGW)
+-------------------
+
+* Notifications: Resolved a reserved_size drift in the 2pc_queue causing ENOSPC errors and fixed a leak where overhead was not properly decremented during commit/abort.
+* Multipart Uploads: Fixed an issue where tags could not be retrieved from objects created via multipart uploads.
+* Kafka Integration: Updated the internal Kafka version support to 3.9.2.
+
+CephFS / MDS
+------------
+
+* Fragments: Simplified fragment printing and corrected frag_t endianness conversion for network and storage consistency.
+* FUSE Client: Updated the FUSE client to clarify that fallocate disk space reservation is only supported with specific flags like FALLOC_FL_KEEP_SIZE.
+* Metadata: Updated the MDS to dump frag_t as an object and included sysinfo in the status command output for better diagnostics.
+
+Dashboard
+---------
+
+* Services: Fixed a bug where changing MDS placement to a label incorrectly triggered the creation of an entirely new MDS service.
+* Access Control: Fixed role-based access control permissions and added missing types to the mgr-module list.
+
+librbd & rbd-mirror
+-------------------
+
+* RBD: Introduced a new ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT`` policy for ``rbd_lock_acquire()``. This is a low-level interface
+  intended to allow a peer to grab exclusive lock manually for short periods of time with other peers pausing their activity and
+  waiting for the lock to be released rather than instantly aborting I/O and returning an error. It's possible to switch
+  from ``RBD_LOCK_MODE_EXCLUSIVE`` to ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT`` policy and vice versa even if the lock is already held.
+
+We recommend users to update to this release.
+For detailed release notes with links & changelog please refer to the
+official blog entry at https://ceph.io/en/news/blog/2026/v19-2-4-squid-released/
+
+
+
+
+
+
 v19.2.3 Squid
 =============
 This is the third backport release in the Squid series.
