@@ -6,3 +6,4 @@ pika
 cloudevents>=1.12.1,<2
 xmltodict
 requests>=2.28.0
+gssapi>=1.8.0
