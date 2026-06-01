@@ -106,7 +106,7 @@
                         [showTitle]="false"
                         spacingClass="mb-2"
                         (action)="navigateCreatePool()">
-          <span i18n>To create a new pool click <a [routerLink]="[POOL.PATH]">here</a></span>
+          <span i18n>To create a new pool click <a [routerLink]="[POOL.PATH]" (click)="persistFormState()">here</a></span>
         </cd-alert-panel>
         <cds-select
           label="Pool"

@@ -14,6 +14,7 @@ import _ from 'lodash';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { StorageClassService } from '~/app/shared/api/storage-class.service';
 
 import {
   ALLOW_READ_THROUGH_TEXT,
@@ -133,7 +134,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private cdRef: ChangeDetectorRef,
     private poolService: PoolService,
     private dimlessBinary: DimlessBinaryPipe,
-    private rgwZoneService: RgwZoneService
+    private rgwZoneService: RgwZoneService,
+    private storageClassService: StorageClassService
   ) {
     super();
     this.resource = $localize`Storage Class`;
@@ -142,6 +144,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
+    const savedFormState = this.storageClassService.storageClassForm;
     this.helpTextLabels = {
       targetPathText: TARGET_PATH_TEXT,
       targetEndpointText: TARGET_ENDPOINT_TEXT,
@@ -169,124 +172,19 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.createForm();
     this.storageClassTypeText();
     this.updateTierTypeHelpText();
-    this.loadZoneGroup();
     if (this.editing) {
       this.route.params.subscribe((params: StorageClass) => {
         this.storageClassInfo = params;
       });
-      this.rgwStorageService
-        .getPlacement_target(this.storageClassInfo.placement_target)
-        .pipe(
-          switchMap((placementTargetInfo: PlacementTarget) => {
-            // Set the tierTargetInfo based on the placementTargetInfo and storageClassInfo
-            this.tierTargetInfo = this.getTierTargetByStorageClass(
-              placementTargetInfo,
-              this.storageClassInfo.storage_class
-            );
-            const tierType = this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL;
-
-            // If tierType is LOCAL, make the second API calls
-            if (tierType === TIER_TYPE.LOCAL) {
-              return forkJoin([
-                this.poolService.getList(),
-                this.rgwZoneService.getAllZonesInfo()
-              ]).pipe(map(([pools, zones]) => ({ placementTargetInfo, pools, zones })));
-            }
-
-            // If tierType is not LOCAL, just return placementTargetInfo with null pools and zones
-            return of({ placementTargetInfo, pools: null, zones: null });
-          }),
-          map(({ placementTargetInfo, pools, zones }) => {
-            return { placementTargetInfo, pools, zones };
-          }),
-          catchError(() => {
-            return of({
-              placementTargetInfo: null,
-              pools: null,
-              zones: null
-            });
-          })
-        )
-        .subscribe(
-          (data: {
-            placementTargetInfo: PlacementTarget;
-            pools: Pool[] | null;
-            zones: AllZonesResponse | null;
-          }) => {
-            let response = this.tierTargetInfo?.val?.s3;
-            this.aclList = response?.acl_mappings || [];
-            this.storageClassForm.patchValue({
-              zonegroup: this.storageClassInfo?.zonegroup_name,
-              region: response?.region,
-              placement_target: this.storageClassInfo?.placement_target,
-              storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
-              target_endpoint: response?.endpoint,
-              storage_class: this.storageClassInfo?.storage_class,
-              access_key: response?.access_key,
-              secret_key: response?.secret,
-              target_path: response?.target_path,
-              retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
-              multipart_sync_threshold:
-                this.dimlessBinary.transform(response?.multipart_sync_threshold) || '',
-              multipart_min_part_size:
-                this.dimlessBinary.transform(response?.multipart_min_part_size) || '',
-              allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
-              restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
-              read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
-              acl_mappings: response?.acl_mappings || []
-            });
-            if (
-              this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.CLOUD_TIER ||
-              this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.GLACIER
-            ) {
-              this.acls?.clear();
-              if (this.aclList.length > 0) {
-                this.aclList.forEach((acl) => {
-                  this.acls?.push(
-                    this.formBuilder.group({
-                      source_id: [acl.val?.source_id || ''],
-                      dest_id: [acl.val?.dest_id || ''],
-                      type: [acl.val?.type || AclTypeConst.ID, Validators.required]
-                    })
-                  );
-                });
-              } else {
-                this.addAcls();
-              }
-            }
-            if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
-              let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
-              this.storageClassForm.patchValue({
-                glacier_restore_tier_type: glacierResponse.glacier_restore_tier_type,
-                glacier_restore_days: glacierResponse.glacier_restore_days
-              });
-            }
-            const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones?.zones, {
-              placement_target: this.storageClassInfo?.placement_target,
-              storage_class: this.storageClassInfo?.storage_class
-            });
-            if (data.pools) {
-              this.rgwPools = data.pools.filter((pool: Pool) =>
-                pool.application_metadata?.includes(RGW)
-              );
-              this.storageClassForm.get('pool').setValue(zoneInfo.data_pool);
-              this.storageClassForm.get('zone').setValue(zoneInfo.zone_name);
-            }
-            this.loadingReady();
-          }
-        );
-      this.storageClassForm.get('zonegroup').disable();
-      this.storageClassForm.get('placement_target').disable();
-      this.storageClassForm.get('storage_class').disable();
-      this.storageClassForm.get('zone').disable();
-      this.storageClassForm.get('storageClassType').disable();
+      this.disableEditImmutableFields();
+      if (savedFormState) {
+        this.initEditModeFromSavedState(savedFormState);
+      } else {
+        this.loadZoneGroup();
+        this.loadEditModeFromApi();
+      }
     } else {
-      this.addAcls();
-      this.poolService.getList().subscribe((resp: Pool[]) => {
-        // Filter only pools with "rgw" in application_metadata
-        this.rgwPools = resp.filter((pool: Pool) => pool.application_metadata?.includes(RGW));
-        this.loadingReady();
-      });
+      this.initCreateMode(savedFormState);
     }
     this.storageClassForm.get('storageClassType').valueChanges.subscribe((value) => {
       this.updateValidatorsBasedOnStorageClass(value);
@@ -294,6 +192,149 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
       this.onAllowReadThroughChange(value);
     });
+  }
+
+  private disableEditImmutableFields(): void {
+    this.storageClassForm.get('zonegroup').disable();
+    this.storageClassForm.get('placement_target').disable();
+    this.storageClassForm.get('storage_class').disable();
+    this.storageClassForm.get('zone').disable();
+    this.storageClassForm.get('storageClassType').disable();
+  }
+
+  private initCreateMode(savedFormState: Record<string, any> | null | undefined): void {
+    this.addAcls();
+    Promise.all([this.loadZoneGroup(), this.poolService.getList().toPromise()])
+      .then(([, pools]) => {
+        this.setRgwPools((pools as Pool[]) || []);
+        if (savedFormState) {
+          this.applySavedFormState(savedFormState);
+        }
+        this.loadingReady();
+      })
+      .catch(() => this.loadingReady());
+  }
+
+  private initEditModeFromSavedState(savedFormState: Record<string, any>): void {
+    const tierType = savedFormState.storageClassType ?? TIER_TYPE.LOCAL;
+    const pools$ =
+      tierType === TIER_TYPE.LOCAL
+        ? this.poolService.getList().toPromise()
+        : Promise.resolve<Pool[]>([]);
+
+    Promise.all([this.loadZoneGroup(), pools$])
+      .then(([, pools]) => {
+        this.setRgwPools((pools as Pool[]) || []);
+        this.applySavedFormState(savedFormState);
+        this.loadingReady();
+      })
+      .catch(() => this.loadingReady());
+  }
+
+  private loadEditModeFromApi(): void {
+    this.rgwStorageService
+      .getPlacement_target(this.storageClassInfo.placement_target)
+      .pipe(
+        switchMap((placementTargetInfo: PlacementTarget) => {
+          // Set the tierTargetInfo based on the placementTargetInfo and storageClassInfo
+          this.tierTargetInfo = this.getTierTargetByStorageClass(
+            placementTargetInfo,
+            this.storageClassInfo.storage_class
+          );
+          const tierType = this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL;
+
+          // If tierType is LOCAL, make the second API calls
+          if (tierType === TIER_TYPE.LOCAL) {
+            return forkJoin([
+              this.poolService.getList(),
+              this.rgwZoneService.getAllZonesInfo()
+            ]).pipe(map(([pools, zones]) => ({ placementTargetInfo, pools, zones })));
+          }
+
+          // If tierType is not LOCAL, just return placementTargetInfo with null pools and zones
+          return of({ placementTargetInfo, pools: null, zones: null });
+        }),
+        map(({ placementTargetInfo, pools, zones }) => {
+          return { placementTargetInfo, pools, zones };
+        }),
+        catchError(() => {
+          return of({
+            placementTargetInfo: null,
+            pools: null,
+            zones: null
+          });
+        })
+      )
+      .subscribe(
+        (data: {
+          placementTargetInfo: PlacementTarget;
+          pools: Pool[] | null;
+          zones: AllZonesResponse | null;
+        }) => {
+          let response = this.tierTargetInfo?.val?.s3;
+          this.aclList = response?.acl_mappings || [];
+          this.storageClassForm.patchValue({
+            zonegroup: this.storageClassInfo?.zonegroup_name,
+            region: response?.region,
+            placement_target: this.storageClassInfo?.placement_target,
+            storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
+            target_endpoint: response?.endpoint,
+            storage_class: this.storageClassInfo?.storage_class,
+            access_key: response?.access_key,
+            secret_key: response?.secret,
+            target_path: response?.target_path,
+            retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
+            multipart_sync_threshold:
+              this.dimlessBinary.transform(response?.multipart_sync_threshold) || '',
+            multipart_min_part_size:
+              this.dimlessBinary.transform(response?.multipart_min_part_size) || '',
+            allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
+            restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
+            read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
+            acl_mappings: response?.acl_mappings || []
+          });
+          if (
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.CLOUD_TIER ||
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.GLACIER
+          ) {
+            this.acls?.clear();
+            if (this.aclList.length > 0) {
+              this.aclList.forEach((acl) => {
+                this.acls?.push(
+                  this.formBuilder.group({
+                    source_id: [acl.val?.source_id || ''],
+                    dest_id: [acl.val?.dest_id || ''],
+                    type: [acl.val?.type || AclTypeConst.ID, Validators.required]
+                  })
+                );
+              });
+            } else {
+              this.addAcls();
+            }
+          }
+          if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
+            let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
+            this.storageClassForm.patchValue({
+              glacier_restore_tier_type: glacierResponse.glacier_restore_tier_type,
+              glacier_restore_days: glacierResponse.glacier_restore_days
+            });
+          }
+          const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones?.zones, {
+            placement_target: this.storageClassInfo?.placement_target,
+            storage_class: this.storageClassInfo?.storage_class
+          });
+          if (data.pools) {
+            this.setRgwPools(data.pools);
+            this.storageClassForm.get('pool').setValue(zoneInfo.data_pool);
+            this.storageClassForm.get('zone').setValue(zoneInfo.zone_name);
+          }
+          this.loadingReady();
+        }
+      );
+  }
+
+  private setRgwPools(pools: Pool[]): void {
+    this.rgwPools = pools.filter((pool: Pool) => pool.application_metadata?.includes(RGW));
   }
 
   public createAcls(): CdFormGroup {
@@ -595,6 +636,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
 
       editZone$.subscribe(
         () => {
+          this.storageClassService.clearStorageClassForm();
           this.notificationService.show(
             NotificationType.success,
             $localize`Edited Storage Class '${storageclassName}'`
@@ -617,6 +659,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
 
       createZone$.subscribe(
         () => {
+          this.storageClassService.clearStorageClassForm();
           this.notificationService.show(
             NotificationType.success,
             $localize`Created Storage Class '${storageclassName}'`
@@ -631,6 +674,18 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
   goToListView() {
     this.router.navigate([`rgw/storage-class`]);
+  }
+
+  persistFormState(): void {
+    if (!this.storageClassForm) {
+      return;
+    }
+    this.storageClassService.storageClassForm = this.storageClassForm.getRawValue();
+  }
+
+  navigateCreatePool(): void {
+    this.persistFormState();
+    this.router.navigate([POOL.PATH]);
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {
@@ -700,6 +755,33 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       multipart_min_part_size,
       tier_config_rm
     );
+  }
+
+  private applySavedFormState(savedFormState: Record<string, any>): void {
+    const { acls, ...savedFormValues } = savedFormState;
+    this.storageClassForm.patchValue(savedFormValues);
+    this.onAllowReadThroughChange(!!savedFormState.allow_read_through);
+
+    if (!Array.isArray(acls)) {
+      this.storageClassService.clearStorageClassForm();
+      return;
+    }
+
+    this.acls.clear();
+    if (!acls.length) {
+      this.addAcls();
+    } else {
+      acls.forEach((acl: ACLVal) => {
+        this.acls.push(
+          this.formBuilder.group({
+            source_id: [acl?.source_id || ''],
+            dest_id: [acl?.dest_id || ''],
+            type: [acl?.type || AclTypeConst.ID, Validators.required]
+          })
+        );
+      });
+    }
+    this.storageClassService.clearStorageClassForm();
   }
 
   private buildPlacementTargets(
