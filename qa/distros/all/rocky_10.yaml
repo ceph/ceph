@@ -1,3 +1,7 @@
+install_rocky_packages:
+  sequential:
+    - print: "Install additional rocky10 dependencies"
+    # postmerge appends to this
 os_type: rocky
 os_version: "10.1"
 overrides:
@@ -5,8 +9,23 @@ overrides:
     allowlist:
       - 'comm="systemd".*denied.*\{ prog_run \}.*tclass=bpf.*permissive=1'
 tasks:
-- pexec:
-    all:
-    # for https://tracker.ceph.com/issues/73823
-    - sudo dnf remove nvme-cli -y
-    - sudo dnf install nvmetcli nvme-cli -y
+  # This is appended to the tasks: list here so that we can edit the task list
+  # before e.g. ceph is installed.
+  - sequential:
+      - install_rocky_packages
+teuthology:
+  postmerge:
+    - |
+      log.debug("os is %s", yaml.os_type)
+      if yaml.os_type == 'rocky' then
+        local pexec_tasks = yaml_load([[
+        sequential:
+          - pexec:
+              all:
+                # for https://tracker.ceph.com/issues/73823
+                # Cannot use install.extra_system_packages because we also remove a package.
+                - sudo dnf remove nvme-cli -y
+                - sudo dnf install nvmetcli nvme-cli -y
+        ]])
+        deep_merge(yaml.install_rocky_packages, pexec_tasks)
+      end
