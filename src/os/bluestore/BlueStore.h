@@ -3923,6 +3923,10 @@ private:
   int _do_remove(TransContext *txc,
 		 CollectionRef& c,
 		 OnodeRef& o);
+  int _maybe_unshare_on_remove(TransContext *txc,
+                               CollectionRef& c,
+                               OnodeRef& head_o,
+                               std::set<SharedBlob*>&& maybe_unshared_blobs);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
