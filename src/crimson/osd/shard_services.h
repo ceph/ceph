@@ -506,10 +506,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
-    return crimson::os::BackendStore{
-      local_state.f_store.get_sharded_store(store_index),
-      local_state.f_store.get_storage_shard_count()
-    };
+    return crimson::os::RelayStore::get_backend_store(local_state.f_store, store_index);
   }
 
   struct shard_stats_t {
