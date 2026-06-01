@@ -326,8 +326,39 @@ For example:
   ]
 
 One entry per mirror-daemon instance is displayed, along with information
-including configured peers and basic statistics. For more detailed statistics,
-use the admin socket interface as detailed below.
+including configured peers and basic statistics.
+
+**Directory snapshot sync metrics (mgr)**
+
+The mirroring module implements ``ceph fs snapshot mirror status``. The
+``cephfs-mirror`` daemon persists per-directory sync statistics to the
+``cephfs_mirror`` object omap in the metadata pool so the Manager can expose
+them through the Ceph CLI without an admin socket on a mirror daemon host. The
+``metrics_status`` handler reads that omap, caches and formats the result, and
+returns JSON in the same nested ``metrics/<dir>/peer/<uuid>`` format as
+``fs mirror peer status``. The Manager caches responses (default TTL 15 seconds
+via ``snapshot_mirror_metrics_cache_ttl``), reports default idle metrics for
+newly added directories, and marks omap entries as ``stale`` when the persisted
+``_instance_id`` is not among live mirror instances or does not match the
+directory's tracked instance while persisted state is not ``idle``.
+
+Each omap value includes internal metadata fields written by ``cephfs-mirror``:
+
+- ``_instance_id`` — RADOS client instance of the writer; used for stale
+  detection and stripped from CLI output.
+- ``_metrics_updated_at`` — wall-clock time of the last omap write; retained for
+  debugging and not used for stale detection or shown in CLI output.
+
+Omap entries are removed when a directory is removed from mirroring. All metric
+fields are written to omap; on daemon restart only ``last_synced_snap`` metadata
+is loaded back. Per-session counters (``snaps_synced``, ``snaps_deleted``,
+``snaps_renamed``) are persisted but not loaded and therefore start at zero each
+session.
+
+See :ref:`Directory snapshot sync metrics<cephfs_mirroring_mgr_snapshot_status>`
+and :ref:`Snapshot sync metric fields<cephfs_mirroring_sync_metric_fields>` in
+:doc:`/cephfs/cephfs-mirroring` for command syntax, examples, and operator
+guidance.
 
 CephFS mirror daemons provide admin socket commands for querying mirror status.
 To list the available commands for ``mirror status``, run the following
