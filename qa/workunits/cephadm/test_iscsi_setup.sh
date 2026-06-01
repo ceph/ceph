@@ -27,14 +27,11 @@ ISCSI_DAEMON_NAME=$(sudo cephadm ls --no-detail | jq -r '.[] | select(.name | st
 ISCSI_DAEMON_ID=$(cut -d '.' -f2- <<< "$ISCSI_DAEMON_NAME")
 HOSTNAME=$(sudo cephadm shell -- ceph orch ps --daemon-id "$ISCSI_DAEMON_ID" -f json | jq -r '.[] | .hostname')
 NODE_IP=$(sudo cephadm shell -- ceph orch host ls --format json | jq --arg HOSTNAME "$HOSTNAME" -r '.[] | select(.hostname == $HOSTNAME) | .addr')
-# The result of this python line is what iscsi will expect for the first gateway name
-FQDN=$(python3 -c 'import socket; print(socket.getfqdn())')
-# I am running this twice on purpose. I don't know why but in my testing the first time this would
-# run it would return a different result then all subsequent runs (and take significantly longer to run).
-# The result from the first run would cause gateway creation to fail when the return value is used
-# later on. It was likely specific to my env, but it doesn't hurt to run it twice anyway. This
-# was the case whether I ran it through cephadm shell or directly on the host machine.
-FQDN=$(python3 -c 'import socket; print(socket.getfqdn())')
+# Query the FQDN from inside the container: rbd-target-api validates that the
+# gateway name matches the container's own hostname, so the value must come
+# from the same environment to avoid mismatches on distros where the host and
+# container resolve names differently.
+FQDN=$(sudo podman exec ${ISCSI_CONT_ID} python3 -c 'import socket; print(socket.getfqdn())')
 ISCSI_POOL=$(sudo cephadm shell -- ceph orch ls iscsi --format json | jq -r '.[] | .spec | .pool')
 ISCSI_USER="adminadmin"
 ISCSI_PASSWORD="adminadminadmin"
