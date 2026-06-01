@@ -186,7 +186,7 @@ def set_backport(issue):
 
 def get_release(issue):
     for field in issue.custom_fields:
-        if field['name'] == 'Release':
+        if field['name'] == 'Ceph Release':
             return field['value']
 
 def update_relations(r, issue, dry_run):
