@@ -829,6 +829,13 @@ ExtentPlacementManager::BackgroundProcess::run()
         pending_user_io_wake = false;
         co_await seastar::yield();
       }
+      // Adaptive threshold hook: each cleaner has its own state and floor.
+      if (main_cleaner) {
+        main_cleaner->maybe_adjust_thresholds();
+      }
+      if (cold_cleaner) {
+        cold_cleaner->maybe_adjust_thresholds();
+      }
     } else {
       log_state("run(block)");
       assert(!blocking_background);
