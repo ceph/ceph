@@ -22,7 +22,8 @@ from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
     disconnect_from_filesystem, sync_stat_omap_key
 from .metrics import load as metrics_load
-from .metrics.load import nest_sync_stat_in_metrics
+from .metrics.format import format_and_order_sync_stat_for_display, \
+    format_peer_status_metrics
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
@@ -776,7 +777,7 @@ class FSSnapshotMirror:
                                               f'directory {dir_path} is not mirrored')
                 peers = self.get_filesystem_peers(filesystem)
                 if not peers:
-                    return 0, json.dumps({}), ''
+                    return 0, json.dumps({'metrics': {}}, indent=4), ''
 
                 if peer_uuid:
                     if peer_uuid not in peers:
@@ -796,12 +797,14 @@ class FSSnapshotMirror:
                     for peer in peers:
                         omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
                         if omap_key in omap_stats:
-                            nest_sync_stat_in_metrics(metrics, dir_path, peer,
-                                                      omap_stats[omap_key])
+                            format_peer_status_metrics(
+                                metrics, dir_path, peer,
+                                format_and_order_sync_stat_for_display(
+                                    omap_stats[omap_key]))
                 else:
                     metrics = metrics_load.load_sync_stat_metrics(
                         ioctx, filesystem, peer_uuid)
-                return 0, json.dumps(metrics, indent=4), ''
+                return 0, json.dumps({'metrics': metrics}, indent=4), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 

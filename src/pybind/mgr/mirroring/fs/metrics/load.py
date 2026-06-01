@@ -14,12 +14,9 @@ from ..utils import (
     get_metadata_pool,
     parse_sync_stat_omap_key,
 )
+from .format import format_and_order_sync_stat_for_display, format_peer_status_metrics
 
 log = logging.getLogger(__name__)
-
-
-def nest_sync_stat_in_metrics(metrics, dir_path, peer_uuid, stat):
-    metrics.setdefault(dir_path, {}).setdefault('peer', {})[peer_uuid] = stat
 
 
 def load_sync_stat_by_keys(ioctx, keys):
@@ -88,7 +85,9 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None):
                     except (json.JSONDecodeError, UnicodeDecodeError) as e:
                         log.warning(f'failed to decode sync stat for key {key}: {e}')
                         continue
-                    nest_sync_stat_in_metrics(metrics, dir_path, peer, stat)
+                    format_peer_status_metrics(
+                        metrics, dir_path, peer,
+                        format_and_order_sync_stat_for_display(stat))
                 start = omap_vals.popitem()[0]
     except rados.Error as e:
         log.error(f'failed to read sync stat omap: {e}')
