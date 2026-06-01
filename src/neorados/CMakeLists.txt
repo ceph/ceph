@@ -2,10 +2,12 @@ add_library(neorados_objs OBJECT
   RADOSImpl.cc)
 target_compile_definitions(neorados_objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+target_link_libraries(neorados_objs legacy-option-headers)
 add_library(neorados_api_obj OBJECT
   RADOS.cc)
 target_compile_definitions(neorados_api_obj PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+target_link_libraries(neorados_api_obj legacy-option-headers)
 
 add_library(libneorados STATIC
   $<TARGET_OBJECTS:neorados_api_obj>
