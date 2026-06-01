@@ -44,6 +44,7 @@ public:
     , oid(std::move(_oid))
   {
     cookie.generate_random();
+    cookie_dstr = cookie.to_string().substr(0, 8);
     auto r = librados::Rados(ioctx);
     myaddrs = r.get_addrs();
   }
@@ -128,6 +129,7 @@ private:
   uint64_t size = 0;
   uint64_t allocated = 0;
   uuid_d cookie{};
+  std::string cookie_dstr;
   bool locked = false;
   bool size_dirty = false;
   bool blocklist_the_dead = true;
