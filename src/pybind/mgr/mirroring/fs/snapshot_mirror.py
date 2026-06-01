@@ -19,7 +19,10 @@ from mgr_module import NotifyType
 from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
-    AsyncOpTracker, connect_to_filesystem, disconnect_from_filesystem
+    AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
+    disconnect_from_filesystem, sync_stat_omap_key
+from .metrics import load as metrics_load
+from .metrics.load import nest_sync_stat_in_metrics
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
@@ -310,13 +313,6 @@ class FSSnapshotMirror:
             raise MirrorException(-errno.EINVAL, f'invalid cluster spec {spec}')
 
     @staticmethod
-    def get_metadata_pool(filesystem, fs_map):
-        for fs in fs_map['filesystems']:
-            if fs['mdsmap']['fs_name'] == filesystem:
-                return fs['mdsmap']['metadata_pool']
-        return None
-
-    @staticmethod
     def get_filesystem_id(filesystem, fs_map):
         for fs in fs_map['filesystems']:
             if fs['mdsmap']['fs_name'] == filesystem:
@@ -479,7 +475,7 @@ class FSSnapshotMirror:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
     def init_pool_policy(self, filesystem):
-        metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+        metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
         if not metadata_pool_id:
             log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
             raise Exception(-errno.EINVAL)
@@ -518,7 +514,7 @@ class FSSnapshotMirror:
         log.info(f'enabling mirror for filesystem {filesystem}')
         with self.lock:
             try:
-                metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+                metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
                 if not metadata_pool_id:
                     log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
                     raise Exception(-errno.EINVAL)
@@ -686,12 +682,6 @@ class FSSnapshotMirror:
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    @staticmethod
-    def norm_path(dir_path):
-        if not os.path.isabs(dir_path):
-            raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
-        return os.path.normpath(dir_path)
-
     def add_dir(self, filesystem, dir_path):
         try:
             with self.lock:
@@ -700,7 +690,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
                 fspolicy.add_dir(dir_path)
                 return 0, json.dumps({}), ''
@@ -717,7 +707,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 fspolicy.remove_dir(dir_path)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
@@ -747,7 +737,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 return fspolicy.status(dir_path)
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -765,8 +755,51 @@ class FSSnapshotMirror:
             return me.args[0], '', me.args[1]
 
     def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
-        """Return cephfs mirror metrics as JSON"""
-        return 0, json.dumps({}), ''
+        """Return persisted mirror directory snapshot metrics as JSON"""
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT,
+                                          f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL,
+                                          f'filesystem {filesystem} is not mirrored')
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    if not fspolicy.policy.lookup(dir_path):
+                        raise MirrorException(-errno.ENOENT,
+                                              f'directory {dir_path} is not mirrored')
+                peers = self.get_filesystem_peers(filesystem)
+                if not peers:
+                    return 0, json.dumps({}), ''
+
+                if peer_uuid:
+                    if peer_uuid not in peers:
+                        raise MirrorException(-errno.ENOENT,
+                                              f'peer {peer_uuid} not found for '
+                                              f'filesystem {filesystem}')
+                    peers = {peer_uuid: peers[peer_uuid]}
+
+                ioctx = metrics_load.open_metadata_ioctx(
+                    self.rados, self.fs_map, filesystem)
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    keys = [sync_stat_omap_key(filesystem, peer, dir_path)
+                            for peer in peers]
+                    omap_stats = metrics_load.load_sync_stat_by_keys(ioctx, keys)
+                    metrics = {}
+                    for peer in peers:
+                        omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
+                        if omap_key in omap_stats:
+                            nest_sync_stat_in_metrics(metrics, dir_path, peer,
+                                                      omap_stats[omap_key])
+                else:
+                    metrics = metrics_load.load_sync_stat_metrics(
+                        ioctx, filesystem, peer_uuid)
+                return 0, json.dumps(metrics, indent=4), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
 
     def daemon_status(self, format='json'):
         try:
