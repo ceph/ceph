@@ -223,16 +223,6 @@ public:
     }
     return {};
   }
-  // True if the token was issued for a restricted application credential.
-  // A restricted credential without access rules denies every request; a
-  // restricted credential with rules permits only matching requests.
-  bool is_restricted() const {
-    return app_cred && app_cred->restricted;
-  }
-  // True only when an app_cred is present AND it carries access rules.
-  bool has_access_rules() const {
-    return app_cred && !app_cred->access_rules.empty();
-  }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
