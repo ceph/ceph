@@ -8,4 +8,5 @@ tasks:
     basedir: qa/workunits/rgw
     clients:
       client.0:
+        - keystone-access-rules.sh
         - keystone-service-token.sh
