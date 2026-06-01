@@ -18305,8 +18305,9 @@ int BlueStore::_maybe_unshare_on_remove(
   // that is not yet loaded! We must have had inspected it to even check nrefs.
   dout(20) << __func__ << " checking for unshareable blobs on " << h
 	   << " " << h->oid << dendl;
-  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  map<const Blob*,bluestore_extent_ref_map_t> expect;
   for (auto& e : h->extent_map.extent_map) {
+    const Blob* B = e.blob.get();
     const bluestore_blob_t& b = e.blob->get_blob();
     SharedBlob *sb = e.blob->get_shared_blob().get();
     if (b.is_shared() &&
@@ -18314,7 +18315,7 @@ int BlueStore::_maybe_unshare_on_remove(
 	maybe_unshared_blobs.count(sb)) {
       if (b.is_compressed()) {
         b.map(0, b.get_ondisk_length(), [&](uint64_t off, uint64_t len) {
-            expect[sb].get(off, len);
+            expect[B].get(off, len);
             return 0;
           });
         // Do not account second time.
@@ -18322,7 +18323,7 @@ int BlueStore::_maybe_unshare_on_remove(
       } else {
 	// todo: it seems to be an overkill to go through map()
 	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	    expect[sb].get(off, len);
+	    expect[B].get(off, len);
 	    return 0;
 	  });
       }
@@ -18333,10 +18334,11 @@ int BlueStore::_maybe_unshare_on_remove(
   vector<SharedBlob*> unshared_blobs;
   unshared_blobs.reserve(expect.size());
   for (auto& p : expect) {
-    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-    if (p.first->persistent->ref_map == p.second) {
+    const Blob* B = p.first;
+    SharedBlob* sb = B->get_shared_blob().get();
+    dout(20) << " ? " << *sb << " vs " << p.second << dendl;
+    if (sb->persistent->ref_map == p.second) {
       // yup, .head is only one that is using the shared blob now
-      SharedBlob *sb = p.first;
       dout(20) << __func__ << "  unsharing " << *sb << dendl;
       unshared_blobs.push_back(sb);
       txc->unshare_blob(sb);
