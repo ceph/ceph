@@ -83,6 +83,11 @@
   data-sync queue timing, bytes/files progress, and ETA). Output is grouped
   under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>``. For more information,
   see https://tracker.ceph.com/issues/73453
+* CephFS Mirroring: The mirroring module provides ``ceph fs snapshot mirror status``,
+  a Ceph CLI command similar to the ``fs mirror peer status`` admin socket interface
+  for viewing per-directory snapshot sync metrics. The output layout matches
+  ``fs mirror peer status``. Optional filters by mirrored directory path and peer
+  UUID are supported. For more information, see https://tracker.ceph.com/issues/76686
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
