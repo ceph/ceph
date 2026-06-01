@@ -20,7 +20,8 @@ add_library(bluestore OBJECT
   Writer.cc
   Compression.cc
   BlueAdmin.cc
-  BlueEnv.cc)
+  BlueEnv.cc
+  OnodeReformat.cc)
 
 target_link_libraries(bluestore
   PRIVATE

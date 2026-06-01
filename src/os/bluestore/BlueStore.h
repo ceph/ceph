@@ -72,6 +72,8 @@ class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
+class OnodeReformatContext;
+
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 #ifdef WITH_CPUTRACE
@@ -268,8 +270,6 @@ enum {
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
 extern const std::vector<uint64_t> bdev_label_positions;
-
-class OnodeReformatContext;
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
@@ -3530,6 +3530,9 @@ public:
   BlockDevice* get_bdev() {
     return bdev;
   }
+  Allocator* get_allocator() {
+    return alloc;
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
@@ -3636,7 +3639,7 @@ public:
   void debug_set_prefer_deferred_size(uint64_t s) {
     prefer_deferred_size = s;
   }
-  inline void log_latency(const char* name,
+  void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
     double lat_threshold,
