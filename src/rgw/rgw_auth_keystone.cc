@@ -172,6 +172,21 @@ check_access_rules(
 // Returns true if the request is permitted, false if it must be denied.
 // Called on both the cache-miss and cache-hit paths so that a cached token
 // reused across requests is re-checked against its rules for every method/path.
+//
+// Enforcement is triggered solely by the presence of access_rules on the
+// application credential, matching the upstream keystonemiddleware reference
+// implementation (auth_token/__init__.py: validate_allowed_request returns
+// without enforcement when access_rules is None) and the original feature
+// commit ("Add validation of app cred access rules", I185e0541d5).
+//
+// The application_credential.restricted (a.k.a. unrestricted=false) flag is
+// intentionally NOT consulted here. Per the Keystone Identity API reference
+// and server source (keystone/api/trusts.py, keystone/api/users.py), that
+// flag governs only Identity-API self-mutation: creating or deleting trusts,
+// EC2 credentials, and additional application credentials. It does not
+// authorize or deny object-store requests, and the OpenStack default
+// `openstack application credential create` produces a token with
+// restricted=true and no access_rules — which must be permitted.
 static bool
 enforce_access_rules(
     const DoutPrefixProvider* dpp,
@@ -179,13 +194,9 @@ enforce_access_rules(
     const req_state* s)
 {
   const auto rules = t.get_access_rules();
-  // A restricted credential with no rules denies everything.
-  if (t.is_restricted() && rules.empty()) {
-    ldpp_dout(dpp, 5) << "denying request: restricted application credential "
-                         "has no access rules" << dendl;
-    return false;
-  }
-  // No app cred or unrestricted with no rules: nothing to enforce.
+  // No access rules: nothing to enforce. This covers ordinary tokens
+  // (no application credential) and application credentials issued without
+  // access rules, regardless of the restricted flag.
   if (rules.empty()) {
     return true;
   }

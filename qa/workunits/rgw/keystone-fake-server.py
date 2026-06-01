@@ -121,17 +121,22 @@ TOKENS = {
             'restricted': False,
         },
     },
-    # Restricted application credential with no access rules attached. Per
-    # the OpenStack spec a restricted credential without rules denies every
-    # request — RGW must deny instead of falling through to "no rules =
-    # unrestricted".
-    'appcred-token-restricted-empty': {
+    # Application credential with restricted=true (the OpenStack default,
+    # produced by `openstack application credential create` without the
+    # --unrestricted flag) and no access_rules attached. The 'restricted'
+    # flag governs only Identity-API self-mutation (trust/app-cred/EC2
+    # create-and-delete) per keystone/api/trusts.py and
+    # keystone/api/users.py — it does NOT authorize or deny object-store
+    # requests. keystonemiddleware's validate_allowed_request returns
+    # without enforcement when access_rules is absent. RGW must do the
+    # same and permit every request from this token.
+    'appcred-token-restricted-no-rules': {
         'username': 'deadbeef',
         'project': 'deadbeef',
         'expired': False,
         'application_credential': {
-            'id': 'appcred-restricted-empty-id',
-            'name': 'restricted-empty',
+            'id': 'appcred-restricted-no-rules-id',
+            'name': 'restricted-no-rules',
             'restricted': True,
         },
     },
