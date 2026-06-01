@@ -24,7 +24,7 @@ Syntax
 .. parsed-literal::
 
     cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] journal <inspect|import|export|reset>
-    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] header <get|set> <trimmed_pos|expire_pos|write_pos|pool_id> <value>
+    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] header {<get|set> <trimmed_pos|expire_pos|write_pos|pool_id> <value> | <recover> [--force]}
     cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] event <get|splice|recover_dentries> [filter] <list|json|summary|binary>
 
 
@@ -97,8 +97,24 @@ Header mode
 * ``set`` modifies an attribute of the header.  Allowed attributes are
   ``trimmed_pos``, ``expire_pos``,  ``write_pos`` and ``pool_id``.
 
-Example: header get/set
-~~~~~~~~~~~~~~~~~~~~~~~
+* ``recover``  recover corrupted journal pointers within the ``mdlog``.
+  It enumerates the journal events and determines safe fallback offsets:
+
+  * ``trimmed_pos``: Set to the first event discovered in the log segment.
+  * ``expire_pos``: Set to the first major segment event.
+  * ``read_pos``: Set to the first major segment event.
+  * ``write_pos``: Set to the first position immediately following the last valid event.
+
+By default, running this command performs a **dry run**. It emits a log to the
+console listing the proposed changes to the header offsets but does not modify the
+disk.
+
+.. warning::
+    The proposed header fields will only be committed to disk if the ``--force``
+    argument is explicitly passed. Use this flag with caution on corrupted file systems.
+
+Example: header get/set/recover
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -118,6 +134,7 @@ Example: header get/set
     Updating trimmed_pos 0x400000 -> 0x3fffff
     Successfully updated header.
 
+    # cephfs-journal-tool --rank a:0 header recover [--force]
 
 Event mode
 ----------
