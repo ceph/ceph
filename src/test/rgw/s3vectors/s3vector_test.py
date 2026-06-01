@@ -8,7 +8,6 @@ import string
 from datetime import datetime, timedelta, timezone
 import pytest
 import boto3
-from botocore.config import Config
 
 from . import(
     configfile,
@@ -454,9 +453,9 @@ def test_delete_index():
     # delete the index from the right bucket
     result = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # not implemented yet
-    #with pytest.raises(conn.exceptions.ClientError):
-    #    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    # try to get the index
+    with pytest.raises(conn.exceptions.ClientError):
+        result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
@@ -657,6 +656,7 @@ def update_vectors_thread(conn, bucket_name, thread_id):
     # Get vectors with returnData=True
     vector_ids = [f'vec-{i}' for i in range(num_vectors)]
     returned_vectors = verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    log.info('test_get_vectors: successfully verified %d vectors', len(returned_vectors))
 
 
 @pytest.mark.vector_test
