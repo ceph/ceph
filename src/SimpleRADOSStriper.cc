@@ -218,6 +218,8 @@ int SimpleRADOSStriper::stat(uint64_t* s)
   }
 
   *s = size;
+
+  d(5) << " = " << size << dendl;
   return 0;
 }
 
