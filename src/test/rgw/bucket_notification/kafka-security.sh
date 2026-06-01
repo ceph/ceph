@@ -8,6 +8,9 @@ REQFILE=$FQDN.req
 CERTFILE=$FQDN.crt
 MYPW=mypassword
 VALIDITY=36500
+CLIENT_KEYFILE=client.key
+CLIENT_CERTFILE=client.crt
+CLIENT_REQFILE=client.req
 
 rm -f $KEYFILE
 rm -f $TRUSTFILE
@@ -66,9 +69,6 @@ keytool -storepass $MYPW -keystore $KEYFILE -alias localhost \
   -import -file $CERTFILE
 
 echo "########## generate client certificate for mTLS testing"
-CLIENT_KEYFILE=client.key
-CLIENT_CERTFILE=client.crt
-CLIENT_REQFILE=client.req
 
 # generate client private key (PKCS#8 for compatibility)
 openssl genpkey -algorithm RSA -out $CLIENT_KEYFILE -pkeyopt rsa_keygen_bits:2048

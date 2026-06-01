@@ -30,7 +30,8 @@ from . import(
     get_config_zonegroup,
     get_config_cluster,
     get_access_key,
-    get_secret_key
+    get_secret_key,
+    get_kerberos_config,
     )
 
 from .api import PSTopicS3, \
@@ -426,6 +427,12 @@ default_kafka_server = get_ip()
 KAFKA_TEST_USER = 'alice'
 KAFKA_TEST_PASSWORD = 'alice-secret'
 
+
+def get_kerberos_env():
+    service_name, principal, keytab = get_kerberos_config()
+    return service_name, principal, keytab
+
+
 def setup_scram_users_via_kafka_configs(mechanism: str) -> None:
     """to setup SCRAM users using kafka-configs.sh after Kafka is running."""
     if not mechanism.startswith('SCRAM'):
@@ -552,17 +559,27 @@ class KafkaReceiver(object):
             if ca_cert:
                 base_config['ssl_cafile'] = ca_cert
             base_config['sasl_mechanism'] = mechanism
-            base_config.update({
-                'sasl_plain_username': KAFKA_TEST_USER,
-                'sasl_plain_password': KAFKA_TEST_PASSWORD,
-            })
+            if mechanism == 'GSSAPI':
+                kerberos_service_name, _, _ = get_kerberos_env()
+                if kerberos_service_name:
+                    base_config['sasl_kerberos_service_name'] = kerberos_service_name
+            else:
+                base_config.update({
+                    'sasl_plain_username': KAFKA_TEST_USER,
+                    'sasl_plain_password': KAFKA_TEST_PASSWORD,
+                })
         elif effective_protocol == 'SASL_PLAINTEXT':
             base_config['security_protocol'] = 'SASL_PLAINTEXT'
             base_config['sasl_mechanism'] = mechanism
-            base_config.update({
-                'sasl_plain_username': KAFKA_TEST_USER,
-                'sasl_plain_password': KAFKA_TEST_PASSWORD,
-            })
+            if mechanism == 'GSSAPI':
+                kerberos_service_name, _, _ = get_kerberos_env()
+                if kerberos_service_name:
+                    base_config['sasl_kerberos_service_name'] = kerberos_service_name
+            else:
+                base_config.update({
+                    'sasl_plain_username': KAFKA_TEST_USER,
+                    'sasl_plain_password': KAFKA_TEST_PASSWORD,
+                })
 
         remaining_retries = 10
         while remaining_retries > 0:
@@ -4732,6 +4749,19 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
     if mechanism.startswith('SCRAM'):
         setup_scram_users_via_kafka_configs(mechanism)
         time.sleep(2)  # Allow time for SCRAM config to propagate
+    elif mechanism == 'GSSAPI':
+        service_name, principal, keytab = get_kerberos_env()
+        missing = []
+        if not service_name:
+            missing.append('service_name')
+        if not principal:
+            missing.append('principal')
+        if not keytab:
+            missing.append('keytab')
+        if missing:
+            pytest.skip('Missing GSSAPI options in [kerberos] section of BNTESTS_CONF: ' + ', '.join(missing))
+        if not os.path.isfile(keytab):
+            pytest.skip(f'[kerberos] keytab does not exist: {keytab}')
     
     conn = connection()
     zonegroup = get_config_zonegroup()
@@ -4742,26 +4772,45 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
     topic_name = bucket_name+'_topic'
     # create topic
     if security_type == 'SASL_SSL':
-        if not use_topic_attrs_for_creds:
-            endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9094'
-        else:
+        if mechanism == 'GSSAPI' or use_topic_attrs_for_creds:
             endpoint_address = 'kafka://' + default_kafka_server + ':9094'
+        else:
+            endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9094'
     elif security_type == 'SSL':
         if use_mtls:
             endpoint_address = 'kafka://' + default_kafka_server + ':9096'
         else:
             endpoint_address = 'kafka://' + default_kafka_server + ':9093'
     elif security_type == 'SASL_PLAINTEXT':
-        endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9095'
+        if mechanism == 'GSSAPI':
+            endpoint_address = 'kafka://' + default_kafka_server + ':9095'
+        else:
+            endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9095'
     else:
         assert False, 'unknown security method '+security_type
 
     if security_type == 'SASL_PLAINTEXT':
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=false&mechanism='+mechanism
+        if mechanism == 'GSSAPI':
+            kerberos_service_name, kerberos_principal, kerberos_keytab = get_kerberos_env()
+            if kerberos_service_name:
+                endpoint_args += '&sasl-kerberos-service-name=' + kerberos_service_name
+            if kerberos_principal:
+                endpoint_args += '&sasl-kerberos-principal=' + kerberos_principal
+            if kerberos_keytab:
+                endpoint_args += '&sasl-kerberos-keytab=' + kerberos_keytab
     elif security_type == 'SASL_SSL':
         kafka_cert_dir = _kafka_cert_dir()
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+kafka_cert_dir+'/y-ca.crt&mechanism='+mechanism
-        if use_topic_attrs_for_creds:
+        if mechanism == 'GSSAPI':
+            kerberos_service_name, kerberos_principal, kerberos_keytab = get_kerberos_env()
+            if kerberos_service_name:
+                endpoint_args += '&sasl-kerberos-service-name=' + kerberos_service_name
+            if kerberos_principal:
+                endpoint_args += '&sasl-kerberos-principal=' + kerberos_principal
+            if kerberos_keytab:
+                endpoint_args += '&sasl-kerberos-keytab=' + kerberos_keytab
+        elif use_topic_attrs_for_creds:
             endpoint_args += '&user-name=alice&password=alice-secret'
     else:
         kafka_cert_dir = _kafka_cert_dir()
@@ -4884,6 +4933,16 @@ def test_notification_kafka_security_sasl_scram_512():
 @pytest.mark.kafka_security_test
 def test_notification_kafka_security_ssl_sasl_scram_512():
     kafka_security('SASL_SSL', mechanism='SCRAM-SHA-512')
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_sasl_gssapi():
+    kafka_security('SASL_PLAINTEXT', mechanism='GSSAPI')
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_ssl_sasl_gssapi():
+    kafka_security('SASL_SSL', mechanism='GSSAPI')
 
 
 @pytest.mark.kafka_security_test
