@@ -4,6 +4,7 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     - \(POOL_APP_NOT_ENABLED\)
+    - \(DEPRECATED_EC_PLUGIN\)
     create_rbd_pool: False
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force

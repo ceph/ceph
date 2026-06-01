@@ -5,6 +5,7 @@ overrides:
     - objects unfound and apparently lost
     - osd_map_cache_size
     - \(POOL_APP_NOT_ENABLED\)
+    - \(DEPRECATED_EC_PLUGIN\)
     conf:
       mon:
         mon min osdmap epochs: 2
