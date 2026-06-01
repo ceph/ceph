@@ -70,6 +70,18 @@ def make_filters_lvmcmd_ready(filters: Dict[str, Any], tags: Dict[str, Any]) -> 
         return ''
 
 
+def should_retry_lvs_without_devices_file(stdout: List[str],
+                                           stderr: List[str],
+                                           returncode: int) -> bool:
+    """
+    Detect an LVM 'devices file' mismatch scenario where `lvs` can return no data
+    and only emits warnings on stderr.
+    """
+    if returncode != 0 or stdout:
+        return False
+    return any('devices file is missing' in line.lower() for line in stderr)
+
+
 def _output_parser(output: List[str], fields: str) -> List[Dict[str, Any]]:
     """
     Newer versions of LVM allow ``--reportformat=json``, but older versions,
@@ -1177,6 +1189,21 @@ def get_lvs(fields: str = LV_FIELDS, filters: Optional[Dict[str, Any]] = None, t
     args = ['lvs'] + LV_CMD_OPTIONS + ['-S', filters_str, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, run_on_host=True, verbose_on_failure=False)
+    if should_retry_lvs_without_devices_file(stdout, stderr, returncode):
+        logger.warning(
+            'lvs returned no output with devices-file warnings; retrying with use_devicesfile=0'
+        )
+        retry_args = ['lvs'] + LV_CMD_OPTIONS + [
+            '--config',
+            'devices { use_devicesfile=0 }',
+            '-S',
+            filters_str,
+            '-o',
+            fields,
+        ]
+        stdout, stderr, returncode = process.call(
+            retry_args, run_on_host=True, verbose_on_failure=False
+        )
     lvs_report = _output_parser(stdout, fields)
     return [Volume(**lv_report) for lv_report in lvs_report]
 
