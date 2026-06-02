@@ -435,6 +435,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
 void ECCommon::ReadPipeline::start_read_op(
     const int priority,
     map<hobject_t, read_request_t> &to_read,
+    OpRequestRef orig_op,
     const bool do_redundant_reads,
     const bool for_recovery,
     std::unique_ptr<ReadCompleter> on_complete) {
@@ -445,6 +446,7 @@ void ECCommon::ReadPipeline::start_read_op(
     ReadOp(
       priority,
       tid,
+      orig_op,
       do_redundant_reads,
       for_recovery,
       std::move(on_complete),
@@ -454,7 +456,6 @@ void ECCommon::ReadPipeline::start_read_op(
 #ifndef WITH_CRIMSON
     op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp", op.op->pg_trace);
 #endif
-    op.otel_trace->AddEvent("start ec read");
   }
   do_read_op(op);
 }
@@ -675,6 +676,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     const map<hobject_t, std::list<ec_align_t>> &reads,
     const bool fast_read,
     const uint64_t object_size,
+    OpRequestRef op,
     GenContextURef<ec_extents_t&&> &&func) {
   in_progress_client_reads.emplace_back(reads.size(), std::move(func));
   if (!reads.size()) {
@@ -716,6 +718,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   start_read_op(
     CEPH_MSG_PRIO_DEFAULT,
     for_read_op,
+    op,
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(
@@ -724,6 +727,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
     map<hobject_t, read_request_t> &&to_read,
+    OpRequestRef op,
     GenContextURef<ec_extents_t&&> &&func) {
   in_progress_client_reads.emplace_back(to_read.size(), std::move(func));
   if (!to_read.size()) {
@@ -749,7 +753,10 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
 
   start_read_op(
     CEPH_MSG_PRIO_DEFAULT,
-    for_read_op, false, false,
+    for_read_op,
+    op,
+    false,
+    false,
     std::make_unique<ClientReadCompleter>(
       *this, &(in_progress_client_reads.back())));
 }
@@ -938,6 +945,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       r->min_epoch = get_parent()->get_interval_start_epoch();
       r->trace = ::tracing::osd::tracer.add_span("MOSDECSubIoWrite",
 						op.otel_trace);
+      r->otel_trace = r->trace->GetContext();
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }
@@ -1395,6 +1403,7 @@ void ECCommon::RecoveryBackend::dispatch_recovery_messages(
   read_pipeline.start_read_op(
     priority,
     m.recovery_reads,
+    OpRequestRef(),
     false,
     true,
     std::make_unique<RecoveryReadCompleter>(*this));

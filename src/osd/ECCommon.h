@@ -91,6 +91,7 @@ struct ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      OpRequestRef op,
       GenContextURef<ec_extents_t&&> &&func) = 0;
 
   struct shard_read_t {
@@ -151,6 +152,7 @@ struct ECCommon {
 
   virtual void objects_read_and_reconstruct_for_rmw(
       std::map<hobject_t, read_request_t> &&to_read,
+      OpRequestRef op,
       GenContextURef<ec_extents_t&&> &&func) = 0;
 
   struct ReadOp;
@@ -277,12 +279,14 @@ struct ECCommon {
     ReadOp(
         int priority,
         ceph_tid_t tid,
+        OpRequestRef op,
         bool do_redundant_reads,
         bool for_recovery,
         std::unique_ptr<ReadCompleter> _on_complete,
         std::map<hobject_t, read_request_t> &&_to_read)
       : priority(priority),
         tid(tid),
+        op(op),
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
@@ -313,10 +317,12 @@ struct ECCommon {
         const std::map<hobject_t, std::list<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
+        OpRequestRef op,
         GenContextURef<ec_extents_t&&> &&func);
 
     void objects_read_and_reconstruct_for_rmw(
         std::map<hobject_t, read_request_t> &&to_read,
+        OpRequestRef op,
         GenContextURef<ECCommon::ec_extents_t&&> &&func);
 
     template <class F, class G>
@@ -337,6 +343,7 @@ struct ECCommon {
     void start_read_op(
         int priority,
         std::map<hobject_t, read_request_t> &to_read,
+        OpRequestRef op,
         bool do_redundant_reads,
         bool for_recovery,
         std::unique_ptr<ReadCompleter> on_complete);
@@ -636,6 +643,7 @@ struct ECCommon {
         Func &&on_complete) {
       ec_backend.objects_read_and_reconstruct_for_rmw(
         std::move(to_read),
+        OpRequestRef(),
         make_gen_lambda_context<
           ECCommon::ec_extents_t&&, Func>(
           std::forward<Func>(on_complete)));

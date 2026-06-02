@@ -825,15 +825,15 @@ bool ECBackendL::_handle_message(
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
       _op->get_nonconst_req());
     parent->maybe_preempt_replica_scrub(op->op.soid);
-    auto sub_span = tracing::osd::tracer.add_span("handle_sub_write", _op->pg_trace);
+    auto sub_span = tracing::osd::tracer.add_span("handle_sub_write (legacy)", _op->pg_trace);
     handle_sub_write(op->op.from, _op, op->op, sub_span, *get_parent()->get_eclistener());
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
     const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(
       _op->get_req());
-    auto sub_span = tracing::osd::tracer.add_span("handle_sub_write_reply",
-    		  _op->pg_trace);
+    auto sub_span = tracing::osd::tracer.add_span("handle_sub_write_reply (legacy)",
+    		  op->otel_trace);
     handle_sub_write_reply(op->op.from, op->op, sub_span);
     return true;
   }
@@ -843,7 +843,7 @@ bool ECBackendL::_handle_message(
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = switcher->get_osdmap_epoch();
     reply->min_epoch = get_parent()->get_interval_start_epoch();
-    auto sub_span = tracing::osd::tracer.add_span("handle_sub_read",
+    auto sub_span = tracing::osd::tracer.add_span("handle_sub_read (legacy)",
       _op->pg_trace);
     handle_sub_read(op->op.from, op->op, &(reply->op), sub_span);
     reply->otel_trace = _op->pg_trace;
@@ -856,7 +856,7 @@ bool ECBackendL::_handle_message(
     // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
       _op->get_nonconst_req());
-    auto sub_span = tracing::osd::tracer.add_span("handle_sub_read_reply",
+    auto sub_span = tracing::osd::tracer.add_span("handle_sub_read_reply (legacy)",
     		  _op->pg_trace);
     handle_sub_read_reply(op->op.from, op->op, sub_span);
     // dispatch_recovery_messages() in the case of recovery_reads
@@ -909,6 +909,7 @@ struct SubWriteCommitted : public Context {
     : pg(pg), msg(msg), tid(tid),
       version(version), last_complete(last_complete), otel_trace(std::move(otel_trace)) {}
   void finish(int) override {
+    otel_trace->AddEvent("sub write committed");
     if (msg)
       msg->mark_event("sub_op_committed");
     pg->sub_write_committed(tid, version, last_complete, otel_trace);
@@ -956,7 +957,6 @@ void ECBackendL::handle_sub_write(
   if (msg) {
     msg->mark_event("sub_op_started");
   }
-  otel_trace->AddEvent("handle_sub_write");
 
   if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_write_error3(op.soid)) {
@@ -1010,12 +1010,14 @@ void ECBackendL::handle_sub_write(
       (unsigned)get_parent()->whoami_shard().shard >= sinfo.get_k())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
+  auto local_sub_write_trace =
+    tracing::osd::tracer.add_span("ECBackendL::local_sub_write", otel_trace);
   localt.register_on_commit(
     get_parent()->bless_context(
       new SubWriteCommitted(
 	this, msg, op.tid,
 	op.at_version,
-	get_parent()->get_info().last_complete, otel_trace)));
+	get_parent()->get_info().last_complete, local_sub_write_trace)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
@@ -1186,7 +1188,8 @@ void ECBackendL::handle_sub_write_reply(
   map<ceph_tid_t, RMWPipeline::OpRef>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
   ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
   if (op.committed) {
-    otel_trace->AddEvent("sub write committed");
+    otel_trace->AddEvent("sub write committed", {{"shard", from.shard.id}});
+
     ceph_assert(i->second->pending_commit.count(from));
     i->second->pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
@@ -1194,7 +1197,7 @@ void ECBackendL::handle_sub_write_reply(
     }
   }
   if (op.applied) {
-    otel_trace->AddEvent("sub write applied");
+    otel_trace->AddEvent("sub write applied", {{"shard", from.shard.id}});
     ceph_assert(i->second->pending_apply.count(from));
     i->second->pending_apply.erase(from);
   }
@@ -1540,7 +1543,7 @@ void ECBackendL::submit_transaction(
   op->reqid = reqid;
   op->client_op = client_op;
   if (client_op) {
-    op->otel_trace = tracing::osd::tracer.add_span("submit_transaction",
+    op->otel_trace = tracing::osd::tracer.add_span("submit_transaction (legacy)",
     		   client_op->pg_trace);
   }
   op->plan = op->get_write_plan(
@@ -1586,7 +1589,8 @@ void ECBackendL::objects_read_async(
   const list<pair<ec_align_t,
                   pair<bufferlist*, Context*>>> &to_read,
   Context *on_complete,
-  bool fast_read)
+  bool fast_read,
+  OpRequestRef op)
 {
   map<hobject_t,std::list<ec_align_t>> reads;
 
@@ -1693,6 +1697,7 @@ void ECBackendL::objects_read_async(
   objects_read_and_reconstruct(
     reads,
     fast_read,
+    op,
     make_gen_lambda_context<
       ECCommonL::ec_extents_t &&, cb>(
 	cb(this,
@@ -1707,10 +1712,11 @@ void ECBackendL::objects_read_and_reconstruct(
     std::list<ec_align_t>
   > &reads,
   bool fast_read,
+  OpRequestRef op,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, std::move(func));
+    reads, fast_read, op, std::move(func));
 }
 
 void ECBackendL::kick_reads() {

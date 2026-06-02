@@ -141,7 +141,9 @@ public:
     uint64_t object_size,
     const std::list<std::pair<ec_align_t,
       std::pair<ceph::buffer::list*, Context*>>> &to_read,
-    Context *on_complete, bool fast_read = false) override {
+    Context *on_complete,
+    bool fast_read = false,
+    OpRequestRef op = OpRequestRef()) override {
   }
 
   bool auto_repair_supported() const override {

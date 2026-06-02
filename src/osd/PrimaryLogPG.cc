@@ -311,7 +311,9 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
     obc->obs.oi.soid,
     obc->obs.oi.size,
     in_native,
-    new OnReadComplete(pg, this), pg->get_pool().fast_read);
+    new OnReadComplete(pg, this),
+    pg->get_pool().fast_read,
+    this->op);
 }
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 {
@@ -1825,8 +1827,7 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  auto pg_span = tracing::osd::tracer.add_span("pg op", op->osd_trace);
-  pg_span->AddEvent("do request");
+  auto pg_span = tracing::osd::tracer.add_span("do_request (pg op)", op->osd_trace);
   op->pg_trace = pg_span->GetContext();
 
 // make sure we have a new enough map

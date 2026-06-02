@@ -24,34 +24,86 @@ Tracer::Tracer(CephContext* _cct,
   init(_cct, service_name);
 }
 
-void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_name) {
+void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view library_name) {
   ceph_assert(_cct);
   cct = _cct;
   if (!tracer) {
-    // Only set up a new provider if one hasn't been initialized yet
-    // This allows daemons (OSD, RGW, etc.) to initialize tracing while preventing
-    // libraries (neorados, librbd when used as a library) from overwriting it
+    // Check if root service name has been set, otherwise use default "io.ceph"
+    std::string provider_service_name;
+    {
+      std::lock_guard<std::mutex> lock(provider_config_mutex);
+      if (root_service_name_set) {
+        provider_service_name = root_service_name;
+      } else {
+        provider_service_name = "io.ceph";
+      }
+    }
+
+    ldout(_cct, 3) << "Initializing tracer for component: " << library_name << dendl;
+    
+    // Only set up a provider if one hasn't been initialized yet
     if (!provider_initialized) {
-      // No real provider set yet - we can initialize one (daemon use case)
       opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
       exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
-      ldout(cct, 3) << "tracer was not loaded, initializing tracing for service: " << service_name
-                    << " on port: " << exporter_options.server_port << dendl;
+      ldout(_cct, 3) << "Initializing tracer provider for service: " << provider_service_name
+                     << " on port: " << exporter_options.server_port << dendl;
       const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
-      const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
-      auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
-      auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
-      const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+      opentelemetry::sdk::resource::ResourceAttributes attrs{
+        {"service.name", provider_service_name}
+      };
+      {
+        std::lock_guard<std::mutex> lock(provider_config_mutex);
+        for (const auto& [key, value] : resource_attributes) {
+          ldout(_cct, 3) << "Adding tracer resource attribute: "
+                         << key << "=" << value << dendl;
+          attrs[key] = value;
+        }
+      }
+      const auto jaeger_resource =
+        opentelemetry::sdk::resource::Resource::Create(std::move(attrs));
+      auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
+        new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
+      auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
+        new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
+      const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(
+        new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
       opentelemetry::trace::Provider::SetTracerProvider(provider);
-      tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
       provider_initialized = true;
-    } else {
-      // A real provider is already set - use it (library use case)
-      ldout(cct, 3) << "Using existing tracer provider for service: " << service_name << dendl;
-      auto existing_provider = opentelemetry::trace::Provider::GetTracerProvider();
-      tracer = existing_provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
     }
+
+    auto provider = opentelemetry::trace::Provider::GetTracerProvider();
+    ldout(_cct, 3) << "Using tracer provider " << provider.get() << " (service: " << provider_service_name << ") for library: " << library_name << dendl;
+    tracer = provider->GetTracer(library_name, OPENTELEMETRY_SDK_VERSION);
   }
+}
+
+void Tracer::set_root_service_name(std::string_view name) {
+  std::lock_guard<std::mutex> lock(provider_config_mutex);
+  
+  if (root_service_name_set) {
+    // Already set - this is an error
+    throw std::runtime_error(
+      std::string("Root service name already set to '") + root_service_name +
+      "', cannot set to '" + std::string(name) + "'");
+  }
+  
+  root_service_name = std::string(name);
+  root_service_name_set = true;
+}
+
+std::string Tracer::get_root_service_name() {
+  std::lock_guard<std::mutex> lock(provider_config_mutex);
+  return root_service_name;
+}
+
+bool Tracer::has_root_service_name() {
+  std::lock_guard<std::mutex> lock(provider_config_mutex);
+  return root_service_name_set;
+}
+
+void Tracer::set_resource_attribute(std::string_view key, std::string_view value) {
+  std::lock_guard<std::mutex> lock(provider_config_mutex);
+  resource_attributes[std::string(key)] = std::string(value);
 }
 
 #ifndef WITH_CRIMSON

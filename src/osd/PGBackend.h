@@ -631,7 +631,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t object_size,
      const std::list<std::pair<ec_align_t,
 		std::pair<ceph::buffer::list*, Context*>>> &to_read,
-     Context *on_complete, bool fast_read = false) = 0;
+     Context *on_complete, bool fast_read = false,
+     OpRequestRef op = OpRequestRef()) = 0;
 
    virtual bool auto_repair_supported() const = 0;
 

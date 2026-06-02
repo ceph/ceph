@@ -318,7 +318,8 @@ void ReplicatedBackend::objects_read_async(
   const list<pair<ec_align_t,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete,
-  bool fast_read)
+  bool fast_read,
+  OpRequestRef op)
 {
   ceph_abort_msg("async read is not used by replica pool");
 }
@@ -691,9 +692,7 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
-    auto commit_span = tracing::osd::tracer.add_span("op_commit",
-						     op->op->pg_trace);
-    commit_span->AddEvent("op_commit");
+    tracing::osd::tracer.add_span("op_commit", op->op->pg_trace);
   }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
@@ -743,10 +742,8 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.waiting_for_commit.erase(from);
       if (ip_op.op) {
 	ip_op.op->mark_event("sub_op_commit_rec");
-	auto commit_span = tracing::osd::tracer.add_span("sub_op_commit_rec",
-							 ip_op.op->pg_trace);
-	commit_span->AddEvent("sub_op_commit_rec");
-      }
+	tracing::osd::tracer.add_span("sub_op_commit_rec", r->otel_trace);
+	    }
     } else {
       // legacy peer; ignore
     }
@@ -1157,6 +1154,7 @@ Message * ReplicatedBackend::generate_subop(
   const eversion_t &at_version,
   ceph_tid_t tid,
   osd_reqid_t reqid,
+  const otel_span_context_t& parent_trace,
   eversion_t pg_trim_to,
   eversion_t pg_committed_to,
   hobject_t new_temp_oid,
@@ -1176,6 +1174,9 @@ Message * ReplicatedBackend::generate_subop(
     get_osdmap_epoch(),
     parent->get_last_peering_reset_epoch(),
     tid, at_version);
+
+  wr->trace = ::tracing::osd::tracer.add_span("MOSDRepOp msg", parent_trace);
+  wr->otel_trace = wr->trace->GetContext();
 
   // ship resulting transaction, log entries, and pg_stats
   if (!parent->should_send_op(peer, soid)) {
@@ -1228,8 +1229,7 @@ void ReplicatedBackend::issue_op(
 {
   if (parent->get_acting_recovery_backfill_shards().size() > 1) {
     if (op->op) {
-      auto issue_span = tracing::osd::tracer.add_span("issue op", op->op->pg_trace);
-      issue_span->AddEvent("issue replication ops");
+      tracing::osd::tracer.add_span("issue_op (replicated)", op->op->pg_trace);
       ostringstream ss;
       set<pg_shard_t> replicas = parent->get_acting_recovery_backfill_shards();
       replicas.erase(parent->whoami_shard());
@@ -1251,6 +1251,7 @@ void ReplicatedBackend::issue_op(
 	  at_version,
 	  tid,
 	  reqid,
+    op->op ? op->op->pg_trace : tracing::noop_span_ctx,
 	  pg_trim_to,
 	  pg_committed_to,
 	  new_temp_oid,
@@ -1375,8 +1376,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   rm->op->mark_commit_sent();
   rm->committed = true;
 
-  auto commit_span = tracing::osd::tracer.add_span(__func__, rm->op->pg_trace);
-  commit_span->AddEvent("sup_op_commit");
+  tracing::osd::tracer.add_span(__func__, rm->op->pg_trace);
 
   // send commit.
   auto m = rm->op->get_req<MOSDRepOp>();

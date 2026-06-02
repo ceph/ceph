@@ -419,13 +419,12 @@ void ECCommonL::ReadPipeline::start_read_op(
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
 #ifndef WITH_CRIMSON
-    op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp", _op->pg_trace);
-    op.otel_trace->AddEvent("start ec read");
+    op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp (legacy)", _op->pg_trace);
 #endif
   } else {
     // need to fix this so that the original op is passed through to here from RMWPipeline::try_state_to_reads 
     // then we wouldnt need to start this new trace
-    op.otel_trace = tracing::osd::tracer.start_trace("EC ReadOp-created");
+    op.otel_trace = tracing::osd::tracer.start_trace("EC ReadOp-created (legacy)");
 
   }
   do_read_op(op);
@@ -677,6 +676,7 @@ static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
+  OpRequestRef op,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
   in_progress_client_reads.emplace_back(
@@ -732,7 +732,7 @@ void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
     CEPH_MSG_PRIO_DEFAULT,
     obj_want_to_read,
     for_read_op,
-    OpRequestRef(),
+    op,
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(*this, &(in_progress_client_reads.back())));
@@ -858,6 +858,7 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
+      OpRequestRef(),
       [op, this](ec_extents_t &&results) {
 	for (auto &&i: results) {
 	  op->remote_read_result.emplace(make_pair(i.first, i.second.emap));
@@ -906,8 +907,6 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
        ++i) {
     trans[i->shard];
   }
-
-  op->otel_trace->AddEvent("start ec write");
 
   map<hobject_t,extent_map> written;
   op->generate_transactions(
@@ -1001,8 +1000,8 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
-      r->trace = ::tracing::osd::tracer.add_span("MOSDECSubOpWrite",
-						op->otel_trace);
+      r->trace = ::tracing::osd::tracer.add_span("MOSDECSubOpWrite msg", op->otel_trace);
+      r->otel_trace = r->trace->GetContext();
       messages.push_back(std::make_pair(i->osd, r));
     }
   }

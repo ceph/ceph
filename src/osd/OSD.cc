@@ -3669,7 +3669,7 @@ int OSD::init()
   std::lock_guard lock(osd_lock);
   if (is_stopping())
     return 0;
-  tracing::osd::tracer.init(cct, "osd");
+  tracing::osd::tracer.init(cct, "io.ceph.osd");
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
@@ -9924,14 +9924,15 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
 	   << " latency " << latency
 	   << " epoch " << epoch << dendl;
 
-  auto enqueue_span = tracing::osd::tracer.add_span(__func__, op->osd_trace);
-  enqueue_span->AddEvent(__func__, {
-    {"priority", priority},
-    {"cost", cost},
-    {"epoch", epoch},
-    {"owner", owner},
-    {"type", type}
-    });
+  // Add operation metadata as attributes to the parent span
+  if (op->osd_parent_span && op->osd_parent_span->IsRecording()) {
+    op->osd_parent_span->SetAttribute("priority", priority);
+    op->osd_parent_span->SetAttribute("cost", cost);
+    op->osd_parent_span->SetAttribute("epoch", static_cast<int64_t>(epoch));
+    op->osd_parent_span->SetAttribute("owner", static_cast<int64_t>(owner));
+    op->osd_parent_span->SetAttribute("type", type);
+    op->osd_parent_span->AddEvent("op_queued");
+  }
 
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
@@ -9995,11 +9996,9 @@ void OSD::dequeue_op(
 
   op->mark_reached_pg();
   auto dequeue_span = tracing::osd::tracer.add_span(__func__, op->osd_trace);
-  dequeue_span->AddEvent(__func__, {
-      {"priority", m->get_priority()},
-      {"cost", m->get_cost()},
-      {"latency", latency.to_nsec()},
-    });
+  dequeue_span->SetAttribute("priority", m->get_priority());
+  dequeue_span->SetAttribute("cost", m->get_cost());
+  dequeue_span->SetAttribute("latency", latency.to_nsec());
 
   pg->do_request(op, handle);
 

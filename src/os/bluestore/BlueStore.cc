@@ -14545,8 +14545,7 @@ BlueStore::TransContext *BlueStore::_txc_create(
   TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
 
-  txc->trace = tracer.add_span("TransContext", osd_op ? osd_op->pg_trace : tracing::noop_span_ctx);
-  txc->trace->AddEvent("txc create", {{"txc", txc}});
+  txc->trace = tracer.add_span("_txc_create (TransContext)", osd_op ? osd_op->pg_trace : tracing::noop_span_ctx);
 
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc

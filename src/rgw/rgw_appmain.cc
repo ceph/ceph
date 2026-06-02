@@ -545,6 +545,7 @@ void rgw::AppMain::init_tracepoints()
 {
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(dpp->get_cct());
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(dpp->get_cct());
+  tracing::Tracer::set_root_service_name("radosgw");
   tracing::rgw::tracer.init(dpp->get_cct(), "rgw");
 } /* init_tracepoints() */
 

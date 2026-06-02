@@ -30,6 +30,7 @@
 #include "common/url_escape.h"
 
 #include "global/global_init.h"
+#include "common/tracer.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -3796,6 +3797,8 @@ int main(int argc, char **argv)
       CEPH_ENTITY_TYPE_OSD,
       CODE_ENVIRONMENT_UTILITY_NODOUT,
       init_flags);
+
+    tracing::Tracer::set_root_service_name("ceph-objectstore-tool");
   }
 
   snprintf(fn, sizeof(fn), "%s/type", dpath.c_str());

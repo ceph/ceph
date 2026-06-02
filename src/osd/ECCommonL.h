@@ -85,6 +85,7 @@ struct ECCommonL {
   virtual void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
+    OpRequestRef op,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
@@ -209,7 +210,7 @@ struct ECCommonL {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
-        otel_trace(tracing::osd::tracer.add_span("EC ReadOp", op ? op->osd_trace : tracing::noop_span_ctx)),
+        otel_trace(op ? op->osd_parent_span : tracing::Tracer::noop_span),
         want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
@@ -231,6 +232,7 @@ struct ECCommonL {
     void objects_read_and_reconstruct(
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
+      OpRequestRef op,
       GenContextURef<ec_extents_t &&> &&func);
 
     template <class F, class G>
@@ -517,6 +519,7 @@ struct ECCommonL {
     template <typename Func>
     void objects_read_async_no_cache(
       const std::map<hobject_t,extent_set> &to_read,
+      OpRequestRef op,
       Func &&on_complete
     ) {
       std::map<hobject_t, std::list<ec_align_t>> _to_read;
@@ -529,6 +532,7 @@ struct ECCommonL {
       ec_backend.objects_read_and_reconstruct(
         _to_read,
         false,
+        op,
         make_gen_lambda_context<
         ECCommonL::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
