@@ -32,110 +32,105 @@ namespace rgw {
 namespace auth {
 namespace keystone {
 
-// Service type for access rules matching. The OpenStack service catalog uses
-// "object-store" for Swift; rules with any other service type are skipped.
+/* Service type for access rules matching. */
 static constexpr const char* const SWIFT_SERVICE_TYPE = "object-store";
 
 namespace detail {
 
-// Match a request path against an access-rule path pattern.
-//
-// Pattern syntax follows the keystonemiddleware reference matcher
-// (keystonemiddleware/auth_token/__init__.py:_path_matches):
-//   *       matches a non-empty path segment (no '/')
-//   **      matches any number of segments (including zero)
-//   {tag}   matches a non-empty path segment (named placeholder, like *)
-//
-// The match is anchored: the entire path must be consumed. Both pattern and
-// path are compared verbatim — no URL decoding is performed here, callers
-// must pass already-decoded paths.
-//
-// Declared in rgw_auth_keystone.h (namespace detail) for unit testing.
+/* Match a request path against an access-rule path pattern. Behaviour
+ * matches keystonemiddleware's _path_matches reference matcher:
+ *
+ *   *       compiles to '[^/]+'   (one segment; non-empty, no '/')
+ *   **      compiles to '.*'      (zero or more arbitrary chars)
+ *   {tag}   compiles to '[^/]+'   (same as '*')
+ *   <other> literal               ('/' is never elided)
+ *
+ * Anchored at both ends. Callers must pass already-decoded paths with the
+ * query string stripped. Declared in the header for unit testing. */
 bool
 path_matches_pattern(const std::string_view pattern, const std::string_view path)
 {
-  size_t pi = 0, si = 0;
-  size_t star_pi = std::string::npos, star_si = 0;
-  size_t dstar_pi = std::string::npos, dstar_si = 0;
+  size_t pi = 0;
+  size_t si = 0;
+
+  /* Backtrack for the most recent '**'; extends by one path char. */
+  size_t dstar_pi = std::string::npos;
+  size_t dstar_si = 0;
+
+  /* Backtrack for the most recent '*' or '{tag}'; extends by one
+   * non-slash char. */
+  size_t star_pi = std::string::npos;
+  size_t star_si = 0;
 
   while (si < path.size()) {
-    // Named placeholder {tag} — matches a single segment, like '*'.
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+        pattern[pi + 1] == '*') {
+      dstar_pi = pi + 2;
+      dstar_si = si;
+      pi = dstar_pi;
+      star_pi = std::string::npos;
+      continue;
+    }
+
     if (pi < pattern.size() && pattern[pi] == '{') {
       const size_t close = pattern.find('}', pi);
       if (close == std::string::npos) {
-        // Malformed pattern: unbalanced '{'. Refuse to match rather than
-        // treat the literal '{' as a character.
         return false;
       }
-      // Consume one path segment (up to next '/' or end).
-      const size_t seg_end = path.find('/', si);
-      const size_t seg_stop = (seg_end == std::string::npos) ? path.size() : seg_end;
-      if (seg_stop == si) {
-        // Empty segment doesn't satisfy a placeholder.
-        return false;
+      if (path[si] == '/') {
+        goto backtrack;
       }
       pi = close + 1;
-      si = seg_stop;
-      continue;
-    }
-    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
-        pattern[pi + 1] == '*') {
-      dstar_pi = pi;
-      dstar_si = si;
-      pi += 2;
-      if (pi < pattern.size() && pattern[pi] == '/')
-        pi++;
-      continue;
-    }
-    if (pi < pattern.size() && pattern[pi] == '*') {
-      // '*' requires at least one non-slash char (regex '[^/]+').
-      if (path[si] == '/') {
-        return false;
-      }
-      pi++;
       si++;
-      star_pi = pi - 1;
+      star_pi = pi;
       star_si = si;
       continue;
     }
+
+    if (pi < pattern.size() && pattern[pi] == '*') {
+      if (path[si] == '/') {
+        goto backtrack;
+      }
+      pi++;
+      si++;
+      star_pi = pi;
+      star_si = si;
+      continue;
+    }
+
     if (pi < pattern.size() && pattern[pi] == path[si]) {
       pi++;
       si++;
       continue;
     }
-    if (dstar_pi != std::string::npos) {
-      pi = dstar_pi + 2;
-      if (pi < pattern.size() && pattern[pi] == '/')
-        pi++;
-      si = ++dstar_si;
+
+  backtrack:
+    /* Try '*' before '**': falling back to '**' invalidates any '*'
+     * that came after it. */
+    if (star_pi != std::string::npos && path[star_si] != '/') {
+      pi = star_pi;
+      si = ++star_si;
       continue;
     }
-    if (star_pi != std::string::npos && path[star_si] != '/') {
-      pi = star_pi + 1;
-      si = ++star_si;
+    if (dstar_pi != std::string::npos) {
+      pi = dstar_pi;
+      si = ++dstar_si;
+      star_pi = std::string::npos;
       continue;
     }
     return false;
   }
-  // Allow trailing '**' or '/' to match the empty remainder; a bare '*'
-  // would have left its mandatory non-slash char unconsumed.
-  while (pi < pattern.size()) {
-    if (pi + 1 < pattern.size() && pattern[pi] == '*' && pattern[pi + 1] == '*') {
-      pi += 2;
-    } else if (pattern[pi] == '/') {
-      pi++;
-    } else {
-      break;
-    }
+
+  /* Path exhausted: only trailing '**' tokens match the empty remainder. */
+  while (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+         pattern[pi + 1] == '*') {
+    pi += 2;
   }
   return pi == pattern.size();
 }
 
 } // namespace detail
 
-// Check whether a request matches any access rule. Returns true on match
-// (permit) or when the rule list is empty (caller's responsibility to
-// distinguish absent from present-but-empty). Otherwise false.
 static bool
 check_access_rules(
     const DoutPrefixProvider* dpp,
@@ -147,8 +142,7 @@ check_access_rules(
     return true;
   }
 
-  // Strip query string before matching — access rules are defined against
-  // path only, never against query parameters.
+  /* Access rules are defined against path only. */
   const std::string_view path = raw_path.substr(0, raw_path.find('?'));
 
   for (const auto& rule : rules) {
@@ -171,10 +165,8 @@ check_access_rules(
   return false;
 }
 
-// Enforce application-credential access rules. Mirrors keystonemiddleware
-// (auth_token: validate_allowed_request): absent access_rules permits;
-// empty list denies (deliberate empty whitelist); non-empty list permits
-// only on a matching rule. Called on cache-miss and cache-hit paths.
+/* Mirrors keystonemiddleware's validate_allowed_request: absent access_rules
+ * permits; empty list denies; non-empty list permits only on a match. */
 static bool
 enforce_access_rules(
     const DoutPrefixProvider* dpp,
@@ -445,23 +437,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   const auto& token_id = rgw_get_token_id(token);
   ldpp_dout(dpp, 20) << "token_id=" << token_id << dendl;
 
-  /* Check cache first. */
-  t = token_cache.find(token_id);
-  if (t) {
-    ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
-                   << dendl;
-    if (!enforce_access_rules(dpp, *t, s)) {
-      return result_t::deny(-EACCES);
-    }
-    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t));
-    return result_t::grant(std::move(apl));
-  }
-
-  /* We have a service token and a token so we verify the service
-   * token and if it's invalid the request is invalid. If it's valid
-   * we allow an expired token to be used when doing lookup in Keystone.
-   * We never get to this if the token is in the cache. */
+  /* Validate the service token before the user-token cache lookup. This
+   * mirrors keystonemiddleware (which validates service_token before
+   * user_token) and lets a single `allow_expired` flag gate access-rule
+   * enforcement uniformly on both cache-hit and cache-miss paths. */
   if (g_conf()->rgw_keystone_service_token_enabled && ! service_token.empty()) {
     boost::optional<TokenEngine::token_envelope_t> st;
 
@@ -521,6 +500,21 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* Check user-token cache. */
+  t = token_cache.find(token_id);
+  if (t) {
+    ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
+                   << dendl;
+    /* Skip access-rule enforcement for service-to-service requests, matching
+     * keystonemiddleware's validate_allowed_request short-circuit. */
+    if (!allow_expired && !enforce_access_rules(dpp, *t, s)) {
+      return result_t::deny(-EACCES);
+    }
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                              get_creds_info(*t));
+    return result_t::grant(std::move(apl));
+  }
+
   /* Token not in cache. Go to the Keystone for validation. This happens even
    * for the legacy PKI/PKIz token types. That's it, after the PKI/PKIz
    * RadosGW-side validation has been removed, we always ask Keystone. */
@@ -563,9 +557,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
-      // Application Credential access rules: enforce before caching so that
-      // a denied request never poisons the cache for subsequent ones. Skip
-      // for service-to-service requests (keystonemiddleware does the same).
+      /* Enforce access rules before caching so a denied request never
+       * poisons the cache. Skip for service-to-service requests. */
       if (!allow_expired && !enforce_access_rules(dpp, *t, s)) {
         return result_t::deny(-EACCES);
       }
