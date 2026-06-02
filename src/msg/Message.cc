@@ -14,8 +14,6 @@
 
 #include "global/global_context.h"
 
-#include "common/zipkin_trace.h"
-
 #include "messages/MPGStats.h"
 
 #include "messages/MGenericMessage.h"
@@ -1046,13 +1044,13 @@ static inline void decode(fake_blkin_trace_info& b, ceph::buffer::list::const_it
 void Message::encode_trace(ceph::bufferlist &bl)
 {
   using ceph::encode;
-  static const blkin_trace_info empty = { 0, 0, 0 };
+  static const fake_blkin_trace_info empty = { 0, 0, 0 };
   encode(empty, bl);
 }
 
 void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
-  blkin_trace_info info = {};
+  fake_blkin_trace_info info = {};
   decode(info, p);
 }
 
