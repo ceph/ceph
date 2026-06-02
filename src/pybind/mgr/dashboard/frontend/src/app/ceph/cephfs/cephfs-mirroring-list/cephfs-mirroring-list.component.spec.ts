@@ -33,10 +33,11 @@ describe('CephfsMirroringListComponent', () => {
     expect(component.columns[0].prop).toBe('remote_cluster_name');
   });
 
-  it('should call loadDaemonStatus inside ngOnInit', () => {
-    const loadSpy = jest.spyOn(component, 'loadDaemonStatus');
-    component.ngOnInit();
-    expect(loadSpy).toHaveBeenCalledTimes(1);
+  it('should fetch daemon status when loadDaemonStatus() is called', () => {
+    cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
+    component.daemonStatus$.subscribe();
+    component.loadDaemonStatus();
+    expect(cephfsServiceMock.listDaemonStatus).toHaveBeenCalledTimes(1);
   });
 
   it('should map daemon status to MirroringRow[] correctly', () => {

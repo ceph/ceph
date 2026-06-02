@@ -131,4 +131,17 @@ export class CephfsService {
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
+
+  enableMirror(fsName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/enable`, {
+      fs_name: fsName
+    });
+  }
+
+  createBootstrapPeer(fsName: string, token: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror`, {
+      fs_name: fsName,
+      token: token
+    });
+  }
 }

@@ -1,18 +1,10 @@
-import { Component, ViewChild, OnInit } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { catchError, switchMap } from 'rxjs/operators';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Component, OnInit } from '@angular/core';
+import { Subject, of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
+
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { CdTableAction } from '~/app/shared/models/cd-table-action';
-import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
-import { Icons } from '~/app/shared/enum/icons.enum';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Permission } from '~/app/shared/models/permissions';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
 
 export const MIRRORING_PATH = 'cephfs/mirroring';
 @Component({
@@ -23,15 +15,8 @@ export const MIRRORING_PATH = 'cephfs/mirroring';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(MIRRORING_PATH) }]
 })
 export class CephfsMirroringListComponent implements OnInit {
-  @ViewChild('table', { static: true }) table: TableComponent;
-
   columns: CdTableColumn[];
-  selection = new CdTableSelection();
-  subject$ = new BehaviorSubject<MirroringRow[]>([]);
-  daemonStatus$: Observable<MirroringRow[]>;
-  context: CdTableFetchDataContext;
-  tableActions: CdTableAction[];
-  permission: Permission;
+  isSetupMirroringOpen = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -113,7 +98,17 @@ export class CephfsMirroringListComponent implements OnInit {
     this.subject$.next([]);
   }
 
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
+  openSetupMirroring() {
+    this.isSetupMirroringOpen = true;
+  }
+
+  closeSetupModal() {
+    this.isSetupMirroringOpen = false;
+    this.loadDaemonStatus();
+  }
+
+  onMirroringSetupComplete(_event: any) {
+    this.isSetupMirroringOpen = false;
+    this.loadDaemonStatus();
   }
 }
