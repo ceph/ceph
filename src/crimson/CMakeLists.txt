@@ -72,6 +72,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/str_map.cc
   ${PROJECT_SOURCE_DIR}/src/common/strtol.cc
   ${PROJECT_SOURCE_DIR}/src/common/reverse.c
+  ${PROJECT_SOURCE_DIR}/src/common/tracer.cc
   ${PROJECT_SOURCE_DIR}/src/common/types.cc
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
   ${PROJECT_SOURCE_DIR}/src/common/version.cc

@@ -31,6 +31,7 @@
 
 #include "librados/librados_asio.h"
 #include "common/dout.h"
+#include "common/tracer.h"
 
 /// Concurrent io algorithms for data sharded across rados objects.
 namespace rgwrados::shard_io {
