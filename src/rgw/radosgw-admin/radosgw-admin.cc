@@ -3924,36 +3924,32 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
 
   {
-    // TODO: remove once --help is fully replaced by CLI11.
-    // Pre-scan argv so require_subcommand() does not reject
-    // "radosgw-admin --cli11-help script" during migration.
+    // TODO: remove once --help is fully replaced by CLI11. When removing,
+    // also drop the argc modification and change app.parse(new_argc, argv)
+    // back to app.parse(argc, argv), and restore require_subcommand(1).
     bool show_cli11_help = false;
+    int new_argc = 1;
     for (int i = 1; i < argc; ++i) {
-      if (std::string_view(argv[i]) == "--cli11-help") {
+      if (std::string_view(argv[i]) == "--cli11-help")
         show_cli11_help = true;
-        break;
-      }
+      else
+        argv[new_argc++] = argv[i];
     }
 
     CLI::App app{"radosgw-admin"};
-    // TODO: remove once all commands are migrated to CLI11
+    // TODO: keep while CLI11 and legacy parsing coexist. After full migration,
+    // decide whether to preserve legacy acceptance of known-but-irrelevant
+    // options while still rejecting truly unknown options, or intentionally
+    // tighten behavior to reject irrelevant options too.
     app.allow_extras();
 
-    auto* script     = app.add_subcommand("script");
-    auto* script_put = script->add_subcommand("put");
-    auto* script_get = script->add_subcommand("get");
-    auto* script_rm  = script->add_subcommand("rm");
+    auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
+    auto* script_put = script->add_subcommand("put", "upload a Lua script to a context");
+    auto* script_get = script->add_subcommand("get", "get the Lua script of a context");
+    auto* script_rm  = script->add_subcommand("rm",  "remove the Lua scripts of a context");
     script_rm->alias("remove");
     // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
     script->require_subcommand(show_cli11_help ? 0 : 1);
-
-    // TODO: remove once --help is fully replaced by CLI11
-    app.add_flag("--cli11-help", show_cli11_help,
-                 "Show CLI11-generated help (temporary, migration testing)");
-    script->add_flag("--cli11-help", show_cli11_help)->group("");
-    script_put->add_flag("--cli11-help", show_cli11_help)->group("");
-    script_get->add_flag("--cli11-help", show_cli11_help)->group("");
-    script_rm->add_flag("--cli11-help", show_cli11_help)->group("");
 
     // TODO: once flags-before-subcommand support is removed, delete these hidden
     // root and script level registrations and keep only the subcommand level ones
@@ -3972,18 +3968,19 @@ int main(int argc, const char **argv)
     // levels for compatibility, because CLI11 checks the specific option location.
     // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
     // and manual checks with ->required()
-    script_put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
-    script_put->add_option("--infile",  infile)->take_last()->option_text("<file> REQUIRED");
-    script_put->add_option("--tenant",  tenant)->take_last();
+    script_put->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
+    script_put->add_option("--infile",  infile,         "file to read in when setting data")->take_last()->option_text("<file> REQUIRED");
+    script_put->add_option("--tenant",  tenant,         "tenant name")->take_last();
 
-    script_get->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
-    script_get->add_option("--tenant",  tenant)->take_last();
+    script_get->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
+    script_get->add_option("--tenant",  tenant,         "tenant name")->take_last();
 
-    script_rm->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
-    script_rm->add_option("--tenant",  tenant)->take_last();
+    script_rm->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
+    script_rm->add_option("--tenant",  tenant,         "tenant name")->take_last();
 
+    // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
     try {
-      app.parse(argc, argv);
+      app.parse(new_argc, argv);
     } catch (const CLI::ParseError& e) {
       return app.exit(e);
     }
