@@ -88,6 +88,12 @@
   for viewing per-directory snapshot sync metrics. The output layout matches
   ``fs mirror peer status``. Optional filters by mirrored directory path and peer
   UUID are supported. For more information, see https://tracker.ceph.com/issues/76686
+* CephFS Mirroring: Per-directory snapshot sync progress is exposed as labeled perf
+  counters in the ``cephfs_mirror_directory`` group (``counter dump`` on the mirror
+  daemon admin socket, exportable via ``ceph-exporter``). Counters mirror
+  ``fs mirror peer status`` fields (directory state, current sync, last sync, and
+  snap summary) and are labeled by peer UUID and mirrored directory path. See
+  https://tracker.ceph.com/issues/73457
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
