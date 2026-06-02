@@ -47,7 +47,7 @@ struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::Mo
   static CopyupRequest* create(librbd::MockTestImageCtx *ictx,
                                uint64_t objectno, Extents &&image_extents,
                                ImageArea area,
-                               const jspan_context& parent_trace) {
+                               const otel_span_context_t& parent_trace) {
     return s_instance;
   }
 
@@ -73,7 +73,7 @@ struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
       librbd::MockImageCtx& image_ctx, AioCompletion* aio_comp,
       Extents&& image_extents, ImageArea area, SnapIds&& snap_ids,
       int list_snaps_flags, SnapshotDelta* snapshot_delta,
-      const jspan_context& parent_trace) {
+      const otel_span_context_t& parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     s_instance->image_extents = image_extents;
@@ -124,7 +124,7 @@ struct Mock {
 
   MOCK_METHOD6(read_parent,
                void(librbd::MockTestImageCtx *, uint64_t, ReadExtents*,
-                    librados::snap_t, const jspan_context &, Context*));
+                    librados::snap_t, const otel_span_context_t &, Context*));
 };
 
 Mock *Mock::s_instance = nullptr;
@@ -134,7 +134,7 @@ Mock *Mock::s_instance = nullptr;
 template<> void read_parent(
     librbd::MockTestImageCtx *image_ctx, uint64_t object_no,
     ReadExtents* extents, librados::snap_t snap_id,
-    const jspan_context &trace, Context* on_finish) {
+    const otel_span_context_t &trace, Context* on_finish) {
   Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id, trace,
                                 on_finish);
 }

@@ -948,7 +948,7 @@ asio::io_context& RADOS::get_io_context() {
 void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
-		     const jspan_context& otel_ctx,
+		     const otel_span_context_t& otel_ctx,
 		     std::uint64_t subsystem) {
   auto trace = impl->tracer.add_span("RADOS::execute", otel_ctx);
   if (_op.size() == 0) {
@@ -973,7 +973,7 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
-		     const jspan_context& otel_ctx,
+		     const otel_span_context_t& otel_ctx,
 		     std::uint64_t subsystem) {
   auto trace = impl->tracer.add_span("RADOS::execute", otel_ctx);
   if (_op.size() == 0) {

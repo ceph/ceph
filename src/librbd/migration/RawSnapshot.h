@@ -45,11 +45,11 @@ public:
 
   void read(io::AioCompletion* aio_comp, io::Extents&& image_extents,
             io::ReadResult&& read_result, int op_flags, int read_flags,
-            const jspan_context &parent_trace) override;
+            const otel_span_context_t &parent_trace) override;
 
   void list_snap(io::Extents&& image_extents, int list_snaps_flags,
                  io::SparseExtents* sparse_extents,
-                 const jspan_context &parent_trace,
+                 const otel_span_context_t &parent_trace,
                  Context* on_finish) override;
 
 private:

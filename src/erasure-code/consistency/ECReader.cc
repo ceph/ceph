@@ -98,7 +98,7 @@ void ECReader::do_read(Read read)
   };
 
   librados::async_operate(asio.get_executor(), io, read.get_oid(),
-                          std::move(op), 0, jspan_context(false, false), read_cb);
+                          std::move(op), 0, otel_span_context_t(false, false), read_cb);
 }
 
 /**

@@ -1545,7 +1545,7 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperat
   return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt, translate_flags(flags));
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags, const jspan_context& otel_trace)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags, const otel_span_context_t& otel_trace)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
@@ -1592,7 +1592,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 ObjectWriteOperation *o, int flags,
-				 const jspan_context& otel_trace)
+				 const otel_span_context_t& otel_trace)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
@@ -1621,7 +1621,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectWriteOperation *o,
          snap_t snap_seq, std::vector<snap_t>& snaps,
-         const jspan_context& otel_trace)
+         const otel_span_context_t& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;
@@ -1638,7 +1638,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectWriteOperation *o,
          snap_t snap_seq, std::vector<snap_t>& snaps, int flags,
-         const jspan_context& otel_trace)
+         const otel_span_context_t& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;
@@ -1697,7 +1697,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectReadOperation *o,
-         int flags, bufferlist *pbl, const jspan_context& otel_trace)
+         int flags, bufferlist *pbl, const otel_span_context_t& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;

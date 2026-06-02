@@ -1268,7 +1268,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       gather_ctx->activate();
     }
 
-    jspan_context read_trace{false, false};
+    otel_span_context_t read_trace{false, false};
 
   private:
     SimpleThrottle *m_throttle;

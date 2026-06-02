@@ -2640,7 +2640,7 @@ public:
                             std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace,
-                  			    const jspan_context *trace_ctx = nullptr) override;
+                  			    const otel_span_context_t *trace_ctx = nullptr) override;
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -2924,7 +2924,7 @@ class RGWObjFetchCR : public RGWCoroutine {
   std::shared_ptr<bool> need_retry;
   bool replicate_tags{true};
 
-  const jspan_context *trace_ctx;
+  const otel_span_context_t *trace_ctx;
 public:
   RGWObjFetchCR(RGWDataSyncCtx *_sc,
                 rgw_bucket_sync_pipe& _sync_pipe,
@@ -2934,7 +2934,7 @@ public:
                 bool _stat_follow_olh,
                 const rgw_zone_set_entry& source_trace_entry,
                 rgw_zone_set *_zones_trace,
-                const jspan_context *_trace_ctx = nullptr) : RGWCoroutine(_sc->cct),
+                const otel_span_context_t *_trace_ctx = nullptr) : RGWCoroutine(_sc->cct),
                                               sc(_sc), sync_env(_sc->env),
                                               sync_pipe(_sync_pipe),
                                               key(_key),
@@ -3088,7 +3088,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dp
                                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                                                     std::optional<uint64_t> versioned_epoch,
                                                     const rgw_zone_set_entry& source_trace_entry,
-                                                    rgw_zone_set *zones_trace, const jspan_context *trace_ctx)
+                                                    rgw_zone_set *zones_trace, const otel_span_context_t *trace_ctx)
 {
   bool stat_follow_olh = false;
   return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, stat_follow_olh,
@@ -3122,7 +3122,7 @@ public:
                             std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace,
-			                      const jspan_context *trace_ctx = nullptr) override;
+			                      const otel_span_context_t *trace_ctx = nullptr) override;
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -3163,7 +3163,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
                                                     std::optional<uint64_t> versioned_epoch,
                                                     const rgw_zone_set_entry& source_trace_entry,
                                                     rgw_zone_set *zones_trace,
-						                                        const jspan_context *trace_ctx)
+						                                        const otel_span_context_t *trace_ctx)
 {
   auto sync_env = sc->env;
   ldout(sc->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
@@ -4393,7 +4393,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
   std::string zone_name;
 
-  const jspan_context trace_ctx;
+  const otel_span_context_t trace_ctx;
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
@@ -4405,7 +4405,7 @@ public:
                              const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker, rgw_zone_set& _zones_trace,
-                             RGWSyncTraceNodeRef& _tn_parent, const jspan_context& _trace_ctx) : RGWCoroutine(_sc->cct),
+                             RGWSyncTraceNodeRef& _tn_parent, const otel_span_context_t& _trace_ctx) : RGWCoroutine(_sc->cct),
 						      sc(_sc), sync_env(_sc->env),
                                                       sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
                                                       key(_key), versioned(_versioned),
@@ -4726,7 +4726,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
                                  false,
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
-                                 entry->key, &marker_tracker, zones_trace, tn, jspan_context{false, false}),
+                                 entry->key, &marker_tracker, zones_trace, tn, otel_span_context_t{false, false}),
                       false);
         }
         drain_with_cb(sc->lcc.adj_concurrency(cct->_conf->rgw_bucket_sync_spawn_window),
@@ -4945,7 +4945,7 @@ public:
 
 int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
 {
-  jspan_ptr trace;
+  otel_span_ref trace;
   reenter(this) {
     do {
       if (lease_cr && !lease_cr->is_locked()) {

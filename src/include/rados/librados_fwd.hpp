@@ -11,7 +11,7 @@ class SpanContext;
 } // inline namespace v1
 } // namespace opentelemetry
 
-using jspan_context = opentelemetry::v1::trace::SpanContext;
+using otel_span_context_t = opentelemetry::v1::trace::SpanContext;
 
 namespace libradosstriper {
 

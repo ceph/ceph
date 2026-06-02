@@ -82,14 +82,14 @@ struct ECCommon {
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const jspan_ptr &otel_trace,
+      const otel_span_ref &otel_trace,
       ECListener &eclistener) = 0;
 
 #ifdef WITH_CRIMSON
   virtual void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const jspan_ptr &otel_trace
+    const otel_span_ref &otel_trace
     ) = 0;
 #endif
 
@@ -305,7 +305,7 @@ struct ECCommon {
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
 
-    jspan_ptr otel_trace{tracing::Tracer::noop_span};
+    otel_span_ref otel_trace{tracing::Tracer::noop_span};
 
     std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t>> source_to_obj;
@@ -497,7 +497,7 @@ struct ECCommon {
     void handle_sub_read_n_reply(
       pg_shard_t from,
       ECSubRead &op,
-      const jspan_ptr &otel_trace) {
+      const otel_span_ref &otel_trace) {
       ec_backend.handle_sub_read_n_reply(from, op, otel_trace);
     }
 #endif
@@ -567,7 +567,7 @@ struct ECCommon {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
-      jspan_ptr otel_trace{tracing::Tracer::noop_span};
+      otel_span_ref otel_trace{tracing::Tracer::noop_span};
 
       /// pin for cache
       std::list<ECExtentCache::OpRef> cache_ops;
@@ -695,7 +695,7 @@ struct ECCommon {
         pg_shard_t from,
         OpRequestRef msg,
         ECSubWrite &op,
-        const jspan_ptr &otel_trace) const {
+        const otel_span_ref &otel_trace) const {
       ec_backend.handle_sub_write(from, std::move(msg), op, otel_trace,
                                   *get_parent());
     }

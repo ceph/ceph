@@ -32,7 +32,7 @@ struct Api {
 
   virtual void read_parent(
       ImageCtxT *image_ctx, uint64_t object_no, io::ReadExtents* extents,
-      librados::snap_t snap_id, const jspan_context &trace,
+      librados::snap_t snap_id, const otel_span_context_t &trace,
       Context* on_finish);
 
   virtual void execute_image_metadata_set(

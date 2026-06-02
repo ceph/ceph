@@ -107,7 +107,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 uint16_t bilog_flags,
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator,
-                                const jspan_context* bilog_trace)
+                                const otel_span_context_t* bilog_trace)
 {
 
   bufferlist in;

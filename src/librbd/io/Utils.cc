@@ -87,7 +87,7 @@ bool assemble_write_same_extent(
 
 template <typename I>
 void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
-                 librados::snap_t snap_id, const jspan_context &trace,
+                 librados::snap_t snap_id, const otel_span_context_t &trace,
                  Context* on_finish) {
 
   auto cct = image_ctx->cct;
@@ -259,7 +259,7 @@ std::pair<uint64_t, ImageArea> raw_to_area_offset(const I& image_ctx,
 
 template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
-    librados::snap_t snap_id, const jspan_context &trace, Context* on_finish);
+    librados::snap_t snap_id, const otel_span_context_t &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
     librbd::ImageCtx* image_ctx, Extents* image_extents, ImageArea area);
 template bool librbd::io::util::trigger_copyup(

@@ -1385,7 +1385,7 @@ public:
   auto execute(Object o, IOContext ioc, ReadOp op,
 	       ceph::buffer::list* bl,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const jspan_context& trace = {false, false},
+	       const otel_span_context_t& trace = {false, false},
 	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
@@ -1400,7 +1400,7 @@ public:
   template<boost::asio::completion_token_for<Op::Signature> CompletionToken>
   auto execute(Object o, IOContext ioc, WriteOp op,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const jspan_context& trace = {false, false},
+	       const otel_span_context_t& trace = {false, false},
 	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
@@ -1799,12 +1799,12 @@ private:
 
   void execute_(Object o, IOContext ioc, ReadOp op,
 		ceph::buffer::list* bl, Op::Completion c,
-		uint64_t* objver, const jspan_context& trace,
+		uint64_t* objver, const otel_span_context_t& trace,
 		uint64_t subsystem);
 
   void execute_(Object o, IOContext ioc, WriteOp op,
 		Op::Completion c, uint64_t* objver,
-		const jspan_context& trace,
+		const otel_span_context_t& trace,
 		uint64_t subsystem);
 
   void lookup_pool_(std::string name, LookupPoolComp c);

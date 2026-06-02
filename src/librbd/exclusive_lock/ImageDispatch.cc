@@ -110,7 +110,7 @@ template <typename I>
 bool ImageDispatch<I>::read(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
     io::ReadResult &&read_result, IOContext io_context, int op_flags,
-    int read_flags, const jspan_context &parent_trace, uint64_t tid,
+    int read_flags, const otel_span_context_t &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -127,7 +127,7 @@ bool ImageDispatch<I>::read(
 template <typename I>
 bool ImageDispatch<I>::write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const jspan_context &parent_trace,
+    int op_flags, const otel_span_context_t &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -145,7 +145,7 @@ bool ImageDispatch<I>::write(
 template <typename I>
 bool ImageDispatch<I>::discard(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const jspan_context &parent_trace,
+    uint32_t discard_granularity_bytes, const otel_span_context_t &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -163,7 +163,7 @@ bool ImageDispatch<I>::discard(
 template <typename I>
 bool ImageDispatch<I>::write_same(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const jspan_context &parent_trace,
+    int op_flags, const otel_span_context_t &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -182,7 +182,7 @@ template <typename I>
 bool ImageDispatch<I>::compare_and_write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    int op_flags, const jspan_context &parent_trace,
+    int op_flags, const otel_span_context_t &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -200,7 +200,7 @@ bool ImageDispatch<I>::compare_and_write(
 template <typename I>
 bool ImageDispatch<I>::flush(
     io::AioCompletion* aio_comp, io::FlushSource flush_source,
-    const jspan_context &parent_trace, uint64_t tid,
+    const otel_span_context_t &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {

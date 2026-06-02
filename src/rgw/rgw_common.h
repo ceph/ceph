@@ -1459,7 +1459,7 @@ struct req_state : DoutPrefixProvider {
 
   std::vector<rgw::IAM::Policy> session_policies;
 
-  jspan_ptr trace;
+  otel_span_ref trace;
   bool trace_enabled = false;
 
   //Principal tags that come in as part of AssumeRoleWithWebIdentity

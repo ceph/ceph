@@ -191,7 +191,7 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
                                RGWModifyOp op, const string& tag, real_time timestamp,
                                const rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace,
-                               const jspan_context* bilog_trace = nullptr)
+                               const otel_span_context_t* bilog_trace = nullptr)
 {
   bufferlist bl;
 

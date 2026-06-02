@@ -97,7 +97,7 @@ struct rgw_cls_obj_complete_op
 
   std::list<cls_rgw_obj_key> remove_objs;
   rgw_zone_set zones_trace;
-  jspan_context bi_trace;
+  otel_span_context_t bi_trace;
 
   rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0), bi_trace(false, false) {}
 

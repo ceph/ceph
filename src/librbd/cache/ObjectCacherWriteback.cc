@@ -69,7 +69,7 @@ class C_OrderedWrite : public Context {
 public:
   C_OrderedWrite(CephContext *cct,
                  ObjectCacherWriteback::write_result_d *result,
-                 const jspan_ptr &trace, ObjectCacherWriteback *wb)
+                 const otel_span_ref &trace, ObjectCacherWriteback *wb)
     : m_cct(cct), m_result(result), m_trace(trace), m_wb_handler(wb) {}
   ~C_OrderedWrite() override {}
   void finish(int r) override {
@@ -88,7 +88,7 @@ public:
 private:
   CephContext *m_cct;
   ObjectCacherWriteback::write_result_d *m_result;
-  jspan_ptr m_trace;
+  otel_span_ref m_trace;
   ObjectCacherWriteback *m_wb_handler;
 };
 
@@ -121,7 +121,7 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
                                  uint64_t off, uint64_t len, snapid_t snapid,
                                  bufferlist *pbl, uint64_t trunc_size,
                                  __u32 trunc_seq, int op_flags,
-                                 const jspan_context &parent_trace,
+                                 const otel_span_context_t &parent_trace,
                                  Context *onfinish)
 {
   auto name = fmt::format("cache read {}", oid.name);
@@ -185,7 +185,7 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
                                         ceph::real_time mtime,
                                         uint64_t trunc_size,
                                         __u32 trunc_seq, ceph_tid_t journal_tid,
-                                        const jspan_context &parent_trace,
+                                        const otel_span_context_t &parent_trace,
                                         Context *oncommit)
 {
   auto name = fmt::format("writeback {}", oid.name);

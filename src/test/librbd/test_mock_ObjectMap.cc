@@ -73,7 +73,7 @@ struct UpdateRequest<MockTestImageCtx> {
                                uint64_t start_object_no, uint64_t end_object_no,
                                uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
-                               const jspan_context &parent_trace,
+                               const otel_span_context_t &parent_trace,
                                bool ignore_enoent, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
