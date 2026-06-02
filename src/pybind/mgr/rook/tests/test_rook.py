@@ -1,6 +1,7 @@
 import orchestrator
 from .fixtures import wait
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, PropertyMock
 
 from rook.module import RookOrchestrator
@@ -12,6 +13,20 @@ from rook.rook_cluster import RookCluster
 class FakeRookCluster(RookCluster):
     def __init__(self):
         pass
+
+
+def _fake_node(name, addresses, labels=None):
+    """Build a V1Node-like object for get_hosts() tests.
+
+    addresses is a list of (type, address) tuples, mirroring the
+    kubernetes client's V1NodeAddress entries.
+    """
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name, labels=labels or {}),
+        status=SimpleNamespace(
+            addresses=[SimpleNamespace(type=t, address=a) for t, a in addresses]
+        ),
+    )
 
 
 class TestRook(object):
@@ -118,3 +133,31 @@ class TestRook(object):
                     assert dds[i].last_deployed == pods[i]['created']
                     assert dds[i].started == pods[i]['started']
                     assert dds[i].last_refresh == pods[i]['refreshed']
+
+    @pytest.mark.parametrize("addresses, expected_addr", [
+        # InternalIP is preferred over the Hostname entry.
+        ([("InternalIP", "10.0.0.1"), ("Hostname", "node-1")], "10.0.0.1"),
+        # InternalIP is preferred regardless of ordering.
+        ([("Hostname", "node-1"), ("InternalIP", "10.0.0.1")], "10.0.0.1"),
+        # No InternalIP: fall back to the first address.
+        ([("ExternalIP", "1.2.3.4"), ("Hostname", "node-1")], "1.2.3.4"),
+        # No addresses at all: get_hosts() passes "" and HostSpec falls
+        # back to the node name (addr = addr or name).
+        ([], "node-1"),
+    ])
+    def test_get_hosts(self, addresses, expected_addr):
+        fake_rook_cluster = FakeRookCluster()
+        node = _fake_node(
+            "node-1",
+            addresses,
+            labels={"ceph-label/mon": "", "kubernetes.io/os": "linux"},
+        )
+        fake_rook_cluster.nodes = SimpleNamespace(items=[node])
+
+        hosts = fake_rook_cluster.get_hosts()
+
+        assert len(hosts) == 1
+        assert hosts[0].hostname == "node-1"
+        assert hosts[0].addr == expected_addr
+        # only ceph-label labels are kept, with the prefix stripped
+        assert hosts[0].labels == ["mon"]
