@@ -45,6 +45,7 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/Preforker.h"
+#include "common/tracer.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -326,6 +327,9 @@ int main(int argc, const char **argv)
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
 			 flags);
   ceph_heap_profiler_init();
+
+  // Set root service name for hierarchical tracer naming
+  tracing::Tracer::set_root_service_name("ceph-mon");
 
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {

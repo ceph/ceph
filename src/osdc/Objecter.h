@@ -2059,7 +2059,6 @@ public:
     osd_reqid_t reqid; // explicitly setting reqid
     otel_span_ref trace = ::tracing::Tracer::noop_span;
     std::uint64_t subsystem = 0;
-    const otel_span_context_t* otel_trace = nullptr;
 
     static bool has_completion(decltype(onfinish)& f) {
       return std::visit([](auto&& arg) { return bool(arg);}, f);
@@ -2100,7 +2099,9 @@ public:
       out_ec(ops.size(), nullptr),
       onfinish(std::move(fin)),
       objver(ov),
-      data_offset(offset), trace(trace), subsystem(subsystem) {
+      data_offset(offset), 
+      trace(trace), 
+      subsystem(subsystem) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       trace->AddEvent("start");

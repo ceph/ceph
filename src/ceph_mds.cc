@@ -44,6 +44,7 @@
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "global/pidfile.h"
+#include "common/tracer.h"
 
 #include "mon/MonClient.h"
 
@@ -97,6 +98,9 @@ int main(int argc, const char **argv)
 
   auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+
+  tracing::Tracer::set_root_service_name("ceph-mds");
+  
   ceph_heap_profiler_init();
 
   int numa_node = g_conf().get_val<int64_t>("mds_numa_node");

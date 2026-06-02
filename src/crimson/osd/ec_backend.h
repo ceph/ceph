@@ -109,10 +109,12 @@ private:
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
     uint64_t object_size,
+    OpRequestRef op,
     GenContextURef<ec_extents_t &&> &&func) override;
 
   void objects_read_and_reconstruct_for_rmw(
     std::map<hobject_t, read_request_t> &&to_read,
+    OpRequestRef op,
     GenContextURef<ec_extents_t&&> &&func) override;
 
   ceph::ErasureCodeInterfaceRef ec_impl;

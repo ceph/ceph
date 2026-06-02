@@ -176,6 +176,7 @@ class ECBackend : public ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      OpRequestRef op,
       GenContextURef<ECCommon::ec_extents_t&&> &&func
     ) override;
 
@@ -188,6 +189,7 @@ class ECBackend : public ECCommon {
    */
   void objects_read_and_reconstruct_for_rmw(
       std::map<hobject_t, read_request_t> &&reads,
+      OpRequestRef op,
       GenContextURef<ECCommon::ec_extents_t&&> &&func
     ) override;
 
@@ -198,7 +200,8 @@ class ECBackend : public ECCommon {
                                 std::pair<ceph::buffer::list*, Context*>>> &
       to_read,
       Context *on_complete,
-      bool fast_read = false
+      bool fast_read = false,
+      OpRequestRef op = OpRequestRef()
     );
 
   bool ec_can_decode(const shard_id_set &available_shards) const;

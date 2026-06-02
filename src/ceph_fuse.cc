@@ -41,6 +41,7 @@
 #include "global/signal_handler.h"
 #include "common/Preforker.h"
 #include "common/safe_io.h"
+#include "common/tracer.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -114,6 +115,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+
+  tracing::Tracer::set_root_service_name("ceph-fuse");
 
   for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
