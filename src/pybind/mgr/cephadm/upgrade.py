@@ -1490,6 +1490,14 @@ class CephadmUpgrade:
                         continue
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     self.mgr.key_rotate(daemon_spec)
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    self.mgr._daemon_action_set_image(
+                        'redeploy',
+                        target_image,
+                        dd.daemon_type,
+                        dd.daemon_id
+                    )
                     if self.mgr.daemon_is_self(daemon_spec.daemon_type, daemon_spec.daemon_id):
                         self.mgr._schedule_daemon_action(daemon_spec.name(), 'redeploy')
                     else:
@@ -1509,6 +1517,14 @@ class CephadmUpgrade:
                 for dd in mon_daemons:
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
                         continue
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    self.mgr._daemon_action_set_image(
+                        'redeploy',
+                        target_image,
+                        dd.daemon_type,
+                        dd.daemon_id
+                    )
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     self.mgr._daemon_action(daemon_spec, action='redeploy')
                     self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
@@ -1575,8 +1591,8 @@ class CephadmUpgrade:
                 logger.info('Upgrade: Updating %s.%s' %
                             (d.daemon_type, d.daemon_id))
 
-        for d in to_upgrade:
-            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d[0])
+        for d_entry in to_upgrade:
+            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d_entry[0])
 
             try:
                 if daemon_spec.daemon_type in ['mds', 'osd']:
@@ -1585,10 +1601,10 @@ class CephadmUpgrade:
             except Exception as e:
                 self._fail_upgrade('UPGRADE_KEY_ROTATION', {
                     'severity': 'warning',
-                    'summary': f'Rotation of cephx key for daemon {d[0].name()} on host {d[0].hostname} failed.',
+                    'summary': f'Rotation of cephx key for daemon {daemon_spec.name()} on host {daemon_spec.host} failed.',
                     'count': 1,
                     'detail': [
-                        f'Upgrade daemon key rotation: {d[0].name()}: {e}'
+                        f'Upgrade daemon key rotation: {daemon_spec.name()}: {e}'
                     ],
                 })
                 return
@@ -1600,19 +1616,19 @@ class CephadmUpgrade:
                     'redeploy',
                     image=target_image if not d_entry[1] else None
                 )
-                self.mgr.cache.metadata_up_to_date[d.hostname] = False
+                self.mgr.cache.metadata_up_to_date[daemon_spec.host] = False
             except Exception as e:
                 logger.exception(
                     'Upgrade: %s daemon %s on host %s failed',
                     action.lower(),
-                    d.name(),
-                    d.hostname)
+                    daemon_spec.name(),
+                    daemon_spec.host)
                 self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                     'severity': 'warning',
-                    'summary': f'{action} daemon {d.name()} on host {d.hostname} failed.',
+                    'summary': f'{action} daemon {daemon_spec.name()} on host {daemon_spec.host} failed.',
                     'count': 1,
                     'detail': [
-                        f'Upgrade daemon: {d.name()}: {e}'
+                        f'Upgrade daemon: {daemon_spec.name()}: {e}'
                     ],
                 })
                 return
