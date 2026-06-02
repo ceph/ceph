@@ -30,7 +30,7 @@
         [description]="cards.subsystem.description"
         [isConfigured]="hasSubsystems"
         [successMessage]="cards.subsystem.successMessage"
-        [infoMessage]="hasGatewayGroups ? cards.subsystem.infoMessage : gatewayPendingMessage">
+        [infoMessage]="cards.subsystem.infoMessage">
       </cd-setup-step-card>
     </div>
 
@@ -41,7 +41,7 @@
         [description]="cards.namespace.description"
         [isConfigured]="hasNamespaces"
         [successMessage]="cards.namespace.successMessage"
-        [infoMessage]="hasGatewayGroups ? cards.namespace.infoMessage : gatewayPendingMessage">
+        [infoMessage]="cards.namespace.infoMessage">
       </cd-setup-step-card>
     </div>
   </div>

@@ -1,27 +1,28 @@
-<ng-container *ngIf="gatewayGroup$ | async as gateways">
-  <cd-table
-    #table
-    [data]="gateways"
-    [columns]="columns"
-    columnMode="flex"
-    selectionType="single"
-    identifier="name"
-    (updateSelection)="updateSelection($event)"
-    (fetchData)="fetchData()"
-    emptyStateTitle="No gateway group created"
-    i18n-emptyStateTitle
-    emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
-    i18n-emptyStateMessage>
-
-    <div class="table-actions">
-      <cd-table-actions [permission]="permission"
+<div class="nvmeof-content-layout">
+  <div class="nvmeof-content-main">
+    <ng-container *ngIf="gatewayGroup$ | async as gateways">
+      <cd-table
+        #table
+        [data]="gateways"
+        [columns]="columns"
+        columnMode="flex"
+        selectionType="single"
+        identifier="name"
+        (updateSelection)="updateSelection($event)"
+        (fetchData)="fetchData()"
+        emptyStateTitle="No gateway group created"
+        i18n-emptyStateTitle
+        emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
+        i18n-emptyStateMessage>
+      <cd-table-actions class="table-actions"
+                        [permission]="permission"
                         [selection]="selection"
-                        class="btn-group"
                         [tableActions]="tableActions">
       </cd-table-actions>
-    </div>
-  </cd-table>
-</ng-container>
+      </cd-table>
+    </ng-container>
+  </div>
+</div>
 
 <ng-template #dateTpl
              let-created="data.value">

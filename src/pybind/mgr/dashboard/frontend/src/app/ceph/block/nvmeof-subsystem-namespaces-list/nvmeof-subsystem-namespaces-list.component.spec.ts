@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ActivatedRoute } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { Subject, of } from 'rxjs';
 
 import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-namespaces-list.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
@@ -43,11 +43,7 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
   }
 
   beforeEach(async () => {
-    const nvmeofStateServiceMock = {
-      refresh$: new Subject<void>(),
-      requestRefresh: jest.fn()
-    };
-
+    const refresh$ = new Subject<void>();
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemNamespacesListComponent],
       imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
@@ -68,7 +64,10 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
           }
         },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
+        {
+          provide: NvmeofStateService,
+          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+        }
       ]
     }).compileComponents();
   });
