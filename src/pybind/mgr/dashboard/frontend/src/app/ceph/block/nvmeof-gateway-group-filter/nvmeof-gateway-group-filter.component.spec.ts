@@ -103,11 +103,13 @@ describe('NvmeofGatewayGroupFilterComponent', () => {
     expect(component.placeholder).toBe('Unable to fetch Gateway groups');
   });
 
-  it('should call preventDefault on the error when the API call fails', () => {
-    const err = { preventDefault: jest.fn() };
-    (nvmeofService.listGatewayGroups as jest.Mock).mockReturnValue(throwError(err));
+  it('should handle non-Error API failures by disabling the control', () => {
+    const err = { message: 'network error' };
+    (nvmeofService.listGatewayGroups as jest.Mock).mockReturnValue(throwError(() => err));
     fixture.detectChanges();
-    expect(err.preventDefault).toHaveBeenCalled();
+    expect(component.disabled).toBe(true);
+    expect(component.placeholder).toBe('Unable to fetch Gateway groups');
+    expect(component.items).toEqual([]);
   });
 
   it('should render a cds-combo-box', () => {
