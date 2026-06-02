@@ -106,7 +106,8 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
 				const list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                 uint16_t bilog_flags,
                                 const rgw_zone_set *zones_trace,
-				const std::string& obj_locator)
+				const std::string& obj_locator,
+                                const jspan_context* bilog_trace)
 {
 
   bufferlist in;
@@ -123,6 +124,9 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
     call.remove_objs = *remove_objs;
   if (zones_trace) {
     call.zones_trace = *zones_trace;
+  }
+  if (bilog_trace) {
+    call.bi_trace = *bilog_trace;
   }
   encode(call, in);
   o.exec(method::bucket_complete_op, in);
