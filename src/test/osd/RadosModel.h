@@ -1652,7 +1652,9 @@ public:
     TestWatchContext *ctx = context->get_watch_context(oid);
     state_locker.unlock();
     if (ctx) {
-      ceph_assert(old_value.exists);
+      ObjectDesc head;
+      ceph_assert(context->find_object(oid, &head, -1));
+      ceph_assert(head.exists);
       TestAlarm alarm;
       context->cout_prefix() << num << ":  about to start" << std::endl;
       ctx->start();
