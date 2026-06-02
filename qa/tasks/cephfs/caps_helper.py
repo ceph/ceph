@@ -204,10 +204,13 @@ class MdsCapTester:
         """
         # CephFS mount where read/write test will be conducted.
         self.mount = mount
+        # Set new file creation path
+        self.new_file = os_path_join(self.mount.hostfs_mntpt, path.lstrip('/'), 'new_file')
         # Path where out test file located.
         self.path = self._gen_test_file_path(path)
         # Data that out test file will contain.
         self.data = self._gen_test_file_data()
+
 
         self.mount.write_file(self.path, self.data)
         log.info(f'Test file has been created on FS '
@@ -242,7 +245,8 @@ class MdsCapTester:
             self.path = {self.path}
             cephfs_name = {self.mount.cephfs_name}
             cephfs_mntpt = {self.mount.cephfs_mntpt}
-            hostfs_mntpt = {self.mount.hostfs_mntpt}''')
+            hostfs_mntpt = {self.mount.hostfs_mntpt}
+            self.new_file_path = {self.new_file}''')
 
     def run_mds_cap_tests(self, perm, mntpt=None):
         """
@@ -260,11 +264,13 @@ class MdsCapTester:
             #   cephfs dir serving as root for current mnt: /dir1/dir2
             #   therefore, final path: /mnt/cephfs_x/testdir
             self.path = self.path.replace(mntpt, '')
+            self.new_file = self.new_file.replace(mntpt, '')
 
         self.conduct_pos_test_for_read_caps()
 
         if perm == 'rw':
             self.conduct_pos_test_for_write_caps()
+            self.conduct_pos_test_for_new_file_creation()
         elif perm == 'r':
             self.conduct_neg_test_for_write_caps()
         else:
@@ -301,6 +307,25 @@ class MdsCapTester:
         cmdargs.pop(-1)
         log.info('absence of write perm was tested successfully: '
                  f'failed to be write data to file {self.path}.')
+
+    def conduct_neg_test_for_new_file_creation(self, sudo_write=False):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
+        cmdargs = ['sudo', 'touch'] if sudo_write else ['touch']
+
+        # don't use data, cmd args to write are set already above.
+        log.info('test absence of write perm: expect failure '
+                 f'try creating a new "{self.new_file}"')
+        cmdargs.append(self.new_file)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+        log.info('absence of write perm was tested successfully: '
+                 f'failed to create a new file {self.new_file}.')
+
+    def conduct_pos_test_for_new_file_creation(self, sudo_write=False):
+        log.info(f'test write perm: try creating a new "{self.new_file}"')
+        self.mount.create_file(self.new_file)
+        log.info(f'write perm was tested successfully: new file "{self.new_file}" '
+                  'created successfully')
 
 
 class CapTester(MonCapTester, MdsCapTester):
