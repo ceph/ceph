@@ -222,6 +222,114 @@ def lsblk(device, columns=None, abspath=False):
 
     return result[0]
 
+
+class BackingDeviceRotation(object):
+    # Typical ceph-volume stacks are a few dm/LVM layers (eg: crypt over LV over disk).
+    # 32 leaves headroom for multipath/MD without unbounded sysfs recursion if slaves/
+    # forms a cycle or an unexpectedly deep mapper chain.
+    _SYSFS_SLAVES_WALK_MAX_DEPTH = 32
+
+    @staticmethod
+    def _kname_from_path(device: str) -> str:
+        if not device:
+            return ''
+        try:
+            return os.path.basename(os.path.realpath(device))
+        except OSError:
+            return ''
+
+    @staticmethod
+    def _kname_for_sysfs_walk(kname: str) -> str:
+        if not kname:
+            return ''
+        if os.path.isdir(os.path.join('/sys/block', kname)):
+            return kname
+        try:
+            parent = get_partitions().get(kname)
+        except OSError as exc:
+            logger.debug('failed to resolve partition parent for %s: %s', kname, exc)
+            parent = None
+        if parent:
+            return parent
+        return kname
+
+    @staticmethod
+    def _walk_sysfs_leaf_blocks(k: str, depth: int, found: set, seen: set) -> None:
+        k = BackingDeviceRotation._kname_for_sysfs_walk(k)
+        if not k or k in seen:
+            return
+        if depth >= BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
+            logger.warning(
+                'sysfs slaves walk exceeded max depth %s at %s',
+                BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH,
+                k,
+            )
+            return
+        seen.add(k)
+        sys_block = os.path.join('/sys/block', k)
+        if not os.path.isdir(sys_block):
+            return
+        slaves_dir = os.path.join(sys_block, 'slaves')
+        slave_names: List[str] = []
+        if os.path.isdir(slaves_dir):
+            try:
+                slave_names = os.listdir(slaves_dir)
+            except OSError as exc:
+                logger.debug(
+                    'failed to list sysfs slaves for %s: %s', slaves_dir, exc)
+                return
+        if not slave_names:
+            found.add(k)
+            return
+        for sn in slave_names:
+            BackingDeviceRotation._walk_sysfs_leaf_blocks(
+                sn,
+                depth + 1,
+                found,
+                seen,
+            )
+
+    @staticmethod
+    def _sysfs_leaf_block_knames(kname: str) -> List[str]:
+        found = set()
+        seen = set()
+        BackingDeviceRotation._walk_sysfs_leaf_blocks(kname, 0, found, seen)
+        return sorted(found)
+
+    @staticmethod
+    def _leaf_block_is_rotational(kname: str) -> bool:
+        kname = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        dev_path = os.path.join('/dev', kname)
+        if os.path.exists(dev_path):
+            try:
+                udev_data = UdevData(dev_path)
+                env = udev_data.environment
+                if env.get('ID_SSD') == '1':
+                    return False
+                rpm = env.get('ID_ATA_ROTATION_RATE_RPM', '')
+                if rpm.isdigit():
+                    return int(rpm) > 0
+            except (RuntimeError, OSError, ValueError) as exc:
+                logger.debug(
+                    'failed to read udev rotational hints for %s: %s',
+                    dev_path, exc)
+
+        sys_block = os.path.join('/sys/block', kname)
+        rota = get_file_contents(
+            os.path.join(sys_block, 'queue/rotational'), '1')
+        return rota == '1'
+
+    @staticmethod
+    def is_rotational(device: str) -> bool:
+        kname = BackingDeviceRotation._kname_from_path(device)
+        walk_root = BackingDeviceRotation._kname_for_sysfs_walk(kname)
+        leaves = BackingDeviceRotation._sysfs_leaf_block_knames(walk_root)
+        if not leaves:
+            return True
+        return any(
+            BackingDeviceRotation._leaf_block_is_rotational(leaf) for leaf in leaves)
+
+
 def lsblk_all(device: str = '',
               columns: Optional[List[str]] = None,
               abspath: bool = False) -> List[Dict[str, str]]:
