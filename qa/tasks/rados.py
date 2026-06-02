@@ -237,6 +237,7 @@ def task(ctx, config):
                 'erasure_code_crush',
                 'fast_read',
                 'min_size',
+                'num_zones',
             ]
             
             for setting in pool_settings:
@@ -246,6 +247,14 @@ def task(ctx, config):
                         config[setting] = pool_config[setting]
                         log.info("Set {setting} from pool-config: {value}".format(
                             setting=setting, value=pool_config[setting]))
+
+            crush_map_config = pool_config.get('crush_map_config', {})
+            if crush_map_config and 'osd_failure_domain' not in config:
+                failure_domain = crush_map_config.get('failure_domain')
+                if failure_domain is not None:
+                    config['osd_failure_domain'] = failure_domain
+                    log.info("Set osd_failure_domain from crush_map_config: %s",
+                             failure_domain)
         else:
             log.warning("use-pool-config is true but no pool-config found in overrides/ceph")
     
@@ -364,12 +373,10 @@ def task(ctx, config):
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
-            manager.create_erasure_code_profile(profile_name, profile)
             crush_prof = config.get('erasure_code_crush', {})
             crush_name = None
             if crush_prof:
                 crush_name = crush_prof.get('name', 'teuthologycrush')
-                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
 
         else:
             profile_name = None
@@ -379,6 +386,16 @@ def task(ctx, config):
 
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
+            # the profile and the CRUSH rule of an erasure coded pool are
+            # deleted with the last pool that uses them, so set them up for
+            # every run
+            if profile_name:
+                manager.create_erasure_code_profile(profile_name, profile)
+            if crush_name:
+                manager.create_erasure_code_crush_rule(
+                    crush_name, crush_prof,
+                    num_zones=config.get('num_zones', None),
+                    erasure_code_profile_name=profile_name)
             tests = {}
             existing_pools = config.get('pools', [])
             created_pools = []
@@ -397,6 +414,8 @@ def task(ctx, config):
                         erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
                             config.get('erasure_code_use_overwrites', False),
+                        num_zones=config.get('num_zones', None),
+                        osd_failure_domain=config.get('osd_failure_domain', None),
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
