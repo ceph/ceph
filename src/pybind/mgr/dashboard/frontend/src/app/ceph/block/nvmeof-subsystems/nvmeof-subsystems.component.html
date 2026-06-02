@@ -1,33 +1,13 @@
-<div cdsGrid
-     [useCssGrid]="true"
-     [narrow]="true"
-     [fullWidth]="true">
-<div cdsCol
-     [columnNumbers]="{sm: 4, md: 8}">
-  <div class="pb-3 form-item"
-       cdsRow>
-    <cds-combo-box
-        type="single"
-        label="Selected Gateway Group"
-        i18n-label
-        [placeholder]="gwGroupPlaceholder"
-        [items]="gwGroups"
-        (selected)="onGroupSelection($event)"
-        (clear)="onGroupClear()"
-        [disabled]="gwGroupsEmpty">
-      <cds-dropdown-list></cds-dropdown-list>
-    </cds-combo-box>
-  </div>
-</div>
-</div>
+<cd-nvmeof-gateway-group-filter
+  (groupChange)="onGroupChange($event)">
+</cd-nvmeof-gateway-group-filter>
+
 <ng-container *ngIf="subsystems$ | async as subsystems">
   <cd-table #table
             [data]="subsystems"
             [columns]="subsystemsColumns"
             columnMode="flex"
             selectionType="single"
-            [hasDetails]="true"
-            (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)"
             (fetchData)="fetchData()"
             emptyStateTitle="No subsystems created"
@@ -66,19 +46,12 @@
              let-row="data.row">
   <div [cdsStack]="'horizontal'"
        gap="4">
-  @if (row.enable_ha === false) {
+  @if (row.auth === authType.NO_AUTH) {
     <cd-icon type="warning"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>No authentication</span>
-  } @else if (row.allow_any_host) {
-    <cd-icon type="success"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>Unidirectional</span>
   } @else {
     <cd-icon type="success"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>Bidirectional</span>
   }
+  <span class="cds-ml-3">{{ row.auth }}</span>
   </div>
 </ng-template>
 
@@ -97,5 +70,7 @@
   }
   </div>
 </ng-template>
+
+<ng-template #deleteTpl></ng-template>
 
 <router-outlet name="modal"></router-outlet>
