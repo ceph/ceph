@@ -126,12 +126,13 @@ class jspan {
 public:
   template <typename T>
   void SetAttribute(std::string_view key, const T& value) const noexcept {}
-  void AddEvent(std::string_view) {}
-  void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, jspan_attribute>> fields) {}
-  template <typename T> void AddEvent(std::string_view name, const T& fields = {}) {}
+  void AddEvent(std::string_view) const {}
+  void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, jspan_attribute>> fields) const {}
+  template <typename T> void AddEvent(std::string_view name, const T& fields = {}) const {}
   jspan_context GetContext() const { return _ctx; }
-  void UpdateName(std::string_view) {}
-  bool IsRecording() { return false; }
+  void UpdateName(std::string_view) const {}
+  void End() const {}
+  bool IsRecording() const { return false; }
 };
 
 class jspan_ptr {
@@ -150,13 +151,16 @@ namespace tracing {
 const static jspan_context noop_span_ctx{};
 
 struct Tracer {
+  Tracer() = default;
+  Tracer(CephContext*, std::string_view) {}
+
   void init(CephContext* _cct, std::string_view service_name) {}
   bool is_enabled() const { return false; }
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
 
-  static const jspan_ptr noop_span;
+  static inline const jspan_ptr noop_span{};
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
