@@ -195,10 +195,20 @@ RecordSubmitter::wa_ertr::future<>
 RecordSubmitter::wait_available()
 {
   LOG_PREFIX(RecordSubmitter::wait_available);
-  assert(!is_available());
   if (has_io_error) {
     ERROR("{} I/O is failed before wait", get_name());
     return crimson::ct_error::input_output_error::make();
+  }
+  if (is_available()) {
+    // The continuation that resolves wait_available_promise can
+    // run before this function is entered -- e.g. from
+    // roll_segment() after the chained
+    // journal_allocator.roll().safe_then(...) completes inline.
+    // In that case there is nothing left to wait for; honour the
+    // documented "check is_available() again when the future is
+    // resolved" contract by returning a successful no-op.
+    DEBUG("{} already available", get_name());
+    return wa_ertr::now();
   }
   return wait_available_promise->get_shared_future(
   ).then([FNAME, this]() -> wa_ertr::future<> {
