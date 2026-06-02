@@ -1514,7 +1514,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   bl_etag.append(etag.c_str());
   obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
   const req_context rctx{dpp, y, nullptr};
-  jspan_context trace{false, false};
+  otel_span_context_t trace{false, false};
   if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
   ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << temp_obj_name <<
     "' to bucket '" << get_key() <<"'. error: " << ret << dendl;

@@ -1026,7 +1026,7 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
   return out;
 }
 
-void encode_json(const char *name, const jspan_context& span_ctx, Formatter *f) {
+void encode_json(const char *name, const otel_span_context_t& span_ctx, Formatter *f) {
   using namespace opentelemetry;
   using namespace trace;
   ceph::bufferlist bl;
@@ -1034,7 +1034,7 @@ void encode_json(const char *name, const jspan_context& span_ctx, Formatter *f) 
   encode_json("bi_trace", bl, f);
 }
 
-void decode_json_obj(jspan_context& span_ctx, JSONObj *obj) {
+void decode_json_obj(otel_span_context_t& span_ctx, JSONObj *obj) {
   using namespace opentelemetry;
   using namespace trace;
   bufferlist bl;

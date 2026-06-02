@@ -1999,7 +1999,7 @@ public:
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
     }
-    jspan_ptr trace = ::tracing::Tracer::noop_span;
+    otel_span_ref trace = ::tracing::Tracer::noop_span;
   private:
     state_t state = STATE_PREPARE;
   };

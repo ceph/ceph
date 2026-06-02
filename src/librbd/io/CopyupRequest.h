@@ -29,14 +29,14 @@ class CopyupRequest {
 public:
   static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
                                Extents &&image_extents, ImageArea area,
-                               const jspan_context &parent_trace) {
+                               const otel_span_context_t &parent_trace) {
     return new CopyupRequest(ictx, objectno, std::move(image_extents), area,
                              parent_trace);
   }
 
   CopyupRequest(ImageCtxT *ictx, uint64_t objectno,
                 Extents &&image_extents, ImageArea area,
-                const jspan_context &parent_trace);
+                const otel_span_context_t &parent_trace);
   ~CopyupRequest();
 
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req,
@@ -83,7 +83,7 @@ private:
   uint64_t m_object_no;
   Extents m_image_extents;
   ImageArea m_image_area;
-  jspan_ptr m_trace;
+  otel_span_ref m_trace;
 
   bool m_flatten = false;
   bool m_copyup_required = true;

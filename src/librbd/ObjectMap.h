@@ -74,7 +74,7 @@ public:
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const jspan_context &parent_trace, bool ignore_enoent,
+                  const otel_span_context_t &parent_trace, bool ignore_enoent,
                   T *callback_object) {
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
                              new_state, current_state, parent_trace,
@@ -85,7 +85,7 @@ public:
   bool aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const jspan_context &parent_trace, bool ignore_enoent,
+                  const otel_span_context_t &parent_trace, bool ignore_enoent,
                   T *callback_object) {
     ceph_assert(start_object_no < end_object_no);
     std::unique_lock locker{m_lock};
@@ -133,14 +133,14 @@ private:
     uint64_t end_object_no;
     uint8_t new_state;
     boost::optional<uint8_t> current_state;
-    jspan_context parent_trace;
+    otel_span_context_t parent_trace;
     bool ignore_enoent;
     Context *on_finish;
 
     UpdateOperation(uint64_t start_object_no, uint64_t end_object_no,
                     uint8_t new_state,
                     const boost::optional<uint8_t> &current_state,
-                    const jspan_context &parent_trace,
+                    const otel_span_context_t &parent_trace,
                     bool ignore_enoent, Context *on_finish)
       : start_object_no(start_object_no), end_object_no(end_object_no),
         new_state(new_state), current_state(current_state),
@@ -167,7 +167,7 @@ private:
   void aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const jspan_context &parent_trace, bool ignore_enoent,
+                  const otel_span_context_t &parent_trace, bool ignore_enoent,
                   Context *on_finish);
   bool update_required(const ceph::BitVector<2>::Iterator &it,
                        uint8_t new_state);

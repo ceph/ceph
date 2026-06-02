@@ -1324,7 +1324,7 @@ protected:
   int multipart_part_num = 0;
   rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
   uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
-  jspan_ptr multipart_trace;
+  otel_span_ref multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
   //append obj
@@ -2071,7 +2071,7 @@ protected:
   std::string upload_id;
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
-  jspan_ptr multipart_trace;
+  otel_span_ref multipart_trace;
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
@@ -2102,7 +2102,7 @@ protected:
   std::string version_id;
   bufferlist data;
   std::unique_ptr<rgw::sal::MPSerializer> serializer;
-  jspan_ptr multipart_trace;
+  otel_span_ref multipart_trace;
   ceph::real_time upload_time;
   std::unique_ptr<rgw::sal::Notification> res;
   std::unique_ptr<rgw::sal::Object> meta_obj;
@@ -2133,7 +2133,7 @@ public:
 
 class RGWAbortMultipart : public RGWOp {
 protected:
-  jspan_ptr multipart_trace;
+  otel_span_ref multipart_trace;
 public:
   RGWAbortMultipart() {}
 

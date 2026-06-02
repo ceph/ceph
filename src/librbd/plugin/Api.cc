@@ -15,7 +15,7 @@ namespace plugin {
 template <typename I>
 void Api<I>::read_parent(
     I *image_ctx, uint64_t object_no, io::ReadExtents* extents,
-    librados::snap_t snap_id, const jspan_context &trace,
+    librados::snap_t snap_id, const otel_span_context_t &trace,
     Context* on_finish) {
   io::util::read_parent<I>(image_ctx, object_no, extents, snap_id, trace,
                            on_finish);

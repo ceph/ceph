@@ -654,7 +654,7 @@ struct rgw_bi_log_entry {
   std::string owner; /* only being set if it's a delete marker */
   std::string owner_display_name; /* only being set if it's a delete marker */
   rgw_zone_set zones_trace;
-  jspan_context bi_trace{false, false};
+  otel_span_context_t bi_trace{false, false};
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
@@ -1475,5 +1475,5 @@ struct cls_rgw_reshard_entry
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
 
-extern void encode_json(const char *name, const jspan_context& span_ctx, Formatter *f);
-extern void decode_json_obj(jspan_context& span_ctx, JSONObj *obj);
+extern void encode_json(const char *name, const otel_span_context_t& span_ctx, Formatter *f);
+extern void decode_json_obj(otel_span_context_t& span_ctx, JSONObj *obj);

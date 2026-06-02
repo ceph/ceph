@@ -1119,7 +1119,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   const DoutPrefixProvider *dpp;
   bool keep_tags;
 
-  jspan_context trace_ctx{false, false};
+  otel_span_context_t trace_ctx{false, false};
 
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
@@ -1141,7 +1141,7 @@ public:
                          PerfCounters* counters,
                          const DoutPrefixProvider *dpp,
                          bool _keep_tags,
-                         const jspan_context *_trace_ctx = nullptr)
+                         const otel_span_context_t *_trace_ctx = nullptr)
     : RGWAsyncRadosRequest(caller, cn), store(_store),
       source_zone(_source_zone),
       user_id(_user_id),
@@ -1198,7 +1198,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   const DoutPrefixProvider *dpp;
   bool keep_tags;
 
-  const jspan_context *trace_ctx;
+  const otel_span_context_t *trace_ctx;
 
 public:
   RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -1218,7 +1218,7 @@ public:
                       PerfCounters* counters,
                       const DoutPrefixProvider *dpp,
                       bool _keep_tags,
-                      const jspan_context *_trace_ctx = nullptr)
+                      const otel_span_context_t *_trace_ctx = nullptr)
     : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
       async_rados(_async_rados), store(_store),
       source_zone(_source_zone),

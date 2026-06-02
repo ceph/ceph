@@ -44,7 +44,7 @@ template <>
 struct Api<MockParentImageCacheImageCtx> {
   MOCK_METHOD6(read_parent, void(MockParentImageCacheImageCtx*, uint64_t,
                                  librbd::io::ReadExtents*, librados::snap_t,
-                                 const jspan_context &, Context*));
+                                 const otel_span_context_t &, Context*));
 };
 
 } // namespace plugin
@@ -293,7 +293,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disable_interface) {
   uint64_t* temp_journal_tid = nullptr;
   Context** temp_on_finish = nullptr;
   Context* temp_on_dispatched = nullptr;
-  jspan_context temp_trace(false, false);
+  otel_span_context_t temp_trace(false, false);
   io::LightweightBufferExtents buffer_extents;
 
   ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, io_context, 0,

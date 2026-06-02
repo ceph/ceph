@@ -3134,7 +3134,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   rgw_zone_id no_zone;
 
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
 
   r = copy_obj(obj_ctx,
                obj_ctx,  /* src and dest share an obj_ctx */
@@ -3235,7 +3235,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     obj_ctx.set_atomic(archive_obj, true);
     obj_ctx.set_atomic(obj, true);
 
-    jspan_context no_trace{false, false};
+    otel_span_context_t no_trace{false, false};
 
     int ret = copy_obj(obj_ctx,
                        obj_ctx,  /* src and dest share an obj_ctx */
@@ -3299,7 +3299,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, void *_index_op,
                                            const req_context& rctx,
-                                           jspan_context& trace, bool log_op)
+                                           otel_span_context_t& trace, bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3664,7 +3664,7 @@ done_cancel:
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                         map<string, bufferlist>& attrs, const req_context& rctx,
-                                        jspan_context& trace, bool log_op)
+                                        otel_span_context_t& trace, bool log_op)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -4576,7 +4576,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                bool stat_follow_olh,
                const rgw_obj& stat_dest_obj,
                std::optional<rgw_zone_set_entry> source_trace_entry,
-               jspan_context& trace_ctx,
+               otel_span_context_t& trace_ctx,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred,
                bool keep_tags)
@@ -5086,7 +5086,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace)
+               otel_span_context_t& trace)
 {
   int ret;
   uint64_t obj_size;
@@ -5485,7 +5485,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
   AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
                                &dest_placement, owner,
                                obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
@@ -5683,7 +5683,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   append_rand_alpha(cct, tag, tag, 32);
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
 
   // bi expects empty instance for the entries created when
   // bucket versioning is not enabled or suspended.
@@ -10723,7 +10723,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                   list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
                                   rgw_zone_set *_zones_trace, bool log_op,
-                        				  const jspan_context *bilog_trace )
+                        				  const otel_span_context_t *bilog_trace )
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
@@ -10768,7 +10768,7 @@ int RGWRados::cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& 
                                    rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                    list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
                                    rgw_zone_set *zones_trace, bool log_op,
-                                   const jspan_context* bilog_trace)
+                                   const otel_span_context_t* bilog_trace)
 {
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_ADD, tag, pool, epoch,
                              ent, category, remove_objs, bilog_flags,

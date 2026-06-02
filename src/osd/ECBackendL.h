@@ -65,29 +65,29 @@ public:
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    const jspan_ptr &otel_trace);
+    const otel_span_ref &otel_trace);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const jspan_ptr &otel_trace,
+    const otel_span_ref &otel_trace,
     ECListener& eclistener
     ) override;
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
     ECSubReadReply *reply,
-    const jspan_ptr &otel_trace
+    const otel_span_ref &otel_trace
     );
   void handle_sub_write_reply(
     pg_shard_t from,
     const ECSubWriteReply &op,
-    const jspan_ptr &otel_trace
+    const otel_span_ref &otel_trace
     );
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    const jspan_ptr &otel_trace
+    const otel_span_ref &otel_trace
     );
 
   /// @see ReadOp below

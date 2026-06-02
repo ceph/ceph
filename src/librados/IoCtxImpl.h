@@ -156,14 +156,14 @@ struct librados::IoCtxImpl {
   int getxattrs(const object_t& oid, std::map<std::string, bufferlist>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
-  int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0, const jspan_context& otel_trace = {false, false});
+  int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0, const otel_span_context_t& otel_trace = {false, false});
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0, int flags_mask=-1);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
 		  const ceph::real_time *pmtime, int flags,
-		  const jspan_context& otel_trace = {false, false});
+		  const otel_span_context_t& otel_trace = {false, false});
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
-		       AioCompletionImpl *c, int flags, bufferlist *pbl, const jspan_context& otel_trace = {false, false});
+		       AioCompletionImpl *c, int flags, bufferlist *pbl, const otel_span_context_t& otel_trace = {false, false});
 
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
@@ -192,10 +192,10 @@ struct librados::IoCtxImpl {
 
   int aio_read(const object_t oid, AioCompletionImpl *c,
 	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid,
-	       const jspan_context& otel_trace = {false, false});
+	       const otel_span_context_t& otel_trace = {false, false});
   int aio_read(object_t oid, AioCompletionImpl *c,
 	       char *buf, size_t len, uint64_t off, uint64_t snapid,
-	       const jspan_context& otel_trace = {false, false});
+	       const otel_span_context_t& otel_trace = {false, false});
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
@@ -205,7 +205,7 @@ struct librados::IoCtxImpl {
 		      const char *cmp_buf, size_t cmp_len, uint64_t off);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off,
-		const jspan_context& otel_trace = {false, false});
+		const otel_span_context_t& otel_trace = {false, false});
   int aio_append(const object_t &oid, AioCompletionImpl *c,
 		 const bufferlist& bl, size_t len);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,

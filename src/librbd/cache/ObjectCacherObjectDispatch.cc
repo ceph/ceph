@@ -185,7 +185,7 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
     uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
-    int op_flags, int read_flags, const jspan_context &parent_trace,
+    int op_flags, int read_flags, const otel_span_context_t &parent_trace,
     uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -253,7 +253,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::discard(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     IOContext io_context, int discard_flags,
-    const jspan_context &parent_trace, int* object_dispatch_flags,
+    const otel_span_context_t &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -295,7 +295,7 @@ bool ObjectCacherObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
     IOContext io_context, int op_flags, int write_flags,
     std::optional<uint64_t> assert_version,
-    const jspan_context& parent_trace, int* object_dispatch_flags,
+    const otel_span_context_t& parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -354,7 +354,7 @@ bool ObjectCacherObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
     IOContext io_context, int op_flags,
-    const jspan_context &parent_trace, int* object_dispatch_flags,
+    const otel_span_context_t &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -377,7 +377,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::compare_and_write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
     ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
-    const jspan_context &parent_trace, uint64_t* mismatch_offset,
+    const otel_span_context_t &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -426,7 +426,7 @@ bool ObjectCacherObjectDispatch<I>::compare_and_write(
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::flush(
-    io::FlushSource flush_source, const jspan_context &parent_trace,
+    io::FlushSource flush_source, const otel_span_context_t &parent_trace,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;

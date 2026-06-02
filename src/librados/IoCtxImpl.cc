@@ -644,7 +644,7 @@ int librados::IoCtxImpl::writesame(const object_t& oid, bufferlist& bl,
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 				 ceph::real_time *pmtime, int flags,
-				 const jspan_context& otel_ctx)
+				 const otel_span_context_t& otel_ctx)
 {
   auto trace = client->tracer().add_span("IoCtx::operate", otel_ctx);
   trace->AddEvent("Beginning rados operation");
@@ -754,7 +754,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  AioCompletionImpl *c,
 					  int flags,
 					  bufferlist *pbl,
-                                          const jspan_context& otel_ctx)
+                                          const otel_span_context_t& otel_ctx)
 {
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
@@ -783,7 +783,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
 				     const SnapContext& snap_context,
 				     const ceph::real_time *pmtime, int flags,
-                                     const jspan_context& otel_ctx)
+                                     const otel_span_context_t& otel_ctx)
 {
   FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -814,7 +814,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
-				  uint64_t snapid, const jspan_context& otel_ctx)
+				  uint64_t snapid, const otel_span_context_t& otel_ctx)
 {
   FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
@@ -844,7 +844,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
-				  uint64_t snapid, const jspan_context& otel_ctx)
+				  uint64_t snapid, const otel_span_context_t& otel_ctx)
 {
   FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
@@ -966,7 +966,7 @@ int librados::IoCtxImpl::aio_cmpext(const object_t& oid,
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
-				   uint64_t off, const jspan_context& otel_ctx)
+				   uint64_t off, const otel_span_context_t& otel_ctx)
 {
   FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();

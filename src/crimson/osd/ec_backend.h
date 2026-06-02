@@ -87,13 +87,13 @@ private:
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const jspan_ptr &otel_trace,
+    const otel_span_ref &otel_trace,
     ECListener& eclistener) override;
 
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const jspan_ptr &otel_trace) override;
+    const otel_span_ref &otel_trace) override;
 
   bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 

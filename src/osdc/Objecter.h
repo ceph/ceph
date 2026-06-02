@@ -2049,9 +2049,9 @@ public:
     int *data_offset;
 
     osd_reqid_t reqid; // explicitly setting reqid
-    jspan_ptr trace = ::tracing::Tracer::noop_span;
+    otel_span_ref trace = ::tracing::Tracer::noop_span;
     std::uint64_t subsystem = 0;
-    const jspan_context* otel_trace = nullptr;
+    const otel_span_context_t* otel_trace = nullptr;
 
     static bool has_completion(decltype(onfinish)& f) {
       return std::visit([](auto&& arg) { return bool(arg);}, f);
@@ -2082,7 +2082,7 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
        int f, OpComp fin, version_t *ov, int *offset = nullptr,
-       const jspan_ptr& trace = ::tracing::Tracer::noop_span, uint64_t subsystem = 0) :
+       const otel_span_ref& trace = ::tracing::Tracer::noop_span, uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
       out_bl(ops.size(), nullptr),
@@ -2099,7 +2099,7 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol, osdc_opvec&& _ops,
        int f, Context* fin, version_t *ov, int *offset = nullptr,
-       const jspan_ptr& trace = ::tracing::Tracer::noop_span,
+       const otel_span_ref& trace = ::tracing::Tracer::noop_span,
        uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
@@ -3052,7 +3052,7 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t(),
-    const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span) {
+    const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, oncommit, objver,
 		   nullptr, parent_trace);
@@ -3085,7 +3085,7 @@ public:
         ceph::real_time mtime, int flags,
         Op::OpComp oncommit,
         version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-        const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span, uint32_t subsystem = 0) {
+        const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span, uint32_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
      CEPH_OSD_FLAG_WRITE, std::move(oncommit), objver,
      nullptr, parent_trace, subsystem);
@@ -3109,7 +3109,7 @@ public:
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
     uint64_t features = 0,
-    const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span) {
+    const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span) {
     Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags) & flags_mask, onack, objver,
      data_offset, parent_trace);
     o->priority = op.priority;
@@ -3144,7 +3144,7 @@ public:
      ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
      int flags, Op::OpComp onack,
      version_t *objver = nullptr, int *data_offset = nullptr,
-      uint64_t features = 0, const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span,
+      uint64_t features = 0, const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span,
      uint64_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
      std::move(onack), objver,
@@ -3345,7 +3345,7 @@ public:
     uint64_t off, uint64_t len, snapid_t snap, ceph::buffer::list *pbl,
     int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0,
-    const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span) {
+    const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span) {
     osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
@@ -3507,7 +3507,7 @@ public:
     const ceph::buffer::list &bl, ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0,
-    const jspan_ptr& parent_trace = ::tracing::Tracer::noop_span) {
+    const otel_span_ref& parent_trace = ::tracing::Tracer::noop_span) {
     osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;

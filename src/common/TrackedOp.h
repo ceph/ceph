@@ -313,10 +313,10 @@ protected:
 
 public:
 
-  jspan_context osd_trace{false, false};
-  jspan_context pg_trace{false, false};
-  jspan_context store_trace{false, false};
-  jspan_context journal_trace{false, false};
+  otel_span_context_t osd_trace{false, false};
+  otel_span_context_t pg_trace{false, false};
+  otel_span_context_t store_trace{false, false};
+  otel_span_context_t journal_trace{false, false};
 
   virtual ~TrackedOp() {}
 

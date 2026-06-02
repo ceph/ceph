@@ -898,14 +898,14 @@ struct SubWriteCommitted : public Context {
   ceph_tid_t tid;
   eversion_t version;
   eversion_t last_complete;
-  jspan_ptr otel_trace;
+  otel_span_ref otel_trace;
   SubWriteCommitted(
     ECBackendL *pg,
     OpRequestRef msg,
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    jspan_ptr otel_trace)
+    otel_span_ref otel_trace)
     : pg(pg), msg(msg), tid(tid),
       version(version), last_complete(last_complete), otel_trace(std::move(otel_trace)) {}
   void finish(int) override {
@@ -916,7 +916,7 @@ struct SubWriteCommitted : public Context {
 };
 void ECBackendL::sub_write_committed(
   ceph_tid_t tid, eversion_t version, eversion_t last_complete,
-  const jspan_ptr &otel_trace) {
+  const otel_span_ref &otel_trace) {
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
     reply.tid = tid;
@@ -950,7 +950,7 @@ void ECBackendL::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const jspan_ptr &otel_trace,
+  const otel_span_ref &otel_trace,
   ECListener&)
 {
   if (msg) {
@@ -1032,7 +1032,7 @@ void ECBackendL::handle_sub_read(
   pg_shard_t from,
   const ECSubRead &op,
   ECSubReadReply *reply,
-  const jspan_ptr &otel_trace)
+  const otel_span_ref &otel_trace)
 {
   otel_trace->AddEvent("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
@@ -1181,7 +1181,7 @@ error:
 void ECBackendL::handle_sub_write_reply(
   pg_shard_t from,
   const ECSubWriteReply &op,
-  const jspan_ptr &otel_trace)
+  const otel_span_ref &otel_trace)
 {
   map<ceph_tid_t, RMWPipeline::OpRef>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
   ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
@@ -1223,7 +1223,7 @@ void ECBackendL::handle_sub_write_reply(
 void ECBackendL::handle_sub_read_reply(
   pg_shard_t from,
   ECSubReadReply &op,
-  const jspan_ptr &otel_trace)
+  const otel_span_ref &otel_trace)
 {
   otel_trace->AddEvent("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;

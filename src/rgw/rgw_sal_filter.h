@@ -917,8 +917,8 @@ public:
     return std::make_unique<FilterObject>(*this);
   }
 
-  virtual jspan_context& get_trace() { return next->get_trace(); }
-  virtual void set_trace (jspan_context&& _trace_ctx) { next->set_trace(std::move(_trace_ctx)); }
+  virtual otel_span_context_t& get_trace() { return next->get_trace(); }
+  virtual void set_trace (otel_span_context_t&& _trace_ctx) { next->set_trace(std::move(_trace_ctx)); }
 
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
@@ -962,7 +962,7 @@ public:
 
   virtual std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() override { return parts; }
 
-  virtual jspan_context& get_trace() override { return next->get_trace(); }
+  virtual otel_span_context_t& get_trace() override { return next->get_trace(); }
 
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 

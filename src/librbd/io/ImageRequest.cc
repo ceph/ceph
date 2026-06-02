@@ -233,7 +233,7 @@ void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents, ImageArea area,
                                ReadResult &&read_result, IOContext io_context,
                                int op_flags, int read_flags,
-			       const jspan_context &parent_trace) {
+			       const otel_span_context_t &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents), area,
                           std::move(read_result), io_context, op_flags,
                           read_flags, parent_trace);
@@ -244,7 +244,7 @@ template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, ImageArea area,
                                 bufferlist &&bl, int op_flags,
-				const jspan_context &parent_trace) {
+				const otel_span_context_t &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
                            std::move(bl), op_flags, parent_trace);
   req.send();
@@ -254,7 +254,7 @@ template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents, ImageArea area,
                                   uint32_t discard_granularity_bytes,
-                                  const jspan_context &parent_trace) {
+                                  const otel_span_context_t &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents), area,
                              discard_granularity_bytes, parent_trace);
   req.send();
@@ -263,7 +263,7 @@ void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_flush(I *ictx, AioCompletion *c,
                                 FlushSource flush_source,
-                                const jspan_context &parent_trace) {
+                                const otel_span_context_t &parent_trace) {
   ImageFlushRequest<I> req(*ictx, c, flush_source, parent_trace);
   req.send();
 }
@@ -272,7 +272,7 @@ template <typename I>
 void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
                                     Extents &&image_extents, ImageArea area,
                                     bufferlist &&bl, int op_flags,
-				    const jspan_context &parent_trace) {
+				    const otel_span_context_t &parent_trace) {
   ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents), area,
                                std::move(bl), op_flags, parent_trace);
   req.send();
@@ -286,7 +286,7 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
                                             bufferlist &&bl,
                                             uint64_t *mismatch_offset,
                                             int op_flags,
-                                            const jspan_context &parent_trace) {
+                                            const otel_span_context_t &parent_trace) {
   ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
                                      std::move(cmp_bl), std::move(bl),
                                      mismatch_offset, op_flags, parent_trace);
@@ -366,7 +366,7 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
 				      int read_flags,
-                                      const jspan_context &parent_trace)
+                                      const otel_span_context_t &parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     "read", parent_trace),
     m_io_context(io_context), m_op_flags(op_flags), m_read_flags(read_flags) {
@@ -814,7 +814,7 @@ template <typename I>
 ImageListSnapsRequest<I>::ImageListSnapsRequest(
     I& image_ctx, AioCompletion* aio_comp, Extents&& image_extents,
     ImageArea area, SnapIds&& snap_ids, int list_snaps_flags,
-    SnapshotDelta* snapshot_delta, const jspan_context& parent_trace)
+    SnapshotDelta* snapshot_delta, const otel_span_context_t& parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     "list-snaps", parent_trace),
     m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),

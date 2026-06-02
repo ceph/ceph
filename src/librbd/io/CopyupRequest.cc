@@ -47,7 +47,7 @@ public:
   C_UpdateObjectMap(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                     uint64_t object_no, uint8_t head_object_map_state,
                     const std::vector<uint64_t> *snap_ids,
-                    bool first_snap_is_clean, const jspan_context &trace,
+                    bool first_snap_is_clean, const otel_span_context_t &trace,
                     size_t snap_id_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_no(object_no),
       m_head_object_map_state(head_object_map_state), m_snap_ids(*snap_ids),
@@ -110,7 +110,7 @@ private:
   uint8_t m_head_object_map_state;
   const std::vector<uint64_t> &m_snap_ids;
   bool m_first_snap_is_clean;
-  jspan_context m_trace;
+  otel_span_context_t m_trace;
   size_t m_snap_id_idx;
 };
 
@@ -119,7 +119,7 @@ private:
 template <typename I>
 CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
                                 Extents &&image_extents, ImageArea area,
-                                const jspan_context &parent_trace)
+                                const otel_span_context_t &parent_trace)
   : m_image_ctx(ictx), m_object_no(objectno),
     m_image_extents(std::move(image_extents)), m_image_area(area),
     m_trace(m_image_ctx->tracer.add_span("copy-up", parent_trace))

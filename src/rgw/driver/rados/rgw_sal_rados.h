@@ -1097,7 +1097,7 @@ public:
 		    const rgw_placement_rule *ptail_placement_rule,
 		    uint64_t olh_epoch,
 		    const std::string& unique_tag,
-                    jspan_context& trace) :
+                    otel_span_context_t& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
@@ -1147,7 +1147,7 @@ public:
 		    const std::string& unique_tag,
 		    uint64_t position,
 		    uint64_t *cur_accounted_size,
-                    jspan_context& trace) :
+                    otel_span_context_t& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
@@ -1194,7 +1194,7 @@ public:
 		       RadosStore* _store, std::unique_ptr<Aio> _aio,
 		       const ACLOwner& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
-		       uint64_t part_num, const std::string& part_num_str, jspan_context& trace) :
+		       uint64_t part_num, const std::string& part_num_str, otel_span_context_t& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),

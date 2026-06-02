@@ -294,14 +294,14 @@ protected:
 
 public:
 
-  jspan_ptr trace{tracing::Tracer::noop_span};
+  otel_span_ref trace{tracing::Tracer::noop_span};
 
   // zipkin tracing - for backward compatibility
   static void encode_trace(ceph::bufferlist &bl);
   void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   // otel tracing
-  jspan_context otel_trace{false, false};
+  otel_span_context_t otel_trace{false, false};
   void encode_otel_trace(ceph::buffer::list &bl, uint64_t features, bool force_otel = false) const;
   void decode_otel_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 

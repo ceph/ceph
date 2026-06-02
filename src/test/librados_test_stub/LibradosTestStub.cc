@@ -440,7 +440,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectReadOperation *op, int flags,
-                       bufferlist *pbl, const jspan_context& otel_trace) {
+                       bufferlist *pbl, const otel_span_context_t& otel_trace) {
   return aio_operate(oid, c, op, flags, pbl);
 }
 
@@ -454,7 +454,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps, int flags,
-                       const jspan_context& otel_trace) {
+                       const otel_span_context_t& otel_trace) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
 
@@ -470,13 +470,13 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps) {
-  return aio_operate(oid, c, op, seq, snaps, 0, jspan_context{false, false});
+  return aio_operate(oid, c, op, seq, snaps, 0, otel_span_context_t{false, false});
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps,
-		       const jspan_context& otel_trace) {
+		       const otel_span_context_t& otel_trace) {
   return aio_operate(oid, c, op, seq, snaps, 0, otel_trace);
 }
 

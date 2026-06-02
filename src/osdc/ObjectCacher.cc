@@ -56,12 +56,12 @@ class ObjectCacher::C_ReadFinish : public Context {
   xlist<C_ReadFinish*>::item set_item;
   bool trust_enoent;
   ceph_tid_t tid;
-  jspan_ptr trace;
+  otel_span_ref trace;
 
 public:
   bufferlist bl;
   C_ReadFinish(ObjectCacher *c, Object *ob, ceph_tid_t t, loff_t s,
-	       uint64_t l, const jspan_ptr& trace) :
+	       uint64_t l, const otel_span_ref& trace) :
     oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
     set_item(this), trust_enoent(true),
     tid(t), trace(trace) {
@@ -87,11 +87,11 @@ class ObjectCacher::C_RetryRead : public Context {
   OSDRead *rd;
   ObjectSet *oset;
   Context *onfinish;
-  jspan_ptr trace;
+  otel_span_ref trace;
   std::vector<ObjHole> holes;
 public:
   C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
-	            const jspan_ptr& trace,
+	            const otel_span_ref& trace,
               std::vector<ObjHole> h)
     : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace), holes(h) {
   }
@@ -806,14 +806,14 @@ void ObjectCacher::close_object(Object *ob)
   delete ob;
 }
 void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
-                           const jspan_context& otel_trace)
+                           const otel_span_context_t& otel_trace)
 {
   auto trace = tracer.add_span("bh_read", otel_trace);
   bh_read(bh, op_flags, trace);
 }
 
 void ObjectCacher::bh_read(BufferHead *bh, int op_flags,
-                           const jspan_ptr& trace)
+                           const otel_span_ref& trace)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 7) << "bh_read on " << *bh << " outstanding reads "
@@ -1067,11 +1067,11 @@ class ObjectCacher::C_WriteCommit : public Context {
   int64_t poolid;
   sobject_t oid;
   vector<pair<loff_t, uint64_t> > ranges;
-  jspan_ptr trace;
+  otel_span_ref trace;
 public:
   ceph_tid_t tid = 0;
   C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s,
-		uint64_t l, const jspan_ptr& trace) :
+		uint64_t l, const otel_span_ref& trace) :
     oc(c), poolid(_poolid), oid(o), trace(trace) {
       ranges.push_back(make_pair(s, l));
     }
@@ -1138,13 +1138,13 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     perfcounter->inc(l_objectcacher_data_flushed, total_len);
 }
 
-void ObjectCacher::bh_write(BufferHead *bh, const jspan_context& otel_ctx) {
+void ObjectCacher::bh_write(BufferHead *bh, const otel_span_context_t& otel_ctx) {
   auto trace = tracer.add_span("bh_write", otel_ctx);
   trace->AddEvent("start");
   bh_write(bh, trace);
 }
 
-void ObjectCacher::bh_write(BufferHead *bh, const jspan_ptr& trace)
+void ObjectCacher::bh_write(BufferHead *bh, const otel_span_ref& trace)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 7) << "bh_write " << *bh << dendl;
@@ -1287,7 +1287,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
     finish_contexts(cct, ls, r);
 }
 
-void ObjectCacher::flush(const jspan_ptr& trace, loff_t amount, int max_bhs)
+void ObjectCacher::flush(const otel_span_ref& trace, loff_t amount, int max_bhs)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph::real_time cutoff = ceph::real_clock::now();
@@ -1396,7 +1396,7 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
  * returns 0 if doing async read
  */
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			                  const jspan_context& otel_ctx,
+			                  const otel_span_context_t& otel_ctx,
                         std::vector<ObjHole> *holes)
 {
   auto trace = tracer.add_span("readx", otel_ctx);
@@ -1417,7 +1417,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 }
 
 int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			 bool external_call, const jspan_ptr& trace,
+			 bool external_call, const otel_span_ref& trace,
                          std::vector<ObjHole> *holes)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -1743,7 +1743,7 @@ void ObjectCacher::retry_waiting_reads()
 }
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-			 const jspan_context& otel_trace,
+			 const otel_span_context_t& otel_trace,
 			 bool block_writes_upfront)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -1846,13 +1846,13 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 class ObjectCacher::C_WaitForWrite : public Context {
 public:
   C_WaitForWrite(ObjectCacher *oc, uint64_t len,
-                 const jspan_ptr& trace, Context *onfinish) :
+                 const otel_span_ref& trace, Context *onfinish) :
     m_oc(oc), m_len(len), trace(trace), m_onfinish(onfinish) {}
   void finish(int r) override;
 private:
   ObjectCacher *m_oc;
   uint64_t m_len;
-  jspan_ptr trace;
+  otel_span_ref trace;
   Context *m_onfinish;
 };
 
@@ -1864,7 +1864,7 @@ void ObjectCacher::C_WaitForWrite::finish(int r)
 }
 
 void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
-					     const jspan_ptr& trace)
+					     const otel_span_ref& trace)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph::mono_time start = ceph::mono_clock::now();
@@ -1913,7 +1913,7 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 
 // blocking wait for write.
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
-				  const jspan_ptr& trace, Context *onfreespace,
+				  const otel_span_ref& trace, Context *onfreespace,
                                   bool block_writes_upfront)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -2116,7 +2116,7 @@ void ObjectCacher::purge(Object *ob)
 }
 
 bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
-                         const jspan_context& otel_ctx)
+                         const otel_span_context_t& otel_ctx)
 {
   auto trace = tracer.add_span("flush", otel_ctx);
   return flush(ob, offset, length, trace);
@@ -2127,7 +2127,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
 // false if we wrote something.
 // be sloppy about the ranges and flush any buffer it touches
 bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
-                         const jspan_ptr& trace)
+                         const otel_span_ref& trace)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   list<BufferHead*> blist;
@@ -2281,7 +2281,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 // flush.  non-blocking, takes callback.
 // returns true if already flushed
 bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
-			     const jspan_ptr& trace, Context *onfinish)
+			     const otel_span_ref& trace, Context *onfinish)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(onfinish != NULL);

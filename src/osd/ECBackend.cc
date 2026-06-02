@@ -337,14 +337,14 @@ struct SubWriteCommitted : public Context {
   ceph_tid_t tid;
   eversion_t version;
   eversion_t last_complete;
-  jspan_ptr otel_trace;
+  otel_span_ref otel_trace;
   SubWriteCommitted(
     ECBackend *pg,
     OpRequestRef msg,
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    jspan_ptr otel_trace)
+    otel_span_ref otel_trace)
     : pg(pg), msg(msg), tid(tid),
     version(version), last_complete(last_complete), otel_trace(std::move(otel_trace)) {}
   void finish(int) override {
@@ -356,7 +356,7 @@ struct SubWriteCommitted : public Context {
 
 void ECBackend::sub_write_committed(
   ceph_tid_t tid, eversion_t version, eversion_t last_complete,
-  const jspan_ptr &otel_trace) {
+  const otel_span_ref &otel_trace) {
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
     reply.tid = tid;
@@ -391,7 +391,7 @@ void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const jspan_ptr &otel_trace,
+  const otel_span_ref &otel_trace,
   ECListener &) {
   if (msg) {
     msg->mark_event("sub_op_started");
@@ -489,7 +489,7 @@ void ECBackend::handle_sub_read(
   pg_shard_t from,
   const ECSubRead &op,
   ECSubReadReply *reply,
-  const jspan_ptr &otel_trace)
+  const otel_span_ref &otel_trace)
 {
   otel_trace->AddEvent("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
@@ -585,7 +585,7 @@ void ECBackend::handle_sub_read(
 void ECBackend::handle_sub_read_n_reply(
   pg_shard_t from,
   ECSubRead &op,
-  const jspan_ptr &otel_trace)
+  const otel_span_ref &otel_trace)
 {
   ECSubReadReply reply;
   handle_sub_read(from, op, &reply, otel_trace);
@@ -595,7 +595,7 @@ void ECBackend::handle_sub_read_n_reply(
 void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
   const ECSubWriteReply &ec_write_reply_op,
-  const jspan_ptr &otel_trace) {
+  const otel_span_ref &otel_trace) {
   RMWPipeline::OpRef &op = rmw_pipeline.tid_to_op_map.at(ec_write_reply_op.tid);
   if (ec_write_reply_op.committed) {
     otel_trace->AddEvent("sub write committed");
@@ -626,7 +626,7 @@ void ECBackend::handle_sub_write_reply(
 void ECBackend::handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    const jspan_ptr &otel_trace)
+    const otel_span_ref &otel_trace)
 {
   otel_trace->AddEvent("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;

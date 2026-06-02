@@ -147,7 +147,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, primary_oid,
-                              std::move(wop), 0, jspan_context(false, false), create_cb);
+                              std::move(wop), 0, otel_span_context_t(false, false), create_cb);
       break;
     }
 
@@ -162,7 +162,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, primary_oid, std::move(wop), 0,
-                              jspan_context(false, false), truncate_cb);
+                              otel_span_context_t(false, false), truncate_cb);
       break;
     }
 
@@ -181,7 +181,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, primary_oid,
-                              std::move(wop), 0, jspan_context(false, false), remove_cb);
+                              std::move(wop), 0, otel_span_context_t(false, false), remove_cb);
       break;
     }
 
@@ -209,7 +209,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, secondary_oid,
-                              std::move(wop), 0, jspan_context(false, false), write_cb);
+                              std::move(wop), 0, otel_span_context_t(false, false), write_cb);
       break;
     }
 
@@ -273,7 +273,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
-                            std::move(rop), 0, jspan_context(false, false), read_cb);
+                            std::move(rop), 0, otel_span_context_t(false, false), read_cb);
     num_io++;
   };
 
@@ -293,7 +293,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
-                            std::move(wop), 0, jspan_context(false, false), write_cb);
+                            std::move(wop), 0, otel_span_context_t(false, false), write_cb);
     num_io++;
   };
 
@@ -314,7 +314,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
-                            std::move(wop), 0, jspan_context(false, false), write_cb);
+                            std::move(wop), 0, otel_span_context_t(false, false), write_cb);
     num_io++;
   };
 

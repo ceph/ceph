@@ -539,17 +539,17 @@ class ObjectCacher {
 
   // io
   void bh_read(BufferHead *bh, int op_flags,
-               const jspan_context& otel_ctx);
+               const otel_span_context_t& otel_ctx);
   void bh_read(BufferHead *bh, int op_flags,
-               const jspan_ptr& trace);
-  void bh_write(BufferHead *bh, const jspan_ptr& otel_trace);
-  void bh_write(BufferHead *bh, const jspan_context& otel_trace);
+               const otel_span_ref& trace);
+  void bh_write(BufferHead *bh, const otel_span_ref& otel_trace);
+  void bh_write(BufferHead *bh, const otel_span_context_t& otel_trace);
   void bh_write_scattered(std::list<BufferHead*>& blist);
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(const jspan_ptr& otel_trace, loff_t amount=0, int max_bhs=0);
+  void flush(const otel_span_ref& otel_trace, loff_t amount=0, int max_bhs=0);
 
   /**
    * flush a range of buffers
@@ -564,9 +564,9 @@ class ObjectCacher {
    * @return true if object was already clean/flushed.
    */
   bool flush(Object *o, loff_t off, loff_t len,
-             const jspan_context& otel_ctx);
+             const otel_span_context_t& otel_ctx);
   bool flush(Object *o, loff_t off, loff_t len,
-             const jspan_ptr& trace);
+             const otel_span_ref& trace);
   loff_t release(Object *o);
   void purge(Object *o);
 
@@ -574,7 +574,7 @@ class ObjectCacher {
   ceph::condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call, const jspan_ptr& otel_trace,
+	     bool external_call, const otel_span_ref& otel_trace,
              std::vector<ObjHole> *holes);
   void retry_waiting_reads();
 
@@ -627,13 +627,13 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	    const jspan_context &otel_trace = {false, false},
+	    const otel_span_context_t &otel_trace = {false, false},
             std::vector<ObjHole> *holes = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-	     const jspan_context &otel_trace,
+	     const otel_span_context_t &otel_trace,
 	     bool block_writes_upfront);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-	     const jspan_context &otel_trace = {false, false}) {
+	     const otel_span_context_t &otel_trace = {false, false}) {
     return writex(wr, oset, onfreespace, otel_trace, cfg_block_writes_upfront);
   }
   bool is_cached(ObjectSet *oset, std::vector<ObjectExtent>& extents,
@@ -642,9 +642,9 @@ class ObjectCacher {
 private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
-                      const jspan_ptr& otel_trace, Context *onfreespace,
+                      const otel_span_ref& otel_trace, Context *onfreespace,
                       bool block_writes_upfront);
-  void _maybe_wait_for_writeback(uint64_t len, const jspan_ptr& otel_trace);
+  void _maybe_wait_for_writeback(uint64_t len, const otel_span_ref& otel_trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
   void _discard(ObjectSet *oset, const std::vector<ObjectExtent>& exls,
@@ -658,9 +658,9 @@ public:
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
   bool flush_set(ObjectSet *oset, std::vector<ObjectExtent>& ex,
-                 const jspan_ptr& trace, Context *onfinish = 0);
+                 const otel_span_ref& trace, Context *onfinish = 0);
   bool flush_set(ObjectSet *oset, std::vector<ObjectExtent>& ex,
-                 const jspan_context& otel_ctx, Context *onfinish = 0) {
+                 const otel_span_context_t& otel_ctx, Context *onfinish = 0) {
     auto trace = tracer.add_span("flush_set", otel_ctx);
     return flush_set(oset, ex, trace, onfinish);
   }
@@ -727,7 +727,7 @@ public:
                    loff_t offset, uint64_t len, ceph::buffer::list *bl, int flags,
                    std::vector<ObjHole> *holes,
                    Context *onfinish,
-                   const jspan_context& otel_trace = {false, false}) {
+                   const otel_span_context_t& otel_trace = {false, false}) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
            oset->truncate_size, rd->extents);
@@ -738,7 +738,7 @@ public:
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags,
 		 Context *onfreespace, bool block_writes_upfront,
-		 const jspan_context& otel_trace = {false, false}) {
+		 const otel_span_context_t& otel_trace = {false, false}) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
@@ -748,7 +748,7 @@ public:
   bool file_flush(ObjectSet *oset, file_layout_t *layout,
 		  const SnapContext& snapc, loff_t offset, uint64_t len,
 		  Context *onfinish,
-		  const jspan_context& otel_ctx = {false, false}) {
+		  const otel_span_context_t& otel_ctx = {false, false}) {
     std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, extents);
