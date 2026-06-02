@@ -1,27 +1,7 @@
-<cd-nvmeof-tabs></cd-nvmeof-tabs>
+<cd-nvmeof-gateway-group-filter
+  (groupChange)="onGroupChange($event)">
+</cd-nvmeof-gateway-group-filter>
 
-<div cdsGrid
-     [useCssGrid]="true"
-     [narrow]="true"
-     [fullWidth]="true">
-<div cdsCol
-     [columnNumbers]="{sm: 4, md: 8}">
-  <div class="cds-mt-3 form-item"
-       cdsRow>
-    <cds-combo-box
-        type="single"
-        label="Selected Gateway Group"
-        i18n-label
-        [placeholder]="gwGroupPlaceholder"
-        [items]="gwGroups"
-        (selected)="onGroupSelection($event)"
-        (clear)="onGroupClear()"
-        [disabled]="gwGroupsEmpty">
-      <cds-dropdown-list></cds-dropdown-list>
-    </cds-combo-box>
-  </div>
-</div>
-</div>
 <ng-container *ngIf="subsystems$ | async as subsystems">
   <cd-table #table
             [data]="subsystems"
