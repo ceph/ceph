@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 
+# allowed and preferred ciphers for cephx keyrings
+# Be careful updating the allowed ciphers as not to
+# disallow one that was allowed in a valid upgrade
+# origin point to this version. The keyrings will not
+# be rotated as of the time the allowed and preferred
+# ciphers are set
+ALLOWED_CIPHERS = ['aes', 'aes256k']
+PREFERRED_CIPHERS = ['aes256k']
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
@@ -879,7 +887,18 @@ class CephadmUpgrade:
             mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
             _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
             if not mons_needing_upgrade:
-                # all mons have been upgraded if we get here
+                # all mons have been upgraded if we get here so keyrings can be rotated
+                # start by setting the preferred and allowed cephx key ciphers
+                ret, image, err = self.mgr.check_mon_command({
+                    'prefix': 'mon set',
+                    'name': 'auth_allowed_ciphers',
+                    'value': ','.join(ALLOWED_CIPHERS),
+                })
+                ret, image, err = self.mgr.check_mon_command({
+                    'prefix': 'mon set',
+                    'name': 'auth_preferred_ciphers',
+                    'value': ','.join(PREFERRED_CIPHERS),
+                })
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
                         continue
