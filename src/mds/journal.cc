@@ -1894,6 +1894,9 @@ void ESession::replay(MDSRank *mds)
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       session->set_client_metadata(client_metadata);
+      if (session->info.auth_name.to_str().empty()) {
+        session->info.auth_name = auth_name;
+      }
       dout(10) << " opened session " << session->info.inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
@@ -1943,7 +1946,7 @@ void ESession::replay(MDSRank *mds)
 
 void ESession::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   encode(stamp, bl);
   encode(client_inst, bl, features);
   encode(open, bl);
@@ -1952,12 +1955,13 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
   encode(inotablev, bl);
   encode(client_metadata, bl);
   encode(inos_to_purge, bl);
+  encode(auth_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void ESession::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(client_inst, bl);
@@ -1972,6 +1976,9 @@ void ESession::decode(bufferlist::const_iterator &bl)
   }
   if (struct_v >= 6){
     decode(inos_to_purge, bl);
+  }
+  if (struct_v >= 7) {
+    decode(auth_name, bl);
   }
     
   DECODE_FINISH(bl);
