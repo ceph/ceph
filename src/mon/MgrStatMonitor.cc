@@ -226,6 +226,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   auto p = bl.cbegin();
   decode(pending_digest, p);
   auto& pending_health_checks = get_health_checks_pending_writeable();
+  pending_health_checks = m->health_checks;
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);
   }
