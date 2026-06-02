@@ -63,10 +63,8 @@
 #ifdef WITH_CPUTRACE
 #include "common/cputrace.h"
 #endif
+#include "common/tracer.h"
 
-#ifdef WITH_BLKIN
-#include "common/zipkin_trace.h"
-#endif
 
 class Allocator;
 class FreelistManager;
@@ -1906,11 +1904,6 @@ public:
 
     inline void set_state(state_t s) {
        state = s;
-#ifdef WITH_BLKIN
-       if (trace) {
-         trace.event(get_state_name());
-       } 
-#endif
     }
     inline state_t get_state() {
       return state;
@@ -1952,9 +1945,6 @@ public:
     bool tracing = false;
 #endif
 
-#ifdef WITH_BLKIN
-    ZTracer::Trace trace;
-#endif
 
     ceph::mutex writings_lock = ceph::make_mutex("BlueStore::TransContextWritings::lock");
     struct WriteObserverEntry {
@@ -1983,11 +1973,6 @@ public:
       }
     }
     ~TransContext() {
-#ifdef WITH_BLKIN
-      if (trace) {
-        trace.event("txc destruct");
-      }
-#endif
       delete deferred_txn;
     }
 
@@ -2014,6 +1999,7 @@ public:
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
     }
+    jspan_ptr trace = ::tracing::Tracer::noop_span;
   private:
     state_t state = STATE_PREPARE;
   };
@@ -2775,9 +2761,6 @@ private:
     mono_clock::time_point last_fragmentation_check;
   } mempool_thread;
 
-#ifdef WITH_BLKIN
-  ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
-#endif
 
   // --------------------------------------------------------
   // private methods
@@ -4191,6 +4174,8 @@ private:
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
 
+  tracing::Tracer tracer{cct, "io.ceph.os.bluestore"};
+  
 public:
   static int create_bdev_labels(CephContext *cct,
                           const std::string& path,
