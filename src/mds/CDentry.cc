@@ -175,7 +175,7 @@ version_t CDentry::pre_dirty(version_t min)
 }
 
 
-void CDentry::_mark_dirty(LogSegment *ls)
+void CDentry::_mark_dirty(LogSegmentRef const& ls)
 {
   // state+pin
   if (!state_test(STATE_DIRTY)) {
@@ -189,7 +189,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
     ls->dirty_dentries.push_back(&item_dirty);
 }
 
-void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
+void CDentry::mark_dirty(version_t pv, LogSegmentRef const& ls) 
 {
   dout(10) << __func__ << " " << *this << dendl;
 

@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
+#include "LogSegmentRef.h"
+
 #include <string_view>
 
 using namespace std::literals::string_view_literals;
@@ -88,6 +90,7 @@ enum {
   l_mdss_last,
 };
 
+
 class Server {
 public:
   using clock = ceph::coarse_mono_clock;
@@ -126,7 +129,7 @@ public:
   void handle_client_session(const cref_t<MClientSession> &m);
   void _session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 		       const interval_set<inodeno_t>& inos_to_free, version_t piv,
-		       const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls);
+		       const interval_set<inodeno_t>& inos_to_purge, LogSegmentRef const& ls);
   version_t prepare_force_open_sessions(std::map<client_t,entity_inst_t> &cm,
 					std::map<client_t,client_metadata_t>& cmm,
 					std::map<client_t,std::pair<Session*,uint64_t> >& smap);
