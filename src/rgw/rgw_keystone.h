@@ -190,7 +190,8 @@ public:
     std::string id;
     std::string name;
     bool restricted;
-    std::vector<AccessRule> access_rules;
+    // std::optional preserves the absent-vs-empty distinction.
+    std::optional<std::vector<AccessRule>> access_rules;
     void decode_json(JSONObj *obj);
   };
 
@@ -215,11 +216,17 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
-  // Returns access rules from the application credential, or an empty span
-  // if there is no app_cred or it carries no rules.
+  // True iff the access_rules field was present (possibly empty) on the
+  // application credential.
+  bool has_access_rules_field() const {
+    return app_cred && app_cred->access_rules.has_value();
+  }
+  // Access rules from the application credential, empty span if absent or
+  // no app_cred. Callers must check has_access_rules_field() to distinguish
+  // absent (permit) from present-but-empty (deny).
   std::span<const ApplicationCredential::AccessRule> get_access_rules() const {
-    if (app_cred) {
-      return app_cred->access_rules;
+    if (app_cred && app_cred->access_rules) {
+      return *app_cred->access_rules;
     }
     return {};
   }

@@ -498,9 +498,9 @@ void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *o
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("restricted", restricted, obj, true);
-  // access_rules only appears when the application credential is restricted
-  // and has rules attached. Tag as optional (last arg = false) so unrestricted
-  // credentials don't fail the decode.
+  // Optional. The std::optional decoder leaves access_rules with no value
+  // when the field is absent and emplaces a (possibly empty) vector when
+  // present.
   JSONDecoder::decode_json("access_rules", access_rules, obj, false);
 }
 
@@ -513,9 +513,7 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
 
-  // Optional application_credential field (only present for app cred auth).
-  // Its decode_json() also pulls in access_rules when the credential is
-  // restricted; unrestricted credentials have no access_rules array.
+  // Optional, only present for application-credential authentication.
   ApplicationCredential tmp_app_cred;
   if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
     app_cred = std::move(tmp_app_cred);

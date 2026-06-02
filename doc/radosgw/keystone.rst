@@ -188,8 +188,11 @@ credential that carries access rules, RGW checks every incoming request against
 those rules and returns ``403 Forbidden`` if none of the rules match.
 
 No additional configuration is required. Tokens that do not belong to an
-application credential, or application credentials that carry no access rules,
-are unaffected.
+application credential, or application credentials without an
+``access_rules`` field, are unaffected. An application credential whose
+``access_rules`` field is present but empty (``[]``) is a deliberate empty
+whitelist: every request from such a token is denied with
+``403 Forbidden``, matching the OpenStack ``keystonemiddleware`` behavior.
 
 Access rule path patterns follow the `keystoneauth1 reference implementation`_:
 
