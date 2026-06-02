@@ -15,16 +15,12 @@
 # GNU Library Public License for more details.
 #
 # Test that RGW enforces application credential access rules received from
-# Keystone. Uses keystone-fake-server.py which provides three app-cred tokens:
+# Keystone. Uses keystone-fake-server.py which provides four app-cred tokens:
 #
 #   appcred-token-readonly             - access rules: GET and HEAD on /v1/AUTH_**
-#   appcred-token-unrestricted         - unrestricted=True, no access rules
-#   appcred-token-restricted-no-rules  - restricted=True (the OpenStack default),
-#                                        no access rules. Must permit every
-#                                        request: the 'restricted' flag governs
-#                                        only Identity-API self-mutation, not
-#                                        object-store access (matches
-#                                        keystonemiddleware behavior).
+#   appcred-token-unrestricted         - unrestricted=True, no access_rules
+#   appcred-token-restricted-no-rules  - restricted=True, no access_rules; permits
+#   appcred-token-empty-rules          - access_rules: []; denies all
 
 import sys
 import requests
@@ -127,15 +123,7 @@ def test_unrestricted_appcred_permits_all():
 
 
 def test_restricted_no_rules_appcred_permits_all():
-    """A restricted app-cred without access rules must permit every request.
-
-    'restricted=true' is the default for `openstack application credential
-    create` (i.e. unrestricted=false). It governs only Identity-API
-    self-mutation operations (trust/app-cred/EC2 create-and-delete) per
-    Keystone server source. It does NOT authorize or deny object-store
-    requests, and keystonemiddleware's validate_allowed_request permits
-    when access_rules is absent.
-    """
+    """A restricted app-cred without access_rules must permit every request."""
     token = 'appcred-token-restricted-no-rules'
     r = requests.get(OBJECT, headers={'X-Auth-Token': token})
     if r.status_code != 200:
@@ -155,6 +143,27 @@ def test_restricted_no_rules_appcred_permits_all():
     print('PASSED: restricted-no-rules appcred permits GET, HEAD, and PUT')
 
 
+def test_empty_rules_appcred_denies_all():
+    """An app-cred with access_rules: [] must deny every request (403)."""
+    token = 'appcred-token-empty-rules'
+    r = requests.get(OBJECT, headers={'X-Auth-Token': token})
+    if r.status_code != 403:
+        fail('empty-rules appcred: GET should be denied (403)', r.status_code)
+
+    r = requests.head(OBJECT, headers={'X-Auth-Token': token})
+    if r.status_code != 403:
+        fail('empty-rules appcred: HEAD should be denied (403)', r.status_code)
+
+    r = requests.put(OBJECT,
+                     headers={'X-Auth-Token': token,
+                               'Content-Type': 'text/plain'},
+                     data=b'should be denied')
+    if r.status_code != 403:
+        fail('empty-rules appcred: PUT should be denied (403)', r.status_code)
+
+    print('PASSED: empty-rules appcred denies GET, HEAD, and PUT')
+
+
 def main():
     setup('admin-token-1')
     try:
@@ -164,6 +173,7 @@ def main():
         test_readonly_appcred_denies_delete()
         test_unrestricted_appcred_permits_all()
         test_restricted_no_rules_appcred_permits_all()
+        test_empty_rules_appcred_denies_all()
     finally:
         teardown('admin-token-1')
     print('ALL TESTS PASSED')
