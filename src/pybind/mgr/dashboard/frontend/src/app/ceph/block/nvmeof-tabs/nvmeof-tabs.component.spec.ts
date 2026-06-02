@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ActivatedRoute, Event as RouterEvent, NavigationEnd, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { BehaviorSubject, Subject, of } from 'rxjs';
 
 import { TabsModule } from 'carbon-components-angular';
@@ -27,9 +27,13 @@ describe('NvmeofTabsComponent', () => {
   let refresh$: Subject<void>;
   let routerEvents$: Subject<RouterEvent>;
   let currentSetupState: SetupState;
+  let routerUrl = '/block/nvmeof/gateways';
 
   const setQueryParams = (params: any) => queryParams$.next(params);
   const emitRefresh = () => refresh$.next();
+  const setRouterUrl = (url: string) => {
+    routerUrl = url;
+  };
   const setSetupState = (state: SetupState) => {
     currentSetupState = state;
     nvmeofServiceSpy.fetchSetupState.mockReturnValue(of(currentSetupState));
@@ -38,9 +42,7 @@ describe('NvmeofTabsComponent', () => {
   beforeEach(async () => {
     queryParams$ = new BehaviorSubject<any>({ group: 'grp1' });
     refresh$ = new Subject<void>();
-    const nvmeofStateServiceMock = {
-      refresh$: refresh$.asObservable()
-    };
+    routerUrl = '/block/nvmeof/gateways';
     currentSetupState = { hasGatewayGroups: true, hasSubsystems: true, hasNamespaces: true };
     nvmeofServiceSpy = {
       fetchSetupState: jest.fn().mockImplementation(() => of(currentSetupState))
@@ -49,8 +51,8 @@ describe('NvmeofTabsComponent', () => {
     TestBed.configureTestingModule({
       declarations: [NvmeofTabsComponent],
       imports: [
-        RouterTestingModule,
         HttpClientTestingModule,
+        RouterTestingModule,
         SharedModule,
         TabsModule,
         NvmeofSetupCardsComponent
@@ -59,21 +61,38 @@ describe('NvmeofTabsComponent', () => {
         { provide: NvmeofService, useValue: nvmeofServiceSpy },
         { provide: ActivatedRoute, useValue: { queryParams: queryParams$.asObservable() } }
       ]
-    });
-    TestBed.overrideComponent(NvmeofTabsComponent, {
-      set: { providers: [{ provide: NvmeofStateService, useValue: nvmeofStateServiceMock }] }
-    });
-    await TestBed.compileComponents();
+    })
+      .overrideComponent(NvmeofTabsComponent, {
+        set: {
+          providers: [
+            {
+              provide: NvmeofStateService,
+              useValue: {
+                refresh$: refresh$.asObservable(),
+                requestRefresh: jest.fn()
+              }
+            }
+          ]
+        }
+      })
+      .compileComponents();
 
     fixture = TestBed.createComponent(NvmeofTabsComponent);
     component = fixture.componentInstance;
     router = TestBed.inject(Router);
     routerEvents$ = new Subject<RouterEvent>();
-    Object.defineProperty(router, 'url', {
-      get: () => '/block/nvmeof/gateways',
-      configurable: true
+    Object.defineProperty(router, 'events', {
+      configurable: true,
+      get: () => routerEvents$.asObservable()
     });
-    jest.spyOn(router, 'events', 'get').mockReturnValue(routerEvents$.asObservable());
+    Object.defineProperty(router, 'url', {
+      configurable: true,
+      get: () => routerUrl
+    });
+    Object.defineProperty(router, 'navigate', {
+      configurable: true,
+      value: jest.fn().mockResolvedValue(true)
+    });
   });
 
   it('should create', () => {
@@ -81,59 +100,54 @@ describe('NvmeofTabsComponent', () => {
   });
 
   it('should default activeTab to gateways', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/gateways');
+    setRouterUrl('/block/nvmeof/gateways');
     component.ngOnInit();
     expect(component.activeTab).toBe(component.Tabs.gateways);
   });
 
   it('should set activeTab to subsystems when URL contains subsystems', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/subsystems');
+    setRouterUrl('/block/nvmeof/subsystems');
     component.ngOnInit();
     expect(component.activeTab).toBe(component.Tabs.subsystems);
   });
 
   it('should set activeTab to namespaces when URL contains namespaces', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/namespaces');
+    setRouterUrl('/block/nvmeof/namespaces');
     component.ngOnInit();
     expect(component.activeTab).toBe(component.Tabs.namespaces);
   });
 
   it('should fallback to gateways when URL does not match any tab', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/unknown');
+    setRouterUrl('/block/nvmeof/unknown');
     component.ngOnInit();
     expect(component.activeTab).toBe(component.Tabs.gateways);
   });
 
   it('should hide the shell on namespace create routes', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/namespaces/create');
+    setRouterUrl('/block/nvmeof/namespaces/create');
     component.ngOnInit();
     expect(component.showTabsShell).toBe(false);
   });
 
   it('should keep the shell visible on namespace list routes', () => {
-    jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/namespaces');
+    setRouterUrl('/block/nvmeof/namespaces');
     component.ngOnInit();
     expect(component.showTabsShell).toBe(true);
   });
 
   it('should keep the shell visible on list routes with a secondary outlet', () => {
-    jest
-      .spyOn(router, 'url', 'get')
-      .mockReturnValue('/block/nvmeof/subsystems(modal:create)?group=default');
+    setRouterUrl('/block/nvmeof/subsystems(modal:create)?group=default');
     component.ngOnInit();
     expect(component.showTabsShell).toBe(true);
   });
 
   it('should hide the shell when primary route is a create page with secondary outlet', () => {
-    jest
-      .spyOn(router, 'url', 'get')
-      .mockReturnValue('/block/nvmeof/subsystems/create(modal:create)?group=default');
+    setRouterUrl('/block/nvmeof/subsystems/create(modal:create)?group=default');
     component.ngOnInit();
     expect(component.showTabsShell).toBe(false);
   });
 
   it('should navigate to correct path on tab selection', () => {
-    spyOn(router, 'navigate');
     component.onSelected(component.Tabs.subsystems);
     expect(component.activeTab).toBe(component.Tabs.subsystems);
     expect(router.navigate).toHaveBeenCalledWith(['block/nvmeof', 'subsystems'], {
@@ -142,7 +156,6 @@ describe('NvmeofTabsComponent', () => {
   });
 
   it('should navigate to gateways on selecting gateways tab', () => {
-    spyOn(router, 'navigate');
     component.onSelected(component.Tabs.gateways);
     expect(component.activeTab).toBe(component.Tabs.gateways);
     expect(router.navigate).toHaveBeenCalledWith(['block/nvmeof', 'gateways'], {
@@ -151,7 +164,6 @@ describe('NvmeofTabsComponent', () => {
   });
 
   it('should navigate to namespaces on selecting namespaces tab', () => {
-    spyOn(router, 'navigate');
     component.onSelected(component.Tabs.namespaces);
     expect(component.activeTab).toBe(component.Tabs.namespaces);
     expect(router.navigate).toHaveBeenCalledWith(['block/nvmeof', 'namespaces'], {
@@ -181,6 +193,7 @@ describe('NvmeofTabsComponent', () => {
       expect(component.hasSubsystems).toBe(true);
       expect(component.hasNamespaces).toBe(true);
       expect(component.isAllConfigured).toBe(true);
+      expect(component.showSetupCards).toBe(true);
     });
 
     it('scenario: no gateway groups — all steps pending', () => {
@@ -201,6 +214,15 @@ describe('NvmeofTabsComponent', () => {
       expect(component.hasSubsystems).toBe(false);
       expect(component.hasNamespaces).toBe(false);
       expect(component.isAllConfigured).toBe(false);
+    });
+
+    it('scenario: selected gateway group does not exist — setup still reflects all groups', () => {
+      component.ngOnInit();
+      setQueryParams({ group: 'grp-other' });
+      expect(component.hasGatewayGroups).toBe(true);
+      expect(component.hasSubsystems).toBe(true);
+      expect(component.hasNamespaces).toBe(true);
+      expect(component.isAllConfigured).toBe(true);
     });
 
     it('scenario: no subsystems in object response across all groups — step 1 complete', () => {
@@ -351,8 +373,7 @@ describe('NvmeofTabsComponent', () => {
     });
 
     it('should render correct setup card messages after all gateway groups are removed', () => {
-      jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/gateways');
-      setSetupState({ hasGatewayGroups: true, hasSubsystems: true, hasNamespaces: true });
+      setRouterUrl('/block/nvmeof/gateways');
       component.ngOnInit();
 
       setSetupState({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false });
@@ -365,12 +386,16 @@ describe('NvmeofTabsComponent', () => {
       expect(cardElements[0].componentInstance.statusMessage).toBe(
         'No gateway groups configured for this cluster yet.'
       );
-      expect(cardElements[1].componentInstance.statusMessage).toBe('No gateway configured yet.');
-      expect(cardElements[2].componentInstance.statusMessage).toBe('No gateway configured yet.');
+      expect(cardElements[1].componentInstance.statusMessage).toBe(
+        'No subsystem configured for this cluster yet.'
+      );
+      expect(cardElements[2].componentInstance.statusMessage).toBe(
+        'No namespace allocated or mapped yet.'
+      );
     });
 
     it('should render success setup card messages before gateway groups are removed', () => {
-      jest.spyOn(router, 'url', 'get').mockReturnValue('/block/nvmeof/gateways');
+      setRouterUrl('/block/nvmeof/gateways');
       component.ngOnInit();
       emitRefresh();
       fixture.detectChanges();

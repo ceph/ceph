@@ -77,7 +77,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
-
   iconSize = IconSize;
 
   constructor(
@@ -182,7 +181,8 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
           }),
           catchError(() => {
             return of([]);
-          })
+          }),
+          finalize(() => this.setTableLoading(false))
         )
       ),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -200,8 +200,15 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       .subscribe(() => this.fetchData());
   }
   fetchData(): void {
+    this.setTableLoading(true);
     this.subject.next([]);
     this.checkNodesAvailability();
+  }
+
+  private setTableLoading(loading: boolean): void {
+    if (this.table) {
+      this.table.loadingIndicator = loading;
+    }
   }
 
   updateSelection(selection: CdTableSelection): void {
