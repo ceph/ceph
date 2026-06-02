@@ -41,6 +41,23 @@ PREFERRED_CIPHER = PREFERRED_CIPHERS[0]
 # cipher mons should use by default when servicing clients
 SERVICE_CIPHER = 'aes256k'
 
+# Health warnings to mute when upgrade starts and unmute
+# when upgrade completes as they could be handled by the
+# upgrade process.
+#
+# TODO: need a better way to handle these for staggered upgrades
+# currently they just disappear and re-appear as each bit of the
+# staggered upgrade starts and stops
+MID_UPGRADE_MUTED_WARNINGS = [
+    'AUTH_INSECURE_KEYS_ALLOWED',
+    'AUTH_INSECURE_KEYS_CREATABLE',
+    'AUTH_INSECURE_SERVICE_TICKETS',
+    'AUTH_INSECURE_CLIENT_KEY_TYPE',
+    'AUTH_INSECURE_SERVICE_KEY_TYPE',
+    'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
+]
+
+
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
     Normal case:
@@ -87,6 +104,7 @@ class UpgradeState:
                  remaining_count: Optional[int] = None,
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_ciphers: Optional[bool] = False,
+                 health_warnings_muted: Optional[bool] = False
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -106,6 +124,7 @@ class UpgradeState:
         self.remaining_count = remaining_count
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
         self.has_set_cephx_ciphers = has_set_cephx_ciphers
+        self.health_warnings_muted = health_warnings_muted
 
     def to_json(self) -> dict:
         return {
@@ -126,6 +145,7 @@ class UpgradeState:
             'remaining_count': self.remaining_count,
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_ciphers': self.has_set_cephx_ciphers,
+            'health_warnings_muted': self.health_warnings_muted
         }
 
     @classmethod
@@ -331,6 +351,33 @@ class CephadmUpgrade:
             r["tags"] = sorted(ls)
         return r
 
+    def _mute_upgrade_related_health_warnings(self) -> None:
+        for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+            try:
+                self.mgr.log.info('Muting %s warning for the duration of the upgrade', health_warning_name)
+                self.mgr.check_mon_command({
+                    'prefix': 'health mute',
+                    'code': health_warning_name,
+                    'sticky': True,
+                })
+            except Exception as e:
+                self.mgr.log.error(
+                    f'Failed to mute health warning {health_warning_name} during upgrade: {str(e)}'
+                )
+
+    def _unmute_upgrade_related_health_warnings(self) -> None:
+        for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+            try:
+                self.mgr.log.info('Unmuting %s warning as upgrade is completed or has been stopped', health_warning_name)
+                self.mgr.check_mon_command({
+                    'prefix': 'health unmute',
+                    'code': health_warning_name,
+                })
+            except Exception as e:
+                self.mgr.log.error(
+                    f'Failed to unmute health warning {health_warning_name} after upgrade: {str(e)}'
+                )
+
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
@@ -508,6 +555,10 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+
+        if self.upgrade_state.health_warnings_muted:
+            self._unmute_upgrade_related_health_warnings()
+
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
         self.upgrade_state = None
@@ -1208,6 +1259,14 @@ class CephadmUpgrade:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+
+        if self.upgrade_state.health_warnings_muted:
+            self._unmute_upgrade_related_health_warnings()
+
+        if getattr(self.upgrade_state, 'noautoscale_set', False):
+            self._unset_noautoscale()
+            self.upgrade_state.noautoscale_set = False
+
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
@@ -1315,6 +1374,10 @@ class CephadmUpgrade:
         if self.upgrade_state.hosts is not None:
             logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
+        if not self.upgrade_state.health_warnings_muted:
+            self._mute_upgrade_related_health_warnings()
+            self.upgrade_state.health_warnings_muted = True
+            self._save_upgrade_state()
         upgraded_daemon_count: int = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
