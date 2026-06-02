@@ -1137,6 +1137,7 @@ void BtreeLBAManager::update_paddr_sync(
   auto c = get_context(t);
   auto btree = get_btree_sync<LBABtree>(c);
   auto iter = btree.lower_bound_sync(c, laddr);
+  assert(iter.get_leaf_node()->is_pending());
   auto cursor = iter.get_cursor(c);
   btree.update(
     c,
