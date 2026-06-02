@@ -188,7 +188,8 @@ void PGScrubber::release_range()
     DEBUGDPP("range not reserved, skipping", pg);
     return;
   }
-  DEBUGDPP("blocked: {}", pg, *blocked);
+  DEBUGDPP("blocked: {}, releasing pg background_process_lock (range {} .. {})",
+	   pg, *blocked, blocked->begin, blocked->end);
   pg.background_process_lock.unlock();
   blocked->p.set_value();
   blocked = std::nullopt;
