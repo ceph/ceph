@@ -10,6 +10,7 @@
 #include <sstream>
 #include <optional>
 #include <iostream>
+#include <CLI/CLI.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -954,6 +955,13 @@ enum class OPT {
   GLOBAL_CORS_GET,
 };
 
+enum class Cli11Op {
+  None,
+  ScriptPut,
+  ScriptGet,
+  ScriptRm,
+};
+
 }
 
 using namespace rgw_admin;
@@ -1205,9 +1213,6 @@ static SimpleCmd::Commands all_cmds = {
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
-  { "script put", OPT::SCRIPT_PUT },
-  { "script get", OPT::SCRIPT_GET },
-  { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
@@ -3697,6 +3702,7 @@ int main(int argc, const char **argv)
   uint32_t perm_mask = 0;
   RGWUserInfo info;
   OPT opt_cmd = OPT::NO_CMD;
+  Cli11Op cli11_op = Cli11Op::None;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   enum generate_key_enum {
@@ -3926,6 +3932,168 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
+
+  {
+    // TODO: remove once --help is fully replaced by CLI11.
+    // Pre-scan argv so require_subcommand() does not reject
+    // "radosgw-admin --cli11-help script" during migration.
+    bool show_cli11_help = false;
+    for (int i = 1; i < argc; ++i) {
+      if (std::string_view(argv[i]) == "--cli11-help") {
+        show_cli11_help = true;
+        break;
+      }
+    }
+
+    CLI::App app{"radosgw-admin"};
+    // TODO: remove once all commands are migrated to CLI11
+    app.allow_extras();
+
+    auto* script     = app.add_subcommand("script");
+    auto* script_put = script->add_subcommand("put");
+    auto* script_get = script->add_subcommand("get");
+    auto* script_rm  = script->add_subcommand("rm");
+    script_rm->alias("remove");
+    // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
+    script->require_subcommand(show_cli11_help ? 0 : 1);
+
+    // TODO: remove once --help is fully replaced by CLI11
+    app.add_flag("--cli11-help", show_cli11_help,
+                 "Show CLI11-generated help (temporary, migration testing)");
+    script->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_put->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_get->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_rm->add_flag("--cli11-help", show_cli11_help)->group("");
+
+    // TODO: once flags-before-subcommand support is removed, delete these hidden
+    // root and script level registrations and keep only the subcommand level ones
+
+    // compatibility: accept options placed before the command
+    app.add_option("--context", str_script_ctx)->group("")->take_last();
+    app.add_option("--infile",  infile)->group("")->take_last();
+    app.add_option("--tenant",  tenant)->group("")->take_last();
+
+    // compatibility: accept options placed between script and its subcommand
+    script->add_option("--context", str_script_ctx)->group("")->take_last();
+    script->add_option("--infile",  infile)->group("")->take_last();
+    script->add_option("--tenant",  tenant)->group("")->take_last();
+
+    // Do not use ->required() while options are also accepted at parent
+    // levels for compatibility, because CLI11 checks the specific option location.
+    // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
+    // and manual checks with ->required()
+    script_put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_put->add_option("--infile",  infile)->take_last()->option_text("<file> REQUIRED");
+    script_put->add_option("--tenant",  tenant)->take_last();
+
+    script_get->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_get->add_option("--tenant",  tenant)->take_last();
+
+    script_rm->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_rm->add_option("--tenant",  tenant)->take_last();
+
+    try {
+      app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+      return app.exit(e);
+    }
+    
+    if (show_cli11_help) {
+      cout << app.help();
+      return 0;
+    }
+
+    if (script_put->parsed()) {
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script put --context=<value> --infile=<value> --tenant=<value>\n";
+      }
+      if ((app.count("--context") + script->count("--context") + script_put->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--infile") + script->count("--infile") + script_put->count("--infile")) > 1) {
+        cerr << "Warning: --infile specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + script_put->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+      if (infile.empty()) {
+        cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+        return EINVAL;
+      }
+
+      cli11_op = Cli11Op::ScriptPut;
+    }
+
+    if (script_get->parsed()) {
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script get --context=<value> --tenant=<value>\n";
+      }
+      if ((app.count("--context") + script->count("--context") + script_get->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + script_get->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+
+      cli11_op = Cli11Op::ScriptGet;
+    }
+
+    if (script_rm->parsed()) {
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script rm --context=<value> --tenant=<value>\n";
+      }
+      if ((app.count("--context") + script->count("--context") + script_rm->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + script_rm->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+
+      cli11_op = Cli11Op::ScriptRm;
+    }
+
+    // require_subcommand(1) guarantees one of put/get/rm was parsed if script was parsed
+    // TODO: remove once all commands are migrated and allow_extras() is gone
+    if (script->parsed()) {
+      for (const auto& arg : app.remaining(true)) {
+        if (!arg.empty() && arg[0] != '-') {
+          cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
+          return EINVAL;
+        }
+      }
+    }
+  }
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -4512,7 +4680,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
-      str_script_ctx = val;
+      // consumed by CLI11 for script commands; kept here to prevent "invalid flag" error
     } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
       script_package = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
@@ -4563,27 +4731,28 @@ int main(int argc, const char **argv)
 
     std::any _opt_cmd;
 
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
-      if (!expected.empty()) {
-        cerr << err << std::endl;
-        cerr << "Expected one of the following:" << std::endl;
-        for (auto& exp : expected) {
-          if (exp == "*" || exp == "[*]") {
-            continue;
+    if (opt_cmd == OPT::NO_CMD && cli11_op == Cli11Op::None) {
+      if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+        if (!expected.empty()) {
+          cerr << err << std::endl;
+          cerr << "Expected one of the following:" << std::endl;
+          for (auto& exp : expected) {
+            if (exp == "*" || exp == "[*]") {
+              continue;
+            }
+            cerr << "  " << exp << std::endl;
           }
-          cerr << "  " << exp << std::endl;
+        } else {
+          cerr << "Command not found:";
+          for (auto& arg : args) {
+            cerr << " " << arg;
+          }
+          cerr << std::endl;
         }
-      } else {
-        cerr << "Command not found:";
-        for (auto& arg : args) {
-          cerr << " " << arg;
-        }
-        cerr << std::endl;
+        exit(1);
       }
-      exit(1);
+      opt_cmd = std::any_cast<OPT>(_opt_cmd);
     }
-
-    opt_cmd = std::any_cast<OPT>(_opt_cmd);
 
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
@@ -4743,7 +4912,8 @@ int main(int argc, const char **argv)
 
     raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
 			   raw_period_update || raw_period_pull);
-    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
+    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end()
+                     && cli11_op != Cli11Op::ScriptGet;
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
     DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
@@ -4828,9 +4998,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
-			  && opt_cmd != OPT::SCRIPT_PUT
-			  && opt_cmd != OPT::SCRIPT_GET
-			  && opt_cmd != OPT::SCRIPT_RM
+                          && cli11_op != Cli11Op::ScriptPut
+                          && cli11_op != Cli11Op::ScriptGet
+                          && cli11_op != Cli11Op::ScriptRm
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
                           && opt_cmd != OPT::ACCOUNT_GET
@@ -12268,7 +12438,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::SCRIPT_PUT) {
+  if (cli11_op == Cli11Op::ScriptPut) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -12306,7 +12476,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::SCRIPT_GET) {
+  if (cli11_op == Cli11Op::ScriptGet) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -12330,7 +12500,7 @@ next:
     }
   }
   
-  if (opt_cmd == OPT::SCRIPT_RM) {
+  if (cli11_op == Cli11Op::ScriptRm) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
