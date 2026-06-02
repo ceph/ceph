@@ -1,0 +1,33 @@
+.nvmeof-setup-cards {
+  &__columns {
+    display: flex;
+    align-items: stretch;
+    gap: var(--cds-spacing-05);
+    padding: var(--cds-spacing-03) 0 var(--cds-spacing-05);
+  }
+
+  &__column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__completion {
+    padding: var(--cds-spacing-04) var(--cds-spacing-05);
+
+    a {
+      cursor: pointer;
+    }
+  }
+
+  &.productive-card {
+    .productive-card-header {
+      padding: var(--cds-spacing-03) var(--cds-spacing-05);
+    }
+
+    .productive-card-section {
+      padding: 0 var(--cds-spacing-05);
+    }
+  }
+}

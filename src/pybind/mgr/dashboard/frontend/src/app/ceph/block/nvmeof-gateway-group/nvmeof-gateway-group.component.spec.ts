@@ -2,9 +2,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group.component';
 import { GridModule, TabsModule } from 'carbon-components-angular';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 describe('NvmeofGatewayGroupComponent', () => {
   let component: NvmeofGatewayGroupComponent;
@@ -241,5 +244,40 @@ describe('NvmeofGatewayGroupComponent', () => {
       expect(data).toEqual(mockData);
       done();
     });
+  });
+
+  it('should refresh table and setup state after gateway group delete completes', () => {
+    const modalService = TestBed.inject(ModalCdsService);
+    const taskWrapperService = TestBed.inject(TaskWrapperService);
+    const nvmeofStateService = TestBed.inject(NvmeofStateService);
+
+    jest.spyOn(modalService, 'show').mockImplementation(() => undefined);
+    jest.spyOn(taskWrapperService, 'wrapTaskAroundCall').mockReturnValue(
+      new Observable((observer) => {
+        observer.complete();
+      })
+    );
+
+    const refreshBtnSpy = jest.fn();
+    component.table = { refreshBtn: refreshBtnSpy } as any;
+    const requestRefreshSpy = jest.spyOn(nvmeofStateService, 'requestRefresh');
+
+    component.selection = {
+      first: () => ({
+        service_name: 'nvmeof.rbd.default',
+        spec: { group: 'default' },
+        subSystemCount: 0
+      }),
+      hasSelection: true
+    } as any;
+
+    component.deleteGatewayGroupModal();
+
+    const submitActionObservable = (modalService.show as jest.Mock).mock.calls[0][1]
+      .submitActionObservable;
+    submitActionObservable().subscribe();
+
+    expect(refreshBtnSpy).toHaveBeenCalled();
+    expect(requestRefreshSpy).toHaveBeenCalled();
   });
 });

@@ -17,8 +17,9 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
@@ -58,14 +59,23 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
-    private dimlessBinaryPipe: DimlessBinaryPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private nvmeofStateService: NvmeofStateService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
-      if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
+      const group = params?.['group']?.trim() || null;
+      if (group) {
+        this.applyGroup(group);
+      } else if (!this.gwGroups.length) {
+        // Wait for gateway groups to load and default selection to be applied via URL sync.
+        this.group = null;
+      } else {
+        this.clearGroup();
+      }
     });
     this.setGatewayGroups();
     this.namespacesColumns = [
@@ -166,6 +176,9 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       }),
       takeUntil(this.destroy$)
     );
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.fetchData());
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -182,14 +195,44 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
 
   // Gateway groups methods
   onGroupSelection(selected: GroupsComboboxItem) {
-    selected.selected = true;
-    this.group = selected.content;
-    this.listNamespaces();
+    this.syncGroupQueryParam(selected.content);
   }
 
   onGroupClear() {
-    this.group = null;
+    this.syncGroupQueryParam(null);
+  }
+
+  private applyGroup(group: string): void {
+    this.group = group;
+    if (this.gwGroups.length) {
+      this.gwGroups = this.gwGroups.map((g) => ({
+        ...g,
+        selected: g.content === group
+      }));
+    }
     this.listNamespaces();
+  }
+
+  private clearGroup(): void {
+    this.group = null;
+    if (this.gwGroups.length) {
+      this.gwGroups = this.gwGroups.map((g) => ({ ...g, selected: false }));
+    }
+    this.listNamespaces();
+  }
+
+  private syncGroupQueryParam(group: string | null): void {
+    const currentGroup = this.route.snapshot.queryParams['group']?.trim() || null;
+    if (currentGroup === group) {
+      return;
+    }
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { group: group || null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   setGatewayGroups() {
@@ -213,12 +256,13 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
 
   updateGroupSelectionState() {
     if (this.gwGroups.length) {
-      if (!this.group) {
-        this.onGroupSelection(this.gwGroups[0]);
+      const urlGroup = this.route.snapshot.queryParams['group']?.trim() || null;
+      if (!urlGroup) {
+        this.syncGroupQueryParam(this.gwGroups[0].content);
       } else {
         this.gwGroups = this.gwGroups.map((g) => ({
           ...g,
-          selected: g.content === this.group
+          selected: g.content === urlGroup
         }));
       }
       this.gwGroupsEmpty = false;
@@ -251,13 +295,15 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         deletionMessage: $localize`Deleting the namespace <strong>${namespace.nsid}</strong> will permanently remove all resources, services, and configurations within it. This action cannot be undone.`
       },
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('nvmeof/namespace/delete', {
-            nqn: subsystemNqn,
-            nsid: namespace.nsid
-          }),
-          call: this.nvmeofService.deleteNamespace(subsystemNqn, namespace.nsid, this.group)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/namespace/delete', {
+              nqn: subsystemNqn,
+              nsid: namespace.nsid
+            }),
+            call: this.nvmeofService.deleteNamespace(subsystemNqn, namespace.nsid, this.group)
+          })
+          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
     });
   }
 
