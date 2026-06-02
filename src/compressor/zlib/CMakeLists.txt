@@ -82,6 +82,36 @@ elseif(HAVE_ARMV8_SIMD)
     COMPILE_DEFINITIONS "__ASSEMBLY__"
     INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/src/isa-l/igzip;${PROJECT_SOURCE_DIR}/src/isa-l/igzip/aarch64"
   )
+elseif(HAVE_RISCV_RVV)
+  set(zlib_asm_sources
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_multibinary_riscv64.S
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_isal_adler32_rvv.S
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_isal_adler32_rvv128.S
+  )
+  set(zlib_sources
+    CompressionPluginZlib.cc
+    ZlibCompressor.cc
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/hufftables_c.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_base.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_icf_base.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/adler32_base.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/flatten_ll.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/encode_df.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_icf_body.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_inflate.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/huff_codes.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/proc_heap_base.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_multibinary_riscv64_dispatcher.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc_base_aliases.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc_base.c
+    ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc64_base.c
+    ${zlib_asm_sources}
+  )
+  set_source_files_properties(${zlib_asm_sources} PROPERTIES
+    COMPILE_DEFINITIONS "__ASSEMBLY__"
+    INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/src/isa-l/igzip;${PROJECT_SOURCE_DIR}/src/isa-l/igzip/riscv64"
+  )
 else()
   set(zlib_sources
     CompressionPluginZlib.cc

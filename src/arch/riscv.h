@@ -13,6 +13,7 @@
 extern "C" {
 #endif
 
+extern int ceph_arch_riscv_rvv;
 extern int ceph_arch_riscv_zbc;
 extern int ceph_arch_riscv_zvbc;
 
