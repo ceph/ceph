@@ -103,6 +103,15 @@ describe('NvmeofGatewayGroupFilterComponent', () => {
     expect(component.placeholder).toBe('Unable to fetch Gateway groups');
   });
 
+  it('should handle non-Error API failures by disabling the control', () => {
+    const err = { message: 'network error' };
+    (nvmeofService.listGatewayGroups as jest.Mock).mockReturnValue(throwError(() => err));
+    fixture.detectChanges();
+    expect(component.disabled).toBe(true);
+    expect(component.placeholder).toBe('Unable to fetch Gateway groups');
+    expect(component.items).toEqual([]);
+  });
+
   it('should render a cds-combo-box', () => {
     fixture.detectChanges();
     const combo = fixture.nativeElement.querySelector('cds-combo-box');

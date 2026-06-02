@@ -177,6 +177,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   extraFilterableColumns: CdTableColumn[] = [];
 
+  /*
+  Used to set custom filters on the table.
+  boolean - if you just want to enable custom filters with default settings
+  string - if you want to enable custom filters and set a specific col prop to be used as filter name
+  */
+  @Input()
+  customFilter: boolean | string = false;
+
+  isCustomFilterLabel(): boolean {
+    return typeof this.customFilter === 'string';
+  }
+
   @Input()
   status = new TableStatus();
 
@@ -253,6 +265,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @Output()
   setExpandedRow = new EventEmitter();
+  @Input()
+  compactSearchField? = false;
 
   /**
    * This should be defined if you need access to the applied column filters.

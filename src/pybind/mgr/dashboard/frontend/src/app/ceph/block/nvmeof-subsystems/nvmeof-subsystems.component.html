@@ -1,10 +1,10 @@
-<cd-nvmeof-gateway-group-filter
-  (groupChange)="onGroupChange($event)">
-</cd-nvmeof-gateway-group-filter>
+<div class="nvmeof-content-layout">
+  <div class="nvmeof-content-main">
 <ng-container *ngIf="subsystems$ | async as subsystems">
   <cd-table #table
             [data]="subsystems"
             [columns]="subsystemsColumns"
+            [compactSearchField]="true"
             columnMode="flex"
             selectionType="single"
             (updateSelection)="updateSelection($event)"
@@ -13,6 +13,12 @@
             i18n-emptyStateTitle
             emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
             i18n-emptyStateMessage>
+
+    <div class="table-filter">
+      <cd-nvmeof-gateway-group-filter
+        (groupChange)="groupHandler.onGroupChange($event)">
+      </cd-nvmeof-gateway-group-filter>
+    </div>
 
     <div class="table-actions">
       <cd-table-actions [permission]="permissions.nvmeof"
@@ -29,6 +35,8 @@
     </cd-nvmeof-subsystems-details>
   </cd-table>
 </ng-container>
+  </div>
+</div>
 
 <ng-template #customTableItemTemplate
              let-value="data.value"

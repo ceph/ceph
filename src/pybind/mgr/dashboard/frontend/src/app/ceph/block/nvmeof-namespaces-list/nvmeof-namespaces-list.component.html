@@ -1,11 +1,8 @@
-<cd-nvmeof-tabs></cd-nvmeof-tabs>
-
-<cd-nvmeof-gateway-group-filter
-  (groupChange)="onGroupChange($event)">
-</cd-nvmeof-gateway-group-filter>
-
+<div class="nvmeof-content-layout">
+  <div class="nvmeof-content-main">
 <ng-container *ngIf="namespaces$ | async as namespaces">
   <cd-table [data]="namespaces"
+            [compactSearchField]="true"
             columnMode="flex"
             (fetchData)="fetchData()"
             [columns]="namespacesColumns"
@@ -18,6 +15,12 @@
             emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
             i18n-emptyStateMessage>
 
+    <div class="table-filter">
+      <cd-nvmeof-gateway-group-filter
+        (groupChange)="groupHandler.onGroupChange($event)">
+      </cd-nvmeof-gateway-group-filter>
+    </div>
+
   <div class="table-actions">
     <cd-table-actions [permission]="permission"
                       [selection]="selection"
@@ -27,5 +30,7 @@
   </div>
 </cd-table>
 </ng-container>
+  </div>
+</div>
 
 <router-outlet name="modal"></router-outlet>

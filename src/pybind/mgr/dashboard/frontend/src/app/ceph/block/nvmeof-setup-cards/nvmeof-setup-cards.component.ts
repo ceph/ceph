@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, ViewEncapsulation } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { LayoutModule, LayerModule, LinkModule, TilesModule } from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
@@ -27,8 +27,7 @@ export class NvmeofSetupCardsComponent {
   @Input() hasSubsystems = false;
   @Input() hasNamespaces = false;
   @Input() isAllConfigured = false;
-
-  readonly gatewayPendingMessage = $localize`No gateway configured yet.`;
+  @Output() viewStatus = new EventEmitter<void>();
 
   readonly cards = {
     gateway: {
