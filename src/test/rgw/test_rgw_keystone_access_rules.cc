@@ -112,8 +112,40 @@ TEST(PathMatchesPattern, EmptyPatternNonEmptyPath)
 
 TEST(PathMatchesPattern, TrailingSlashInPattern)
 {
-  // Trailing slash in pattern should match path without trailing slash
+  // A literal trailing '/' in the pattern requires '/' at the end of the path.
   EXPECT_TRUE(path_matches_pattern("/v1/AUTH_abc/", "/v1/AUTH_abc/"));
+  EXPECT_FALSE(path_matches_pattern("/v1/AUTH_abc/", "/v1/AUTH_abc"));
+}
+
+// Trailing '/**' must not match the bare prefix without the separator.
+// Regression for the "container/** matches container" scoping bug.
+TEST(PathMatchesPattern, TrailingDoubleStar_RequiresSeparator)
+{
+  EXPECT_FALSE(path_matches_pattern("/v1/AUTH_p/container/**",
+                                    "/v1/AUTH_p/container"));
+  EXPECT_TRUE(path_matches_pattern("/v1/AUTH_p/container/**",
+                                   "/v1/AUTH_p/container/"));
+  EXPECT_TRUE(path_matches_pattern("/v1/AUTH_p/container/**",
+                                   "/v1/AUTH_p/container/obj"));
+  EXPECT_TRUE(path_matches_pattern("/v1/AUTH_p/container/**",
+                                   "/v1/AUTH_p/container/a/b/c"));
+}
+
+// '**' in the middle of a pattern keeps its surrounding '/' literals.
+TEST(PathMatchesPattern, MiddleDoubleStar_KeepsSeparators)
+{
+  EXPECT_FALSE(path_matches_pattern("/v1/**/obj", "/v1/obj"));
+  EXPECT_TRUE(path_matches_pattern("/v1/**/obj", "/v1//obj"));
+  EXPECT_TRUE(path_matches_pattern("/v1/**/obj", "/v1/a/obj"));
+  EXPECT_TRUE(path_matches_pattern("/v1/**/obj", "/v1/a/b/obj"));
+}
+
+// '*' must backtrack across literal mismatches within a segment.
+TEST(PathMatchesPattern, SingleStar_BacktrackOnLiteral)
+{
+  EXPECT_TRUE(path_matches_pattern("/abc*xyz", "/abc123xyz"));
+  EXPECT_FALSE(path_matches_pattern("/abc*xyz", "/abcxyz"));
+  EXPECT_TRUE(path_matches_pattern("/a*b*c", "/aXbYc"));
 }
 
 // '*' must match a non-empty segment (regex '[^/]+'), not zero chars.
