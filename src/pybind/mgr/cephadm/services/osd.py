@@ -146,7 +146,7 @@ class OSDService(CephService):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     logger.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if osd['tags']['ceph.osdspec_affinity'] != spec.service_id:
+                if spec.service_id and osd['tags']['ceph.osdspec_affinity'] != spec.service_id:
                     logger.debug('mismatched service id, skipping %s' % osd)
                     continue
                 if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
