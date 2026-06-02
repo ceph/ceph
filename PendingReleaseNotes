@@ -2,7 +2,9 @@
   requests authenticated via Keystone. When a token belongs to an application
   credential that carries access rules, RGW validates each request against those
   rules and returns 403 if none match. No configuration change is required;
-  tokens without access rules are unaffected.
+  tokens without access rules are unaffected. Service tokens are now validated
+  before the user-token cache is consulted, so an invalid service token is
+  rejected regardless of user-token cache state.
   Related Tracker: https://tracker.ceph.com/issues/68232
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
