@@ -1008,6 +1008,59 @@ int SQLiteDB::ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params)
   return ret;
 }
 
+int SQLiteDB::list_user_ids(const DoutPrefixProvider* dpp,
+                            const std::string& marker, int max,
+                            std::list<std::string>& ids,
+                            bool* truncated)
+{
+  sqlite3* sdb = static_cast<sqlite3*>(DB::db);
+  if (!sdb) {
+    return -ENOTCONN;
+  }
+
+  if (max < 0) {
+    return -EINVAL;
+  }
+
+  const std::string query = fmt::format(
+      "SELECT UserID FROM '{}' WHERE UserID > ? ORDER BY UserID LIMIT ?",
+      getUserTable());
+
+  sqlite3_stmt* stmt = nullptr;
+  int rc = sqlite3_prepare_v2(sdb, query.c_str(), -1, &stmt, nullptr);
+  if (rc != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "list_user_ids: prepare failed: "
+                      << sqlite3_errmsg(sdb) << dendl;
+    return -EIO;
+  }
+
+  sqlite3_bind_text(stmt, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt, 2, max + 1);
+
+  int count = 0;
+  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+    const char* uid = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+    if (!uid) {
+      continue;
+    }
+    if (count < max) {
+      ids.push_back(uid);
+    }
+    ++count;
+  }
+
+  if (rc != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "list_user_ids: step error: "
+                      << sqlite3_errmsg(sdb) << dendl;
+    sqlite3_finalize(stmt);
+    return -EIO;
+  }
+
+  sqlite3_finalize(stmt);
+  *truncated = (count > max);
+  return 0;
+}
+
 int SQLiteDB::ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params)
 {
   int ret = -1;

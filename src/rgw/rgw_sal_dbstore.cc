@@ -2098,22 +2098,22 @@ namespace rgw::sal {
 
   int DBStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle)
   {
-    return 0;
+    return DBListUserIdsHelper::list_keys_init(dpp, section, marker, phandle, db);
   }
 
   int DBStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<string>& keys, bool* truncated)
   {
-    return 0;
+    return DBListUserIdsHelper::list_keys_next(dpp, handle, max, keys, truncated);
   }
 
   void DBStore::meta_list_keys_complete(void* handle)
   {
-    return;
+    DBListUserIdsHelper::list_keys_complete(handle);
   }
 
   std::string DBStore::meta_get_marker(void* handle)
   {
-    return "";
+    return DBListUserIdsHelper::get_marker(handle);
   }
 
   int DBStore::meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y)

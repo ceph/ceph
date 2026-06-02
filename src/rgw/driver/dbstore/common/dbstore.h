@@ -1580,6 +1580,11 @@ class DB {
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
     virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
 
+    virtual int list_user_ids(const DoutPrefixProvider* dpp,
+                  const std::string& marker, int max,
+                  std::list<std::string>& ids,
+                  bool* truncated) = 0;
+
     int get_user(const DoutPrefixProvider *dpp,
         const std::string& query_str, const std::string& query_str_val,
         RGWUserInfo& uinfo, std::map<std::string, bufferlist> *pattrs,

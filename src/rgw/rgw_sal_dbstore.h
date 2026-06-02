@@ -18,6 +18,67 @@
 #include "rgw_sal_store.h"
 #include "rgw_role.h"
 #include "rgw_lc.h"
+#include "driver/dbstore/common/dbstore.h"
+
+namespace rgw { namespace sal {
+
+class DBListUserIdsHelper {
+  // Reusable implementation of meta_list_keys_* for drivers that store users
+  // in a DB. Used by DBStore and POSIXDriver to avoid duplicating the
+  // listing logic.
+public:
+  struct ListUserIdsHandle {
+    rgw::store::DB* db;
+    std::string marker;
+  };
+
+  static int list_keys_init(const DoutPrefixProvider* dpp,
+                            const std::string& section,
+                            const std::string& marker,
+                            void** phandle,
+                            rgw::store::DB* db)
+  {
+    if (section != "user") {
+      *phandle = nullptr;
+      return 0;
+    }
+    *phandle = new ListUserIdsHandle{db, marker};
+    return 0;
+  }
+
+  static int list_keys_next(const DoutPrefixProvider* dpp,
+                            void* handle, int max,
+                            std::list<std::string>& keys,
+                            bool* truncated)
+  {
+    if (!handle) {
+      *truncated = false;
+      return 0;
+    }
+
+    auto* h = static_cast<ListUserIdsHandle*>(handle);
+    int ret = h->db->list_user_ids(dpp, h->marker, max, keys, truncated);
+    if (ret < 0) {
+      return ret;
+    }
+    if (!keys.empty()) {
+      h->marker = keys.back();
+    }
+    return 0;
+  }
+
+  static void list_keys_complete(void* handle)
+  {
+    delete static_cast<ListUserIdsHandle*>(handle);
+  }
+
+  static std::string get_marker(void* handle)
+  {
+    return static_cast<ListUserIdsHandle*>(handle)->marker;
+  }
+};
+
+} }
 #include "rgw_multi.h"
 
 #include "driver/dbstore/common/dbstore.h"

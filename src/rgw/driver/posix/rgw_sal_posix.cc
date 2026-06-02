@@ -4351,6 +4351,32 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   return 0;
 }
 
+int POSIXDriver::meta_list_keys_init(const DoutPrefixProvider* dpp,
+                                     const std::string& section,
+                                     const std::string& marker,
+                                     void** phandle)
+{
+  return DBListUserIdsHelper::list_keys_init(dpp, section, marker, phandle, get_user_db());
+}
+
+int POSIXDriver::meta_list_keys_next(const DoutPrefixProvider* dpp,
+                                     void* handle, int max,
+                                     std::list<std::string>& keys,
+                                     bool* truncated)
+{
+  return DBListUserIdsHelper::list_keys_next(dpp, handle, max, keys, truncated);
+}
+
+void POSIXDriver::meta_list_keys_complete(void* handle)
+{
+  DBListUserIdsHelper::list_keys_complete(handle);
+}
+
+std::string POSIXDriver::meta_get_marker(void* handle)
+{
+  return DBListUserIdsHelper::get_marker(handle);
+}
+
 } } // namespace rgw::sal
 
 extern "C" {

@@ -21,6 +21,7 @@
 #include "common/dout.h"
 #include "bucket_cache.h"
 #include "posixDB.h"
+#include "rgw_sal_dbstore.h"
 
 namespace rgw { namespace sal {
 
@@ -703,10 +704,10 @@ public:
 			     std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override { return 0; }
   virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override { return 0; }
   virtual int get_config_key_val(std::string name, bufferlist* bl) override { return -ENOTSUP; }
-  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override { return 0; }
-  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override { return 0; }
-  virtual void meta_list_keys_complete(void* handle) override { return; }
-  virtual std::string meta_get_marker(void* handle) override { return ""; }
+  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
+  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
+  virtual void meta_list_keys_complete(void* handle) override;
+  virtual std::string meta_get_marker(void* handle) override;
   virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override { return 0; }
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override { return sync_module; }
   virtual std::string get_host_id() override { return ""; }
