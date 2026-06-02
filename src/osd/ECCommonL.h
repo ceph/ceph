@@ -20,6 +20,7 @@
 #include <fmt/format.h>
 
 #include "common/sharedptr_registry.hpp"
+#include "common/tracer.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtilL.h"
 #include "ECTypes.h"
@@ -44,6 +45,7 @@ typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #else
 #include "common/WorkQueue.h"
+#include "osd/osd_tracer.h"
 #endif
 
 #include "ECTransactionL.h"
@@ -207,6 +209,7 @@ struct ECCommonL {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
+        otel_trace(tracing::osd::tracer.add_span("EC ReadOp", op ? op->osd_trace : tracing::noop_span_ctx)),
         want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {

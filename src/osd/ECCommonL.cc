@@ -420,8 +420,13 @@ void ECCommonL::ReadPipeline::start_read_op(
   if (_op) {
 #ifndef WITH_CRIMSON
     op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp", _op->pg_trace);
-#endif
     op.otel_trace->AddEvent("start ec read");
+#endif
+  } else {
+    // need to fix this so that the original op is passed through to here from RMWPipeline::try_state_to_reads 
+    // then we wouldnt need to start this new trace
+    op.otel_trace = tracing::osd::tracer.start_trace("EC ReadOp-created");
+
   }
   do_read_op(op);
 }
