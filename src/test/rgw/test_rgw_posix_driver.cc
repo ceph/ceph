@@ -1080,6 +1080,8 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
+    std::string notif_option = "RedisNotify";
+
     root_dir = std::make_unique<Directory>(base_path, nullptr, env->cct.get());
     int ret = root_dir->open(env->dpp);
     if (ret < 0) {
@@ -1100,7 +1102,7 @@ public:
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     /* ordered listing cache */
     bucket_cache.reset(new BucketCache(
-        this, base_path, cache_base, 100, 3, 3, 3));
+        this, base_path, cache_base, notif_option, 100, 3, 3, 3));
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;

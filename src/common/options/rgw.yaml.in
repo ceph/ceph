@@ -4675,6 +4675,25 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_standalone_redis
+  type: str
+  level: advanced
+  desc: The backend address used by Redis Standalone
+  default: 127.0.0.1:6379
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_standalone_notification_option
+  type: str
+  level: advanced
+  desc: Option for choosing between Inotify and RedisNotify
+  long_desc: This setting defines the notification system for bucket modifications.
+      Valid entries include Inotify or RedisNotify.
+  default: RedisNotify
+  services:
+  - rgw
 - name: rgw_bucket_eexist_override
   type: bool
   level: advanced
