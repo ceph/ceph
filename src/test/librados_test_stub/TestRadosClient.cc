@@ -92,6 +92,7 @@ private:
 TestRadosClient::TestRadosClient(CephContext *cct,
                                  TestWatchNotify *watch_notify)
   : m_cct(cct->get()), m_watch_notify(watch_notify),
+    m_tracer(m_cct, "librados_test_stub"),
     m_aio_finisher(new Finisher(m_cct)),
     m_io_context_pool(std::make_unique<ceph::async::io_context_pool>())
 {

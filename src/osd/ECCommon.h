@@ -26,6 +26,8 @@
 #include "messages/MOSDPGPushReply.h"
 #include "msg/MessageRef.h"
 #include "osd/ECOmapJournal.h"
+#include "osd/osd_tracer.h"
+
 #if WITH_CRIMSON
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -303,7 +305,7 @@ struct ECCommon {
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
 
-    jspan_ptr otel_trace;
+    jspan_ptr otel_trace{tracing::Tracer::noop_span};
 
     std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t>> source_to_obj;
@@ -566,7 +568,7 @@ struct ECCommon {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
-      jspan_ptr otel_trace = tracing::Tracer::noop_span;
+      jspan_ptr otel_trace{tracing::Tracer::noop_span};
 
       /// pin for cache
       std::list<ECExtentCache::OpRef> cache_ops;

@@ -229,7 +229,7 @@ int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation&& op, bufferlist* pbl,
-                      optional_yield y, int flags, const jspan_context* trace_info,
+                      optional_yield y, int flags, const jspan_context& trace_info,
                       version_t* pver)
 {
   // given a yield_context, call async_operate() to yield the coroutine instead
@@ -258,7 +258,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation&& op, optional_yield y,
-		      int flags, const jspan_context* trace_info, version_t* pver)
+		                  int flags, const jspan_context& trace_info, version_t* pver)
 {
   if (y) {
     auto& yield = y.get_yield_context();

@@ -121,7 +121,7 @@ template <typename I>
 bool QosImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
     IOContext io_context, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    const jspan_context &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -145,7 +145,7 @@ bool QosImageDispatch<I>::read(
 template <typename I>
 bool QosImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -169,7 +169,7 @@ bool QosImageDispatch<I>::write(
 template <typename I>
 bool QosImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
+    uint32_t discard_granularity_bytes, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -193,7 +193,7 @@ bool QosImageDispatch<I>::discard(
 template <typename I>
 bool QosImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -218,7 +218,7 @@ template <typename I>
 bool QosImageDispatch<I>::compare_and_write(
     AioCompletion* aio_comp, Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -242,7 +242,7 @@ bool QosImageDispatch<I>::compare_and_write(
 template <typename I>
 bool QosImageDispatch<I>::flush(
     AioCompletion* aio_comp, FlushSource flush_source,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    const jspan_context &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {

@@ -53,6 +53,7 @@ private:
   std::unique_ptr<CephContext,
 		  std::function<void(CephContext*)>> cct_deleter;
 
+  tracing::Tracer tracer_{cct_deleter.get(), "io.ceph.librados"};
 public:
   const ConfigProxy& conf{cct->_conf};
   ceph::async::io_context_pool poolctx;
@@ -195,6 +196,9 @@ public:
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
+  inline auto& tracer() {
+    return tracer_;
+  }
 };
 
 #endif

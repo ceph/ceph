@@ -45,12 +45,11 @@ void FlattenRequest<I>::read_header() {
           ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_READ);
 
   auto crypto = m_image_ctx->encryption_format->get_crypto();
-  ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
           {{0, crypto->get_data_offset()}}, io::ImageArea::CRYPTO_HEADER,
           io::ReadResult{&m_bl}, m_image_ctx->get_data_io_context(), 0, 0,
-          trace);
+          {false, false});
   req->send();
 }
 
@@ -93,11 +92,10 @@ void FlattenRequest<I>::write_header() {
   auto aio_comp = io::AioCompletion::create_and_start(
           ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_WRITE);
 
-  ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
           {{0, m_bl.length()}}, io::ImageArea::CRYPTO_HEADER,
-          std::move(m_bl), 0, trace);
+          std::move(m_bl), 0, {false, false});
   req->send();
 }
 
@@ -123,7 +121,7 @@ void FlattenRequest<I>::flush() {
     ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-    io::FLUSH_SOURCE_INTERNAL, {});
+    io::FLUSH_SOURCE_INTERNAL, {false, false});
   req->send();
 }
 

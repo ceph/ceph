@@ -33,7 +33,7 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
                         Extents&& image_extents, ImageArea area,
                         bufferlist&& bl, int op_flags,
-                        const ZTracer::Trace &parent_trace) {
+                        const jspan_context &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_write(c, image_extents, bl, op_flags);
   }
@@ -43,14 +43,14 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
                           Extents&& image_extents, ImageArea area,
                           uint32_t discard_granularity_bytes,
-                          const ZTracer::Trace &parent_trace) {
+                          const jspan_context &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_discard(c, image_extents, discard_granularity_bytes);
   }
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
   static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c,
-                        FlushSource, const ZTracer::Trace &parent_trace) {
+                        FlushSource, const jspan_context &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_flush(c);
   }
@@ -62,7 +62,7 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
                             Extents&& image_extents, ImageArea area,
                             bufferlist&& bl, int op_flags,
-                            const ZTracer::Trace &parent_trace) {
+                            const jspan_context &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_writesame(c, image_extents, bl, op_flags);
   }
@@ -75,7 +75,7 @@ struct ImageRequest<MockReplayImageCtx> {
                                     Extents&& image_extents, ImageArea area,
                                     bufferlist&& cmp_bl, bufferlist&& bl,
                                     uint64_t* mismatch_offset, int op_flags,
-                                    const ZTracer::Trace &parent_trace) {
+                                    const jspan_context &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_compare_and_write(c, image_extents, cmp_bl, bl,
                                       mismatch_offset, op_flags);

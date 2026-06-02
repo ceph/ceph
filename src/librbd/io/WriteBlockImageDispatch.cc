@@ -127,7 +127,7 @@ void WriteBlockImageDispatch<I>::wait_on_writes_unblocked(
 template <typename I>
 bool WriteBlockImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -140,7 +140,7 @@ bool WriteBlockImageDispatch<I>::write(
 template <typename I>
 bool WriteBlockImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
+    uint32_t discard_granularity_bytes, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -153,7 +153,7 @@ bool WriteBlockImageDispatch<I>::discard(
 template <typename I>
 bool WriteBlockImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -167,7 +167,7 @@ template <typename I>
 bool WriteBlockImageDispatch<I>::compare_and_write(
     AioCompletion* aio_comp, Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const jspan_context &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -180,7 +180,7 @@ bool WriteBlockImageDispatch<I>::compare_and_write(
 template <typename I>
 bool WriteBlockImageDispatch<I>::flush(
     AioCompletion* aio_comp, FlushSource flush_source,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    const jspan_context &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -244,7 +244,7 @@ void WriteBlockImageDispatch<I>::flush_io(Context* on_finish) {
     on_finish, util::get_image_ctx(m_image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = ImageDispatchSpec::create_flush(
     *m_image_ctx, IMAGE_DISPATCH_LAYER_WRITE_BLOCK, aio_comp,
-    FLUSH_SOURCE_WRITE_BLOCK, {});
+    FLUSH_SOURCE_WRITE_BLOCK, {false, false});
   req->send();
 }
 

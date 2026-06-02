@@ -18,6 +18,7 @@
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "include/buffer_fwd.h"
+#include "common/tracer.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 
 class Finisher;
@@ -67,6 +68,10 @@ public:
   void put();
 
   virtual CephContext *cct();
+
+  tracing::Tracer& tracer() {
+    return m_tracer;
+  }
 
   virtual uint32_t get_nonce() = 0;
   virtual uint64_t get_instance_id() = 0;
@@ -147,6 +152,7 @@ private:
   std::atomic<uint64_t> m_refcount = { 0 };
 
   TestWatchNotify *m_watch_notify;
+  tracing::Tracer m_tracer;
 
   Finisher *get_finisher(const std::string& oid);
 
