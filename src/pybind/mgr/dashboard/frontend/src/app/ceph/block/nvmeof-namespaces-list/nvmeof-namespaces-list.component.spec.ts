@@ -12,6 +12,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
+import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 
 const mockNamespaces = [
   {
@@ -65,7 +66,12 @@ describe('NvmeofNamespacesListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        NvmeofGatewayGroupFilterComponent
+      ],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },

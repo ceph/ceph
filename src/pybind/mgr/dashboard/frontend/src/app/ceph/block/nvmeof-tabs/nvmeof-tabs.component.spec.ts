@@ -160,7 +160,7 @@ describe('NvmeofTabsComponent', () => {
       expect(component.showSetupCards).toBe(true);
     });
 
-    it('should detect subsystems and namespaces regardless of dropdown selection', () => {
+    it('should evaluate setup cards across gateway groups when no group is selected', () => {
       component.ngOnInit();
       nvmeofServiceSpy.listSubsystems.mockReturnValue(of(mockSubsystems));
       nvmeofServiceSpy.listNamespaces.mockReturnValue(of(mockNamespaces));
@@ -169,6 +169,7 @@ describe('NvmeofTabsComponent', () => {
       expect(component.hasSubsystems).toBe(true);
       expect(component.hasNamespaces).toBe(true);
       expect(component.isAllConfigured).toBe(true);
+      expect(component.showSetupCards).toBe(true);
     });
 
     it('scenario: no gateway groups — all steps pending', () => {
@@ -190,6 +191,15 @@ describe('NvmeofTabsComponent', () => {
       expect(component.hasSubsystems).toBe(false);
       expect(component.hasNamespaces).toBe(false);
       expect(component.isAllConfigured).toBe(false);
+    });
+
+    it('scenario: selected gateway group does not exist — setup still reflects all groups', () => {
+      component.ngOnInit();
+      setQueryParams({ group: 'grp-other' });
+      expect(component.hasGatewayGroups).toBe(true);
+      expect(component.hasSubsystems).toBe(true);
+      expect(component.hasNamespaces).toBe(true);
+      expect(component.isAllConfigured).toBe(true);
     });
 
     it('scenario: no subsystems in object response across all groups — step 1 complete', () => {

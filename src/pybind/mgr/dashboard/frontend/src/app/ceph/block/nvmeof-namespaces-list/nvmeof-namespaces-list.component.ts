@@ -7,6 +7,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { Icons } from '~/app/shared/enum/icons.enum';
 
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
@@ -18,8 +19,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
-import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, forkJoin, of, Subject } from 'rxjs';
+import { catchError, finalize, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
@@ -36,15 +37,17 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   group: string;
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
+  @ViewChild(TableComponent)
+  table: TableComponent;
   namespacesColumns: any;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
   namespaces$: Observable<NvmeofSubsystemNamespace[]>;
   private namespaceSubject = new BehaviorSubject<void>(undefined);
-
   // Gateway group dropdown properties
   gwGroups: GroupsComboboxItem[] = [];
+  groupSelectionCleared = false;
   gwGroupsEmpty: boolean = false;
   gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
 
@@ -68,13 +71,29 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
       const group = params?.['group']?.trim() || null;
+      const hasGroupParam = Object.prototype.hasOwnProperty.call(params ?? {}, 'group');
       if (group) {
-        this.applyGroup(group);
-      } else if (!this.gwGroups.length) {
-        // Wait for gateway groups to load and default selection to be applied via URL sync.
-        this.group = null;
+        if (this.group === group && !this.groupSelectionCleared) {
+          return;
+        }
+        this.groupSelectionCleared = false;
+        this.onGroupSelection({ content: group }, false);
+      } else if (hasGroupParam) {
+        if (!this.group && this.groupSelectionCleared) {
+          return;
+        }
+        this.groupSelectionCleared = true;
+        if (this.group) {
+          this.onGroupClear(false);
+        } else {
+          this.listNamespaces();
+        }
       } else {
-        this.clearGroup();
+        if (!this.group && !this.groupSelectionCleared) {
+          return;
+        }
+        this.groupSelectionCleared = false;
+        this.group = null;
       }
     });
     this.setGatewayGroups();
@@ -152,28 +171,19 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     this.namespaces$ = this.namespaceSubject.pipe(
       switchMap(() => {
         if (!this.group) {
-          return of([]);
+          if (this.groupSelectionCleared) {
+            return of([]);
+          }
+          return this.fetchAllGroupsNamespaces();
         }
         return this.nvmeofService.listNamespaces(this.group).pipe(
-          map((res: NvmeofSubsystemNamespace[] | { namespaces: NvmeofSubsystemNamespace[] }) => {
-            const namespaces = Array.isArray(res) ? res : res.namespaces || [];
-            // Deduplicate by nsid + subsystem NQN (API with wildcard can return duplicates per gateway)
-            const seen = new Set<string>();
-            return namespaces
-              .filter((ns) => {
-                const key = `${ns.nsid}_${ns['ns_subsystem_nqn']}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-              })
-              .map((ns) => ({
-                ...ns,
-                unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
-              }));
-          }),
+          map((res: any) => this.normalizeAndDedup(res)),
           catchError(() => of([]))
         );
       }),
+      tap(() => this.setTableLoading(false)),
+      finalize(() => this.setTableLoading(false)),
+      shareReplay({ bufferSize: 1, refCount: true }),
       takeUntil(this.destroy$)
     );
     this.nvmeofStateService.refresh$
@@ -181,42 +191,86 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       .subscribe(() => this.fetchData());
   }
 
+  private normalizeAndDedup(
+    res: NvmeofSubsystemNamespace[] | { namespaces: NvmeofSubsystemNamespace[] }
+  ): (NvmeofSubsystemNamespace & { unique_id: string })[] {
+    const namespaces = Array.isArray(res) ? res : res.namespaces || [];
+    const seen = new Set<string>();
+    return namespaces
+      .filter((ns) => {
+        const key = `${ns.nsid}_${ns['ns_subsystem_nqn']}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((ns) => ({ ...ns, unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}` }));
+  }
+
+  private fetchAllGroupsNamespaces() {
+    return this.nvmeofService.listGatewayGroups().pipe(
+      switchMap((gatewayGroups: CephServiceSpec[][]) => {
+        const firstItem = (gatewayGroups as any)?.[0];
+        const groups: CephServiceSpec[] = Array.isArray(firstItem) ? firstItem : [];
+        const validGroups = groups.filter((g) => g?.spec?.group);
+        if (validGroups.length === 0) return of([]);
+        return forkJoin(
+          validGroups.map((g) =>
+            this.nvmeofService.listNamespaces(g.spec.group).pipe(
+              map((res: any) => this.normalizeAndDedup(res)),
+              catchError(() => of([]))
+            )
+          )
+        ).pipe(
+          map((results) => {
+            // Deduplicate again across groups
+            const seen = new Set<string>();
+            return (results as any[]).flat().filter((ns: any) => {
+              if (seen.has(ns.unique_id)) return false;
+              seen.add(ns.unique_id);
+              return true;
+            });
+          })
+        );
+      }),
+      catchError(() => of([]))
+    );
+  }
+
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
   listNamespaces() {
+    this.setTableLoading(true);
     this.namespaceSubject.next();
   }
 
   fetchData() {
-    this.namespaceSubject.next();
+    this.listNamespaces();
+  }
+
+  private setTableLoading(loading: boolean): void {
+    if (this.table) {
+      this.table.loadingIndicator = loading;
+    }
   }
 
   // Gateway groups methods
-  onGroupSelection(selected: GroupsComboboxItem) {
-    this.syncGroupQueryParam(selected.content);
-  }
-
-  onGroupClear() {
-    this.syncGroupQueryParam(null);
-  }
-
-  private applyGroup(group: string): void {
-    this.group = group;
-    if (this.gwGroups.length) {
-      this.gwGroups = this.gwGroups.map((g) => ({
-        ...g,
-        selected: g.content === group
-      }));
+  onGroupSelection(selected: GroupsComboboxItem, syncQueryParam = true) {
+    selected.selected = true;
+    this.group = selected.content;
+    this.groupSelectionCleared = false;
+    if (syncQueryParam) {
+      this.syncGroupQueryParam(this.group);
     }
     this.listNamespaces();
   }
 
-  private clearGroup(): void {
+  onGroupClear(syncQueryParam = true) {
     this.group = null;
-    if (this.gwGroups.length) {
-      this.gwGroups = this.gwGroups.map((g) => ({ ...g, selected: false }));
+    this.groupSelectionCleared = true;
+    if (syncQueryParam) {
+      this.syncGroupQueryParam(null);
     }
     this.listNamespaces();
   }
@@ -256,13 +310,17 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
 
   updateGroupSelectionState() {
     if (this.gwGroups.length) {
-      const urlGroup = this.route.snapshot.queryParams['group']?.trim() || null;
-      if (!urlGroup) {
-        this.syncGroupQueryParam(this.gwGroups[0].content);
+      if (this.group) {
+        this.gwGroups = this.gwGroups.map((g) => ({
+          ...g,
+          selected: g.content === this.group
+        }));
+      } else if (!this.groupSelectionCleared) {
+        this.onGroupSelection(this.gwGroups[0]);
       } else {
         this.gwGroups = this.gwGroups.map((g) => ({
           ...g,
-          selected: g.content === urlGroup
+          selected: false
         }));
       }
       this.gwGroupsEmpty = false;

@@ -20,7 +20,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -76,7 +75,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
-
   iconSize = IconSize;
 
   constructor(
@@ -153,7 +151,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
               return of([]);
             }
             return forkJoin(
-              groups.map((group: NvmeofGatewayGroup) => {
+              groups.map((group: CephServiceSpec) => {
                 const isRunning = (group.status?.running ?? 0) > 0;
                 const subsystemsObservable = isRunning
                   ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
@@ -181,7 +179,8 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
           }),
           catchError(() => {
             return of([]);
-          })
+          }),
+          finalize(() => this.setTableLoading(false))
         )
       ),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -199,8 +198,15 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       .subscribe(() => this.fetchData());
   }
   fetchData(): void {
+    this.setTableLoading(true);
     this.subject.next([]);
     this.checkNodesAvailability();
+  }
+
+  private setTableLoading(loading: boolean): void {
+    if (this.table) {
+      this.table.loadingIndicator = loading;
+    }
   }
 
   updateSelection(selection: CdTableSelection): void {

@@ -16,5 +16,24 @@
   &__combo {
     min-inline-size: 14rem;
     max-inline-size: 20rem;
+
+    .cds--list-box,
+    .cds--list-box:hover,
+    .cds--list-box--expanded,
+    .cds--list-box--expanded:hover {
+      border: 0;
+      border-block-end: 0;
+      box-shadow: none;
+      outline: 0;
+    }
+
+    .cds--list-box__field,
+    .cds--list-box__wrapper,
+    .cds--text-input {
+      border: 0;
+      border-bottom: 0;
+      box-shadow: none;
+      outline: 0;
+    }
   }
 }

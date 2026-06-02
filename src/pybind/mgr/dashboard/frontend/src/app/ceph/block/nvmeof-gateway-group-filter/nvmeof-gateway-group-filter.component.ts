@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
 import { ComboBoxModule } from 'carbon-components-angular';
 import { GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
 
@@ -7,7 +7,8 @@ import { GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
   templateUrl: './nvmeof-gateway-group-filter.component.html',
   styleUrls: ['./nvmeof-gateway-group-filter.component.scss'],
   standalone: true,
-  imports: [ComboBoxModule]
+  imports: [ComboBoxModule],
+  encapsulation: ViewEncapsulation.None
 })
 export class NvmeofGatewayGroupFilterComponent {
   @Input() items: GroupsComboboxItem[] = [];
