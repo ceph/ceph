@@ -319,7 +319,7 @@ namespace rgw::s3vector {
 
           if (name == "$or" && has_column && has_json) {
             ldpp_dout(dpp, 1) << "ERROR: s3vector filter: $or cannot mix filterable column and JSON metadata conditions" << dendl;
-            errors.push_back({"filter", "$or cannot mix filterable and non-filterable metadata conditions"});
+            errors.push_back({"filter", "$or cannot mix filterable column and JSON metadata conditions"});
             free_filter_exprs(*sub);
             free_filter_exprs(logical);
             free_filter_exprs(combined);

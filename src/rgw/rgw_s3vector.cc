@@ -316,7 +316,7 @@ namespace rgw::s3vector {
     return 0;
   }
 
-  std::vector<std::string> get_nonfilterable_metadata(const LanceDBTable* table, DoutPrefixProvider* dpp) {
+  int get_nonfilterable_metadata(const LanceDBTable* table, DoutPrefixProvider* dpp, std::vector<std::string>& non_filterable_metadata_keys) {
     char** keys_out = nullptr;
     char** values_out = nullptr;
     size_t count = 0;
@@ -325,23 +325,25 @@ namespace rgw::s3vector {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get " << nonfilterable_metadata_key <<
         "  metadata: " << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
-      return {};
+      return lancedb_error_to_errno(result);
     }
-    std::vector<std::string> result_keys;
     if (count > 0) {
+      JSONParser parser;
+      if (!parser.parse(values_out[0], strlen(values_out[0]))) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to parse nonfilterable metadata JSON" << dendl;
+        lancedb_free_metadata(keys_out, values_out, count);
+        return -EINVAL;
+      }
       try {
-        JSONParser parser;
-        if (parser.parse(values_out[0], strlen(values_out[0]))) {
-          JSONDecoder::decode_json("keys", result_keys, &parser);
-        } else {
-          ldpp_dout(dpp, 1) << "ERROR: s3vector failed to parse nonfilterable metadata JSON" << dendl;
-        }
+        JSONDecoder::decode_json("keys", non_filterable_metadata_keys, &parser);
       } catch (const JSONDecoder::err& e) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to decode nonfilterable metadata JSON: " << e.what() << dendl;
+        lancedb_free_metadata(keys_out, values_out, count);
+        return -EINVAL;
       }
+      lancedb_free_metadata(keys_out, values_out, count);
     }
-    lancedb_free_metadata(keys_out, values_out, count);
-    return result_keys;
+    return 0;
   }
 
 
@@ -725,12 +727,24 @@ namespace rgw::s3vector {
       return -ENOENT;
     }
 
-    reply.dimension = 0;
     std::shared_ptr<arrow::Schema> schema;
-    if (import_table_schema(configuration.index_name, table, dpp, schema) == 0) {
-      std::ignore = get_vector_dimension(configuration.index_name, schema, dpp, reply.dimension);
-      reply.filterable_metadata_keys = get_filterable_keys_from_schema(schema);
+    if (int ret = import_table_schema(configuration.index_name, table, dpp, schema); ret < 0) {
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return ret;
     }
+    reply.dimension = 0;
+    if (int ret = get_vector_dimension(configuration.index_name, schema, dpp, reply.dimension); ret < 0) {
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return ret;
+    }
+    if (int ret = get_nonfilterable_metadata(table, dpp, reply.non_filterable_metadata_keys); ret < 0) {
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return ret;
+    }
+    reply.filterable_metadata_keys = get_filterable_keys_from_schema(schema);
 
     reply.data_type = "float32";
     reply.distance_metric = get_distance_metric(table, dpp);
@@ -748,7 +762,6 @@ namespace rgw::s3vector {
     }
 
     reply.creation_time = get_table_creation_time(table, dpp);
-    reply.non_filterable_metadata_keys = get_nonfilterable_metadata(table, dpp);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     return 0;
@@ -1940,7 +1953,12 @@ namespace rgw::s3vector {
     LanceDBExpr* json_filter_expr = nullptr;
     if (filter) {
       const auto filterable_keys = get_filterable_keys_from_schema(schema);
-      const auto nonfilterable_keys = get_nonfilterable_metadata(table, dpp);
+      std::vector<std::string> nonfilterable_keys;
+      if (int ret = get_nonfilterable_metadata(table, dpp, nonfilterable_keys); ret < 0) {
+        lancedb_vector_query_free(query);
+        lancedb_table_free(table);
+        return ret;
+      }
       auto filter_exprs = build_filter_expr(*filter, filterable_keys, nonfilterable_keys, dpp, errors);
       if (!filter_exprs) {
         lancedb_vector_query_free(query);
