@@ -80,7 +80,7 @@ export class NvmeofTabsComponent implements OnInit, OnDestroy {
         this.hasSubsystems = hasSubsystems;
         this.hasNamespaces = hasNamespaces;
         this.isAllConfigured = hasGatewayGroups && hasSubsystems && hasNamespaces;
-        this.showSetupCards = !this.isAllConfigured;
+        this.showSetupCards = true;
       });
   }
 
