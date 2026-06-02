@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of, Subject } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { BehaviorSubject, Subject, of } from 'rxjs';
+import { skip, take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -13,6 +14,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
+import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 
 const mockNamespaces = [
   {
@@ -31,16 +33,36 @@ const mockNamespaces = [
   }
 ];
 
+const mockGroups = [
+  [
+    {
+      service_name: 'nvmeof.rbd.g1',
+      service_type: 'nvmeof',
+      unmanaged: false,
+      spec: {
+        group: 'g1'
+      }
+    }
+  ],
+  1
+];
+
+const mockFormattedGwGroups = [
+  {
+    content: 'g1'
+  }
+];
+
 class MockNvmeOfService {
   gatewayGroupsResponse: any = [[{ id: 'g1' }]];
   namespacesResponse: any = { namespaces: mockNamespaces };
 
   listGatewayGroups() {
-    return of(this.gatewayGroupsResponse);
+    return of(mockGroups);
   }
 
   formatGwGroupsList(_response: any) {
-    return [{ content: 'g1', selected: false }];
+    return mockFormattedGwGroups;
   }
 
   listNamespaces(_group?: string) {
@@ -63,33 +85,55 @@ class MockTaskWrapperService {}
 describe('NvmeofNamespacesListComponent', () => {
   let component: NvmeofNamespacesListComponent;
   let fixture: ComponentFixture<NvmeofNamespacesListComponent>;
-
+  let queryParams$: BehaviorSubject<Record<string, string>>;
   let modalService: MockModalCdsService;
   let nvmeofService: MockNvmeOfService;
+  const activatedRouteMock = {
+    queryParams: null as any,
+    snapshot: { queryParams: {} as Record<string, string> }
+  };
 
   beforeEach(async () => {
-    const nvmeofStateServiceMock = {
-      refresh$: new Subject<void>(),
-      requestRefresh: jest.fn()
-    };
+    const refresh$ = new Subject<void>();
+    queryParams$ = new BehaviorSubject<Record<string, string>>({});
+    activatedRouteMock.queryParams = queryParams$.asObservable();
+    activatedRouteMock.snapshot.queryParams = queryParams$.value;
 
     await TestBed.configureTestingModule({
       declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        NvmeofGatewayGroupFilterComponent
+      ],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
         { provide: ModalCdsService, useClass: MockModalCdsService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService },
-        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
+        { provide: ActivatedRoute, useValue: activatedRouteMock },
+        {
+          provide: NvmeofStateService,
+          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+        }
       ],
-      schemas: [NO_ERRORS_SCHEMA]
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
+
+    const router = TestBed.inject(Router);
+    jest.spyOn(router, 'navigate').mockImplementation((_commands, extras?) => {
+      const group = extras?.queryParams?.['group'];
+      const params = group ? { group: String(group) } : {};
+      activatedRouteMock.snapshot.queryParams = params;
+      queryParams$.next(params);
+      return Promise.resolve(true);
+    });
 
     fixture = TestBed.createComponent(NvmeofNamespacesListComponent);
     component = fixture.componentInstance;
-    component.ngOnInit();
     component.subsystemNQN = 'nqn.2001-07.com.ceph:1721040751436';
+    component.ngOnInit();
     fixture.detectChanges();
     modalService = TestBed.inject(ModalCdsService) as any;
     nvmeofService = TestBed.inject(NvmeofService) as any;
@@ -100,7 +144,7 @@ describe('NvmeofNamespacesListComponent', () => {
   });
 
   it('should retrieve namespaces', (done) => {
-    component.group = 'g1';
+    component.groupHandler.group = 'g1';
     component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
       expect(namespaces).toEqual(
         mockNamespaces.map((ns) => ({
@@ -131,7 +175,7 @@ describe('NvmeofNamespacesListComponent', () => {
   });
 
   it('should deduplicate namespaces by nsid and subsystem nqn', (done) => {
-    component.group = 'g1';
+    component.groupHandler.group = 'g1';
     nvmeofService.namespacesResponse = {
       namespaces: [
         { nsid: 1, ns_subsystem_nqn: 'sub1' },
@@ -140,7 +184,7 @@ describe('NvmeofNamespacesListComponent', () => {
       ]
     };
 
-    component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
+    component.namespaces$.pipe(skip(1), take(1)).subscribe((namespaces) => {
       expect(namespaces).toEqual([
         { nsid: 1, ns_subsystem_nqn: 'sub1', unique_id: '1_sub1' },
         { nsid: 1, ns_subsystem_nqn: 'sub2', unique_id: '1_sub2' }

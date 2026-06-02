@@ -22,7 +22,6 @@ describe('NvmeofGatewayGroupComponent', () => {
       listGatewayGroups: jest.fn().mockReturnValue(of([])),
       listSubsystems: jest.fn().mockReturnValue(of([]))
     };
-
     const nvmeofStateServiceMock = {
       refresh$: new Subject<void>(),
       requestRefresh: jest.fn()

@@ -115,6 +115,52 @@
                 </cds-select>
               </div>
             </div>
+          }}
+          @if (customFilter) {
+          @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
+            @if (isCustomFilterLabel()) {
+              <div cdsRow
+                   class="cds-mt-4 cds--type-body-02">
+                Filter {{ customFilter }}:
+              </div>
+            }
+            <div cdsRow
+                 [cdsLayer]="1"
+                 class="cds-mt-4">
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Key
+                  <input cdsText
+                         size="md"
+                         [id]="'filter_key_' + i"
+                         [value]="filter.key"
+                         (input)="filter.key = $any($event.target).value">
+                </cds-text-label>
+              </div>
+
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Value
+                  <input cdsText
+                         size="md"
+                         [id]="'filter_value_' + i"
+                         [value]="filter.value"
+                         (input)="filter.value = $any($event.target).value">
+                </cds-text-label>
+            </div>
+
+            @if (i !== 0) {
+            <div cdsCol
+                 [columnNumbers]="{sm: 2, md: 2, lg: 2}"
+                class="cds-mt-6">
+              <cds-icon-button kind="ghost"
+                               size="sm"
+                               (click)="removeCustomFilter(filter.id)">
+                <cd-icon type="trash"></cd-icon>
+              </cds-icon-button>
+            </div>
+            }
+          </div>
           }
           <div cdsRow
                class="cds-mt-4 cds-mb-4">
