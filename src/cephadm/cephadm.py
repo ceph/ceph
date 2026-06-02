@@ -640,6 +640,14 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Out:{out}\n'
                     f'Err:{err}'
                 )
+        logger.info(
+            f'Restarting osd.{self.daemon_id} after updating osd_key bluestore label'
+        )
+        call(
+            ctx,
+            ['systemctl', 'restart', get_unit_name(self.fsid, 'osd', self.daemon_id)],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
 
 
 ##################################
