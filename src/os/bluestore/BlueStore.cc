@@ -18111,11 +18111,12 @@ int BlueStore::_maybe_unshare_on_remove(
         // Do not account second time.
         maybe_unshared_blobs.erase(sb);
       } else {
-	// todo: it seems to be an overkill to go through map()
-	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	    expect[B].get(off, len);
-	    return 0;
-	  });
+        for (const auto& e: b.get_extents()) {
+          if (e.is_valid()) {
+            expect[B].get(e.offset, e.length);
+          }
+        }
+        maybe_unshared_blobs.erase(sb);
       }
     }
   }
