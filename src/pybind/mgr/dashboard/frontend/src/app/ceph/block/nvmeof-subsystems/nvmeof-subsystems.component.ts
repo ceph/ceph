@@ -21,6 +21,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
@@ -72,7 +73,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private router: Router,
     private route: ActivatedRoute,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private nvmeofStateService: NvmeofStateService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -80,7 +82,15 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   ngOnInit() {
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
-      if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
+      const group = params?.['group']?.trim() || null;
+      if (group) {
+        this.applyGroup(group);
+      } else if (!this.gwGroups.length) {
+        // Wait for gateway groups to load and default selection to be applied via URL sync.
+        this.group = null;
+      } else {
+        this.clearGroup();
+      }
     });
     this.setGatewayGroups();
     this.subsystemsColumns = [
@@ -152,6 +162,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       }),
       takeUntil(this.destroy$)
     );
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.fetchData());
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -179,22 +192,54 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         forceDeleteAcknowledgementMessage: $localize`I understand this may remove resources still attached to this subsystem.`
       },
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('nvmeof/subsystem/delete', { nqn: subsystem.nqn }),
-          call: this.nvmeofService.deleteSubsystem(subsystem.nqn, this.group)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/subsystem/delete', { nqn: subsystem.nqn }),
+            call: this.nvmeofService.deleteSubsystem(subsystem.nqn, this.group)
+          })
+          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
     });
   }
 
   onGroupSelection(selected: GroupsComboboxItem) {
-    selected.selected = true;
-    this.group = selected.content;
-    this.getSubsystems();
+    this.syncGroupQueryParam(selected.content);
   }
 
   onGroupClear() {
-    this.group = null;
+    this.syncGroupQueryParam(null);
+  }
+
+  private applyGroup(group: string): void {
+    this.group = group;
+    if (this.gwGroups.length) {
+      this.gwGroups = this.gwGroups.map((g) => ({
+        ...g,
+        selected: g.content === group
+      }));
+    }
     this.getSubsystems();
+  }
+
+  private clearGroup(): void {
+    this.group = null;
+    if (this.gwGroups.length) {
+      this.gwGroups = this.gwGroups.map((g) => ({ ...g, selected: false }));
+    }
+    this.getSubsystems();
+  }
+
+  private syncGroupQueryParam(group: string | null): void {
+    const currentGroup = this.route.snapshot.queryParams['group']?.trim() || null;
+    if (currentGroup === group) {
+      return;
+    }
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { group: group || null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   setGatewayGroups() {
@@ -220,12 +265,13 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     if (this.gwGroups.length) {
       this.gwGroupsEmpty = false;
       this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
-      if (!this.group) {
-        this.onGroupSelection(this.gwGroups[0]);
+      const urlGroup = this.route.snapshot.queryParams['group']?.trim() || null;
+      if (!urlGroup) {
+        this.syncGroupQueryParam(this.gwGroups[0].content);
       } else {
         this.gwGroups = this.gwGroups.map((g) => ({
           ...g,
-          selected: g.content === this.group
+          selected: g.content === urlGroup
         }));
       }
     } else {
