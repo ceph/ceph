@@ -393,12 +393,11 @@ if(WITH_BREAKPAD)
 endif(WITH_BREAKPAD)
 
 if(WITH_JAEGER)
-  find_package(thrift 0.13.0 REQUIRED)
   include(BuildOpentelemetry)
   build_opentelemetry()
   add_library(jaeger_base INTERFACE)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
-    thrift::libthrift)
+  add_dependencies(jaeger_base opentelemetry-cpp)
+  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry)
 endif()
 
 set(mds_files)
@@ -582,7 +581,7 @@ target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 
 if(WITH_JAEGER)
-  add_dependencies(common-objs jaeger_base)
+  add_dependencies(common-objs opentelemetry-cpp jaeger_base)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
@@ -686,7 +685,7 @@ target_link_libraries(common
   ${ceph_common_deps}
   legacy-option-headers)
 if(WITH_JAEGER)
-add_dependencies(common jaeger_base)
+  add_dependencies(common jaeger_base)
 endif()
 
 if (WIN32)
@@ -705,7 +704,7 @@ endif(ENABLE_COVERAGE)
 target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
-add_dependencies(ceph-common jaeger_base)
+  add_dependencies(ceph-common jaeger_base)
 endif()
 
 if(WITH_BREAKPAD)
