@@ -26,6 +26,7 @@ overrides:
       - osd down
       - OBJECT_UNFOUND
       - OSD_HOST_DOWN
+      - but it is still running
 tasks:
 - install:
     branch: tentacle
