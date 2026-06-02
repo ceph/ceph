@@ -90,9 +90,11 @@ WebTokenEngine::get_role_name(const string& role_arn) const
 
 int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield y,
                                   const string& role_arn, const string& iss,
-                                  RGWOIDCProviderInfo& info) const
+                                  RGWOIDCProviderInfo& info,
+                                  bool& is_global_oidc) const
 {
   string tenant = get_role_tenant(role_arn);
+  is_global_oidc = false;
 
   string idp_url = iss;
   auto pos = idp_url.find("http://");
@@ -110,7 +112,16 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  int r = driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  if (r == -ENOENT && tenant != global_oidc_id) {
+    ldpp_dout(dpp, 20) << "no OIDC provider found for tenant '" << tenant
+        << "' and url '" << idp_url << "', trying global" << dendl;
+    r = driver->load_oidc_provider(dpp, y, global_oidc_id, idp_url, info, nullptr);
+    if (r == 0) {
+      is_global_oidc = true;
+    }
+  }
+  return r;
 }
 
 bool
@@ -213,10 +224,11 @@ WebTokenEngine::get_token_claims(const jwt::decoded_jwt& decoded) const
 }
 
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
-std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
+std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
 WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s,
 			     optional_yield y) const
 {
+  bool is_global_oidc = false;
   WebTokenEngine::token_t t;
   WebTokenEngine::principal_tags_t principal_tags;
   try {
@@ -251,7 +263,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
 
     string role_arn = s->info.args.get("RoleArn");
     RGWOIDCProviderInfo provider;
-    int r = load_provider(dpp, y, role_arn, iss, provider);
+    int r = load_provider(dpp, y, role_arn, iss, provider, is_global_oidc);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw std::system_error(EACCES, std::system_category());
@@ -290,13 +302,13 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
         throw std::system_error(EACCES, std::system_category());
       }
     } else {
-      return {boost::none, boost::none};
+      return {boost::none, boost::none, false};
     }
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 5) << "Invalid JWT token" << dendl;
-    return {boost::none, boost::none};
+    return {boost::none, boost::none, false};
   }
-  return {t, principal_tags};
+  return {t, principal_tags, is_global_oidc};
 }
 
 std::string
@@ -784,7 +796,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   try {
-    auto [t, princ_tags] = get_from_jwt(dpp, token, s, y);
+    auto [t, princ_tags, is_global_oidc] = get_from_jwt(dpp, token, s, y);
     if (t) {
       string role_session = s->info.args.get("RoleSessionName");
       if (role_session.empty()) {
@@ -824,7 +836,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       boost::optional<multimap<string,string>> role_tags = role->get_tags();
       auto apl = apl_factory->create_apl_web_identity(
           cct, s, role->get_id(), role_session, role_tenant,
-          *t, role_tags, princ_tags, std::move(account));
+          *t, role_tags, princ_tags, std::move(account), is_global_oidc);
       return result_t::grant(std::move(apl));
     }
     return result_t::deny(-EACCES);

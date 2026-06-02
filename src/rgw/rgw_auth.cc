@@ -801,8 +801,15 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
 
 bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 {
-  return p.is_oidc_provider()
-      && p.get_idp_url() == get_idp_url();
+  if (!p.is_oidc_provider())
+    return false;
+  if (p.get_idp_url() != get_idp_url())
+    return false;
+
+  if (is_global_oidc) {
+    return p.get_account() == ".global";
+  }
+  return p.get_account() == role_tenant;
 }
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;

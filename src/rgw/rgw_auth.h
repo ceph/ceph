@@ -413,6 +413,7 @@ protected:
   boost::optional<std::multimap<std::string,std::string>> role_tags;
   boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags;
   std::optional<RGWAccountInfo> account;
+  bool is_global_oidc;
 
   std::string get_idp_url() const;
 
@@ -429,7 +430,8 @@ public:
                       const std::unordered_multimap<std::string, std::string>& token_claims,
                       boost::optional<std::multimap<std::string,std::string>> role_tags,
                       boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags,
-                      std::optional<RGWAccountInfo> account)
+                      std::optional<RGWAccountInfo> account,
+                      bool is_global_oidc = false)
       : cct(cct),
       driver(driver),
       role_id(role_id),
@@ -438,7 +440,8 @@ public:
       token_claims(token_claims),
       role_tags(role_tags),
       principal_tags(principal_tags),
-      account(std::move(account))
+      account(std::move(account)),
+      is_global_oidc(is_global_oidc)
   {
       const auto& sub = token_claims.find("sub");
       if(sub != token_claims.end()) {
@@ -538,7 +541,8 @@ public:
                                               const std::unordered_multimap<std::string, std::string>& token,
                                               boost::optional<std::multimap<std::string, std::string>>,
                                               boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags,
-                                              std::optional<RGWAccountInfo> account) const = 0;
+                                              std::optional<RGWAccountInfo> account,
+                                              bool is_global_oidc) const = 0;
   };
 };
 
