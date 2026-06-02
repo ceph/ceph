@@ -21,15 +21,9 @@ namespace keystone {
  * regular user/pass). RadosGW actually does support the first two. */
 
 namespace detail {
-// Match a request path against an OpenStack application-credential access-rule
-// path pattern. Exposed for unit testing; not part of the stable interface.
-//
-// Pattern syntax mirrors keystoneauth1's reference matcher:
-//   *      one path segment (no '/')
-//   **     any number of segments (zero or more)
-//   {tag}  one path segment (named placeholder)
-//
-// Match is anchored: the entire path must be consumed.
+/* Match a request path against an application-credential access-rule
+ * pattern. Exposed for unit testing. See rgw_auth_keystone.cc for the
+ * full pattern syntax. */
 bool path_matches_pattern(std::string_view pattern, std::string_view path);
 } // namespace detail
 
