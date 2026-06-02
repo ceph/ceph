@@ -2061,8 +2061,9 @@ public:
 			      fu2::unique_function<OpSig>>) {
 		     std::move(arg)(ec);
                    } else {
-		     boost::asio::defer(e,
-					boost::asio::append(std::move(arg), ec));
+		     auto ex = boost::asio::get_associated_executor(arg, e);
+		     boost::asio::dispatch(ex,
+					   boost::asio::append(std::move(arg), ec));
 		   }
 		 }, std::move(f));
     }
