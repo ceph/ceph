@@ -31,6 +31,9 @@ public:
       return;
     }
 
+    // Send HTTP headers and reset formatter before writing the stats body;
+    // send_response() will only flush the body (did_start() is true).
+    flusher.start(0);
     op_ret = rgw::dedup::cluster::collect_all_shard_stats(
       store, s->formatter, this);
   }
@@ -59,8 +62,10 @@ public:
     throttle_msg_t throttle_msg;
     encode(throttle_msg, urgent_msg_bl);
 
+    // Same as stats: headers first, then throttle JSON from dedup_control_bl().
+    flusher.start(0);
     op_ret = cluster::dedup_control_bl(store, this, urgent_msg, urgent_msg_bl,
-                                        s->formatter);
+                                        s->formatter, y);
   }
 
   const char* name() const override { return "get_dedup_throttle"; }
@@ -97,7 +102,8 @@ public:
 #endif
     }
 
-    op_ret = rgw::dedup::cluster::dedup_restart_scan(store, dedup_type, this);
+    op_ret = rgw::dedup::cluster::dedup_restart_scan(store, dedup_type, this,
+                                                    nullptr, y);
   }
 
   const char* name() const override {
@@ -123,7 +129,7 @@ public:
       return;
     }
 
-    op_ret = rgw::dedup::cluster::dedup_control(store, this, msg);
+    op_ret = rgw::dedup::cluster::dedup_control(store, this, msg, y);
   }
 
   const char* name() const override {
@@ -181,9 +187,11 @@ public:
       return;
     }
 
+    // After validation: headers first, then JSON echo of applied throttle state.
+    flusher.start(0);
     encode(throttle_msg, urgent_msg_bl);
     op_ret = cluster::dedup_control_bl(store, this, urgent_msg, urgent_msg_bl,
-                                        s->formatter);
+                                        s->formatter, y);
   }
 
   const char* name() const override { return "set_dedup_throttle"; }
