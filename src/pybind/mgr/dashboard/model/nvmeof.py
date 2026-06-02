@@ -207,6 +207,35 @@ class NamespaceList(NamedTuple):
     namespaces: Annotated[List[Namespace], CliFlags.EXCLUSIVE_LIST]
 
 
+class NamespaceHostInfo(NamedTuple):
+    nqn: Annotated[str, CliHeader("NQN")]
+    nsid: Annotated[int, CliHeader("NSID")]
+    hosts: Annotated[
+        List[str],
+        CliHeader("Hosts"),
+        CliFieldTransformer(lambda v: "\n".join(v) if v else "None")
+    ]
+
+
+class NamespaceHostsList(NamedTuple):
+    status: int
+    error_message: str
+    namespaces: Annotated[List[NamespaceHostInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class NamespaceLocationInfo(NamedTuple):
+    subsystem: Annotated[str, CliHeader("Subsystem")]
+    load_balancing_group: Annotated[int, CliHeader("Load Balancing Group")]
+    location: Annotated[str, CliHeader("Location")]
+    namespace_count: Annotated[int, CliHeader("Count")]
+
+
+class NamespaceLocationsList(NamedTuple):
+    status: int
+    error_message: str
+    locations: Annotated[List[NamespaceLocationInfo], CliFlags.EXCLUSIVE_LIST]
+
+
 class NamespaceIOStats(NamedTuple):
     status: Annotated[int, CliFlags.DROP]
     error_message: Annotated[str, CliFlags.DROP]
@@ -290,6 +319,19 @@ class GatewayStatsInfo(NamedTuple):
     error_message: str
     tick_rate: int
     poll_groups: Annotated[List[PollGroupInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class SpdkThreadInfo(NamedTuple):
+    name: str
+    busy: int
+    idle: int
+
+
+class ThreadStatsInfo(NamedTuple):
+    status: int
+    error_message: str
+    tick_rate: int
+    threads: Annotated[List[SpdkThreadInfo], CliFlags.EXCLUSIVE_LIST]
 
 
 class AnaState(Enum):
