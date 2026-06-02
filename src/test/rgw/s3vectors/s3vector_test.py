@@ -501,7 +501,7 @@ def generate_vectors(num_vectors, dimension):
     return vectors
 
 
-def verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=None):
+def verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=None, allow_extra=False):
     return_data = expected_dimension is not None
     result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
                              keys=vector_ids, returnData=return_data)
@@ -510,8 +510,12 @@ def verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimen
     assert 'vectors' in result
     returned_vectors = result['vectors']
     num_expected = len(vector_ids)
-    assert len(returned_vectors) == num_expected, \
-        f"expected {num_expected} vectors but got {len(returned_vectors)}"
+    if allow_extra:
+        assert len(returned_vectors) >= num_expected, \
+            f"expected at least {num_expected} vectors but got {len(returned_vectors)}"
+    else:
+        assert len(returned_vectors) == num_expected, \
+            f"expected {num_expected} vectors but got {len(returned_vectors)}"
 
     for vector in returned_vectors:
         assert 'key' in vector, "vector should have a 'key' field"
@@ -532,10 +536,11 @@ def verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimen
             assert 'data' not in vector, \
                 f"vector {vector['key']} should not have 'data' field when returnData=False"
 
-    # verify all requested keys are present
-    returned_keys = [v['key'] for v in returned_vectors]
-    assert set(returned_keys) == set(vector_ids), \
-        f"returned keys don't match requested keys. got {set(returned_keys)}, expected {set(vector_ids)}"
+    if not allow_extra:
+      # verify all requested keys are present
+      returned_keys = [v['key'] for v in returned_vectors]
+      assert set(returned_keys) == set(vector_ids), \
+          f"returned keys don't match requested keys. got {set(returned_keys)}, expected {set(vector_ids)}"
 
     log.info('get_vectors verification completed: %d vectors with returnData=%s',
              len(returned_vectors), return_data)
@@ -634,11 +639,7 @@ def test_put_vectors():
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
 
-def update_vectors_thread(conn, bucket_name, thread_id):
-    index_name = 'test-index-'+str(thread_id)
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    dimension = 128
+def update_vectors_thread(conn, bucket_name, index_name, dimension, allow_extra=False):
     num_vectors = 10
     vectors = generate_vectors(num_vectors, dimension)
     result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
@@ -655,7 +656,7 @@ def update_vectors_thread(conn, bucket_name, thread_id):
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # Get vectors with returnData=True
     vector_ids = [f'vec-{i}' for i in range(num_vectors)]
-    returned_vectors = verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    returned_vectors = verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension, allow_extra=allow_extra)
     log.info('test_get_vectors: successfully verified %d vectors', len(returned_vectors))
 
 
@@ -666,9 +667,36 @@ def test_update_vectors():
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     num_indexes = 10
+    dimension = 128
     threads = []
     for i in range(num_indexes):
-        t = threading.Thread(target=update_vectors_thread, args=(conn, bucket_name, i))
+        index_name = 'test-index-'+str(i)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        t = threading.Thread(target=update_vectors_thread, args=(conn, bucket_name, index_name, dimension))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_update_vectors_single_index():
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    num_threads = 10
+    dimension = 128
+    threads = []
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for i in range(num_threads):
+        t = threading.Thread(target=update_vectors_thread, args=(conn, bucket_name, index_name, dimension, True))
         t.start()
         threads.append(t)
     for t in threads:
