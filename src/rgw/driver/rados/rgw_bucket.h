@@ -31,7 +31,9 @@
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, std::string& buckets_obj_id);
 
+#ifdef WITH_RADOSGW_RADOS
 class RGWBucketMetadataHandler;
+#endif
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;

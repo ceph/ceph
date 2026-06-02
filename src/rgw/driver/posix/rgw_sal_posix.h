@@ -17,6 +17,8 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include "rgw_quota.h"
+#include <cstdint>
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
@@ -106,6 +108,9 @@ protected:
   CephContext* ctx;
 
 public:
+  static constexpr uint32_t FLAG_NONE =      0x0;
+  static constexpr uint32_t FLAG_CURRENT =   0x2;
+
   FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
   FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
   FSEnt(const FSEnt& _e) :
@@ -138,7 +143,7 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
   virtual std::string get_cur_version() { return ""; };
 };
 
@@ -210,7 +215,7 @@ public:
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
@@ -247,7 +252,6 @@ public:
     return std::make_unique<Symlink>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb) override;
 };
 
 class MPDirectory : public Directory {
@@ -283,7 +287,7 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 };
 
 class VersionedDirectory : public Directory {
@@ -344,7 +348,7 @@ public:
     return std::make_unique<VersionedDirectory>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
@@ -472,12 +476,14 @@ class POSIXDriver : public StoreDriver {
 protected:	
   CephContext *cct;
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
+  std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
   POSIXZone zone;
   std::unique_ptr<BucketCache> bucket_cache;
   std::string base_path;
   std::unique_ptr<Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
+  RGWQuotaHandler* quota_handler{nullptr};
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -488,6 +494,7 @@ public:
     auto db_full_path = std::filesystem::path(db_path) / db_name;
     
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
+    accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
   }
   virtual ~POSIXDriver() { }
 
@@ -515,32 +522,32 @@ public:
 				 std::string_view id,
 				 RGWAccountInfo& info,
 				 Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int load_account_by_name(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view tenant,
 				 std::string_view name,
 				 RGWAccountInfo& info,
 				 Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int load_account_by_email(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view email,
 				  RGWAccountInfo& info,
 				  Attrs& attrs,
-				  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				  RGWObjVersionTracker& objv) override;
 
   virtual int store_account(const DoutPrefixProvider* dpp,
 			  optional_yield y, bool exclusive,
 			  const RGWAccountInfo& info,
 			  const RGWAccountInfo* old_info,
 			  const Attrs& attrs,
-			  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			  RGWObjVersionTracker& objv) override;
 
   virtual int delete_account(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     const RGWAccountInfo& info,
-			     RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			     RGWObjVersionTracker& objv) override;
 
   virtual int load_stats(const DoutPrefixProvider* dpp,
 			 optional_yield y,
@@ -703,9 +710,9 @@ public:
 			     std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override { return 0; }
   virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override { return 0; }
   virtual int get_config_key_val(std::string name, bufferlist* bl) override { return -ENOTSUP; }
-  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override { return 0; }
-  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override { return 0; }
-  virtual void meta_list_keys_complete(void* handle) override { return; }
+  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
+  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
+  virtual void meta_list_keys_complete(void* handle) override;
   virtual std::string meta_get_marker(void* handle) override { return ""; }
   virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override { return 0; }
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override { return sync_module; }
@@ -766,7 +773,7 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
 
-  virtual void finalize(void) override {}
+  virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
@@ -783,6 +790,8 @@ public:
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
+
+  RGWQuotaHandler* get_quota_handler() {return quota_handler;}
 };
 
 class POSIXNotification : public StoreNotification {
@@ -873,7 +882,7 @@ public:
     acls(_b.acls),
     ns(_b.ns)
     {
-      dir.reset(static_cast<Directory*>(_b.dir->clone().get()));
+      dir = _b.dir->clone_dir();
     }
 
   virtual ~POSIXBucket() { }
@@ -964,6 +973,23 @@ public:
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
+
+struct POSIXManifest {
+  int64_t  multipart_part_count{-1};
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(multipart_part_count, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(multipart_part_count, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(POSIXManifest);
 
 class POSIXObject : public StoreObject {
 public:

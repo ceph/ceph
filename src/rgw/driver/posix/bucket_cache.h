@@ -67,11 +67,21 @@ struct BucketCacheEntry : public cohort::lru::Object
 
 public:
   BucketCacheEntry(BucketCache<D, B>* bc, const std::string& name, uint64_t hk)
-    : bc(bc), name(name), hk(hk), flags(FLAG_NONE) {}
+    : bc(bc), name(name), env{nullptr}, hk(hk), flags(FLAG_NONE) {}
 
   void set_env(std::shared_ptr<LMDBSafe::MDBEnv>& _env, LMDBSafe::MDBDbi& _dbi) {
     env = _env;
     dbi = _dbi;
+  }
+
+  virtual ~BucketCacheEntry()
+  {
+    /* XXX depends on safe_link -- but I think on balance, built-in safe_link
+     * is preferable to a custom mechanism with likely the same cost */
+    if (name_hook.is_linked()) {
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+    }
+    mdb_dbi_close(*env, dbi); // return db handle
   }
 
   inline bool deleted() const {
@@ -152,14 +162,12 @@ public:
 
 	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
 	bc->un->remove_watch(name);
-#if 1
-	// depends on safe_link
+
+	// XXX depends on safe_link
 	if (! name_hook.is_linked()) {
 	  // this should not happen!
 	  abort();
 	}
-#endif
-	bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
 
 	/* discard lmdb data associated with this bucket */
 	auto txn = env->getRWTransaction();
@@ -392,12 +400,13 @@ public:
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
 	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-	  auto errc =
-	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-		bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-		bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+          auto errc =
+              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                  bde.meta.owner_display_name, bde.meta.accounted_size,
+                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                  bde.flags);
 	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
 	    << std::endl;*/
 	  if (errc.code != std::errc{0}) {
@@ -449,12 +458,13 @@ public:
 	std::string ser_v{svv};
 	zpp::bits::in in_v(ser_v);
 	struct timespec ts;
-	errc =
-	  in_v(bde.key.name, bde.key.instance, /* bde.key.ns, */
-	       bde.ver.pool, bde.ver.epoch, bde.exists,
-	       bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-	       bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-	       bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+        errc = in_v(
+            bde.key.name, bde.key.instance, /* bde.key.ns, */
+            bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+            bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+            bde.meta.owner_display_name, bde.meta.accounted_size,
+            bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+            bde.flags);
 	if (errc.code != std::errc{0}) {
 	  abort();
 	}
@@ -535,12 +545,13 @@ public:
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
 	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-	  auto errc =
-	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-		bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-		bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+          auto errc =
+              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                  bde.meta.owner_display_name, bde.meta.accounted_size,
+                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                  bde.flags);
 	  if (errc.code != std::errc{0}) {
 	    abort();
 	  }
@@ -595,7 +606,8 @@ public:
               bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
               bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
               bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+              bde.flags);
       if (errc.code != std::errc{0}) {
         abort();
       }
@@ -642,6 +654,7 @@ public:
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
       ulk.unlock();
+      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
