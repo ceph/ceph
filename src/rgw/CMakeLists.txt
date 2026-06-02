@@ -32,6 +32,7 @@ function(gperf_generate input output)
 endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
+find_package(CLI11 QUIET)
 
 set(librgw_common_srcs
   spdk/crc64.c
@@ -557,6 +558,10 @@ target_link_libraries(radosgw-admin
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+if(CLI11_FOUND)
+  target_compile_definitions(radosgw-admin PRIVATE HAVE_CLI11)
+  target_link_libraries(radosgw-admin PRIVATE CLI11::CLI11)
+endif()
 endif()
 
 # this is unsatisfying and hopefully temporary; ARROW should not be

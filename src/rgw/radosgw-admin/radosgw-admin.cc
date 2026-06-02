@@ -13,6 +13,9 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#ifdef HAVE_CLI11
+#include <CLI/CLI.hpp>
+#endif
 
 #include "rgw_cors_s3.h"
 
@@ -3618,6 +3621,79 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+struct Cli11PocParseResult {
+  bool matched = false;
+  OPT opt_cmd = OPT::NO_CMD;
+};
+
+#ifdef HAVE_CLI11
+static int try_parse_cli11_poc(const std::vector<const char*>& args,
+                               Cli11PocParseResult* out)
+{
+  if (!out) {
+    return -EINVAL;
+  }
+  *out = {};
+  if (args.empty()) {
+    return 0;
+  }
+
+  std::vector<std::string> string_args;
+  string_args.reserve(args.size());
+  for (const auto* arg : args) {
+    string_args.emplace_back(arg);
+  }
+
+  std::vector<char*> cli11_argv;
+  cli11_argv.reserve(string_args.size() + 1);
+  static char program_name[] = "radosgw-admin";
+  cli11_argv.push_back(program_name);
+  for (auto& arg : string_args) {
+    cli11_argv.push_back(arg.data());
+  }
+
+  CLI::App app{"radosgw-admin CLI11 POC"};
+  app.allow_extras(false);
+  app.set_help_flag("");
+  app.require_subcommand(1);
+
+  auto* bucket = app.add_subcommand("bucket");
+  auto* buckets = app.add_subcommand("buckets");
+  auto* usage = app.add_subcommand("usage");
+  auto* object = app.add_subcommand("object");
+
+  bucket->require_subcommand(1);
+  buckets->require_subcommand(1);
+  usage->require_subcommand(1);
+  object->require_subcommand(1);
+
+  auto* bucket_list = bucket->add_subcommand("list");
+  auto* buckets_list = buckets->add_subcommand("list");
+  auto* usage_show = usage->add_subcommand("show");
+  auto* object_rm = object->add_subcommand("rm");
+
+  int cli11_argc = static_cast<int>(cli11_argv.size());
+  try {
+    app.parse(cli11_argc, cli11_argv.data());
+  } catch (const CLI::ParseError&) {
+    return 0;
+  }
+
+  if (bucket_list->parsed() || buckets_list->parsed()) {
+    out->matched = true;
+    out->opt_cmd = OPT::BUCKETS_LIST;
+  } else if (usage_show->parsed()) {
+    out->matched = true;
+    out->opt_cmd = OPT::USAGE_SHOW;
+  } else if (object_rm->parsed()) {
+    out->matched = true;
+    out->opt_cmd = OPT::OBJECT_RM;
+  }
+
+  return 0;
+}
+#endif // HAVE_CLI11
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -4558,44 +4634,59 @@ int main(int argc, const char **argv)
     exit(1);
   }
   else {
-    std::vector<string> extra_args;
-    std::vector<string> expected;
-
-    std::any _opt_cmd;
-
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
-      if (!expected.empty()) {
-        cerr << err << std::endl;
-        cerr << "Expected one of the following:" << std::endl;
-        for (auto& exp : expected) {
-          if (exp == "*" || exp == "[*]") {
-            continue;
-          }
-          cerr << "  " << exp << std::endl;
-        }
-      } else {
-        cerr << "Command not found:";
-        for (auto& arg : args) {
-          cerr << " " << arg;
-        }
-        cerr << std::endl;
-      }
-      exit(1);
+    bool cli11_poc_matched = false;
+#ifdef HAVE_CLI11
+    Cli11PocParseResult cli11_poc;
+    const int cli11_poc_ret = try_parse_cli11_poc(args, &cli11_poc);
+    if (cli11_poc_ret < 0) {
+      return -cli11_poc_ret;
     }
+    if (cli11_poc.matched) {
+      opt_cmd = cli11_poc.opt_cmd;
+      cli11_poc_matched = true;
+    }
+#endif // HAVE_CLI11
 
-    opt_cmd = std::any_cast<OPT>(_opt_cmd);
+    if (!cli11_poc_matched) {
+      std::vector<string> extra_args;
+      std::vector<string> expected;
 
-    /* some commands may have an optional extra param */
-    if (!extra_args.empty()) {
-      switch (opt_cmd) {
-        case OPT::METADATA_GET:
-        case OPT::METADATA_PUT:
-        case OPT::METADATA_RM:
-        case OPT::METADATA_LIST:
-          metadata_key = extra_args[0];
-          break;
-        default:
-          break;
+      std::any _opt_cmd;
+
+      if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+        if (!expected.empty()) {
+          cerr << err << std::endl;
+          cerr << "Expected one of the following:" << std::endl;
+          for (auto& exp : expected) {
+            if (exp == "*" || exp == "[*]") {
+              continue;
+            }
+            cerr << "  " << exp << std::endl;
+          }
+        } else {
+          cerr << "Command not found:";
+          for (auto& arg : args) {
+            cerr << " " << arg;
+          }
+          cerr << std::endl;
+        }
+        exit(1);
+      }
+
+      opt_cmd = std::any_cast<OPT>(_opt_cmd);
+
+      /* some commands may have an optional extra param */
+      if (!extra_args.empty()) {
+        switch (opt_cmd) {
+          case OPT::METADATA_GET:
+          case OPT::METADATA_PUT:
+          case OPT::METADATA_RM:
+          case OPT::METADATA_LIST:
+            metadata_key = extra_args[0];
+            break;
+          default:
+            break;
+        }
       }
     }
 
