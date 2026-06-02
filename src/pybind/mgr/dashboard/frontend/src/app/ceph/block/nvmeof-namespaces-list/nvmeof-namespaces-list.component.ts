@@ -1,6 +1,6 @@
 import { Component, Input, NgZone, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
@@ -11,16 +11,14 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
-
-const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
+import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-nvmeof-namespaces-list',
@@ -41,11 +39,6 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   namespaces$: Observable<NvmeofSubsystemNamespace[]>;
   private namespaceSubject = new BehaviorSubject<void>(undefined);
 
-  // Gateway group dropdown properties
-  gwGroups: GroupsComboboxItem[] = [];
-  gwGroupsEmpty: boolean = false;
-  gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
-
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -57,16 +50,13 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
-    private dimlessBinaryPipe: DimlessBinaryPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private nvmeofStateService: NvmeofStateService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
-    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
-      if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
-    });
-    this.setGatewayGroups();
     this.namespacesColumns = [
       {
         name: $localize`Namespace ID`,
@@ -165,76 +155,22 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       }),
       takeUntil(this.destroy$)
     );
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.fetchData());
+  }
+
+  onGroupChange(group: string | null): void {
+    this.group = group;
+    this.namespaceSubject.next();
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
-  listNamespaces() {
-    this.namespaceSubject.next();
-  }
-
   fetchData() {
     this.namespaceSubject.next();
-  }
-
-  // Gateway groups methods
-  onGroupSelection(selected: GroupsComboboxItem) {
-    selected.selected = true;
-    this.group = selected.content;
-    this.listNamespaces();
-  }
-
-  onGroupClear() {
-    this.group = null;
-    this.listNamespaces();
-  }
-
-  setGatewayGroups() {
-    this.nvmeofService
-      .listGatewayGroups()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response: CephServiceSpec[][]) => this.handleGatewayGroupsSuccess(response),
-        error: (error) => this.handleGatewayGroupsError(error)
-      });
-  }
-
-  handleGatewayGroupsSuccess(response: CephServiceSpec[][]) {
-    if (response?.[0]?.length) {
-      this.gwGroups = this.nvmeofService.formatGwGroupsList(response);
-    } else {
-      this.gwGroups = [];
-    }
-    this.updateGroupSelectionState();
-  }
-
-  updateGroupSelectionState() {
-    if (this.gwGroups.length) {
-      if (!this.group) {
-        this.onGroupSelection(this.gwGroups[0]);
-      } else {
-        this.gwGroups = this.gwGroups.map((g) => ({
-          ...g,
-          selected: g.content === this.group
-        }));
-      }
-      this.gwGroupsEmpty = false;
-      this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
-    } else {
-      this.gwGroupsEmpty = true;
-      this.gwGroupPlaceholder = $localize`No groups available`;
-    }
-  }
-
-  handleGatewayGroupsError(error: any) {
-    this.gwGroups = [];
-    this.gwGroupsEmpty = true;
-    this.gwGroupPlaceholder = $localize`Unable to fetch Gateway groups`;
-    if (error?.preventDefault) {
-      error?.preventDefault?.();
-    }
   }
 
   deleteNamespaceModal() {
@@ -250,13 +186,15 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         deletionMessage: $localize`Deleting the namespace <strong>${namespace.nsid}</strong> will permanently remove all resources, services, and configurations within it. This action cannot be undone.`
       },
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('nvmeof/namespace/delete', {
-            nqn: subsystemNqn,
-            nsid: namespace.nsid
-          }),
-          call: this.nvmeofService.deleteNamespace(subsystemNqn, namespace.nsid, this.group)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/namespace/delete', {
+              nqn: subsystemNqn,
+              nsid: namespace.nsid
+            }),
+            call: this.nvmeofService.deleteNamespace(subsystemNqn, namespace.nsid, this.group)
+          })
+          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
     });
   }
 

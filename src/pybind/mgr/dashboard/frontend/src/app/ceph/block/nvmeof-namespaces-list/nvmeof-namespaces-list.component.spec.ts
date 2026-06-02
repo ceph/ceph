@@ -1,12 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { of, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofService } from '../../../shared/api/nvmeof.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -63,6 +64,11 @@ describe('NvmeofNamespacesListComponent', () => {
   let modalService: MockModalCdsService;
 
   beforeEach(async () => {
+    const nvmeofStateServiceMock = {
+      refresh$: new Subject<void>(),
+      requestRefresh: jest.fn()
+    };
+
     await TestBed.configureTestingModule({
       declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule],
@@ -70,9 +76,10 @@ describe('NvmeofNamespacesListComponent', () => {
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
         { provide: ModalCdsService, useClass: MockModalCdsService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
+        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
       ],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofNamespacesListComponent);
@@ -98,7 +105,7 @@ describe('NvmeofNamespacesListComponent', () => {
       );
       done();
     });
-    component.listNamespaces();
+    component.fetchData();
   });
 
   it('should open delete modal with correct data', () => {
