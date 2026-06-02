@@ -40,6 +40,8 @@ CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 # ciphers are set
 ALLOWED_CIPHERS = ['aes', 'aes256k']
 PREFERRED_CIPHERS = ['aes256k']
+# cipher mons should use by default when servicing clients
+SERVICE_CIPHER = 'aes256k'
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
@@ -1503,6 +1505,13 @@ class CephadmUpgrade:
                     'prefix': 'mon set',
                     'name': 'auth_preferred_ciphers',
                     'value': ','.join(PREFERRED_CIPHERS),
+                })
+                # set the default service cipher to whatever
+                # the preference is this release
+                ret, image, err = self.mgr.check_mon_command({
+                    'prefix': 'mon set',
+                    'name': 'auth_service_cipher',
+                    'value': SERVICE_CIPHER,
                 })
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
