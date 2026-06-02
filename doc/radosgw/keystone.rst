@@ -194,7 +194,7 @@ application credential, or application credentials without an
 whitelist: every request from such a token is denied with
 ``403 Forbidden``, matching the OpenStack ``keystonemiddleware`` behavior.
 
-Access rule path patterns follow the `keystoneauth1 reference implementation`_:
+Access rule path patterns follow the `keystonemiddleware reference matcher`_:
 
 * ``*`` matches one path segment (no ``/`` characters)
 * ``**`` matches any number of path segments (including zero)
@@ -205,7 +205,7 @@ to any object inside ``mycontainer`` for any account, while ``/v1/*`` permits
 requests only to the top-level account endpoint.
 
 .. _Application Credentials: https://docs.openstack.org/keystone/latest/user/application_credentials.html
-.. _keystoneauth1 reference implementation: https://opendev.org/openstack/keystoneauth/src/branch/master/keystoneauth1/access/access.py
+.. _keystonemiddleware reference matcher: https://opendev.org/openstack/keystonemiddleware/src/branch/master/keystonemiddleware/auth_token/__init__.py
 
 Keystone Integration with the S3 API
 ------------------------------------
