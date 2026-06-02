@@ -82,6 +82,7 @@ class UpgradeState:
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
+                 has_set_cephx_ciphers: Optional[bool] = False,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -100,6 +101,7 @@ class UpgradeState:
         self.total_count = total_count
         self.remaining_count = remaining_count
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
+        self.has_set_cephx_ciphers = has_set_cephx_ciphers
 
     def to_json(self) -> dict:
         return {
@@ -119,6 +121,7 @@ class UpgradeState:
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
+            'has_set_cephx_ciphers': self.has_set_cephx_ciphers,
         }
 
     @classmethod
@@ -889,25 +892,28 @@ class CephadmUpgrade:
             mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
             _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
             if not mons_needing_upgrade:
-                # all mons have been upgraded if we get here so keyrings can be rotated
-                # start by setting the preferred and allowed cephx key ciphers
-                ret, image, err = self.mgr.check_mon_command({
-                    'prefix': 'mon set',
-                    'name': 'auth_allowed_ciphers',
-                    'value': ','.join(ALLOWED_CIPHERS),
-                })
-                ret, image, err = self.mgr.check_mon_command({
-                    'prefix': 'mon set',
-                    'name': 'auth_preferred_ciphers',
-                    'value': ','.join(PREFERRED_CIPHERS),
-                })
-                # set the default service cipher to whatever
-                # the preference is this release
-                ret, image, err = self.mgr.check_mon_command({
-                    'prefix': 'mon set',
-                    'name': 'auth_service_cipher',
-                    'value': SERVICE_CIPHER,
-                })
+                if not self.upgrade_state.has_set_cephx_ciphers:
+                    # all mons have been upgraded if we get here so keyrings can be rotated
+                    # start by setting the preferred and allowed cephx key ciphers
+                    ret, image, err = self.mgr.check_mon_command({
+                        'prefix': 'mon set',
+                        'name': 'auth_allowed_ciphers',
+                        'value': ','.join(ALLOWED_CIPHERS),
+                    })
+                    ret, image, err = self.mgr.check_mon_command({
+                        'prefix': 'mon set',
+                        'name': 'auth_preferred_ciphers',
+                        'value': ','.join(PREFERRED_CIPHERS),
+                    })
+                    # set the default service cipher to whatever
+                    # the preference is this release
+                    ret, image, err = self.mgr.check_mon_command({
+                        'prefix': 'mon set',
+                        'name': 'auth_service_cipher',
+                        'value': SERVICE_CIPHER,
+                    })
+                    self.upgrade_state.has_set_cephx_ciphers = True
+                    self._save_upgrade_state()
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
                         continue
