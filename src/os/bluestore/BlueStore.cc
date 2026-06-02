@@ -18313,21 +18313,12 @@ int BlueStore::_maybe_unshare_on_remove(
     if (b.is_shared() &&
 	sb->loaded &&
 	maybe_unshared_blobs.count(sb)) {
-      if (b.is_compressed()) {
-        b.map(0, b.get_ondisk_length(), [&](uint64_t off, uint64_t len) {
-            expect[B].get(off, len);
-            return 0;
-          });
-        // Do not account second time.
-        maybe_unshared_blobs.erase(sb);
-      } else {
-        for (const auto& e: b.get_extents()) {
-          if (e.is_valid()) {
-            expect[B].get(e.offset, e.length);
-          }
+      for (const auto& e: b.get_extents()) {
+        if (e.is_valid()) {
+          expect[B].get(e.offset, e.length);
         }
-        maybe_unshared_blobs.erase(sb);
       }
+      maybe_unshared_blobs.erase(sb);
     }
   }
 
