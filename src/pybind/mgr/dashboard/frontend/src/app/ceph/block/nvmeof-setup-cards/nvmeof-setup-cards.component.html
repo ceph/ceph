@@ -1,0 +1,103 @@
+<cd-productive-card class="nvmeof-setup-cards">
+  <ng-template #header>
+    <div cdsStack="vertical"
+         gap="3">
+      <h2 class="cds--type-heading-compact-03"
+          i18n>Recommended first-time setup</h2>
+      <p class="cds--type-body-01"
+         i18n>
+        Start your NVMe over Fabrics configuration by creating the essential resources in sequence.
+      </p>
+    </div>
+  </ng-template>
+
+  <div class="nvmeof-setup-cards__columns">
+
+    <div class="nvmeof-setup-cards__column">
+      <div class="nvmeof-setup-cards__column-content">
+        <div class="nvmeof-setup-cards__step-row">
+          <span class="cds--type-label-01"
+                i18n>1.</span>
+          <span class="cds--type-heading-compact-01"
+                i18n>Create Gateway groups</span>
+        </div>
+        <p class="cds--type-label-01"
+           i18n>
+          Group NVMe gateway nodes to enable high availability and<br>load balancing for storage targets.
+        </p>
+        <div class="nvmeof-setup-cards__info">
+          @if (hasGatewayGroups) {
+          <cd-icon type="success"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>Gateway group configured successfully.</span>
+          } @else {
+          <cd-icon type="info"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>No gateway groups configured for this cluster yet.</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="nvmeof-setup-cards__column">
+      <div class="nvmeof-setup-cards__column-content">
+        <div class="nvmeof-setup-cards__step-row">
+          <span class="cds--type-label-01"
+                i18n>2.</span>
+          <span class="cds--type-heading-compact-01"
+                i18n>Create Subsystems</span>
+        </div>
+        <p class="cds--type-label-01"
+           i18n>
+         Define storage targets by creating NVMe subsystems and <br> configuring security, listeners, and host access.
+        </p>
+        <div class="nvmeof-setup-cards__info">
+          @if (hasSubsystems) {
+          <cd-icon type="success"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>Subsystem configured successfully.</span>
+          } @else {
+          <cd-icon type="info"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>No subsystem configured for this cluster yet.</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="nvmeof-setup-cards__column">
+      <div class="nvmeof-setup-cards__column-content">
+        <div class="nvmeof-setup-cards__step-row">
+          <span class="cds--type-label-01"
+                i18n>3.</span>
+          <span class="cds--type-heading-compact-01"
+                i18n>Create Namespaces</span>
+        </div>
+        <p class="cds--type-label-01"
+           i18n>
+          Create storage namespaces backed by Ceph block images. This <br>completes your NVMe over Fabrics setup.
+        </p>
+        <div class="nvmeof-setup-cards__info">
+          @if (hasNamespaces) {
+          <cd-icon type="success"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>Namespaces mapped successfully.</span>
+          } @else {
+          <cd-icon type="info"></cd-icon>
+          <span class="cds--type-label-01"
+                i18n>No namespace allocated or mapped yet.</span>
+          }
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  @if (isAllConfigured) {
+  <div class="nvmeof-setup-cards__completion">
+    <a cdsLink
+       (click)="viewStatus.emit()"
+       i18n>Configuration complete. View status →</a>
+  </div>
+  }
+</cd-productive-card>
