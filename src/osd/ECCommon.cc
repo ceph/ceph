@@ -536,7 +536,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     handle_sub_read_n_reply(
       get_parent()->whoami_shard(),
       *local_read_op,
-      rop.trace);
+      rop.otel_trace);
   }
 #endif
   dout(10) << __func__ << ": started " << rop << dendl;

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "acconfig.h"
+#include "include/common_fwd.h"
 #include "include/encoding.h"
 
 #ifdef HAVE_JAEGER
@@ -25,9 +25,12 @@ const inline jspan_context noop_span_ctx{false, false};
 
 class Tracer {
  private:
-  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
   CephContext* cct = nullptr;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
+  
+  // Static flag to track if a real (non-noop) tracer provider has been initialized
+  // This allows daemons to initialize tracing while preventing libraries from overwriting it
+  inline static bool provider_initialized = false;
 
  public:
 
@@ -53,7 +56,20 @@ class Tracer {
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
   // A No-op span that can be safely passed to anything expecting a span
-  const static jspan_ptr noop_span;
+  inline static const jspan_ptr noop_span = [] {
+  auto provider = opentelemetry::trace::Provider::GetTracerProvider();
+  auto tracer = provider->GetTracer("no-op", "");
+  auto span = tracer->StartSpan("noop");
+  
+  // Ensure we never return a null pointer
+  if (!span || !span.get()) {
+    // Create a minimal valid no-op span if the provider fails
+    // This should never happen with a proper OpenTelemetry setup
+    ceph_abort("OpenTelemetry noop_span initialization failed - returned null pointer");
+  }
+  
+  return span;
+  }();
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "include/common_fwd.h"
 #include "common/ceph_context.h"
 #include "tracer.h"
 #include "common/debug.h"
@@ -16,9 +17,6 @@
 
 namespace tracing {
 
-const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
-const jspan_ptr Tracer::noop_span = noop_tracer->StartSpan("noop");
-
 using bufferlist = ceph::buffer::list;
 
 Tracer::Tracer(CephContext* _cct,
@@ -30,20 +28,33 @@ void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_n
   ceph_assert(_cct);
   cct = _cct;
   if (!tracer) {
-    opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
-    exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
-    ldout(cct, 3) << "tracer was not loaded, initializing tracing for service: " << service_name
-                  << " on port: " << exporter_options.server_port << dendl;
-    const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
-    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
-    auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
-    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
-    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
-    opentelemetry::trace::Provider::SetTracerProvider(provider);
-    tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+    // Only set up a new provider if one hasn't been initialized yet
+    // This allows daemons (OSD, RGW, etc.) to initialize tracing while preventing
+    // libraries (neorados, librbd when used as a library) from overwriting it
+    if (!provider_initialized) {
+      // No real provider set yet - we can initialize one (daemon use case)
+      opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
+      exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
+      ldout(cct, 3) << "tracer was not loaded, initializing tracing for service: " << service_name
+                    << " on port: " << exporter_options.server_port << dendl;
+      const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
+      const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+      auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
+      auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
+      const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+      opentelemetry::trace::Provider::SetTracerProvider(provider);
+      tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+      provider_initialized = true;
+    } else {
+      // A real provider is already set - use it (library use case)
+      ldout(cct, 3) << "Using existing tracer provider for service: " << service_name << dendl;
+      auto existing_provider = opentelemetry::trace::Provider::GetTracerProvider();
+      tracer = existing_provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+    }
   }
 }
 
+#ifndef WITH_CRIMSON
 jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   ceph_assert(cct);
   if (is_enabled()) {
@@ -62,7 +73,7 @@ jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool
     ldout(cct, 20) << "start trace for " << trace_name << " " << dendl;
     return tracer->StartSpan(trace_name);
   }
-  return noop_tracer->StartSpan(trace_name);
+  return noop_span;
 }
 
 // WARNING: When working with Messages, do NOT use Message::trace as parent_span!
@@ -92,8 +103,12 @@ jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const js
 }
 
 bool Tracer::is_enabled() const {
+  if (!cct) [[unlikely]] {
+    return false;
+  }
   return cct->_conf->jaeger_tracing_enable;
 }
+#endif // WITH_CRIMSON
 
 } // namespace tracing
 
