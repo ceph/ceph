@@ -5924,7 +5924,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
         r = -EIO; // try repair later
       }
     }
-    if (r == -EIO) {
+    if (r == -EIO && is_primary()) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r >= 0)
@@ -6003,7 +6003,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
     bufferlist data_bl;
     r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
-    if (r == -EIO) {
+    if (r == -EIO && is_primary()) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
@@ -6022,7 +6022,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
           << " full-object read crc 0x" << crc
           << " != expected 0x" << oi.data_digest
           << std::dec << " on " << soid;
-        r = rep_repair_primary_object(soid, ctx);
+        r = -EIO;
+        if (is_primary()) {
+          r = rep_repair_primary_object(soid, ctx);
+        }
 	if (r < 0) {
 	  return r;
 	}
