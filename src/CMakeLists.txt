@@ -397,7 +397,7 @@ if(WITH_JAEGER)
   build_opentelemetry()
   add_library(jaeger_base INTERFACE)
   add_dependencies(jaeger_base opentelemetry-cpp)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry)
+  target_link_libraries(jaeger_base INTERFACE libopentelemetry)
 endif()
 
 set(mds_files)
@@ -581,13 +581,24 @@ target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 
 if(WITH_JAEGER)
-  add_dependencies(common-objs opentelemetry-cpp jaeger_base)
+  add_dependencies(common-objs jaeger_base)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
+
+# tracer.h is a public src/ header (included by Message.h and others) that
+# unconditionally includes opentelemetry headers.  Attach the otel include
+# dirs to legacy-option-headers — linked by every target in the tree — so
+# any TU that transitively pulls in tracer.h can find those headers without
+# each individual target needing to know about jaeger_base.
+if(WITH_JAEGER)
+  target_include_directories(legacy-option-headers SYSTEM INTERFACE
+    $<TARGET_PROPERTY:libopentelemetry,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
 add_subdirectory(crush)
 add_subdirectory(msg)
 add_subdirectory(arch)
@@ -1020,47 +1031,64 @@ option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" 
 
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
-  # Prefer config mode so gRPC sees protobuf's full target set
-  # (incl. upb); fall back to module mode.
-  find_package(Protobuf CONFIG)
-  if(NOT Protobuf_FOUND)
-    find_package(Protobuf REQUIRED)
-  endif()
-
-  set(_REFLECTION grpc++_reflection)
-  if(CMAKE_CROSSCOMPILING)
-    find_program(_PROTOBUF_PROTOC protoc
-      REQUIRED)
-  else()
-    set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
-  endif()
-
-  # Find gRPC - try cmake config first (gRPC >= 1.50 and RHEL/Rocky packages),
-  # fall back to pkg-config for distros without cmake config files (e.g. Ubuntu 22.04).
-  find_package(gRPC CONFIG QUIET)
-  if(gRPC_FOUND)
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
+  if(_otel_bundled_grpc)
+    # OpenTelemetry was built with its own bundled gRPC and protobuf
+    # (set by build_opentelemetry() when no system gRPC was found).
+    # Re-use those targets directly to avoid linking two incompatible versions
+    # of protobuf/gRPC into the same executable.
+    message(STATUS "nvmeof: using bundled gRPC/protobuf from OpenTelemetry build")
     set(_GRPC_GRPCPP gRPC::grpc++)
+    set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
     if(CMAKE_CROSSCOMPILING)
       find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
     else()
       set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
     endif()
-    # Modern gRPC links system absl; HAVE_ABSEIL makes opentelemetry-cpp do the
-    # same so their two absl inline namespaces don't collide in shared TUs.
-    set(_HAVE_ABSEIL ON)
-  else()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GRPCPP REQUIRED IMPORTED_TARGET grpc++)
-    message(STATUS "Using gRPC ${GRPCPP_VERSION} (via pkg-config)")
-    set(_GRPC_GRPCPP PkgConfig::GRPCPP)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
-    # Older gRPC (e.g. Jammy's 1.30.2) uses bundled absl; libabsl-dev not required.
+    # Bundled gRPC always uses absl.
     set(_HAVE_ABSEIL OFF)
-    # grpc++.pc omits protobuf from Requires; add it so PkgConfig::GRPCPP
-    # carries the same transitive dependency as the cmake-config gRPC::grpc++.
-    target_link_libraries(PkgConfig::GRPCPP INTERFACE protobuf::libprotobuf)
+  else()
+    # Prefer config mode so gRPC sees protobuf's full target set
+    # (incl. upb); fall back to module mode.
+    find_package(Protobuf CONFIG)
+    if(NOT Protobuf_FOUND)
+      find_package(Protobuf REQUIRED)
+    endif()
+
+    if(CMAKE_CROSSCOMPILING)
+      find_program(_PROTOBUF_PROTOC protoc REQUIRED)
+    else()
+      set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+    endif()
+
+    # Find gRPC - try cmake config first (gRPC >= 1.50 and RHEL/Rocky packages),
+    # fall back to pkg-config for distros without cmake config files (e.g. Ubuntu 22.04).
+    find_package(gRPC CONFIG QUIET)
+    if(gRPC_FOUND)
+      message(STATUS "nvmeof: using system gRPC ${gRPC_VERSION}")
+      set(_GRPC_GRPCPP gRPC::grpc++)
+      if(CMAKE_CROSSCOMPILING)
+        find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+      else()
+        set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+      endif()
+      # Modern gRPC links system absl; HAVE_ABSEIL makes opentelemetry-cpp do the
+      # same so their two absl inline namespaces don't collide in shared TUs.
+      set(_HAVE_ABSEIL ON)
+    else()
+      find_package(PkgConfig REQUIRED)
+      pkg_check_modules(GRPCPP REQUIRED IMPORTED_TARGET grpc++)
+      message(STATUS "nvmeof: using system gRPC ${GRPCPP_VERSION} (via pkg-config)")
+      set(_GRPC_GRPCPP PkgConfig::GRPCPP)
+      find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+      # Older gRPC (e.g. Jammy's 1.30.2) uses bundled absl; libabsl-dev not required.
+      set(_HAVE_ABSEIL OFF)
+      # grpc++.pc omits protobuf from Requires; add it so PkgConfig::GRPCPP
+      # carries the same transitive dependency as the cmake-config gRPC::grpc++.
+      target_link_libraries(PkgConfig::GRPCPP INTERFACE protobuf::libprotobuf)
+    endif()
   endif()
+
+  set(_REFLECTION grpc++_reflection)
 
   # Gateway Proto file
   get_filename_component(nvmeof_gateway_proto "nvmeof/gateway/control/proto/gateway.proto" ABSOLUTE)
