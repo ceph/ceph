@@ -195,12 +195,14 @@ def task(ctx, config):
                     erasure_code_profile_name=profile_name,
                     erasure_code_crush_rule_name=crush_name,
                     erasure_code_use_overwrites=config.get('erasure_code_use_overwrites', False),
+                    num_zones=config.get('num_zones',None),
                 )
             else:
                 pool = manager.create_pool_with_unique_name(
                     erasure_code_profile_name=profile_name,
                     erasure_code_crush_rule_name=crush_name,
                     erasure_code_use_overwrites=config.get('erasure_code_use_overwrites', False),
+                    num_zones=config.get('num_zones',None),
                 )
             
             # Apply additional pool settings
