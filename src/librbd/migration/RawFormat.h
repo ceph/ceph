@@ -47,11 +47,11 @@ public:
   void read(io::AioCompletion* aio_comp, uint64_t snap_id,
             io::Extents&& image_extents, io::ReadResult&& read_result,
             int op_flags, int read_flags,
-            const ZTracer::Trace &parent_trace) override;
+            const jspan_context &parent_trace) override;
 
   void list_snaps(io::Extents&& image_extents, io::SnapIds&& snap_ids,
                   int list_snaps_flags, io::SnapshotDelta* snapshot_delta,
-                  const ZTracer::Trace &parent_trace,
+                  const jspan_context &parent_trace,
                   Context* on_finish) override;
 
 private:

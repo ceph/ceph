@@ -20,7 +20,7 @@
 #include "common/event_socket.h"
 #include "common/Readahead.h"
 #include "common/snap_types.h"
-#include "common/zipkin_trace.h"
+#include "common/tracer.h"
 
 #include "include/common_fwd.h"
 #include "include/buffer_fwd.h"
@@ -87,6 +87,7 @@ namespace librbd {
     static const std::string METADATA_CONF_PREFIX;
 
     CephContext *cct;
+    tracing::Tracer tracer;
     ConfigProxy config;
     std::set<std::string> config_overrides;
 
@@ -225,7 +226,7 @@ namespace librbd {
     uint32_t alloc_hint_flags = 0U;
     uint32_t read_flags = 0U;  // librados::OPERATION_*
     uint32_t discard_granularity_bytes = 0;
-    bool blkin_trace_all;
+    bool otel_trace_all;
     uint64_t mirroring_replay_delay;
     uint64_t mtime_update_interval;
     uint64_t atime_update_interval;
@@ -234,8 +235,6 @@ namespace librbd {
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;
     journal::Policy *journal_policy = nullptr;
-
-    ZTracer::Endpoint trace_endpoint;
 
     std::unique_ptr<crypto::EncryptionFormat<ImageCtx>> encryption_format;
 

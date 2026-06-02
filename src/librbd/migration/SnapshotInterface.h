@@ -34,11 +34,11 @@ struct SnapshotInterface {
 
   virtual void read(io::AioCompletion* aio_comp, io::Extents&& image_extents,
                     io::ReadResult&& read_result, int op_flags, int read_flags,
-                    const ZTracer::Trace &parent_trace) = 0;
+                    const jspan_context &parent_trace) = 0;
 
   virtual void list_snap(io::Extents&& image_extents, int list_snaps_flags,
                          io::SparseExtents* sparse_extents,
-                         const ZTracer::Trace &parent_trace,
+                         const jspan_context &parent_trace,
                          Context* on_finish) = 0;
 };
 

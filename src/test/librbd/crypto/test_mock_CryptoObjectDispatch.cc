@@ -41,7 +41,7 @@ struct CopyupRequest<librbd::MockImageCtx> {
     static CopyupRequest* s_instance;
     static CopyupRequest* create(librbd::MockImageCtx* ictx, uint64_t objectno,
                                  Extents&& image_extents, ImageArea area,
-                                 const ZTracer::Trace& parent_trace) {
+                                 const jspan_context& parent_trace) {
       return s_instance;
     }
 
@@ -66,7 +66,7 @@ struct Mock {
 
     MOCK_METHOD6(read_parent,
             void(MockImageCtx*, uint64_t, io::ReadExtents*,
-                 librados::snap_t, const ZTracer::Trace &, Context*));
+                 librados::snap_t, const jspan_context &, Context*));
 };
 
 Mock *Mock::s_instance = nullptr;
@@ -76,7 +76,7 @@ Mock *Mock::s_instance = nullptr;
 template <> void read_parent(
         MockImageCtx *image_ctx, uint64_t object_no,
         io::ReadExtents* extents, librados::snap_t snap_id,
-        const ZTracer::Trace &trace, Context* on_finish) {
+        const jspan_context &trace, Context* on_finish) {
 
   Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id, trace,
                                 on_finish);
@@ -262,7 +262,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, Flush) {
   ASSERT_FALSE(mock_crypto_object_dispatch->flush(
-          io::FLUSH_SOURCE_USER, {}, nullptr, nullptr, &on_finish, nullptr));
+		 io::FLUSH_SOURCE_USER, {false, false}, nullptr, nullptr, &on_finish, nullptr));
   ASSERT_EQ(on_finish, &finished_cond); // not modified
   on_finish->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
@@ -271,7 +271,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Flush) {
 TEST_F(TestMockCryptoCryptoObjectDispatch, Discard) {
   expect_object_write_same();
   ASSERT_TRUE(mock_crypto_object_dispatch->discard(
-          11, 0, 4096, mock_image_ctx->get_data_io_context(), 0, {},
+          11, 0, 4096, mock_image_ctx->get_data_io_context(), 0, {false, false},
           &object_dispatch_flags, nullptr, &dispatch_result, &on_finish,
           on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -285,7 +285,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, AlignedReadFail) {
   io::ReadExtents extents = {{0, 4096}};
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-      11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+      11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {false, false},
       nullptr, &object_dispatch_flags, &dispatch_result,
       &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -304,7 +304,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, AlignedRead) {
   extents[1].bl.append(std::string(4096, '0'));
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {false, false},
           nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -330,7 +330,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFromParent) {
   expect_object_read(&extents);
   expect_read_parent(mock_utils, 11, &extents, CEPH_NOSNAP, 8192);
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {false, false},
           nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -347,7 +347,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFromParentDisabled) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
           11, &extents, mock_image_ctx->get_data_io_context(), 0,
-          io::READ_FLAG_DISABLE_READ_FROM_PARENT, {},
+          io::READ_FLAG_DISABLE_READ_FROM_PARENT, {false, false},
           nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -375,7 +375,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedRead) {
 
   expect_object_read(&aligned_extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          11, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {false, false},
           nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -400,7 +400,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, AlignedWrite) {
   expect_encrypt();
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
         11, 0, std::move(data), mock_image_ctx->get_data_io_context(), 0, 0,
-        std::nullopt, {}, nullptr, nullptr, &dispatch_result, &on_finish,
+        std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result, &on_finish,
         on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_CONTINUE);
   ASSERT_EQ(on_finish, &finished_cond); // not modified
@@ -418,7 +418,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWrite) {
   expect_object_read(&extents, version);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -439,7 +439,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithNoObject) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -463,7 +463,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailCreate) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -505,7 +505,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteCopyup) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -549,7 +549,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteEmptyCopyup) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -590,7 +590,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailVersionCheck) {
   expect_object_read(&extents, version);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::nullopt, {}, nullptr, nullptr, &dispatch_result,
+          0, 0, std::nullopt, {false, false}, nullptr, nullptr, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -626,7 +626,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithAssertVersion) {
   expect_object_read(&extents, version);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, 0, std::make_optional(assert_version), {}, nullptr, nullptr,
+          0, 0, std::make_optional(assert_version), {false, false}, nullptr, nullptr,
           &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -644,7 +644,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithExclusiveCreate) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           11, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE, std::nullopt, {}, nullptr,
+          0, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE, std::nullopt, {false, false}, nullptr,
           nullptr, &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -667,7 +667,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, CompareAndWrite) {
 
   ASSERT_TRUE(mock_crypto_object_dispatch->compare_and_write(
           11, 1, std::move(cmp_data), std::move(write_data),
-          mock_image_ctx->get_data_io_context(), 0, {}, nullptr, nullptr,
+          mock_image_ctx->get_data_io_context(), 0, {false, false}, nullptr, nullptr,
           nullptr, &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -696,7 +696,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, CompareAndWriteFail) {
   uint64_t mismatch_offset;
   ASSERT_TRUE(mock_crypto_object_dispatch->compare_and_write(
           11, 1, std::move(cmp_data), std::move(write_data),
-          mock_image_ctx->get_data_io_context(), 0, {}, &mismatch_offset,
+          mock_image_ctx->get_data_io_context(), 0, {false, false}, &mismatch_offset,
           nullptr, nullptr, &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
@@ -713,7 +713,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, WriteSame) {
   expect_object_write(0, std::string("12121") , 0, std::nullopt);
   ASSERT_TRUE(mock_crypto_object_dispatch->write_same(
           11, 0, 5, {{0, 5}}, std::move(write_data),
-          mock_image_ctx->get_data_io_context(), 0, {}, nullptr, nullptr,
+          mock_image_ctx->get_data_io_context(), 0, {false, false}, nullptr, nullptr,
           &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
 

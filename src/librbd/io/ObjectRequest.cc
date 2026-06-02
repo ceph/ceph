@@ -38,7 +38,6 @@ namespace io {
 
 using librbd::util::data_object_name;
 using librbd::util::create_context_callback;
-using librbd::util::create_trace;
 
 namespace {
 
@@ -74,7 +73,7 @@ ObjectRequest<I>::create_write(
     I *ictx, uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
     IOContext io_context, int op_flags, int write_flags,
     std::optional<uint64_t> assert_version,
-    const ZTracer::Trace &parent_trace, Context *completion) {
+    const jspan_context &parent_trace, Context *completion) {
   return new ObjectWriteRequest<I>(ictx, object_no, object_off,
                                    std::move(data), io_context, op_flags,
                                    write_flags, assert_version,
@@ -86,7 +85,7 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_discard(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t object_len,
     IOContext io_context, int discard_flags,
-    const ZTracer::Trace &parent_trace, Context *completion) {
+    const jspan_context &parent_trace, Context *completion) {
   return new ObjectDiscardRequest<I>(ictx, object_no, object_off,
                                      object_len, io_context, discard_flags,
                                      parent_trace, completion);
@@ -97,7 +96,7 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_write_same(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t object_len,
     ceph::bufferlist&& data, IOContext io_context, int op_flags,
-    const ZTracer::Trace &parent_trace, Context *completion) {
+    const jspan_context &parent_trace, Context *completion) {
   return new ObjectWriteSameRequest<I>(ictx, object_no, object_off,
                                        object_len, std::move(data), io_context,
                                        op_flags, parent_trace, completion);
@@ -109,7 +108,7 @@ ObjectRequest<I>::create_compare_and_write(
     I *ictx, uint64_t object_no, uint64_t object_off,
     ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
     IOContext io_context, uint64_t *mismatch_offset, int op_flags,
-    const ZTracer::Trace &parent_trace, Context *completion) {
+    const jspan_context &parent_trace, Context *completion) {
   return new ObjectCompareAndWriteRequest<I>(ictx, object_no, object_off,
                                              std::move(cmp_data),
                                              std::move(write_data), io_context,
@@ -120,16 +119,13 @@ ObjectRequest<I>::create_compare_and_write(
 template <typename I>
 ObjectRequest<I>::ObjectRequest(
     I *ictx, uint64_t objectno, IOContext io_context,
-    const char *trace_name, const ZTracer::Trace &trace, Context *completion)
+    const char *trace_name, const jspan_context &parent_trace, Context *completion)
   : m_ictx(ictx), m_object_no(objectno), m_io_context(io_context),
-    m_completion(completion),
-    m_trace(create_trace(*ictx, "", trace)) {
+    m_completion(completion) {
   ceph_assert(m_ictx->data_ctx.is_valid());
-  if (m_trace.valid()) {
-    m_trace.copy_name(trace_name + std::string(" ") +
-                      data_object_name(ictx, objectno));
-    m_trace.event("start");
-  }
+  auto name = fmt::format("{} {}", trace_name, data_object_name(ictx, objectno));
+  m_trace = ictx->tracer.add_span(name.c_str(), parent_trace);
+  m_trace->AddEvent("start");
 }
 
 template <typename I>
@@ -203,7 +199,7 @@ template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(
     I *ictx, uint64_t objectno, ReadExtents* extents,
     IOContext io_context, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace, uint64_t* version,
+    const jspan_context &parent_trace, uint64_t* version,
     Context *completion)
   : ObjectRequest<I>(ictx, objectno, io_context, "read", parent_trace,
                      completion),
@@ -252,7 +248,7 @@ void ObjectReadRequest<I>::read_object() {
     *this->m_io_context, std::move(read_op), nullptr,
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_read_object(r); }), m_version,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    this->m_trace->GetContext());
 }
 
 template <typename I>
@@ -291,7 +287,7 @@ void ObjectReadRequest<I>::read_parent() {
 
   io::util::read_parent<I>(
     image_ctx, this->m_object_no, this->m_extents,
-    this->m_io_context->get_read_snap(), this->m_trace,
+    this->m_io_context->get_read_snap(), this->m_trace->GetContext(),
     ctx);
 }
 
@@ -342,7 +338,7 @@ void ObjectReadRequest<I>::copyup() {
     // create and kick off a CopyupRequest
     auto new_req = CopyupRequest<I>::create(
         image_ctx, this->m_object_no, std::move(parent_extents), area,
-        this->m_trace);
+        this->m_trace->GetContext());
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
     image_ctx->copyup_list_lock.unlock();
@@ -363,7 +359,7 @@ template <typename I>
 AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t len,
     IOContext io_context, const char *trace_name,
-    const ZTracer::Trace &parent_trace, Context *completion)
+    const jspan_context &parent_trace, Context *completion)
   : ObjectRequest<I>(ictx, object_no, io_context, trace_name, parent_trace,
                      completion),
     m_object_off(object_off), m_object_len(len)
@@ -461,7 +457,7 @@ void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update>(
-          CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, false,
+          CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace->GetContext(), false,
           this)) {
     image_ctx->image_lock.unlock_shared();
     return;
@@ -515,7 +511,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
     *this->m_io_context, std::move(write_op),
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_write_object(r); }), nullptr,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    this->m_trace->GetContext());
 }
 
 template <typename I>
@@ -569,7 +565,7 @@ void AbstractObjectWriteRequest<I>::copyup() {
   if (it == image_ctx->copyup_list.end()) {
     auto new_req = CopyupRequest<I>::create(
         image_ctx, this->m_object_no, std::move(this->m_parent_extents),
-        m_image_area, this->m_trace);
+        m_image_area, this->m_trace->GetContext());
     this->m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
@@ -627,7 +623,7 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_post_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
-          this->m_trace, false, this)) {
+          this->m_trace->GetContext(), false, this)) {
     image_ctx->image_lock.unlock_shared();
     return;
   }
@@ -733,7 +729,7 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
 template <typename I>
 ObjectListSnapsRequest<I>::ObjectListSnapsRequest(
     I *ictx, uint64_t objectno, Extents&& object_extents, SnapIds&& snap_ids,
-    int list_snaps_flags, const ZTracer::Trace &parent_trace,
+    int list_snaps_flags, const jspan_context &parent_trace,
     SnapshotDelta* snapshot_delta, Context *completion)
   : ObjectRequest<I>(
       ictx, objectno, ictx->duplicate_data_io_context(), "snap_list",
@@ -771,7 +767,7 @@ void ObjectListSnapsRequest<I>::list_snaps() {
     *this->m_io_context, std::move(read_op), nullptr,
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_list_snaps(r); }), nullptr,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    this->m_trace->GetContext());
 }
 
 template <typename I>
@@ -993,7 +989,7 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
   ImageListSnapsRequest<I> req(
     *image_ctx->parent, aio_comp, std::move(parent_extents), m_image_area,
     {0, image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
-    this->m_trace);
+    this->m_trace->GetContext());
   req.send();
 }
 

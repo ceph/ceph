@@ -75,7 +75,7 @@ void LoadRequest<I>::flush() {
     ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-    io::FLUSH_SOURCE_INTERNAL, {});
+    io::FLUSH_SOURCE_INTERNAL, {false, false});
   req->send();
 }
 

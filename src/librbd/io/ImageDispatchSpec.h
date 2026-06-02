@@ -119,7 +119,7 @@ public:
   Request request;
   IOContext io_context;
   int op_flags;
-  ZTracer::Trace parent_trace;
+  jspan_context parent_trace;
   uint64_t tid = 0;
 
   template <typename ImageCtxT = ImageCtx>
@@ -127,7 +127,7 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       ReadResult &&read_result, IOContext io_context, int op_flags,
-      int read_flags, const ZTracer::Trace &parent_trace) {
+      int read_flags, const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -139,7 +139,7 @@ public:
   static ImageDispatchSpec* create_discard(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
-      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
+      uint32_t discard_granularity_bytes, const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -151,7 +151,7 @@ public:
   static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+      bufferlist &&bl, int op_flags, const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -163,7 +163,7 @@ public:
   static ImageDispatchSpec* create_write_same(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+      bufferlist &&bl, int op_flags, const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -176,7 +176,7 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-      int op_flags, const ZTracer::Trace &parent_trace) {
+      int op_flags, const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -190,7 +190,7 @@ public:
   static ImageDispatchSpec* create_flush(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, FlushSource flush_source,
-      const ZTracer::Trace &parent_trace) {
+      const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp, {},
                                  ImageArea::DATA /* dummy for {} */,
@@ -202,7 +202,7 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       SnapIds&& snap_ids, int list_snaps_flags, SnapshotDelta* snapshot_delta,
-      const ZTracer::Trace &parent_trace) {
+      const jspan_context &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), area,
@@ -227,7 +227,7 @@ private:
                     ImageDispatchLayer image_dispatch_layer,
                     AioCompletion* aio_comp, Extents&& image_extents,
                     ImageArea area, Request&& request, IOContext io_context,
-                    int op_flags, const ZTracer::Trace& parent_trace)
+                    int op_flags, const jspan_context& parent_trace)
     : dispatcher_ctx(this), image_dispatcher(image_dispatcher),
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),

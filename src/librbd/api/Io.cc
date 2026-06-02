@@ -216,11 +216,8 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
                      bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: read", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: read", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_READ);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
@@ -238,7 +235,7 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   auto req = io::ImageDispatchSpec::create_read(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
       {{off, len}}, io::ImageArea::DATA, std::move(read_result),
-      image_ctx.get_data_io_context(), op_flags, 0, trace);
+      image_ctx.get_data_io_context(), op_flags, 0, trace->GetContext());
   req->send();
 }
 
@@ -248,11 +245,8 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
                       bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: write", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: wite", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_WRITE);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
@@ -269,7 +263,7 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec::create_write(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-      {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace);
+      {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace->GetContext());
   req->send();
 }
 
@@ -279,11 +273,8 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
                         bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: discard", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: discard", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_DISCARD);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
@@ -300,7 +291,7 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec::create_discard(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes, trace);
+      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes, trace->GetContext());
   req->send();
 }
 
@@ -310,11 +301,8 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
                            int op_flags, bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: writesame", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: writesame", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_WRITESAME);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
@@ -332,7 +320,7 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec::create_write_same(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-      {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace);
+      {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace->GetContext());
   req->send();
 }
 
@@ -342,11 +330,8 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
                              int op_flags, bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: write_zeroes", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: write_zeroes", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   auto io_type = io::AIO_TYPE_DISCARD;
   if ((zero_flags & RBD_WRITE_ZEROES_FLAG_THICK_PROVISION) != 0) {
@@ -405,7 +390,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       aio_comp->aio_type = io::AIO_TYPE_WRITE;
       auto req = io::ImageDispatchSpec::create_write(
           image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace);
+          {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace->GetContext());
       req->send();
       return;
     } else if (prepend_length == 0 && append_length == 0) {
@@ -415,7 +400,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
 
       auto req = io::ImageDispatchSpec::create_write_same(
           image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace);
+          {{off, len}}, io::ImageArea::DATA, std::move(bl), op_flags, trace->GetContext());
       req->send();
       return;
     }
@@ -444,7 +429,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       auto prepend_req = io::ImageDispatchSpec::create_write(
           image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, prepend_aio_comp,
           {{prepend_offset, prepend_length}}, io::ImageArea::DATA,
-          std::move(bl), op_flags, trace);
+          std::move(bl), op_flags, trace->GetContext());
       prepend_req->send();
     }
 
@@ -458,7 +443,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       auto append_req = io::ImageDispatchSpec::create_write(
           image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, append_aio_comp,
           {{append_offset, append_length}}, io::ImageArea::DATA,
-          std::move(bl), op_flags, trace);
+          std::move(bl), op_flags, trace->GetContext());
       append_req->send();
     }
 
@@ -471,7 +456,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
     auto req = io::ImageDispatchSpec::create_write_same(
         image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, write_same_aio_comp,
         {{write_same_offset, write_same_length}}, io::ImageArea::DATA,
-        std::move(bl), op_flags, trace);
+        std::move(bl), op_flags, trace->GetContext());
     req->send();
     return;
   }
@@ -481,7 +466,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec::create_discard(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes, trace);
+      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes, trace->GetContext());
   req->send();
 }
 
@@ -493,11 +478,8 @@ void Io<I>::aio_compare_and_write(I &image_ctx, io::AioCompletion *aio_comp,
                                   int op_flags, bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: compare_and_write", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: compare_and_write", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx),
                       io::AIO_TYPE_COMPARE_AND_WRITE);
@@ -516,7 +498,7 @@ void Io<I>::aio_compare_and_write(I &image_ctx, io::AioCompletion *aio_comp,
   auto req = io::ImageDispatchSpec::create_compare_and_write(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
       {{off, len}}, io::ImageArea::DATA, std::move(cmp_bl), std::move(bl),
-      mismatch_off, op_flags, trace);
+      mismatch_off, op_flags, trace->GetContext());
   req->send();
 }
 
@@ -525,11 +507,8 @@ void Io<I>::aio_flush(I &image_ctx, io::AioCompletion *aio_comp,
                       bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  ZTracer::Trace trace;
-  if (image_ctx.blkin_trace_all) {
-    trace.init("io: flush", &image_ctx.trace_endpoint);
-    trace.event("init");
-  }
+  auto trace = image_ctx.tracer.start_trace("io: flush", image_ctx.otel_trace_all);
+  trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
@@ -545,7 +524,7 @@ void Io<I>::aio_flush(I &image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec::create_flush(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-    io::FLUSH_SOURCE_USER, trace);
+    io::FLUSH_SOURCE_USER, trace->GetContext());
   req->send();
 }
 
