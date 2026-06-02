@@ -245,7 +245,7 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
                       bool native_async) {
   auto cct = image_ctx.cct;
   FUNCTRACE(cct);
-  auto trace = image_ctx.tracer.start_trace("io: wite", image_ctx.otel_trace_all);
+  auto trace = image_ctx.tracer.start_trace("io: write", image_ctx.otel_trace_all);
   trace->AddEvent("init");
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_WRITE);
