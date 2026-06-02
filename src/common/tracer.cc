@@ -30,9 +30,10 @@ void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_n
   ceph_assert(_cct);
   cct = _cct;
   if (!tracer) {
-    ldout(cct, 3) << "tracer was not loaded, initializing tracing" << dendl;
     opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
     exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
+    ldout(cct, 3) << "tracer was not loaded, initializing tracing for service: " << service_name
+                  << " on port: " << exporter_options.server_port << dendl;
     const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
     const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
     auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));

@@ -35,7 +35,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -226,7 +226,7 @@ public:
           encode(redirect, payload);
         }
       }
-      encode_trace(payload, features);
+      encode_otel_trace(payload, features);
     }
   }
   void decode_payload() override {
@@ -259,7 +259,7 @@ public:
       decode(do_redirect, p);
       if (do_redirect)
 	decode(redirect, p);
-      decode_trace(p);
+      decode_otel_trace(p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);
@@ -320,7 +320,7 @@ public:
 	  decode(redirect, p);
         }
       }
-      if (header.version >= 8) {
+      if (header.version == 8) {
         decode_trace(p);
       }
     }
