@@ -34,6 +34,10 @@ CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 # ciphers are set
 ALLOWED_CIPHERS = ['aes', 'aes256k']
 PREFERRED_CIPHERS = ['aes256k']
+# PREFERRED_CIPHERS may be multiple different ciphers, but when
+# we rotate keys we need to arbitrarily pick one to use just
+# to make sure the rotated key is on one from that list
+PREFERRED_CIPHER = PREFERRED_CIPHERS[0]
 # cipher mons should use by default when servicing clients
 SERVICE_CIPHER = 'aes256k'
 
