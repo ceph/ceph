@@ -127,6 +127,13 @@ options:
   default: 15_min
   services:
   - mon
+- name: mon_nvmeofgw_failback_delay
+  type: secs
+  level: advanced
+  desc: Period in seconds to delay HA failback of the gateway
+  default: 0
+  services:
+  - mon
 - name: mon_nvmeofgw_wrong_map_ignore_sec
   type: uint
   level: advanced

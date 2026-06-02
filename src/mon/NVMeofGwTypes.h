@@ -180,6 +180,8 @@ struct NvmeGwMonState {
              std::chrono::system_clock::now();
   std::chrono::system_clock::time_point last_gw_down_ts =
              std::chrono::system_clock::now() - std::chrono::seconds(30);
+  std::chrono::system_clock::time_point delay_failbacks_ts =
+             std::chrono::system_clock::now();
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
