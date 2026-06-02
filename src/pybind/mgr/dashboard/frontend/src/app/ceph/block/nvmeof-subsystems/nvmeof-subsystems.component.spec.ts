@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -10,7 +12,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
-import { ComboBoxModule, GridModule } from 'carbon-components-angular';
+import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 const mockSubsystems = [
@@ -93,13 +95,19 @@ describe('NvmeofSubsystemsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule, ComboBoxModule, GridModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        NvmeofGatewayGroupFilterComponent
+      ],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
         { provide: ModalCdsService, useClass: MockModalService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
-      ]
+      ],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofSubsystemsComponent);
@@ -132,5 +140,14 @@ describe('NvmeofSubsystemsComponent', () => {
 
   it('should set first group as default initially', () => {
     expect(component.group).toBe(mockGroups[0][0].spec.group);
+  });
+
+  it('should not show existing subsystem records when dropdown selection is empty', (done) => {
+    component.onGroupClear();
+    component.subsystems$.pipe(take(1)).subscribe((subsystems) => {
+      expect(subsystems).toEqual([]);
+      done();
+    });
+    component.getSubsystems();
   });
 });

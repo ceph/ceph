@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group.component';
 import { GridModule, TabsModule } from 'carbon-components-angular';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { of } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -16,11 +18,16 @@ describe('NvmeofGatewayGroupComponent', () => {
       listGatewayGroups: jest.fn().mockReturnValue(of([])),
       listSubsystems: jest.fn().mockReturnValue(of([]))
     };
+    const nvmeofStateServiceSpy = { requestRefresh: jest.fn() };
 
     await TestBed.configureTestingModule({
       imports: [HttpClientModule, SharedModule, TabsModule, GridModule],
       declarations: [NvmeofGatewayGroupComponent],
-      providers: [{ provide: NvmeofService, useValue: nvmeofServiceSpy }]
+      providers: [
+        { provide: NvmeofService, useValue: nvmeofServiceSpy },
+        { provide: NvmeofStateService, useValue: nvmeofStateServiceSpy }
+      ],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
