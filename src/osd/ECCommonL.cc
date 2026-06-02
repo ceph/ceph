@@ -419,9 +419,9 @@ void ECCommonL::ReadPipeline::start_read_op(
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
 #ifndef WITH_CRIMSON
-    op.trace = _op->pg_trace;
+    op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp", _op->pg_trace);
 #endif
-    op.trace.event("start ec read");
+    op.otel_trace->AddEvent("start ec read");
   }
   do_read_op(op);
 }
@@ -487,11 +487,8 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
     msg->op = i->second;
     msg->op.from = get_parent()->whoami_shard();
     msg->op.tid = tid;
-    if (op.trace) {
-      // initialize a child span for this shard
-      msg->trace.init("ec sub read", nullptr, &op.trace);
-      msg->trace.keyval("shard", i->first.shard.id);
-    }
+    msg->otel_trace = op.otel_trace->GetContext();
+    op.otel_trace->AddEvent("ec sub read", {{"shard", i->first.shard.id}});
     msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(i->first.osd, msg));
   }
@@ -909,7 +906,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
     trans[i->shard];
   }
 
-  op->trace.event("start ec write");
+  op->otel_trace->AddEvent("start ec write");
 
   map<hobject_t,extent_map> written;
   op->generate_transactions(
@@ -989,11 +986,8 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       !should_send);
 
     ZTracer::Trace trace;
-    if (op->trace) {
-      // initialize a child span for this shard
-      trace.init("ec sub write", nullptr, &op->trace);
-      trace.keyval("shard", i->shard.id);
-    }
+    
+    op->otel_trace->AddEvent("ec sub read", {{"shard", i->shard.id}});
 
     if (*i == get_parent()->whoami_shard()) {
       should_write_local = true;
@@ -1022,7 +1016,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       get_parent()->whoami_shard(),
       op->client_op,
       local_write_op,
-      op->trace);
+      op->otel_trace);
   }
 
   for (auto i = op->on_write.begin();
