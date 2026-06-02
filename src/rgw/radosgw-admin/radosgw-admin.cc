@@ -3619,6 +3619,54 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+// Registers an option at every level of the command tree: hidden on all ancestor
+// commands for backward compatibility, visible on cmd. Returns the visible
+// Option* so callers can chain modifiers like ->option_text().
+template <typename T>
+CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
+                               const std::string& desc = "") {
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
+    if (!p->get_option_no_throw(name))
+      p->add_option(name, var)->group("")->take_last();
+  return cmd->add_option(name, var, desc)->take_last();
+}
+
+// After parsing: warns if any option was placed before the subcommand.
+// Compatibility options are registered hidden on ancestor commands via
+// add_multilevel_option(). If a hidden ancestor registration has count() > 0,
+// the option was specified before the leaf subcommand.
+void warn_wrong_position(CLI::App* cmd) {
+  std::set<std::string> warned;
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
+    for (const auto* opt : p->get_options())
+      if (opt->get_group().empty() && opt->count() > 0) {
+        std::string flag = "--" + opt->get_single_name(); // get_name() returns "" for hidden options
+        if (warned.insert(flag).second)
+          cerr << "Warning: " << flag
+               << " should appear after the subcommand\n";
+      }
+}
+
+// After parsing: checks all options registered at the command and each ancestor
+// level, and warn if the same option was specified more than once. This also
+// catches duplicates introduced by backward-compatibility registrations.
+// The last value wins.
+void warn_duplicates(CLI::App* cmd) {
+  std::set<std::string> checked;
+  for (CLI::App* p = cmd; p; p = p->get_parent())
+    for (const auto* opt : p->get_options())
+      if (checked.insert("--" + opt->get_single_name()).second) {
+        std::string flag = "--" + opt->get_single_name();
+        std::size_t total = 0;
+        for (CLI::App* q = cmd; q; q = q->get_parent())
+          if (auto* o = q->get_option_no_throw(flag))
+            total += o->count();
+        if (total > 1)
+          cerr << "Warning: " << flag
+               << " specified multiple times, using last value\n";
+      }
+}
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -3951,32 +3999,23 @@ int main(int argc, const char **argv)
     // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
     script->require_subcommand(show_cli11_help ? 0 : 1);
 
-    // TODO: once flags-before-subcommand support is removed, delete these hidden
-    // root and script level registrations and keep only the subcommand level ones
-
-    // compatibility: accept options placed before the command
-    app.add_option("--context", str_script_ctx)->group("")->take_last();
-    app.add_option("--infile",  infile)->group("")->take_last();
-    app.add_option("--tenant",  tenant)->group("")->take_last();
-
-    // compatibility: accept options placed between script and its subcommand
-    script->add_option("--context", str_script_ctx)->group("")->take_last();
-    script->add_option("--infile",  infile)->group("")->take_last();
-    script->add_option("--tenant",  tenant)->group("")->take_last();
-
     // Do not use ->required() while options are also accepted at parent
     // levels for compatibility, because CLI11 checks the specific option location.
     // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
     // and manual checks with ->required()
-    script_put->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
-    script_put->add_option("--infile",  infile,         "file to read in when setting data")->take_last()->option_text("<file> REQUIRED");
-    script_put->add_option("--tenant",  tenant,         "tenant name")->take_last();
+    const std::string ctx_desc    = "context in which the script runs. one of: " + LUA_CONTEXT_LIST;
+    const std::string infile_desc = "file to read in when setting data";
+    const std::string tenant_desc = "tenant name";
 
-    script_get->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
-    script_get->add_option("--tenant",  tenant,         "tenant name")->take_last();
+    add_multilevel_option(script_put, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+    add_multilevel_option(script_put, "--infile",  infile,         infile_desc)->option_text("<file> REQUIRED");
+    add_multilevel_option(script_put, "--tenant",  tenant,         tenant_desc);
 
-    script_rm->add_option("--context", str_script_ctx, "context in which the script runs. one of: " + LUA_CONTEXT_LIST)->take_last()->option_text("<context> REQUIRED");
-    script_rm->add_option("--tenant",  tenant,         "tenant name")->take_last();
+    add_multilevel_option(script_get, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+    add_multilevel_option(script_get, "--tenant",  tenant,         tenant_desc);
+
+    add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+    add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
 
     // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
     try {
@@ -3991,21 +4030,8 @@ int main(int argc, const char **argv)
     }
 
     if (script_put->parsed()) {
-      if (app.count("--context") > 0 || script->count("--context") > 0 ||
-          app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
-          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
-        cerr << "Warning: flags should appear after the subcommand. "
-                "Use: script put --context=<value> --infile=<value> --tenant=<value>\n";
-      }
-      if ((app.count("--context") + script->count("--context") + script_put->count("--context")) > 1) {
-        cerr << "Warning: --context specified multiple times, using last value\n";
-      }
-      if ((app.count("--infile") + script->count("--infile") + script_put->count("--infile")) > 1) {
-        cerr << "Warning: --infile specified multiple times, using last value\n";
-      }
-      if ((app.count("--tenant") + script->count("--tenant") + script_put->count("--tenant")) > 1) {
-        cerr << "Warning: --tenant specified multiple times, using last value\n";
-      }
+      warn_wrong_position(script_put);
+      warn_duplicates(script_put);
 
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
@@ -4023,17 +4049,8 @@ int main(int argc, const char **argv)
     }
 
     if (script_get->parsed()) {
-      if (app.count("--context") > 0 || script->count("--context") > 0 ||
-          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
-        cerr << "Warning: flags should appear after the subcommand. "
-                "Use: script get --context=<value> --tenant=<value>\n";
-      }
-      if ((app.count("--context") + script->count("--context") + script_get->count("--context")) > 1) {
-        cerr << "Warning: --context specified multiple times, using last value\n";
-      }
-      if ((app.count("--tenant") + script->count("--tenant") + script_get->count("--tenant")) > 1) {
-        cerr << "Warning: --tenant specified multiple times, using last value\n";
-      }
+      warn_wrong_position(script_get);
+      warn_duplicates(script_get);
 
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
@@ -4047,17 +4064,8 @@ int main(int argc, const char **argv)
     }
 
     if (script_rm->parsed()) {
-      if (app.count("--context") > 0 || script->count("--context") > 0 ||
-          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
-        cerr << "Warning: flags should appear after the subcommand. "
-                "Use: script rm --context=<value> --tenant=<value>\n";
-      }
-      if ((app.count("--context") + script->count("--context") + script_rm->count("--context")) > 1) {
-        cerr << "Warning: --context specified multiple times, using last value\n";
-      }
-      if ((app.count("--tenant") + script->count("--tenant") + script_rm->count("--tenant")) > 1) {
-        cerr << "Warning: --tenant specified multiple times, using last value\n";
-      }
+      warn_wrong_position(script_rm);
+      warn_duplicates(script_rm);
 
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
