@@ -3,8 +3,11 @@
 
 #pragma once
 
-#include "opentelemetry/trace/span_context.h"
 #include "common/tracer.h"
+#ifdef HAVE_JAEGER
+#include "opentelemetry/trace/span_context.h"
+#endif // HAVE_JAEGER
+
 #include "cls/rgw/cls_rgw_types.h"
 
 struct rgw_cls_tag_timeout_op
