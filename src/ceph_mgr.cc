@@ -26,6 +26,7 @@
 #include "common/errno.h"
 #include "common/pick_address.h"
 #include "global/global_init.h"
+#include "common/tracer.h"
 
 #include "mgr/MgrStandby.h"
 
@@ -59,6 +60,8 @@ int main(int argc, const char **argv)
   };
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_MGR,
 			 CODE_ENVIRONMENT_DAEMON, 0);
+
+  tracing::Tracer::set_root_service_name("ceph-mgr");
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 

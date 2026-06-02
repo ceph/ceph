@@ -5,6 +5,9 @@
 
 #include "include/common_fwd.h"
 #include "include/encoding.h"
+#include <map>
+#include <mutex>
+#include <string>
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
@@ -32,6 +35,15 @@ class Tracer {
   // This allows daemons to initialize tracing while preventing libraries from overwriting it
   inline static bool provider_initialized = false;
 
+  // Root service name for hierarchical tracer naming
+  // Set once by daemon main(), used by all tracers in the process
+  inline static std::string root_service_name = "";
+  inline static bool root_service_name_set = false;
+  inline static std::mutex provider_config_mutex;
+
+  // Additional provider resource attributes, set once before provider init
+  inline static std::map<std::string, std::string, std::less<>> resource_attributes;
+
  public:
 
   Tracer() = default;
@@ -40,6 +52,14 @@ class Tracer {
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
 
   bool is_enabled() const;
+  
+  // Root service name management for hierarchical naming
+  // Should be called once by daemon main() before any tracer initialization
+  static void set_root_service_name(std::string_view name);
+  static std::string get_root_service_name();
+  static bool has_root_service_name();
+  static void set_resource_attribute(std::string_view key, std::string_view value);
+  
   // creates and returns a new span with `trace_name`
   // this span represents a trace, since it has no parent.
   otel_span_ref start_trace(opentelemetry::nostd::string_view trace_name);
