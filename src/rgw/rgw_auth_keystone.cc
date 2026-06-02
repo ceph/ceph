@@ -40,11 +40,11 @@ namespace detail {
 
 // Match a request path against an access-rule path pattern.
 //
-// Pattern syntax follows the keystoneauth reference matcher
-// (keystoneauth1/access/access.py:_path_matches):
-//   *       matches one path segment (no '/')
+// Pattern syntax follows the keystonemiddleware reference matcher
+// (keystonemiddleware/auth_token/__init__.py:_path_matches):
+//   *       matches a non-empty path segment (no '/')
 //   **      matches any number of segments (including zero)
-//   {tag}   matches one path segment (named placeholder, treated like *)
+//   {tag}   matches a non-empty path segment (named placeholder, like *)
 //
 // The match is anchored: the entire path must be consumed. Both pattern and
 // path are compared verbatim — no URL decoding is performed here, callers
@@ -88,9 +88,14 @@ path_matches_pattern(const std::string_view pattern, const std::string_view path
       continue;
     }
     if (pi < pattern.size() && pattern[pi] == '*') {
-      star_pi = pi;
-      star_si = si;
+      // '*' requires at least one non-slash char (regex '[^/]+').
+      if (path[si] == '/') {
+        return false;
+      }
       pi++;
+      si++;
+      star_pi = pi - 1;
+      star_si = si;
       continue;
     }
     if (pi < pattern.size() && pattern[pi] == path[si]) {
@@ -112,10 +117,16 @@ path_matches_pattern(const std::string_view pattern, const std::string_view path
     }
     return false;
   }
-  // Allow trailing '*' / '**' / '/' to match the empty remainder.
-  while (pi < pattern.size() &&
-         (pattern[pi] == '*' || pattern[pi] == '/')) {
-    pi++;
+  // Allow trailing '**' or '/' to match the empty remainder; a bare '*'
+  // would have left its mandatory non-slash char unconsumed.
+  while (pi < pattern.size()) {
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' && pattern[pi + 1] == '*') {
+      pi += 2;
+    } else if (pattern[pi] == '/') {
+      pi++;
+    } else {
+      break;
+    }
   }
   return pi == pattern.size();
 }
@@ -553,8 +564,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
       // Application Credential access rules: enforce before caching so that
-      // a denied request never poisons the cache for subsequent ones.
-      if (!enforce_access_rules(dpp, *t, s)) {
+      // a denied request never poisons the cache for subsequent ones. Skip
+      // for service-to-service requests (keystonemiddleware does the same).
+      if (!allow_expired && !enforce_access_rules(dpp, *t, s)) {
         return result_t::deny(-EACCES);
       }
 

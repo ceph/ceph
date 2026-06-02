@@ -115,3 +115,23 @@ TEST(PathMatchesPattern, TrailingSlashInPattern)
   // Trailing slash in pattern should match path without trailing slash
   EXPECT_TRUE(path_matches_pattern("/v1/AUTH_abc/", "/v1/AUTH_abc/"));
 }
+
+// '*' must match a non-empty segment (regex '[^/]+'), not zero chars.
+TEST(PathMatchesPattern, SingleStar_RejectsEmptySegment)
+{
+  EXPECT_FALSE(path_matches_pattern("/v1/*", "/v1/"));
+  EXPECT_FALSE(path_matches_pattern("/v1/AUTH_abc/*", "/v1/AUTH_abc/"));
+  EXPECT_FALSE(path_matches_pattern("/v1/AUTH_*/container",
+                                    "/v1/AUTH_/container"));
+}
+
+TEST(PathMatchesPattern, NamedPlaceholder_RejectsEmptyTrailingSegment)
+{
+  EXPECT_FALSE(path_matches_pattern("/v1/{account}", "/v1/"));
+}
+
+TEST(PathMatchesPattern, DoubleStar_MatchesEmptyTrailingSegment)
+{
+  // '**' (regex '.*') still permits the empty remainder.
+  EXPECT_TRUE(path_matches_pattern("/v1/AUTH_abc/**", "/v1/AUTH_abc/"));
+}
