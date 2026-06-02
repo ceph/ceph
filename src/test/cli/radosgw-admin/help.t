@@ -170,7 +170,7 @@
     datalog list                     list data log
     datalog trim                     trim data log
     datalog status                   read data log status
-    datalog type                     change datalog type to --log_type={fifo,omap}
+    datalog type                     change datalog type to --log_type=fifo
     datalog semaphore list           List recovery semaphores
     datalog semaphore reset          Reset recovery semaphore (use marker)
     orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)

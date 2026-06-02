@@ -3937,19 +3937,6 @@ options:
   see_also:
   - rgw_dmclock_metadata_res
   - rgw_dmclock_metadata_wgt
-- name: rgw_default_data_log_backing
-  type: str
-  level: advanced
-  desc: Default backing store for the RGW data sync log
-  long_desc: Whether to use the older OMAP backing store or the high performance FIFO
-    based backing store by default. This only covers the creation of the log on startup
-    if none exists.
-  default: fifo
-  services:
-  - rgw
-  enum_values:
-  - fifo
-  - omap
 - name: rgw_d3n_l1_local_datacache_enabled
   type: bool
   level: advanced
