@@ -202,6 +202,7 @@ class UpgradeState:
                  remaining_count: Optional[int] = None,
                  crush_bucket_type: Optional[str] = None,
                  crush_bucket_name: Optional[str] = None,
+                 osds_in_crush_bucket: Optional[List[int]] = None,
                  noautoscale_set: Optional[bool] = False,
                  prior_autoscale: Optional[bool] = True,
                  ):
@@ -224,6 +225,8 @@ class UpgradeState:
         self.remaining_count = remaining_count
         self.crush_bucket_type = crush_bucket_type
         self.crush_bucket_name = crush_bucket_name
+        # OSD ids persisted to survive mgr restart after bucket-scoped upgrade.
+        self.osds_in_crush_bucket = osds_in_crush_bucket
         self.noautoscale_set = noautoscale_set
         self.prior_autoscale = prior_autoscale
 
@@ -246,6 +249,7 @@ class UpgradeState:
             'remaining_count': self.remaining_count,
             'crush_bucket_type': self.crush_bucket_type,
             'crush_bucket_name': self.crush_bucket_name,
+            'osds_in_crush_bucket': self.osds_in_crush_bucket,
             'noautoscale_set': self.noautoscale_set,
             'prior_autoscale': self.prior_autoscale,
         }
@@ -291,7 +295,17 @@ class CephadmUpgrade:
         # osd.<id> names under the upgrade CRUSH bucket from the last osd ok-to-upgrade
         # report (``osds_in_crush_bucket``). Used so ok-to-stop ``known`` (cluster-wide)
         # cannot schedule OSDs outside the bucket.
+        # Progress/status count only bucket OSDs when CRUSH bucket params are set.
         self._ok_to_upgrade_osds_in_crush_bucket: Optional[Set[str]] = None
+        upgrade_state = self.upgrade_state
+        if (
+            upgrade_state
+            and upgrade_state.osds_in_crush_bucket is not None
+        ):
+            # Restore in-memory cache from persisted mon report after mgr restart.
+            self._ok_to_upgrade_osds_in_crush_bucket = {
+                f'osd.{osd_id}' for osd_id in upgrade_state.osds_in_crush_bucket
+            }
 
     @property
     def target_image(self) -> str:
@@ -306,8 +320,12 @@ class CephadmUpgrade:
 
     def _upgrade_status_osd_bucket_scope_active(self) -> bool:
         """True when upgrade state selects OSD bucket scope"""
-        st = self.upgrade_state
-        return bool(st and st.crush_bucket_name and st.crush_bucket_type)
+        upgrade_state = self.upgrade_state
+        return bool(
+            upgrade_state
+            and upgrade_state.crush_bucket_name
+            and upgrade_state.crush_bucket_type
+        )
 
     def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
         r = orchestrator.UpgradeStatusSpec()
@@ -386,7 +404,72 @@ class CephadmUpgrade:
             ) if d.daemon_type in CEPH_UPGRADE_ORDER]
         if self.upgrade_state.hosts is not None:
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
+
+        if self._upgrade_uses_ok_to_upgrade_for_osds():
+            # Restrict to OSDs the monitor reported for CRUSH bucket as denominator.
+            bucket_osd_names = self._get_osds_in_crush_bucket_names(
+                refresh_from_mon=True)
+            if bucket_osd_names is not None:
+                daemons = [
+                    daemon for daemon in daemons
+                    if daemon.daemon_type != 'osd'
+                    or daemon.name() in bucket_osd_names
+                ]
         return daemons
+
+    def _get_osds_in_crush_bucket_names(
+            self, refresh_from_mon: bool = False) -> Optional[Set[str]]:
+        """
+        Return ``osd.<id>`` names for OSDs under the upgrade CRUSH bucket.
+
+        Lookup order:
+        1. In-memory cache from the last ``osd ok-to-upgrade`` report (also
+        restored from persisted state on mgr restart).
+        2. Persisted ``UpgradeState.osds_in_crush_bucket`` if the cache is empty.
+        3. If ``refresh_from_mon`` is True, query the monitor once to populate the cache.
+        Returns None when bucket membership is not yet known.
+        """
+        if self._ok_to_upgrade_osds_in_crush_bucket is not None:
+            return self._ok_to_upgrade_osds_in_crush_bucket
+        upgrade_state = self.upgrade_state
+        if upgrade_state and upgrade_state.osds_in_crush_bucket is not None:
+            return {
+                f'osd.{osd_id}' for osd_id in upgrade_state.osds_in_crush_bucket
+            }
+        if refresh_from_mon and self._refresh_osds_in_crush_bucket_from_mon():
+            return self._ok_to_upgrade_osds_in_crush_bucket
+        return None
+
+    def _refresh_osds_in_crush_bucket_from_mon(self) -> bool:
+        """
+        Populate bucket OSD membership from ``osd ok-to-upgrade``.
+
+        Used for upgrade status/progress before the upgrade loop has cached
+        bucket OSDs from a batch request. ``max_osds=0`` is sufficient because
+        the response includes the full ``osds_in_crush_bucket`` list.
+        """
+        assert self.upgrade_state is not None
+        if not self._upgrade_uses_ok_to_upgrade_for_osds():
+            return False
+        crush_bucket_name = self.upgrade_state.crush_bucket_name
+        target_version_short = self.upgrade_state.target_version
+        if not crush_bucket_name or not target_version_short:
+            return False
+        try:
+            ok_to_upgrade_report = request_osd_ok_to_upgrade_report(
+                self.mgr,
+                crush_bucket_name,
+                target_version_short,
+                max_osds=0,
+            )
+        except (json.JSONDecodeError, MonCommandFailed) as err:
+            logger.debug(
+                'Upgrade: could not refresh osds_in_crush_bucket from mon: %s',
+                err)
+            return False
+        self._cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
+            ok_to_upgrade_report)
+        return self._ok_to_upgrade_osds_in_crush_bucket is not None
 
     def _get_current_version(self) -> Tuple[int, int, str]:
         current_version = self.mgr.version.split('ceph version ')[1]
@@ -851,18 +934,22 @@ class CephadmUpgrade:
         """
         if not self.upgrade_state:
             return False
-        state = self.upgrade_state
-        if not state.crush_bucket_name or not state.crush_bucket_type:
+        upgrade_state = self.upgrade_state
+        if not upgrade_state.crush_bucket_name or not upgrade_state.crush_bucket_type:
             return False
 
         return True
 
     def _cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
             self, report: OkToUpgradeMonReport) -> None:
-        ids = report.osds_in_crush_bucket
+        bucket_osd_ids = report.osds_in_crush_bucket
         self._ok_to_upgrade_osds_in_crush_bucket = {
-            f'osd.{osd_id}' for osd_id in ids
+            f'osd.{osd_id}' for osd_id in bucket_osd_ids
         }
+        if self.upgrade_state is not None:
+            # Persist so ``upgrade status`` progress uses bucket OSDs after restart.
+            self.upgrade_state.osds_in_crush_bucket = list(bucket_osd_ids)
+            self._save_upgrade_state()
 
     def is_osd_upgrade_valid_for_failure_domain(self, d: DaemonDescription) -> bool:
         # If not using ok-to-upgrade for OSDs, any OSD is valid.
@@ -872,10 +959,10 @@ class CephadmUpgrade:
         if d.daemon_type != 'osd':
             return True
         # If not in the CRUSH bucket, it is not valid.
-        bset = self._ok_to_upgrade_osds_in_crush_bucket
-        if not bset:
+        bucket_osd_names = self._ok_to_upgrade_osds_in_crush_bucket
+        if not bucket_osd_names:
             return False
-        return d.name() in bset
+        return d.name() in bucket_osd_names
 
     def _wait_for_ok_to_upgrade_osd_batch(
             self,
@@ -1792,23 +1879,7 @@ class CephadmUpgrade:
 
         image_settings = self.get_distinct_container_image_settings()
 
-        if self.upgrade_state.daemon_types is not None:
-            logger.debug(
-                f'Filtering daemons to upgrade by daemon types: {self.upgrade_state.daemon_types}')
-            daemons = [d for d in self.mgr.cache.get_daemons(
-            ) if d.daemon_type in self.upgrade_state.daemon_types]
-        elif self.upgrade_state.services is not None:
-            logger.debug(
-                f'Filtering daemons to upgrade by services: {self.upgrade_state.daemon_types}')
-            daemons = []
-            for service in self.upgrade_state.services:
-                daemons += self.mgr.cache.get_daemons_by_service(service)
-        else:
-            daemons = [d for d in self.mgr.cache.get_daemons(
-            ) if d.daemon_type in CEPH_UPGRADE_ORDER]
-        if self.upgrade_state.hosts is not None:
-            logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
-            daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
+        daemons = self._get_filtered_daemons()
         upgraded_daemon_count: int = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
@@ -1833,7 +1904,9 @@ class CephadmUpgrade:
             need_upgrade_self, need_upgrade, need_upgrade_deployer, done = self._detect_need_upgrade(
                 daemons_of_type, target_digests, target_image)
             upgraded_daemon_count += done
-            self._update_upgrade_progress(upgraded_daemon_count / len(daemons))
+            if daemons:
+                self._update_upgrade_progress(
+                    upgraded_daemon_count / len(daemons))
 
             # make sure mgr and monitoring stack daemons are properly redeployed in staggered upgrade scenarios
             # The idea here is to upgrade the mointoring daemons after the mgr is done upgrading as
