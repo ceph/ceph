@@ -134,27 +134,6 @@ private:
     reply.dump(f);
     rgw_flush_formatter_and_reset(s, f);
   }
-
-  void send_response() override {
-    if (op_ret) {
-      set_req_state_err(s, op_ret);
-    }
-    dump_errno(s);
-    end_header(s, this, "application/json");
-
-    if (op_ret < 0) {
-      return;
-    }
-
-    dump_start(s);
-
-    rgw::s3vector::create_index_reply_t reply{
-      rgw::s3vector::index_arn(s->zonegroup_name, s->account_name, configuration.vector_bucket_name, configuration.index_name).to_string()
-    };
-    const auto f = s->formatter;
-    reply.dump(f);
-    rgw_flush_formatter_and_reset(s, f);
-  }
 };
 
 class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
@@ -292,42 +271,6 @@ private:
     reply.dump(&f);
     rgw_flush_formatter_and_reset(s, &f);
   }
-
-  void send_response() override {
-    if (op_ret == -ERR_BUCKET_EXISTS) {
-      const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
-      if (! eexist_override) [[likely]] {
-        op_ret = 0;
-      } else {
-        s->err.message = "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Specify a different name and try again.";
-      }
-    }
-
-    if (op_ret) {
-      set_req_state_err(s, op_ret);
-    }
-    dump_errno(s);
-
-    if (op_ret == 0 && s->system_request) {
-      s->format = RGWFormat::JSON;
-      end_header(s, this, to_mime_type(s->format));
-      JSONFormatter f; /* use json formatter for system requests output */
-
-      ceph_assert(bucket);
-      ceph_assert(!bucket->empty());
-      const RGWBucketInfo& info = bucket->get_info();
-      const obj_version& ep_objv = bucket->get_version();
-      f.open_object_section("info");
-      encode_json("entry_point_object_ver", ep_objv, &f);
-      encode_json("object_ver", info.objv_tracker.read_version, &f);
-      encode_json("bucket_info", info, &f);
-      f.close_section();
-      rgw_flush_formatter_and_reset(s, &f);
-      return;
-    }
-    end_header(s);
-  }
-
 };
 
 class RGWS3VectorDeleteIndex : public RGWS3VectorBase {
@@ -369,8 +312,6 @@ private:
 };
 
 class RGWS3VectorDeleteVectorBucket : public RGWS3VectorBase {
-  // TODO: collapse with get_vector_bucket_t an create a common function
-  // to build and verify the ARN in init_processing()
   rgw::s3vector::delete_vector_bucket_t configuration;
 public:
   explicit RGWS3VectorDeleteVectorBucket(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
