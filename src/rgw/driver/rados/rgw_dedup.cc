@@ -1259,14 +1259,14 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
       return -EINVAL;
     }
-    const auto &head_placement_rule = manifest.get_head_placement_rule();
-    const std::string& storage_class =
-      rgw_placement_rule::get_canonical_storage_class(head_placement_rule.storage_class);
 
+    // non-default storage_class only applies to tail-objects
+    const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
+    const auto& sc_from_tail = tail_placement.placement_rule.get_storage_class();
     // p_rec holds an the storage_class value taken from the bucket-index/obj-attr
-    if (unlikely(storage_class != p_rec->stor_class)) {
-      ldpp_dout(dpp, 5) << __func__ << "::ERROR::manifest storage_class="
-                        << storage_class << " != " << "::bucket-index storage_class="
+    if (unlikely(sc_from_tail != p_rec->stor_class)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERROR::manifest tail storage_class="
+                        << sc_from_tail << " != p_rec->stor_class="
                         << p_rec->stor_class << dendl;
       p_stats->different_storage_class++;
       return -EINVAL;
@@ -3381,6 +3381,8 @@ namespace rgw::dedup {
       d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
                       [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
       if (unlikely(d_ctl.should_pause())) {
+        // must release lock before calling handle_pause_req()
+        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
@@ -3423,6 +3425,8 @@ namespace rgw::dedup {
       d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
                       [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
       if (unlikely(d_ctl.should_pause())) {
+        // must release lock before calling handle_pause_req()
+        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
