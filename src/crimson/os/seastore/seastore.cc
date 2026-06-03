@@ -1652,6 +1652,10 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   ++(shard_stats.processing_inlock_io_num);
 
   co_await with_repeat_trans_intr(
+    [&, this] {
+      // Preserve handle and rewind the external iterator before each attempt.
+      ctx.reset_preserve_handle(*transaction_manager);
+    },
     *ctx.transaction,
     seastar::coroutine::lambda([&ctx, this, FNAME](auto &t)
 			       -> tm_ret {
@@ -1674,7 +1678,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 	     ctx.iter.colls.size(),
 	     ctx.iter.objects.size());
 
-      ctx.reset_preserve_handle(*transaction_manager);
       std::vector<OnodeRef> onodes(ctx.iter.objects.size());
 
       // Get the total number of operations from the transaction
