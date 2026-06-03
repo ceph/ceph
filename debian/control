@@ -73,6 +73,8 @@ Build-Depends: automake,
                libxml2-dev,
                librabbitmq-dev,
                libre2-dev,
+               libgrpc++-dev,
+               protobuf-compiler-grpc,
                libutf8proc-dev (>= 2.2.0),
                librdkafka-dev (>= 1.1.0),
                libthrift-dev (>= 0.13.0),
@@ -82,7 +84,7 @@ Build-Depends: automake,
                libndctl-dev (>= 63) <pkg.ceph.pmdk>,
                libpmem-dev <pkg.ceph.pmdk>,
                libpmemobj-dev (>= 1.8) <pkg.ceph.pmdk>,
-               libprotobuf-dev <pkg.ceph.crimson>,
+               libprotobuf-dev,
                libxsimd-dev <!pkg.ceph.arrow>,
                ninja-build,
                nlohmann-json3-dev,
@@ -414,6 +416,33 @@ Description: debugging symbols for ceph-mon
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mon.
+
+Package: ceph-mon-client-nvmeof
+Architecture: linux-any
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: NVMe-oF Gateway Monitor Client for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the NVMe-oF Gateway Monitor Client. It distributes
+ Paxos ANA info to the NVMe-oF Gateway and provides beacons to the
+ ceph-mon daemon.
+
+Package: ceph-mon-client-nvmeof-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-mon-client-nvmeof (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-mon-client-nvmeof
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-mon-client-nvmeof.
 
 Package: ceph-osd
 Architecture: linux-any

@@ -1019,12 +1019,7 @@ if(WITH_FUSE)
 endif(WITH_FUSE)
 
 # NVMEOF GATEWAY MONITOR CLIENT
-# Supported on RPM-based platforms only, depends on grpc devel libraries/tools
-if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
-  option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
-else()
-  option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" OFF)
-endif()
+option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
 
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
@@ -1041,16 +1036,31 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
   endif()
 
-  # Find gRPC installation
-  # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-  find_package(gRPC CONFIG REQUIRED)
-  message(STATUS "Using gRPC ${gRPC_VERSION}")
-  set(_GRPC_GRPCPP gRPC::grpc++)
-  if(CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin
-      REQUIRED)
+  # Find gRPC - try cmake config first (gRPC >= 1.50 and RHEL/Rocky packages),
+  # fall back to pkg-config for distros without cmake config files (e.g. Ubuntu 22.04).
+  find_package(gRPC CONFIG QUIET)
+  if(gRPC_FOUND)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    if(CMAKE_CROSSCOMPILING)
+      find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+    else()
+      set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    endif()
+    # Modern gRPC links system absl; HAVE_ABSEIL makes opentelemetry-cpp do the
+    # same so their two absl inline namespaces don't collide in shared TUs.
+    set(_HAVE_ABSEIL ON)
   else()
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GRPCPP REQUIRED IMPORTED_TARGET grpc++)
+    message(STATUS "Using gRPC ${GRPCPP_VERSION} (via pkg-config)")
+    set(_GRPC_GRPCPP PkgConfig::GRPCPP)
+    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin REQUIRED)
+    # Older gRPC (e.g. Jammy's 1.30.2) uses bundled absl; libabsl-dev not required.
+    set(_HAVE_ABSEIL OFF)
+    # grpc++.pc omits protobuf from Requires; add it so PkgConfig::GRPCPP
+    # carries the same transitive dependency as the cmake-config gRPC::grpc++.
+    target_link_libraries(PkgConfig::GRPCPP INTERFACE protobuf::libprotobuf)
   endif()
 
   # Gateway Proto file
@@ -1115,9 +1125,7 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})
   add_dependencies(ceph-nvmeof-monitor-client ceph-common)
-  # absl is installed as grpc build dependency on RPM based systems
-  # Also isolate this flag to specific targets which needs this package
-  if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
+  if(_HAVE_ABSEIL)
     target_compile_definitions(ceph-nvmeof-monitor-client PRIVATE HAVE_ABSEIL)
     target_compile_definitions(ceph-mon PRIVATE HAVE_ABSEIL)
   endif()
