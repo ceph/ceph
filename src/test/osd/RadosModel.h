@@ -4,6 +4,7 @@
 #include "include/int_types.h"
 
 #include "common/ceph_mutex.h"
+#include "common/ceph_json.h"
 #include "include/rados/librados.hpp"
 
 #include <iostream>
@@ -13,10 +14,7 @@
 #include <set>
 #include <list>
 #include <string>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <time.h>
+#include <thread>
 #include "Object.h"
 #include "TestOpStat.h"
 #include "test/librados/test.h"
@@ -24,6 +22,7 @@
 #include "common/errno.h"
 #include "osd/HitSet.h"
 #include "common/ceph_crypto.h"
+#include "common/json/OSDStructures.h"
 
 #include "cls/cas/cls_cas_client.h"
 #include "cls/cas/cls_cas_internal.h"
@@ -72,6 +71,30 @@ enum TestOpType {
   TEST_OP_TIER_EVICT
 };
 
+class LogHelper {
+public:
+  bool timestamp;
+  ceph::mutex cout_lock = ceph::make_mutex("Cout Lock");
+
+  std::string timestamp_string() {
+    if (timestamp) {
+      ceph::logging::log_clock clock;
+      clock.coarsen();
+      auto t = clock.now();
+      constexpr int buflen = 128;
+      char buf[buflen];
+      ceph::logging::append_time(t, buf, buflen);
+      return std::string(buf) + " ";
+    }
+    return std::string();
+  }
+
+  std::ostream &cout_prefix() {
+    std::lock_guard l(cout_lock);
+    return std::cout << timestamp_string();
+  }
+};
+
 class TestWatchContext : public librados::WatchCtx2 {
   TestWatchContext(const TestWatchContext&);
 public:
@@ -79,17 +102,24 @@ public:
   uint64_t handle = 0;
   bool waiting = false;
   ceph::mutex lock = ceph::make_mutex("watch lock");
-  TestWatchContext() = default;
+  librados::IoCtx& io_ctx;
+  const std::string oid;
+  LogHelper& context;
+  TestWatchContext(librados::IoCtx& io_ctx, const std::string oid, LogHelper& context) : io_ctx(io_ctx), oid(oid), context(context) {}
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist &bl) override {
+    context.cout_prefix() << "watch handle_notify oid=" << oid << " notify_id=" << notify_id
+              << " cookie=" << cookie << " notifier_id=" << notifier_id << std::endl;
     std::lock_guard l{lock};
     waiting = false;
     cond.notify_all();
+    bufferlist empty;
+    io_ctx.notify_ack(oid, notify_id, cookie, empty);
   }
   void handle_error(uint64_t cookie, int err) override {
     std::lock_guard l{lock};
-    std::cout << "watch handle_error " << err << std::endl;
+    context.cout_prefix() << "watch handle_error oid=" << oid << " err=" << err << std::endl;
   }
   void start() {
     std::lock_guard l{lock};
@@ -159,7 +189,7 @@ public:
   virtual TestOp *next(RadosTestContext &context) = 0;
 };
 
-class RadosTestContext {
+class RadosTestContext : public LogHelper {
 public:
   ceph::mutex state_lock = ceph::make_mutex("Context Lock");
   ceph::condition_variable wait_cond;
@@ -186,6 +216,7 @@ public:
   uint64_t seq;
   const char *rados_id;
   bool initialized;
+  bool finished;
   std::map<std::string, TestWatchContext*> watches;
   const uint64_t max_size;
   const uint64_t min_stride_size;
@@ -202,7 +233,11 @@ public:
   bool enable_dedup;
   std::string chunk_algo;
   std::string chunk_size;
-  bool timestamp;
+  const bool migrate_pool;
+  const int migration_interval;
+  std::optional<int> migration_pg_num;
+  int initial_migration_delay;
+  std::thread pool_migration_thread;
 
   RadosTestContext(const std::string &pool_name,
 		   int max_in_flight,
@@ -215,10 +250,14 @@ public:
 		   bool write_fadvise_dontneed,
 		   const std::string &low_tier_pool_name,
 		   bool enable_dedup,
-		   bool timestamp,
+		   bool _timestamp,
 		   std::string chunk_algo,
 		   std::string chunk_size,
 		   size_t max_attr_len,
+		   const bool migrate_pool,
+		   const uint8_t migration_interval,
+		   std::optional<int> migration_pg_num,
+		   uint8_t initial_migration_delay,
 		   const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
@@ -228,6 +267,7 @@ public:
     max_in_flight(max_in_flight),
     seq_num(0), seq(0),
     rados_id(id), initialized(false),
+    finished(false),
     max_size(max_size), 
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000, max_attr_len),
@@ -240,9 +280,13 @@ public:
     enable_dedup(enable_dedup),
     chunk_algo(chunk_algo),
     chunk_size(chunk_size),
-    timestamp(timestamp)
-  {
-  }
+    migrate_pool(migrate_pool),
+    migration_interval(migration_interval),
+    migration_pg_num(migration_pg_num),
+    initial_migration_delay(initial_migration_delay)
+    {
+      timestamp = _timestamp;
+    }
 
   int init()
   {
@@ -328,6 +372,11 @@ public:
     if (initialized) {
       rados.shutdown();
     }
+    if (migrate_pool) {
+      finished = true;
+      cout_prefix() << __func__ <<  " pool_migration_thread joining" << std::endl;
+      pool_migration_thread.join();
+    }
   }
 
   void loop(TestOpGenerator *gen)
@@ -338,6 +387,10 @@ public:
 
     TestOp *next = gen->next(*this);
     TestOp *waiting = NULL;
+
+    if (migrate_pool) {
+      pool_migration_thread = std::thread(&RadosTestContext::manage_pool_migrations, this);
+    }
 
     while (next || !inflight.empty()) {
       if (next && next->must_quiesce_other_ops() && !inflight.empty()) {
@@ -365,7 +418,14 @@ public:
 	}
 
 	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
-	  cout_prefix() << " waiting on " << inflight.size() << std::endl;
+          std::string active;
+          for (auto i : inflight) {
+            if (active.length()) {
+              active += ",";
+            }
+            active += std::to_string(i->num);
+          }
+	  cout_prefix() << " waiting on " << inflight.size() << " ops, inflight ops=(" << active << ")" << std::endl;
 	  wait_cond.wait(state_locker);
 	} else {
 	  break;
@@ -391,7 +451,7 @@ public:
 
   TestWatchContext *watch(const std::string &oid) {
     ceph_assert(!watches.count(oid));
-    return (watches[oid] = new TestWatchContext);
+    return (watches[oid] = new TestWatchContext(io_ctx, prefix+oid, *this));
   }
 
   void unwatch(const std::string &oid) {
@@ -712,22 +772,103 @@ public:
     io_ctx.snap_set_read(0);
     return has_snap;
   }
- public:
-  std::string timestamp_string() {
-    if (timestamp) {
-      ceph::logging::log_clock clock;
-      clock.coarsen();
-      auto t = clock.now();
-      constexpr int buflen = 128;
-      char buf[buflen];
-      ceph::logging::append_time(t, buf, buflen);
-      return std::string(buf) + " ";
+
+  /**
+ * Send a mon command to fetch the pg_num value for the specified pool and return it.
+ *
+ * @param poolname string Name of the pool to get the pg_num value of
+ * @returns int pg_num
+ */
+  int get_pool_pg_num(const std::string& poolname) {
+    auto const formatter = std::make_shared<JSONFormatter>(false);
+    messaging::osd::OSDPoolGetRequest osd_pool_get_request{poolname, "all"};
+    encode_json("OSDPoolGetRequest", osd_pool_get_request, formatter.get());
+
+    std::ostringstream oss;
+    formatter.get()->flush(oss);
+
+    bufferlist outbl;
+    std::string outstr;
+    if (rados.mon_command(oss.str(), {}, &outbl, &outstr) != 0) {
+      std::cerr << "Error: could not start pool migration: " << outstr << std::endl;
+      ceph_abort();
     }
-    return std::string();
+
+    JSONParser p;
+    if (!p.parse(outbl.c_str(), static_cast<int>(outbl.length()))) {
+      std::cerr << "Error: could not parse get pool output" << std::endl;
+      ceph_abort();
+    }
+
+    messaging::osd::OSDPoolGetReply osd_pool_get_reply;
+    osd_pool_get_reply.decode_json(&p);
+
+    return osd_pool_get_reply.pg_num.value_or(-1);
   }
 
-  std::ostream &cout_prefix() {
-    return std::cout << timestamp_string();
+  bool is_pool_migration_in_progress() {
+    std::string outstr;
+    bufferlist outbl;
+
+    if (rados.mon_command( R"({"prefix": "status"})", {}, &outbl, &outstr) != 0) {
+      std::cerr << "Error: could not get ceph status: " << outstr << std::endl;
+      ceph_abort();
+    }
+
+    return (outbl.to_str().contains("Pool migration"));
+  }
+
+  void start_pool_migration(const std::string &source_name, const std::string &target_name, const int pg_num) {
+    auto const formatter = std::make_shared<JSONFormatter>(false);
+    std::ostringstream oss;
+    messaging::osd::OSDPoolMigrateRequest pool_mig_request{target_name, source_name, pg_num};
+
+    encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
+    formatter.get()->flush(oss);
+
+    std::string outstr;
+    if (rados.mon_command(oss.str(), {}, nullptr, &outstr) != 0) {
+      std::cerr << "Error: could not start pool migration: " << outstr << std::endl;
+      ceph_abort();
+    }
+  }
+
+  void manage_pool_migrations() {
+    const std::string original_pool_name = pool_name;
+    std::string target_pool_name;
+    int migration_counter = 0;
+    int initial_pg_num = get_pool_pg_num(original_pool_name);
+    int pg_num = initial_pg_num;
+    bool needs_wait = false;
+
+    if (initial_migration_delay > 0) {
+      cout_prefix() << __func__ << " delaying for " << std::to_string(initial_migration_delay)
+                    << " before starting initial pool migration" << std::endl;
+      std::this_thread::sleep_for(std::chrono::seconds(initial_migration_delay));
+    }
+
+    while (!finished) {
+      int sleep_duration = 60;
+      if (is_pool_migration_in_progress()) {
+        cout_prefix() << __func__ << " migration in progress" << std::endl;
+      } else if (!needs_wait) {
+        target_pool_name = original_pool_name + "_mig" + std::to_string(migration_counter);
+        pg_num = migration_pg_num.has_value() && pg_num != migration_pg_num.value() ?
+          migration_pg_num.value() : initial_pg_num;
+        cout_prefix() << __func__ << " starting new pool migration from "
+                      << pool_name << " to " << target_pool_name << std::endl;
+        start_pool_migration(pool_name, target_pool_name, pg_num);
+        needs_wait = true;
+      } else {
+        pool_name = target_pool_name;
+        sleep_duration = migration_interval;
+        migration_counter++;
+        needs_wait = false;
+        cout_prefix() << __func__ << ": migration completed, sleeping for "
+              << std::to_string(sleep_duration) << " seconds" << std::endl;
+      }
+      std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
+    }
   }
 };
 
@@ -1338,6 +1479,7 @@ public:
   {
     std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
+      // Don't delete objects that are being watched
       context->kick();
       return;
     }
@@ -1512,9 +1654,9 @@ public:
     if (ctx) {
       ceph_assert(old_value.exists);
       TestAlarm alarm;
-      std::cerr << num << ":  about to start" << std::endl;
+      context->cout_prefix() << num << ":  about to start" << std::endl;
       ctx->start();
-      std::cerr << num << ":  started" << std::endl;
+      context->cout_prefix() << num << ":  started" << std::endl;
       bufferlist bl;
       context->io_ctx.set_notify_timeout(600);
       int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
@@ -1522,7 +1664,7 @@ public:
 	std::cerr << "r is " << r << std::endl;
 	ceph_abort();
       }
-      std::cerr << num << ":  notified, waiting" << std::endl;
+      context->cout_prefix() << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
     state_locker.lock();
@@ -1949,8 +2091,10 @@ public:
   {
     context->state_lock.lock();
     if (context->get_watch_context(oid)) {
+      // Don't rollback objects that are being watched
       context->kick();
       context->state_lock.unlock();
+      done = true;
       return;
     }
 
@@ -2833,6 +2977,7 @@ public:
   {
     std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
+      // Don't unset redirect on watched objects
       context->kick();
       return;
     }

@@ -401,7 +401,7 @@ void PG::on_replica_activate()
   scrubber.on_replica_activate();
 }
 
-void PG::on_activate_complete()
+void PG::on_activate_complete(HBHandle *handle)
 {
   /* Confusingly, on_activate_complete is invoked when the primary and replicas
    * have recorded the current interval.  At that point, the PG may either become
@@ -2028,6 +2028,12 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
   }
   logger().debug("{}: after pwlc={}",
                  __func__, info->partial_writes_last_complete);
+}
+
+std::optional<hobject_t> PG::consider_updating_migration_watermark(
+  std::set<hobject_t> &deleted) {
+  // TODO: Implement migration watermark logic
+  return std::nullopt;  // For now, return empty
 }
 
 }

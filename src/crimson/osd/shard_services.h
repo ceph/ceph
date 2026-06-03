@@ -334,6 +334,9 @@ private:
 			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
+
+  seastar::future<> send_pg_migrated_pool(int64_t migration_target, pg_t pgid);
+
   seastar::future<> send_pg_temp();
 
   std::set<pg_t> pg_created;
@@ -664,6 +667,7 @@ public:
   QUEUE_FOR_OSD_SINGLETON(send_pg_created)
   QUEUE_FOR_OSD_SINGLETON(send_alive)
   QUEUE_FOR_OSD_SINGLETON(send_pg_temp)
+  QUEUE_FOR_OSD_SINGLETON(send_pg_migrated_pool)
   FORWARD_TO_OSD_SINGLETON(get_osd_stat)
   FORWARD_TO_OSD_SINGLETON(update_osd_stat)
   FORWARD_TO_OSD_SINGLETON(inc_osd_stat_repaired)

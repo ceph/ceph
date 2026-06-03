@@ -534,6 +534,160 @@ public:
     get_object_op_for_modify(hoid);
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->open_array_section("ops");
+    int op_num = 0;
+    for (const auto &[hoid, op] : op_map) {
+      f->open_object_section("op");
+      f->dump_int("op_num", op_num);
+      f->dump_stream("object") << hoid;
+
+      // Dump init_type
+      match(
+        op.init_type,
+        [&](const ObjectOperation::Init::None &) {
+          if (op.delete_first) {
+            f->dump_string("init_type", "delete");
+          } else {
+            f->dump_string("init_type", "none");
+          }
+        },
+        [&](const ObjectOperation::Init::Create &) {
+          f->dump_string("init_type", "create");
+        },
+        [&](const ObjectOperation::Init::Clone &c) {
+          f->dump_string("init_type", "clone");
+          f->dump_stream("clone_source") << c.source;
+        },
+        [&](const ObjectOperation::Init::Rename &r) {
+          f->dump_string("init_type", "rename");
+          f->dump_stream("rename_source") << r.source;
+        });
+
+      f->dump_bool("delete_first", op.delete_first);
+
+      // Dump clear_omap
+      if (op.clear_omap) {
+        f->dump_bool("clear_omap", true);
+      }
+
+      // Dump truncate
+      if (op.truncate) {
+        f->open_object_section("truncate");
+        f->dump_unsigned("lowest", op.truncate->first);
+        f->dump_unsigned("final_size", op.truncate->second);
+        f->close_section();
+      }
+
+      // Dump attr_updates
+      if (!op.attr_updates.empty()) {
+        f->open_object_section("attr_updates");
+        for (const auto &[key, val] : op.attr_updates) {
+          if (val) {
+            f->dump_unsigned(key.c_str(), val->length());
+          } else {
+            f->dump_string(key.c_str(), "remove");
+          }
+        }
+        f->close_section();
+      }
+
+      // Dump omap_updates
+      if (!op.omap_updates.empty()) {
+        f->open_array_section("omap_updates");
+        for (const auto &[type, bl] : op.omap_updates) {
+          f->open_object_section("omap_update");
+          switch (type) {
+            case ObjectOperation::OmapUpdateType::Remove:
+              f->dump_string("type", "remove");
+              break;
+            case ObjectOperation::OmapUpdateType::Insert:
+              f->dump_string("type", "insert");
+              break;
+            case ObjectOperation::OmapUpdateType::RemoveRange:
+              f->dump_string("type", "remove_range");
+              break;
+          }
+          f->dump_unsigned("data_length", bl.length());
+          f->close_section();
+        }
+        f->close_section();
+      }
+
+      // Dump omap_header
+      if (op.omap_header) {
+        f->dump_unsigned("omap_header_length", op.omap_header->length());
+      }
+
+      // Dump updated_snaps
+      if (op.updated_snaps) {
+        f->open_object_section("updated_snaps");
+        f->open_array_section("old_snaps");
+        for (const auto &snap : op.updated_snaps->first) {
+          f->dump_unsigned("snap", snap);
+        }
+        f->close_section();
+        f->open_array_section("new_snaps");
+        for (const auto &snap : op.updated_snaps->second) {
+          f->dump_unsigned("snap", snap);
+        }
+        f->close_section();
+        f->close_section();
+      }
+
+      // Dump alloc_hint
+      if (op.alloc_hint) {
+        f->open_object_section("alloc_hint");
+        f->dump_unsigned("expected_object_size", op.alloc_hint->expected_object_size);
+        f->dump_unsigned("expected_write_size", op.alloc_hint->expected_write_size);
+        f->dump_unsigned("flags", op.alloc_hint->flags);
+        f->close_section();
+      }
+
+      // Dump buffer_updates
+      if (!op.buffer_updates.empty()) {
+        f->open_array_section("buffer_updates");
+        for (const auto &it : op.buffer_updates) {
+          f->open_object_section("buffer_update");
+          f->dump_unsigned("offset", it.get_off());
+          f->dump_unsigned("length", it.get_len());
+          const auto &update = it.get_val();
+          match(
+            update,
+            [&](const ObjectOperation::BufferUpdate::Write &w) {
+              f->dump_string("type", "write");
+              f->dump_unsigned("buffer_length", w.buffer.length());
+              f->dump_unsigned("fadvise_flags", w.fadvise_flags);
+            },
+            [&](const ObjectOperation::BufferUpdate::Zero &z) {
+              f->dump_string("type", "zero");
+              f->dump_unsigned("zero_length", z.len);
+            },
+            [&](const ObjectOperation::BufferUpdate::CloneRange &c) {
+              f->dump_string("type", "clone_range");
+              f->dump_stream("from") << c.from;
+              f->dump_unsigned("from_offset", c.offset);
+              f->dump_unsigned("clone_length", c.len);
+            });
+          f->close_section();
+        }
+        f->close_section();
+      }
+
+      f->close_section();
+      op_num++;
+    }
+    f->close_section();
+  }
+
+  friend inline std::ostream& operator<<(std::ostream& out, const PGTransaction& t) {
+    Formatter *f = Formatter::create("json");
+    t.dump(f);
+    f->flush(out);
+    delete f;
+    return out;
+  }
+
   /* Calls t() on all pair<hobject_t, ObjectOperation> & such that clone/rename
    * sinks are always called before clone sources
    *

@@ -314,6 +314,19 @@ struct ObjectOperation {
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
     osd_op.op.alloc_hint.flags = flags;
   }
+  void add_pg_pool_migration_reserve(int op, const hobject_t& start_obj,
+                                     int64_t num_bytes,
+                                     int64_t num_objects) {
+    using ceph::encode;
+    OSDOp& osd_op = add_op(op);
+    encode(start_obj, osd_op.indata);
+    osd_op.op.pool_migration_reserve.num_bytes = num_bytes;
+    osd_op.op.pool_migration_reserve.num_objects = num_objects;
+  }
+  void add_pg_pool_migration_release(int op) {
+    using ceph::encode;
+    add_op(op);
+  }
 
   // ------
 
@@ -335,6 +348,19 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGNLS_FILTER, count, filter, cookie,
 		      start_epoch);
+    flags |= CEPH_OSD_FLAG_PGOP;
+  }
+
+  void pg_pool_migration_reserve(const hobject_t& start_obj,
+                                 int64_t num_bytes,
+                                 int64_t num_objects) {
+    add_pg_pool_migration_reserve(CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE,
+                                  start_obj, num_bytes, num_objects);
+    flags |= CEPH_OSD_FLAG_PGOP;
+  }
+
+  void pg_pool_migration_release() {
+    add_pg_pool_migration_release(CEPH_OSD_OP_PG_POOL_MIGRATION_RELEASE);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
@@ -1108,6 +1134,7 @@ struct ObjectOperation {
     mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
+    std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -1124,6 +1151,7 @@ struct ObjectOperation {
 			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
+                              std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *owatchers,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -1134,6 +1162,7 @@ struct ObjectOperation {
 	out_reqid_return_codes(oreqid_return_codes),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
+        out_watchers(owatchers),
 	prval(r) {}
     void finish(int r) override {
       using ceph::decode;
@@ -1179,6 +1208,8 @@ struct ObjectOperation {
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
 	  *out_truncate_size = copy_reply.truncate_size;
+        if (out_watchers)
+          *out_watchers = copy_reply.watchers;
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)
@@ -1204,6 +1235,7 @@ struct ObjectOperation {
 		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
+                std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers,
 		int *prval) {
     using ceph::encode;
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
@@ -1219,7 +1251,8 @@ struct ObjectOperation {
 				    out_flags, out_data_digest,
 				    out_omap_digest, out_reqids,
 				    out_reqid_return_codes, truncate_seq,
-				    truncate_size, prval);
+				    truncate_size, out_watchers,
+                                    prval);
     out_bl[p] = &h->bl;
     set_handler(h);
   }
@@ -1530,7 +1563,8 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
-    osd_op.op.copy_from.flags = flags;
+    osd_op.op.copy_from.flags = flags; // 8-bits
+    osd_op.op.copy_from.flags2 = flags; // 32-bits
     osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
     encode(src, osd_op.indata);
     encode(src_oloc, osd_op.indata);
@@ -1543,7 +1577,8 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM2);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
-    osd_op.op.copy_from.flags = flags;
+    osd_op.op.copy_from.flags = flags; // 8-bits
+    osd_op.op.copy_from.flags2 = flags; // 32-bits
     osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
     encode(src, osd_op.indata);
     encode(src_oloc, osd_op.indata);
@@ -1802,7 +1837,11 @@ private:
       it++;
     }
   }
-
+  // Cache of pool migration watermarks for each placement group. Cleared on
+  // each epoch and updated by the OSD providing the current watermark when
+  // redirecting a request to the target pool. Use rwlock for thread safety
+  // when accessing.
+  std::map<pg_t, hobject_t> pool_migration_watermarks;
 public:
   void maybe_request_map();
 
@@ -1874,6 +1913,7 @@ public:
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
     bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
+    std::set<pg_t> migrating_pgs; ///< PGs migrating for pool migration
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -1905,6 +1945,15 @@ public:
       return hobject_t(target_oid,
 		       target_oloc.key,
 		       CEPH_NOSNAP,
+		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
+		       target_oloc.pool,
+		       target_oloc.nspace);
+    }
+
+    hobject_t get_hobj(pg_t pgid, snapid_t snapid) {
+      return hobject_t(target_oid,
+		       target_oloc.key,
+		       snapid,
 		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
 		       target_oloc.pool,
 		       target_oloc.nspace);
@@ -2227,6 +2276,25 @@ public:
     std::string nspace;
 
     ceph::buffer::list bl;   // raw data read to here
+
+    // Pool Migration specific attributes
+  	std::list<librados::ListObjectImpl> tgt_list;
+  	std::list<librados::ListObjectImpl> src_list;
+  	std::list<librados::ListObjectImpl> intermediate_list;
+
+  	collection_list_handle_t end_of_tgt;
+
+	uint64_t src_pool_id = -1;
+	uint64_t tgt_pool_id = -1;
+
+  	collection_list_handle_t src_pos;
+  	collection_list_handle_t tgt_pos;
+
+  	enum stage {TGT_READ, SRC_READ, TGT_SECOND_READ};
+  	stage current_stage = TGT_READ;
+  	bool end_of_tripple_read = false;
+  	// End of Pool Migration attributes
+
     std::list<librados::ListObjectImpl> list;
 
     ceph::buffer::list filter;
@@ -2589,12 +2657,13 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, bool any_change = false);
-  int _map_session(op_target_t *op, OSDSession **s,
+  int _calc_target(op_target_t *t, snapid_t snap, bool any_change = false);
+  int _map_session(op_target_t *op, snapid_t snap, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);
 
   void _session_op_assign(OSDSession *s, Op *op);
   void _session_op_remove(OSDSession *s, Op *op);
+  void _session_op_remove(OSDSession *s, std::map<ceph_tid_t,Op*>::iterator& it);
   void _session_linger_op_assign(OSDSession *to, LingerOp *op);
   void _session_linger_op_remove(OSDSession *from, LingerOp *op);
   void _session_command_op_assign(OSDSession *to, CommandOp *op);
@@ -2659,6 +2728,10 @@ private:
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
+
+  void combine_result_lists(NListContext *list_context);
+
+  static uint32_t reverse_bits_32(uint32_t n);
 
   void resend_mon_ops();
 
