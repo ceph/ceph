@@ -577,7 +577,7 @@ public:
         iter.leaf.node = child;
       }
     }
-    auto it = iter.leaf.node->upper_bound(addr);
+    auto it = iter.leaf.node->lower_bound(addr);
     iter.leaf.pos = it->get_offset();
     SUBTRACET(
       seastore_fixedkv_tree,
