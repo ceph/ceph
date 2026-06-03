@@ -371,7 +371,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
 	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
-	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
+	f(SCRUBLS,      __CEPH_OSD_OP(RD, PG, 7),       "scrubls")          \
+	f(PG_POOL_MIGRATION_RESERVE, __CEPH_OSD_OP(WR, PG, 8), "pg-pool-migration-reserve") \
+	f(PG_POOL_MIGRATION_RELEASE, __CEPH_OSD_OP(WR, PG, 9), "pg-pool-migration-release") \
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -532,15 +534,21 @@ enum {
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
 	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
+	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION = 64, /* pool migration copy */
+	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES = 128, /* pool migration copy which must have reservations */
+	CEPH_OSD_COPY_FROM_FLAG2_POOL_MIGRATION_HAS_CLONES = 256, /* pool migration copy head object and update snapset */
 };
 
-#define CEPH_OSD_COPY_FROM_FLAGS			\
-	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |		\
-	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |	\
-	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |		\
-	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |	\
-	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |		\
-	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ)
+#define CEPH_OSD_COPY_FROM_FLAGS                            \
+	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |                    \
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |           \
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |             \
+	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |           \
+	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |                \
+	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ |             \
+	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION |           \
+	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES |   \
+	 CEPH_OSD_COPY_FROM_FLAG2_POOL_MIGRATION_HAS_CLONES)
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
@@ -651,6 +659,7 @@ struct ceph_osd_op {
 			 * ceph_osd_op::flags.
 			 */
 			__le32 src_fadvise_flags;
+			__le32 flags2; /* CEPH_OSD_COPY_FROM_FLAG2_* */
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;
@@ -674,6 +683,10 @@ struct ceph_osd_op {
 			__le32 chunk_size;
 			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
 		} __attribute__ ((packed)) checksum;
+		struct {
+		        __le64 num_bytes;
+		        __le64 num_objects;
+		} __attribute__ ((packed)) pool_migration_reserve;
 	} __attribute__ ((packed));
 	__le32 payload_len;
 } __attribute__ ((packed));

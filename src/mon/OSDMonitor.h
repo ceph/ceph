@@ -429,6 +429,10 @@ public:
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
+  static bool target_pg_migrating(const std::set<pg_t> &migrating_pgs, const pg_t &source_pg,
+                                  int source_pgnum, int target_pgnum);
+  static uint64_t calculate_migrating_pg_count(int source_pgnum, int target_pgnum,
+                                               uint64_t migration_percent);
 
 private:
   void print_utilization(std::ostream &out, ceph::Formatter *f, bool tree) const;
@@ -469,6 +473,9 @@ private:
 
   bool preprocess_pg_ready_to_merge(MonOpRequestRef op);
   bool prepare_pg_ready_to_merge(MonOpRequestRef op);
+
+  bool preprocess_pg_migrated_pool(MonOpRequestRef op);
+  bool prepare_pg_migrated_pool(MonOpRequestRef op);
 
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, std::ostream *ss);
   bool _check_become_tier(
@@ -531,22 +538,24 @@ private:
   uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
-		       int crush_rule,
-		       const std::string &crush_rule_name,
+                       int crush_rule,
+                       const std::string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
-		       unsigned pg_num_min,
-		       unsigned pg_num_max,
+                       unsigned pg_num_min,
+                       unsigned pg_num_max,
                        uint64_t repl_size,
-		       const uint64_t target_size_bytes,
-		       const float target_size_ratio,
-		       const std::string &erasure_code_profile,
+                       const uint64_t target_size_bytes,
+                       const float target_size_ratio,
+                       const std::string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       std::string pg_autoscale_mode,
-		       bool bulk,
-		       bool crimson,
-		       std::ostream *ss);
+                       std::string pg_autoscale_mode,
+                       bool bulk,
+                       bool crimson,
+                       const std::optional<int64_t> source_pool_id,
+                       bool enable_ec_optimizations,
+                       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
   void set_pool_flags(int64_t pool_id, uint64_t flags);
@@ -632,6 +641,7 @@ private:
     }
   };
 
+  void insert_new_removed_snap(int64_t pool, snapid_t s);
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 

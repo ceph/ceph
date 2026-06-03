@@ -1804,6 +1804,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
+    if (pool.second.is_migrating()) {
+      features |= CEPH_FEATURE_SERVER_UMBRELLA;
+    }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
 
@@ -1857,6 +1860,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
+  if (HAVE_FEATURE(f, SERVER_UMBRELLA)) {
+    return ceph_release_t::umbrella;     // v21.2.0
+  }
   if (HAVE_FEATURE(f, CRUSH_MSR)) {
     return ceph_release_t::squid;        // v19.2.0
   }

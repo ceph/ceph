@@ -263,6 +263,12 @@ enum {
   rs_update_stats_invalidated,
   rs_append_log_stats_invalidated,
   rs_merge_log_stats_invalidated,
+  rs_stats_invalidated,
+  rs_waitlocalpoolmigrationreserved_latency,
+  rs_waitremotepoolmigrationreserved_latency,
+  rs_notmigrating_latency,
+  rs_repwaitmigrationreserved_latency,
+  rs_migratingsource_latency,
   rs_last,
 };
 

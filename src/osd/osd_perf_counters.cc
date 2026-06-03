@@ -542,6 +542,12 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
   rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
   rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
+  rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
+  rs_perf.add_time_avg(rs_waitlocalpoolmigrationreserved_latency, "waitlocalpoolmigrationreserved_latency", "Wait local pool migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitremotepoolmigrationreserved_latency, "waitremotepoolmigrationreserved_latency", "Wait remote pool migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_notmigrating_latency, "notmigrating_latency", "Notmigrating recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitmigrationreserved_latency, "repwaitmigrationreserved_latency", "Rep wait migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_migratingsource_latency, "migratingsource_latency", "Migrating source recovery state latency");
 
   return rs_perf.create_perf_counters();
 }
