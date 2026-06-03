@@ -717,8 +717,11 @@ JournalTrimmerImpl::trim_dirty()
 	    return trans_intr::do_for_each(
 	      dirty_list,
 	      [this, &t](auto &e) {
-	      return extent_callback->rewrite_extent(
+              return extent_callback->maybe_remove_shadow(t, *e
+              ).si_then([this, &t, e] {
+	        return extent_callback->rewrite_extent(
 		  t, e, INIT_GENERATION, NULL_TIME);
+              });
 	    });
 	  });
 	}).si_then([this, &t] {

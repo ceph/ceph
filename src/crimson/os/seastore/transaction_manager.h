@@ -993,6 +993,42 @@ public:
     laddr_t start,
     std::size_t max_proceed_size) final;
 
+  maybe_remove_shadow_ret maybe_remove_shadow(
+    Transaction &t,
+    CachedExtent &e) {
+    if (!e.is_logical()) {
+      co_return;
+    }
+    auto &extent = static_cast<LogicalChildNode&>(e);
+    auto cursor = co_await lba_manager->get_cursor(t, extent
+    ).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further{},
+      crimson::ct_error::enoent::assert_failure{}
+    );
+    if (cursor->has_shadow_paddr()) {
+      if (auto shadow = extent.get_shadow(); shadow) {
+        cache->retire_extent(t, shadow);
+      } else {
+        auto laddr = cursor->get_laddr();
+        std::ignore = cache->retire_absent_extent_addr_by_type(
+          t, laddr,
+          cursor->get_shadow_paddr(),
+          cursor->get_length(),
+          cursor->get_extent_type(),
+          [&extent, laddr](auto &ext) {
+            auto lextent = ext.template cast<LogicalChildNode>();
+            assert(ext.is_logical());
+            assert(!lextent->has_laddr());
+            assert(!ext.has_been_invalidated());
+            lextent->set_laddr(laddr);
+            ext.set_shadow_extent(true);
+            extent.set_shadow(lextent);
+          }
+        );
+      }
+    }
+  }
+
   using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
