@@ -488,6 +488,9 @@ class NvmeofCLICommand(DBCLICommand):
                                    self.prefix, exc_info=True)
 
                 out = message if message else self._output_formatter.format_output(ret, self._model)
+                wrn_msg = ret.get('error_message', '')
+                if wrn_msg:
+                    out += f"\nWarning: {wrn_msg}"
 
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)
