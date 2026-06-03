@@ -38,6 +38,11 @@ export class PoolDetailsComponent implements OnInit, OnDestroy {
   private buildSidebarItems(permissions: any): void {
     const items: SidebarItem[] = [
       {
+        label: $localize`Overview`,
+        route: [this.basePath, this.poolName, 'overview'],
+        routerLinkActiveOptions: { exact: true }
+      },
+      {
         label: $localize`Details`,
         route: [this.basePath, this.poolName, 'details'],
         routerLinkActiveOptions: { exact: true }

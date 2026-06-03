@@ -1,0 +1,90 @@
+@if (poolName) {
+  <cd-details-card cardTitle="Overview" i18n-cardTitle>
+    <ng-container class="details-body-content overview-body">
+      <div class="overview-columns">
+
+        <!-- Column 1: Name, Data Protection, Applications -->
+        <div class="overview-col">
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Name</span>
+            <span class="cds--type-body-compact-01" [title]="name">{{ name }}</span>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Data Protection</span>
+            @if (dataProtection !== '-') {
+              <cds-tag type="gray" class="tag-auto">{{ dataProtection }}</cds-tag>
+            } @else {
+              <span class="cds--type-body-compact-01">-</span>
+            }
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Applications</span>
+            <div class="tags-row">
+              @if (applications.length > 0) {
+                @for (app of applications; track app) {
+                  <cds-tag type="blue" class="tag-auto">{{ app }}</cds-tag>
+                }
+              } @else {
+                <span class="cds--type-body-compact-01">-</span>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: PG Status, Crush Ruleset, Usage -->
+        <div class="overview-col">
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>PG Status</span>
+            <span class="cds--type-body-compact-01" [title]="pgStatus">{{ pgStatus }}</span>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Crush Ruleset</span>
+            <span class="cds--type-body-compact-01" [title]="crushRuleset">{{ crushRuleset }}</span>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Usage</span>
+            @if (usageTotal > 0) {
+              <cd-usage-bar [total]="usageTotal"
+                            [used]="usageUsed"
+                            [title]="name"
+                            decimals="2">
+              </cd-usage-bar>
+            } @else {
+              <span class="cds--type-body-compact-01">-</span>
+            }
+          </div>
+        </div>
+
+        <!-- Column 3: Read/Write stats -->
+        <div class="overview-col">
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Read Bytes</span>
+            <cd-sparkline [data]="readBytesRates" [isBinary]="true"></cd-sparkline>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Write Bytes</span>
+            <cd-sparkline [data]="writeBytesRates" [isBinary]="true"></cd-sparkline>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Read Ops</span>
+            <span class="cds--type-body-compact-01">{{ readOpsRate | dimless }}/s</span>
+          </div>
+
+          <div class="overview-field">
+            <span class="cds--type-label-01" i18n>Write Ops</span>
+            <span class="cds--type-body-compact-01">{{ writeOpsRate | dimless }}/s</span>
+          </div>
+        </div>
+
+      </div>
+    </ng-container>
+  </cd-details-card>
+} @else {
+  <cd-alert-panel type="error" i18n>No pool name found.</cd-alert-panel>
+}

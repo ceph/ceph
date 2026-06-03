@@ -14,6 +14,7 @@ import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-for
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolDetailsBreadcrumbResolver } from './pool-details/pool-details-breadcrumb.resolver';
 import { PoolDetailsSectionComponent } from './pool-details/pool-details-section.component';
+import { PoolOverviewComponent } from './pool-details/pool-overview.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
 import {
@@ -88,7 +89,8 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
     PoolDetailsComponent,
-    PoolDetailsSectionComponent
+    PoolDetailsSectionComponent,
+    PoolOverviewComponent
   ]
 })
 export class PoolModule {
@@ -121,7 +123,12 @@ const routes: Routes = [
     component: PoolDetailsComponent,
     data: { breadcrumbs: PoolDetailsBreadcrumbResolver },
     children: [
-      { path: '', redirectTo: 'details', pathMatch: 'full' },
+      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+      {
+        path: 'overview',
+        component: PoolOverviewComponent,
+        data: { breadcrumbs: 'Overview', section: 'overview' }
+      },
       {
         path: 'details',
         component: PoolDetailsSectionComponent,
