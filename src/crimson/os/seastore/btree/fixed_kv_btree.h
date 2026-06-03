@@ -546,7 +546,7 @@ public:
       iter.leaf.node = root_node->template cast<leaf_node_t>();
       auto &root_entry = iter.leaf;
       auto riter = root_entry.node->lower_bound(addr);
-      SUBTRACET(
+      SUBDEBUGT(
         seastore_fixedkv_tree,
         "leaf addr {}, got ret offset {}, size {}, end {}",
         c.trans,
@@ -579,7 +579,7 @@ public:
     }
     auto it = iter.leaf.node->lower_bound(addr);
     iter.leaf.pos = it->get_offset();
-    SUBTRACET(
+    SUBDEBUGT(
       seastore_fixedkv_tree,
       "leaf addr {}, got ret offset {}, size {}, end {}",
       c.trans,
