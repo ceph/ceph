@@ -8621,8 +8621,25 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
 
-  if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
-    // This will fail if the pool cannot support ec optimizations.
+  if (pool_type == pg_pool_t::TYPE_ERASURE && num_zones > 1) {
+    stringstream ec_opt_ss;
+    int ec_opt_result = enable_pool_ec_optimizations(*pi, &ec_opt_ss, true);
+    
+    if (ec_opt_result != 0) {
+      // FastEC validation failed, pool creation must fail
+      *ss << "Multi-zone erasure coded pools require FastEC support. "
+          << "The erasure code profile '" << erasure_code_profile << "' "
+          << "does not support FastEC: " << ec_opt_ss.str()
+          << "Please use a FastEC-compatible profile (e.g., plugin=jerasure technique=reed_sol_van, "
+          << "or plugin=isa).";
+      return ec_opt_result;
+    }
+    
+    dout(20) << __func__ << " enabled FastEC for multi-zone pool " << name
+             << " with profile " << erasure_code_profile << dendl;
+  } else if (pool_type == pg_pool_t::TYPE_ERASURE &&
+             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+    // This will fail silently if the pool cannot support ec optimizations
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
 

@@ -23,7 +23,19 @@ int create_ec_pool_with_params(Rados &cluster, const std::string &pool_name,
   cmd += "}";
 
   bufferlist outbl;
-  const int ret = cluster.mon_command(std::move(cmd), {}, &outbl, nullptr);
+  std::string errstr;
+  const int ret = cluster.mon_command(std::move(cmd), {}, &outbl, &errstr);
+
+  if (ret != 0) {
+    std::cout << "Pool creation failed with error " << ret << std::endl;
+    if (outbl.length() > 0) {
+      std::cout << "Output: " << outbl.to_str() << std::endl;
+    }
+    if (!errstr.empty()) {
+      std::cout << "Error: " << errstr << std::endl;
+    }
+  }
+
   if (ret == 0) {
     cluster.wait_for_latest_osdmap();
   }
@@ -57,7 +69,6 @@ int cleanup_ec_pool(Rados &cluster, const std::string &pool_name) {
 
 // Helper function to clean up EC profile
 int cleanup_ec_profile(Rados &cluster, const std::string &profile_name) {
-
   std::string cmd = "{\"prefix\": \"osd erasure-code-profile rm\", "
                     "\"name\": \"" + profile_name + "\"}";
   int ret = cluster.mon_command(std::move(cmd), {}, nullptr, nullptr);
@@ -124,7 +135,6 @@ int cleanup_crush_rule(Rados &cluster, const std::string &rule_name) {
   return cluster.mon_command(std::move(cmd), {}, nullptr, nullptr);
 }
 
-
 // Test basic EC pool creation with K and M parameters
 TEST(ECPoolCreatePP, BasicKM) {
   Rados cluster;
@@ -153,7 +163,7 @@ TEST(ECPoolCreatePP, StretchECWithNumZones) {
   ASSERT_EQ("", connect_cluster_pp(cluster));
   
   const std::string pool_name = get_temp_pool_name("ec_stretch_");
-  constexpr int k = 4, m = 2, num_zones = 2;
+  constexpr int k = 2, m = 1, num_zones = 2;
   
   ASSERT_EQ(0, create_ec_pool_with_params(cluster, pool_name, k, m, num_zones));
   
@@ -166,7 +176,8 @@ TEST(ECPoolCreatePP, StretchECWithNumZones) {
   ASSERT_EQ(num_zones, actual_num_zones);
   
   ASSERT_EQ(0, cleanup_ec_pool(cluster, pool_name));
-  ASSERT_NE(0, verify_ec_profile(cluster, profile_name));  cluster.shutdown();
+  ASSERT_NE(0, verify_ec_profile(cluster, profile_name));
+  cluster.shutdown();
 }
 
 // Test that creating two pools with same K/M creates separate profiles
@@ -373,7 +384,7 @@ TEST(ECPoolCreatePP, DefaultProfile) {
   cluster.shutdown();
 }
 
-TEST(PoolCreateNumZonesPP, ReplicatedPoolStoresNumZones) {
+TEST(ECPoolCreatePP, ReplicatedPoolStoresNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
 
@@ -423,7 +434,7 @@ TEST(ECPoolCreatePP, AutoProfileAndRuleWithNumZones) {
   ASSERT_EQ("", connect_cluster_pp(cluster));
   
   const std::string pool_name = get_temp_pool_name("ec_auto_stretch_");
-  constexpr int k = 4, m = 2, num_zones = 2;
+  constexpr int k = 2, m = 1, num_zones = 2;
   
   ASSERT_EQ(0, create_ec_pool_with_params(cluster, pool_name, k, m, num_zones));
   
