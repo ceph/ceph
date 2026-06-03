@@ -511,7 +511,7 @@ def parse_cli() -> argparse.Namespace:
     mg.add_argument(
         '--address',
         type=str,
-        help='Address of gRPC server',
+        help='Location of gRPC server - <host_or_addr>:<port> for TCP servers',
     )
     mg.add_argument(
         '--cluster',
