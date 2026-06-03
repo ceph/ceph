@@ -677,7 +677,7 @@ namespace ceph {
        */
       FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS = 1<<5,
       /* Optimized EC is supported only if this flag is set. All other flags
-       * are irrelevant if this flag is false.
+       * are irrelevant if this flag pr the experimental flag are false.
        */
       FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED = 1<<6,
       /* This plugin supports the ability to encode CRCs of data shards to get
@@ -690,6 +690,12 @@ namespace ceph {
        * shard and that the data shards are simply striped.
        */
       FLAG_EC_PLUGIN_DIRECT_READS = 1<<8,
+      /* Optimized EC is allowed to be used expermimentally if this flag is set.
+         All other flags are irrelevant if this flag or the supported flag are
+         false. Experimental plugins are not supported and are purely for
+         development and testing.
+       */
+      FLAG_EC_PLUGIN_OPTIMIZED_EXPERIMENTAL = 1<<9
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
@@ -702,8 +708,9 @@ namespace ceph {
       case FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED: return "optimizedsupport";
       case FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT:
         return "crcencodedecode";
-      case FLAG_EC_PLUGIN_DIRECT_READS:
-        return "directreads";
+      case FLAG_EC_PLUGIN_DIRECT_READS: return "directreads";
+      case FLAG_EC_PLUGIN_OPTIMIZED_EXPERIMENTAL:
+        return "experimentaloptimizedsupport";
       default: return "???";
       }
     }
