@@ -70,10 +70,9 @@ public:
 
 private:
   PGPeeringPipeline &peering_pp(PG &pg);
-  seastar::future<> handle_split_pg_creation(
-    Ref<PG> child_pg,
-    cached_map_t next_map,
-    PeeringCtx child_rctx);
+  seastar::future<Ref<PG>> handle_split_pg_creation(
+    spg_t child_pgid,
+    cached_map_t next_map);
 };
 
 }
