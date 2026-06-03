@@ -828,6 +828,116 @@ def test_to_upgrade_batches_mds_when_fail_fs(
     assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
 
 
+def _fsmap_two_filesystems():
+    # Two multi-rank filesystems. 'up' is non-empty so the fail_fs branch logs
+    # and issues 'fs fail'; max_mds > 1 so the max_mds branch issues 'fs set'.
+    return {'filesystems': [
+        {'id': 1, 'mdsmap': {'fs_name': 'cephfs', 'max_mds': 2, 'flags': 0,
+                             'up': {'mds_0': 1, 'mds_1': 2}, 'in': [0, 1],
+                             'info': {'gid_1': {'name': 'a', 'state': 'up:active'},
+                                      'gid_2': {'name': 'b', 'state': 'up:active'}}}},
+        {'id': 2, 'mdsmap': {'fs_name': 'cephfs2', 'max_mds': 2, 'flags': 0,
+                             'up': {'mds_0': 3, 'mds_1': 4}, 'in': [0, 1],
+                             'info': {'gid_3': {'name': 'c', 'state': 'up:active'},
+                                      'gid_4': {'name': 'd', 'state': 'up:active'}}}},
+    ]}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_fail_fs_scopes_to_targeted_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=true and the upgrade scoped to a single filesystem
+    # (need_upgrade only contains cephfs2's MDS), only cephfs2 must be failed.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs2' in failed
+    assert 'cephfs' not in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_includes_fs_actually_served(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # A daemon from service mds.cephfs2 currently holds a rank in cephfs
+    # (standby takeover: mds_join_fs is only a preference). The filesystem
+    # it actually serves must be prepared too, not only its service's.
+    fsmap = _fsmap_two_filesystems()
+    fsmap['filesystems'][0]['mdsmap']['info']['gid_1']['name'] = 'cephfs2.host1.abcde'
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: fsmap if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs' in failed
+    assert 'cephfs2' in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_max_mds_scopes_to_targeted_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=false the targeted filesystem is scaled to max_mds 1, and
+    # only the targeted filesystem (cephfs2) must be touched.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=False)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    scaled = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs set'
+              and c.args[0].get('var') == 'max_mds']
+    assert 'cephfs2' in scaled
+    assert 'cephfs' not in scaled
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_all_mds_touches_all_filesystems(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With --daemon-types mds (or no filter), need_upgrade contains MDS from
+    # every filesystem, so all filesystems must still be prepared.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [
+        DaemonDescription(daemon_type='mds', daemon_id='cephfs.host1.aaaaa',
+                          service_name='mds.cephfs'),
+        DaemonDescription(daemon_type='mds', daemon_id='cephfs2.host1.bbbbb',
+                          service_name='mds.cephfs2'),
+    ]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs' in failed
+    assert 'cephfs2' in failed
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
