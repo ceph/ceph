@@ -3377,12 +3377,14 @@ namespace rgw::dedup {
 
       ldpp_dout(dpp, 10) << __func__ << "::Wait for object ingress completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
-        // must release lock before calling handle_pause_req()
-        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
@@ -3421,12 +3423,14 @@ namespace rgw::dedup {
     while (!all_md5_shards_completed(&d_cluster, store, num_md5_shards)) {
       ldpp_dout(dpp, 10) << __func__ << "::Wait for md5 completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
-        // must release lock before calling handle_pause_req()
-        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
