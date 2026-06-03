@@ -207,11 +207,6 @@ public:
       uint32_t op_flags = 0) = 0;
 
     virtual unsigned get_max_attr_name_length() const = 0;
-
-    /// Override to report a tighter per-object cap than osd_max_object_size.
-    virtual uint64_t get_max_object_size() const {
-      return crimson::common::local_conf()->osd_max_object_size;
-    }
   };
 
 public:
@@ -248,6 +243,11 @@ public:
   virtual seastar::future<> report_stats() { return seastar::now(); }
 
   virtual uuid_d get_fsid() const  = 0;
+
+  /// Override to report a tighter per-object cap than osd_max_object_size.
+  virtual uint64_t get_max_object_size() const {
+    return crimson::common::local_conf()->osd_max_object_size;
+  }
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
