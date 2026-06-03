@@ -649,15 +649,28 @@ void NVMeofGwMap::skip_failovers_for_group(const NvmeGroupKey& group_key,
   }
 }
 
-int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
+/*
+ This function called in the following cases:
+  - Gw has no subsystems and no listeners
+  - GW performed fast startup
+  - GW sends the beacon with a wrong sequence number
+  - GW starts in ADMIN_DISABLED state
+ In all cases when GW passes to CREATED state it should not have active ANA groups
+ No failover started in all these cases, GW stay alive and beacon timer is armed
+*/
+int NVMeofGwMap::process_gw_map_gw_pass_to_created(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
 {
   int rc = 0;
   auto& gws_states = created_gws[group_key];
   auto  gw_state = gws_states.find(gw_id);
   if (gw_state != gws_states.end()) {
-    dout(10) << "GW- no subsystems configured " << gw_id << dendl;
+    dout(10) << "GW-id no subsystems configured " << gw_id << dendl;
     auto& st = gw_state->second;
+    if (st.availability == gw_availability_t::GW_CREATED) {
+       dout(20) << "GW-id was already in Created state " <<gw_id << dendl;
+       return 0;
+    }
     st.availability = gw_availability_t::GW_CREATED;
     for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
       fsm_handle_gw_no_subsystems(
