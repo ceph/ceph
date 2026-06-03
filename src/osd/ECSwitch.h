@@ -279,7 +279,7 @@ public:
     if (is_optimized()) {
       return optimized.objects_read_local(hoid, off, len, op_flags, bl);
     }
-    return legacy.objects_read_local(hoid, off, len, op_flags, bl);
+    return -EOPNOTSUPP;
   }
 
   int objects_readv_sync(const hobject_t &hoid,

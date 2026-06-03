@@ -62,6 +62,8 @@ void compare_pg_pool_t(const pg_pool_t l, const pg_pool_t r)
   ASSERT_EQ(l.cache_min_flush_age, r.cache_min_flush_age);
   ASSERT_EQ(l.cache_min_evict_age, r.cache_min_evict_age);
   ASSERT_EQ(l.erasure_code_profile, r.erasure_code_profile);
+  ASSERT_EQ(l.ec_data_shard_count, r.ec_data_shard_count);
+  ASSERT_EQ(l.ec_coding_shard_count, r.ec_coding_shard_count);
   ASSERT_EQ(l.last_force_op_resend_preluminous, r.last_force_op_resend_preluminous);
   ASSERT_EQ(l.min_read_recency_for_promote, r.min_read_recency_for_promote);
   ASSERT_EQ(l.expected_num_objects, r.expected_num_objects);
