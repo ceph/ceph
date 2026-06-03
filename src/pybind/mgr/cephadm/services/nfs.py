@@ -142,6 +142,11 @@ class NFSService(CephService):
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
         deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
         deps.append(f'rdma_port: {nfs_spec.rdma_port}')
+        # added dependency for cluster QoS configuration
+        if nfs_spec.cluster_qos_config:
+            import json
+            qos_hash = utils.config_hash(json.dumps(nfs_spec.cluster_qos_config, sort_keys=True))
+            deps.append(f'cluster_qos_config: {qos_hash}')
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
