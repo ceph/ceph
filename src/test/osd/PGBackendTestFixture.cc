@@ -15,6 +15,7 @@
 
 #include "test/osd/PGBackendTestFixture.h"
 #include "common/errno.h"
+#include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"

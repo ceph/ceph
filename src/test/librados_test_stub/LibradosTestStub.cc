@@ -20,6 +20,7 @@
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 #include <arpa/inet.h>
+#include <stdarg.h>
 #include <boost/shared_ptr.hpp>
 #include <deque>
 #include <functional>

@@ -28,6 +28,12 @@
 #include "MockMessenger.h"
 #include "global/global_context.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 // Forward declarations
 class EventLoop;
 class ECPeeringTestFixture;

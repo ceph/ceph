@@ -3,6 +3,7 @@
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
+#include "common/Cond.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"

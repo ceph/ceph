@@ -27,6 +27,7 @@
 #include "client/FSCrypt.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientSession.h"
+#include "common/Cond.h"
 #include "common/async/blocked_completion.h"
 
 #include "fscrypt_conf.h"

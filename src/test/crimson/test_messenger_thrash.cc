@@ -16,6 +16,7 @@
 #include "messages/MPing.h"
 #include "messages/MCommand.h"
 #include "crimson/auth/DummyAuth.h"
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
