@@ -269,6 +269,145 @@ class MultiLabelTest : public StoreTestDeferredSetup {
   }
 };
 
+class CheckedUmount: public StoreTestDeferredSetup {
+public:
+  bool mounted = false;
+  virtual int mount() {
+    int r = store->mount();
+    if (r == 0) mounted = true;
+    return r;
+  }
+  virtual void umount() {
+    ASSERT_TRUE(mounted);
+    store->umount();
+    mounted = false;
+  }
+
+protected:
+  void DeferredSetup() {
+    StoreTest::SetUp();
+    mounted = true;
+  }
+  void TearDown() override {
+    if (mounted) {
+      store->umount();
+    }
+    StoreTest::RemoveTestObjectStore();
+    store = nullptr;
+    StoreTest::TearDown();
+  }
+};
+
+class UnsharingBlobsOnRemove : public CheckedUmount {
+public:
+  struct MyCond : public C_SaferCond {
+    void reset() {
+      done = false;
+    }
+  };
+
+  std::string get_data_dir() {
+    return data_dir;
+  }
+ 
+  void write_object(
+    ghobject_t hoid,
+    size_t pos,
+    size_t size)
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(size, 'x'));
+    t.write(cid, hoid, pos, bl.length(), bl);
+    int r = queue_transaction(store, ch, std::move(t));
+    EXPECT_EQ(r, 0);
+  }
+
+  size_t count_shared_blob_trackers()
+  {
+    BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+    auto* kv = bstore->get_kv();
+    // to be inline with BlueStore.cc
+    const string PREFIX_SHARED_BLOB = "X";
+    size_t cnt = 0;
+    auto it = kv->get_iterator(PREFIX_SHARED_BLOB);
+    ceph_assert(it);
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      ++cnt;
+    }
+    return cnt;
+  }
+
+  void commit_transaction()
+  {
+    t.register_on_commit(&mycond);
+    int r = queue_transaction(store, ch, std::move(t));
+    EXPECT_EQ(r, 0);
+    mycond.wait();
+    mycond.reset();
+    t = ObjectStore::Transaction();
+  }
+
+  BlueStore::OnodeRef get_onode(const coll_t& cid, const ghobject_t& hoid) {
+    BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+    return bstore->debug_get_onode(cid, hoid);
+  }
+
+  size_t count_shared_blobs(BlueStore::OnodeRef o)
+  {
+    std::set<BlueStore::Blob*> visited;
+    size_t cnt = 0;
+    for (const auto& e : o->extent_map.extent_map) {
+      if (e.blob->get_blob().is_shared()) {
+        if (visited.emplace(e.blob.get()).second) {
+          cnt++;
+        }
+      }
+    }
+    return cnt;
+  }
+
+  coll_t cid;
+  ObjectStore::CollectionHandle ch;
+  uint16_t poolid;
+  ObjectStore::Transaction t;
+  MyCond mycond;
+  void prepare_store()
+  {
+    static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+    SetVal(g_conf(), "bluestore_block_size", stringify(10 * _1G).c_str());
+    g_conf().apply_changes(nullptr);
+    DeferredSetup();
+    poolid = 1234;
+    cid = coll_t(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+
+    ch = store->create_new_collection(cid);
+    {
+      ObjectStore::Transaction t;
+      t.create_collection(cid, 0);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    ch.reset();
+    umount();
+  }
+
+  void cleanup_store()
+  {
+    mount();
+    ch = store->open_collection(cid);
+    {
+      ObjectStore::Transaction t;
+      t.remove_collection(cid);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    ch.reset();
+    umount();
+  }
+};
+
 #endif // WITH_BLUESTORE
 
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
@@ -7262,6 +7401,12 @@ INSTANTIATE_TEST_SUITE_P(
   ::testing::Values(
     "bluestore"));
 
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  UnsharingBlobsOnRemove,
+  ::testing::Values("bluestore")
+);
+
 #endif // WITH_BLUESTORE
 
 struct deferred_test_t {
@@ -11371,6 +11516,80 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
   ASSERT_EQ(label.meta["multi"], "yes");
 }
 
+TEST_P(UnsharingBlobsOnRemove, FullCloneAndErase) {
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  ch = store->create_new_collection(cid);
+  ghobject_t hoid_head(hobject_t(
+    sobject_t("LoremIpsum", CEPH_NOSNAP), "", 0x12345678, poolid, ""));
+
+  write_object(hoid_head, 0x0, 0x10000);
+
+  ghobject_t hoid_snap_1 = hoid_head;
+  hoid_snap_1.hobj.snap = 1;
+
+  t.clone(cid, hoid_head, hoid_snap_1);
+  commit_transaction();
+
+  BlueStore::OnodeRef oo = get_onode(cid, hoid_head);
+  size_t shared_blob_count = count_shared_blobs(oo);
+  EXPECT_GE(shared_blob_count, 1);
+  size_t shared_blob_trackers = count_shared_blob_trackers();
+  EXPECT_GE(shared_blob_trackers, 1);
+
+  t.remove(cid, hoid_snap_1);
+  commit_transaction();
+
+  shared_blob_count = count_shared_blobs(oo);
+  EXPECT_EQ(shared_blob_count, 0);
+  shared_blob_trackers = count_shared_blob_trackers();
+  EXPECT_EQ(shared_blob_trackers, 0);
+  oo.reset();
+
+  umount();
+  cleanup_store();
+}
+
+TEST_P(UnsharingBlobsOnRemove, UnshareOnPartial) {
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  SetVal(g_conf(), "bluestore_min_alloc_size", "16384");
+  prepare_store();
+
+  mount();
+  ch = store->create_new_collection(cid);
+
+  ghobject_t hoid_head(hobject_t(
+    sobject_t("LoremIpsum", CEPH_NOSNAP), "", 0x12345678, poolid, ""));
+
+  write_object(hoid_head, 0x0, 0xe000);
+
+  ghobject_t hoid_snap_1 = hoid_head;
+  hoid_snap_1.hobj.snap = 1;
+
+  t.clone(cid, hoid_head, hoid_snap_1);
+  commit_transaction();
+
+  BlueStore::OnodeRef oo = get_onode(cid, hoid_head);
+  size_t shared_blob_count = count_shared_blobs(oo);
+  EXPECT_GE(shared_blob_count, 1);
+  size_t shared_blob_trackers = count_shared_blob_trackers();
+  EXPECT_GE(shared_blob_trackers, 1);
+
+  t.remove(cid, hoid_snap_1);
+  commit_transaction();
+
+  shared_blob_count = count_shared_blobs(oo);
+  EXPECT_EQ(shared_blob_count, 0);
+  shared_blob_trackers = count_shared_blob_trackers();
+  EXPECT_EQ(shared_blob_trackers, 0);
+  oo.reset();
+
+  umount();
+  cleanup_store();
+}
+
 #endif // WITH_BLUESTORE
 
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
@@ -12128,8 +12347,9 @@ TEST_P(StoreTest, BlueFS_truncate_remove_race) {
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
+  std::map<string, string> defaults = {{"debug_rocksdb","0/0"}};
   auto args = argv_to_vec(argc, argv);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
