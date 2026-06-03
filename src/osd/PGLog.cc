@@ -1201,7 +1201,7 @@ namespace {
       ).safe_then([] (auto ret) {
         ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
       }).handle_error(
-        crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+        crimson::os::FuturizedStore::Shard::read_errorator::assert_all("unexpected error")
       );
 
       for (auto &p : kvs) {

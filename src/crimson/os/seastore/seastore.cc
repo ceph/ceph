@@ -232,9 +232,9 @@ seastar::future<> SeaStore::get_shard_nums()
     INFO("seastore mkfs done");
     auto shard_nums = co_await device->get_shard_nums(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in device->get_shard_nums"
-      });
+      ));
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
     if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
@@ -387,9 +387,9 @@ seastar::future<> SeaStore::Shard::mount_managers()
   init_managers();
   return transaction_manager->mount(
   ).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in mount_managers"
-  });
+  ));
 }
 
 seastar::future<> SeaStore::umount()
@@ -401,9 +401,9 @@ seastar::future<> SeaStore::umount()
   co_await shard_stores.invoke_on_all([](auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
       return mshard_store->umount().handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in shard_store->umount"
-      });
+      ));
     });
   });
   INFO("done");
@@ -526,7 +526,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
     co_return;
   }
   co_await shard_stores.local().mshard_stores[0]->mkfs_managers().handle_error(
-    crimson::ct_error::assert_all{"Invalid error in SeaStore::mkfs"});
+    crimson::ct_error::assert_all("Invalid error in SeaStore::mkfs"));
   co_await prepare_meta(new_osd_fsid);
   INFO("done");
 }
@@ -590,7 +590,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
         sds.emplace((device_id_t)id, device_spec_t{magic, dtype, (device_id_t)id});
         co_await p_sec_dev->mkfs(
           device_config_t::create_secondary(new_osd_fsid, id, dtype, magic)
-          ).handle_error(crimson::ct_error::assert_all{"not possible"});
+          ).handle_error(crimson::ct_error::assert_all("not possible"));
         co_await set_secondaries();
       }
     }
@@ -616,7 +616,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   co_await shard_stores.invoke_on_all([] (auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
       return mshard_store->mkfs_managers().handle_error(
-        crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
+        crimson::ct_error::assert_all("Invalid error in SeaStoreS::mkfs_managers"));
     });
   });
   co_await prepare_meta(new_osd_fsid);
@@ -1057,9 +1057,9 @@ SeaStore::Shard::list_objects(CollectionRef ch,
     }).safe_then([&ret] {
       return std::move(ret);
     }).handle_error(
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Invalid error in SeaStoreS::list_objects"
-      }
+      )
     );
   }).finally([this] {
     assert(shard_stats.pending_read_num);
@@ -1148,9 +1148,9 @@ SeaStore::Shard::list_collections()
       });
     }
   ).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::list_collections"
-    }
+    )
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1247,7 +1247,7 @@ SeaStore::Shard::exists(
       DEBUG("not exists");
       return seastar::make_ready_future<bool>(false);
     }),
-    crimson::ct_error::assert_all{"unexpected error"}
+    crimson::ct_error::assert_all("unexpected error")
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -1438,9 +1438,9 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     crimson::ct_error::enoent::handle([] {
       return seastar::make_ready_future<struct stat>();
     }),
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::stat"
-    }
+    )
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
@@ -2091,9 +2091,9 @@ SeaStore::Shard::_do_transaction_step(
       }
       return seastar::now();
     }),
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::do_transaction_step"
-    }
+    )
   );
 }
 
@@ -2159,8 +2159,8 @@ SeaStore::Shard::_rename(
     *ctx.transaction, onode
   ).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::_rename"});
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_rename"));
 }
 
 SeaStore::Shard::tm_ret
@@ -2588,9 +2588,9 @@ SeaStore::Shard::_split_collection(
     );
   }).handle_error_interruptible(
     tm_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::_create_collection"
-    }
+    )
   );
 }
 
@@ -2606,11 +2606,11 @@ SeaStore::Shard::_merge_collection(
   co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid, bits)
     .handle_error_interruptible(
       tm_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error from update in _merge_collection"});
+      crimson::ct_error::assert_all("unexpected error from update in _merge_collection"));
   co_await collection_manager->remove(cmroot, *ctx.transaction, cid)
     .handle_error_interruptible(
       tm_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error from remove in _merge_collection"});
+      crimson::ct_error::assert_all("unexpected error from remove in _merge_collection"));
 }
 
 SeaStore::Shard::tm_ret
@@ -2640,9 +2640,9 @@ SeaStore::Shard::_create_collection(
     );
   }).handle_error_interruptible(
     tm_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::_create_collection"
-    }
+    )
   );
 }
 
@@ -2672,9 +2672,9 @@ SeaStore::Shard::_remove_collection(
       });
   }).handle_error_interruptible(
     tm_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::_create_collection"
-    }
+    )
   );
 }
 
@@ -2699,7 +2699,7 @@ seastar::future<> SeaStore::write_meta(
     }).safe_then([FNAME, &key, &value] {
       DEBUG("key={} value={} done", key, value);
     }).handle_error(
-      crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
+      crimson::ct_error::assert_all("Invalid error in SeaStore::write_meta")
     );
   });
 }
@@ -2732,7 +2732,7 @@ seastar::future<> SeaStore::Shard::write_meta(
       });
     });
   }).handle_error(
-    crimson::ct_error::assert_all{"Invalid error in SeaStoreS::write_meta"}
+    crimson::ct_error::assert_all("Invalid error in SeaStoreS::write_meta")
   ).finally([this] {
     assert(shard_stats.pending_io_num);
     --(shard_stats.pending_io_num);
@@ -2759,9 +2759,9 @@ SeaStore::read_meta(const std::string& key)
       return std::make_tuple(-1, std::string(""));
     }
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SeaStore::read_meta"
-    }
+    )
   );
 }
 
@@ -3212,7 +3212,7 @@ SeaStore::Shard::omaptree_clone(
 	  }
 	}).handle_error_interruptible(
 	  base_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected value_too_large"}
+	  crimson::ct_error::assert_all("unexpected value_too_large")
 	);
       });
     });

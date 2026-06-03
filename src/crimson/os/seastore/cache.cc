@@ -2207,9 +2207,9 @@ Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in Cache::mkfs"
-    }
+    )
   );
 }
 
@@ -2383,9 +2383,9 @@ Cache::replay_delta(
 	delta.paddr)
     ).handle_error(
       replay_delta_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error in Cache::replay_delta"
-      }
+      )
     );
     return extent_fut.safe_then([=, this, &delta](auto extent) {
       if (!extent) {

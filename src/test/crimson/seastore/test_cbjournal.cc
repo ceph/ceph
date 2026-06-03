@@ -287,7 +287,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     });
   }
   seastar::future<> close() {
-    return cbj->close().handle_error(crimson::ct_error::assert_all{});
+    return cbj->close().handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
   auto get_records_available_size() {
     return cbj->get_cjs().get_records_available_size();
@@ -343,7 +343,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	  return replay();
 	});
       });
-    }).handle_error(crimson::ct_error::assert_all{});
+    }).handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
 };
 

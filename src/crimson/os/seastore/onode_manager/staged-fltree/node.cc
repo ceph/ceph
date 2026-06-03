@@ -1390,7 +1390,7 @@ eagain_ifuture<> InternalNode::test_clone_root(
     return c_other.nm.get_super(c_other.t, tracker_other
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::assert_all{"Invalid error during test clone"}
+      crimson::ct_error::assert_all("Invalid error during test clone")
     ).si_then([c_other, cloned_root](auto&& super_other) {
       assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));
@@ -2038,7 +2038,7 @@ eagain_ifuture<> LeafNode::test_clone_root(
     return c_other.nm.get_super(c_other.t, tracker_other
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::assert_all{"Invalid error during test clone"}
+      crimson::ct_error::assert_all("Invalid error during test clone")
     ).si_then([c_other, cloned_root](auto&& super_other) {
       assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));

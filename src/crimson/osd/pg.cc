@@ -852,8 +852,8 @@ seastar::future<> PG::init(
       t.touch(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     }
   },
-  ::crimson::ct_error::assert_all{fmt::format(
-    "{} {} unexpected eio", *this, __func__).c_str()}
+  ::crimson::ct_error::assert_all(
+    "{} {} unexpected eio", std::cref(*this), __func__)
 );
 }
 
@@ -1524,7 +1524,7 @@ PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
     r->op.from = pg_whoami;
     r->set_priority(CEPH_MSG_PRIO_HIGH);
     return shard_services.send_to_osd(get_primary().osd, std::move(r), get_osdmap_epoch());
-  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+  }).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
@@ -1539,7 +1539,7 @@ PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>
   assert(ec_backend);
   return ec_backend->handle_rep_write_reply(
     std::move(m->op)
-  ).handle_error_interruptible(crimson::ct_error::assert_all{});
+  ).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
@@ -1557,7 +1557,7 @@ PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
     reply->op = std::move(rep);
     return shard_services.send_to_osd(
       get_primary().osd, std::move(reply), get_osdmap_epoch());
-  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+  }).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(

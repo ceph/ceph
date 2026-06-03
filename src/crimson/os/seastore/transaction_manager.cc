@@ -196,7 +196,7 @@ TransactionManager::mount()
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{"unhandled error"}
+    crimson::ct_error::assert_all("unhandled error")
   );
 }
 
@@ -646,7 +646,7 @@ TransactionManager::do_submit_transaction(
       cache->get_oldest_backref_dirty_from().value_or(start_seq));
     }).handle_error(
       submit_transaction_iertr::pass_further{},
-      crimson::ct_error::assert_all{"Hit error submitting to journal"}
+      crimson::ct_error::assert_all("Hit error submitting to journal")
     );
 
   co_await trans_intr::make_interruptible(
@@ -723,7 +723,7 @@ TransactionManager::rewrite_logical_extent(
       t, *extent
     ).handle_error_interruptible(
       rewrite_extent_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
+      crimson::ct_error::assert_all("unexpected enoent")
     );
     co_await lba_manager->update_mapping(
       t,
@@ -773,7 +773,7 @@ TransactionManager::rewrite_logical_extent(
 	  t, *extent
 	).handle_error_interruptible(
 	  rewrite_extent_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected enoent"}
+	  crimson::ct_error::assert_all("unexpected enoent")
 	);
 	refcount = co_await lba_manager->update_mapping(
 	  t,
@@ -783,7 +783,7 @@ TransactionManager::rewrite_logical_extent(
 	  *nextent
 	).handle_error_interruptible(
 	  rewrite_extent_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected enoent"}
+	  crimson::ct_error::assert_all("unexpected enoent")
 	);
       } else {
 	ceph_assert(refcount != 0);

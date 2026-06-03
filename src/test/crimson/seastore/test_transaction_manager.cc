@@ -602,9 +602,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (t.t->is_conflicted()) {
       return nullptr;
@@ -632,9 +632,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (t.t->is_conflicted()) {
       return nullptr;
@@ -661,9 +661,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"read_pin got invalid error"
-      }
+      )
     ).get();
     if (ext) {
       if (indirect) {
@@ -760,9 +760,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<std::optional<LBAMapping>>();
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"get_extent got invalid error"
-      }
+      )
     ).get();
     if (pin) {
       EXPECT_EQ(offset, pin->get_key());
@@ -845,9 +845,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<bool>(false);
       },
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"try_submit_transaction hit invalid error"
-      }
+      )
     ).then([this](auto ret) {
       return epm->run_background_work_until_halt(
       ).then([ret] { return ret; });
@@ -916,9 +916,9 @@ struct transaction_manager_test_t :
         return epm->background_process.trimmer->trim();
       }
     }).handle_error(
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error in SeaStore::list_collections"
-      }
+      )
     );
   }
 

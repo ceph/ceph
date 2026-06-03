@@ -712,9 +712,9 @@ ExtentPlacementManager::BackgroundProcess::run_cleaner_until_done()
     [this] {
       return main_cleaner->clean_space(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "run_cleaner_until_done encountered error in clean_space"
-        }
+        )
       );
     }
   ).finally([FNAME] {
@@ -1025,9 +1025,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               main_cleaner_should_fast_evict());
         return main_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in main clean_space"
-          }
+          )
         ).finally([this, main_cold_usage, FNAME] {
           DEBUG("finished clean main");
           abort_cold_usage(main_cold_usage, true);
@@ -1045,9 +1045,9 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
               should_clean_cold_for_main);
         return cold_cleaner->clean_space(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in cold clean_space"
-          }
+          )
         ).finally([FNAME] {
           DEBUG("finished clean cold");
         });
@@ -1211,8 +1211,8 @@ RandomBlockOolWriter::do_write(
         return info.rbm->write(info.offset, info.bp
         ).handle_error(
           alloc_write_ertr::pass_further{},
-          crimson::ct_error::assert_all{
-            "Invalid error when writing record"}
+          crimson::ct_error::assert_all(
+            "Invalid error when writing record")
         );
       });
     })

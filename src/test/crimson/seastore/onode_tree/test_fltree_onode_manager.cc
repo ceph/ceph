@@ -103,7 +103,7 @@ struct fltree_onode_manager_test_t
         });
       });
     }).handle_error(
-      crimson::ct_error::assert_all{"Invalid error in _mkfs"}
+      crimson::ct_error::assert_all("Invalid error in _mkfs")
     );
   }
 

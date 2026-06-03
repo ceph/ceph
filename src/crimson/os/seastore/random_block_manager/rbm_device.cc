@@ -75,16 +75,16 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_primary_mkfs"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_primary_mkfs")
   );
   co_await initialize_nvme_features();
   co_await write_rbm_superblock(
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
     "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
-  });
+  ));
   co_await close();
 }
 
@@ -192,8 +192,8 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::do_shard_mount")
   );
 
   auto st = co_await stat_device(
@@ -213,8 +213,8 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
   auto s = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
     mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount"}
+    crimson::ct_error::assert_all(
+    "Invalid error read_rbm_superblock in RBMDevice::do_shard_mount")
   );
   LOG_PREFIX(RBMDevice::do_shard_mount);
   if(seastar::this_shard_id() + seastar::smp::count * store_index >= s.shard_num) {
@@ -235,22 +235,22 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
   co_await open(get_device_path(),
     seastar::open_flags::rw | seastar::open_flags::dsync
   ).handle_error(
-    crimson::ct_error::assert_all{
-    "Invalid error open in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+    "Invalid error open in RBMDevice::get_shard_nums")
   );
 
   auto st = co_await stat_device(
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error stat_device in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error stat_device in RBMDevice::get_shard_nums")
   );
 
   assert(st.block_size > 0);
   super.block_size = st.block_size;
   auto sb = co_await read_rbm_superblock(RBM_START_ADDRESS
   ).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in RBMDevice::get_shard_nums"}
+    crimson::ct_error::assert_all(
+      "Invalid error in RBMDevice::get_shard_nums")
   );
 
   co_return sb.shard_num;

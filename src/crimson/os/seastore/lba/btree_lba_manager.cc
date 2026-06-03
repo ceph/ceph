@@ -807,9 +807,9 @@ BtreeLBAManager::update_mapping(
   ).handle_error_interruptible(
     update_mapping_iertr::pass_further{},
     /* ENOENT in particular should be impossible */
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in BtreeLBAManager::update_mapping"
-    }
+    )
   );
   DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
 	 t, laddr, prev_addr, prev_len, addr, len, checksum, *cursor);
@@ -872,9 +872,9 @@ BtreeLBAManager::update_mappings(
 	    },
 	    update_mapping_iertr::pass_further{},
 	    /* ENOENT in particular should be impossible */
-	    crimson::ct_error::assert_all{
+	    crimson::ct_error::assert_all(
 	      "Invalid error in BtreeLBAManager::update_mappings"
-	    }
+	    )
 	  );
 	});
       });
@@ -1224,7 +1224,7 @@ BtreeLBAManager::_move_mapping(
     c.trans, ret.src, -1
   ).handle_error_interruptible(
     move_mapping_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"});
+    crimson::ct_error::assert_all("unexpected error"));
 
   co_await ret.dest->refresh();
   auto iter = btree.make_partial_iter(c, *ret.dest);
@@ -1269,7 +1269,7 @@ BtreeLBAManager::move_and_clone_direct_mapping(
     nullptr
   ).handle_error_interruptible(
     move_mapping_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"});
+    crimson::ct_error::assert_all("unexpected error"));
 
   assert(cursor->is_indirect());
   auto iter = btree.make_partial_iter(c, *cursor);

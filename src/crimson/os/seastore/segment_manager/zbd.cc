@@ -489,9 +489,9 @@ ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums
   }).safe_then([](auto meta){
     return read_ertr::make_ready_future<uint32_t>(meta.shard_num);
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in ZBDSegmentManager::get_shard_nums"
-  });
+  ));
 }
 
 ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
@@ -500,9 +500,9 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in ZBDSegmentManager::mount"
-      });
+      ));
     });
   });
 }
@@ -540,9 +540,9 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
       return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
         return mshard_device->shard_mkfs(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "Invalid error in ZBDSegmentManager::mkfs"
-        });
+        ));
       });
     });
   });

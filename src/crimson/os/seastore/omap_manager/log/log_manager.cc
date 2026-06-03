@@ -410,7 +410,7 @@ LogManager::log_load_extent(
     }
   ).handle_error_interruptible(
     log_load_extent_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error in log_load_extent" }
+    crimson::ct_error::assert_all( "Invalid error in log_load_extent" )
   );
 
   assert(!maybe_indirect_extent.is_indirect());
@@ -574,7 +574,7 @@ LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
   co_await tm.remove(t, mut->get_laddr()
   ).handle_error_interruptible(
     omap_rm_key_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in remove_node"}
+    crimson::ct_error::assert_all("Invalid error in remove_node")
   );
   auto mut_prev = tm.get_mutable_extent(t, prev)->template cast<LogNode>();
   assert(mut_prev);
@@ -830,12 +830,12 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
   co_await tm.remove(t, co_await get_dup_addr_from_root(t, root.addr)
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   co_await tm.remove(t, root.get_location()
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   root.update(
     L_ADDR_NULL,

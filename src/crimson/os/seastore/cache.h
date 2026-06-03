@@ -1444,9 +1444,9 @@ public:
       });
     }).handle_error_interruptible(
       init_cached_extents_iertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Invalid error in Cache::init_cached_extents"
-      }
+      )
     ).si_then([this, FNAME, &t] {
       SUBINFOT(seastore_cache,
           "finish with {}(0x{:x}B) extents, {} dirty, dirty_from={}, alloc_from={}",
@@ -2051,9 +2051,9 @@ void stage_visibility_handoff(Transaction& t,
           std::move(extent));
       },
       get_extent_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Cache::read_extent: invalid error"
-      }
+      )
     );
   }
 
@@ -2153,9 +2153,9 @@ void stage_visibility_handoff(Transaction& t,
       futs, [](auto &fut) { return std::move(fut);
     }).handle_error(
       get_extent_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Cache::read_extent: invalid error"
-      }
+      )
     );
     for (auto &ext : extents_read) {
       auto &extent = ext.extent;
