@@ -3646,6 +3646,16 @@ public:
   void debug_set_prefer_deferred_size(uint64_t s) {
     prefer_deferred_size = s;
   }
+  OnodeRef debug_get_onode(const coll_t& cid, const ghobject_t& hoid) {
+    std::shared_lock l(coll_lock);
+    auto cp = coll_map.find(cid);
+    if (cp == coll_map.end())
+      return OnodeRef();
+    auto& c = cp->second;
+    std::shared_lock ll(c->lock);
+    OnodeRef o = c->get_onode(hoid, false);
+    return o;
+  }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
