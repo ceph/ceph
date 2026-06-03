@@ -22,7 +22,6 @@ import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
-import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -47,9 +46,6 @@ const BASE_URL = 'pool';
 export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent)
   table!: TableComponent;
-  @ViewChild('poolUsageTpl', { static: true })
-  poolUsageTpl!: TemplateRef<any>;
-
   @ViewChild('poolNameTpl', { static: true })
   poolNameTpl!: TemplateRef<any>;
 
@@ -76,7 +72,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     public taskListService: TaskListService,
     private modalService: ModalCdsService,
     private pgCategoryService: PgCategoryService,
-    private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
     public actionLabels: ActionLabelsI18n
@@ -129,8 +124,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
-    const compare = (prop: string, pool1: Pool, pool2: Pool) =>
-      _.get(pool1, prop) > _.get(pool2, prop) ? 1 : -1;
     this.columns = [
       {
         prop: 'pool_name',
@@ -163,48 +156,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass(row, column, value);
         }
-      },
-      {
-        prop: 'crush_rule',
-        name: $localize`Crush Ruleset`,
-        isHidden: true,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Usage`,
-        prop: 'usage',
-        cellTemplate: this.poolUsageTpl,
-        flexGrow: 1.2
-      },
-      {
-        prop: 'stats.rd_bytes.rates',
-        name: $localize`Read bytes`,
-        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
-          compare('stats.rd_bytes.latest', rowA, rowB),
-        cellTransformation: CellTemplate.sparkline,
-        flexGrow: 1.5
-      },
-      {
-        prop: 'stats.wr_bytes.rates',
-        name: $localize`Write bytes`,
-        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
-          compare('stats.wr_bytes.latest', rowA, rowB),
-        cellTransformation: CellTemplate.sparkline,
-        flexGrow: 1.5
-      },
-      {
-        prop: 'stats.rd.rate',
-        name: $localize`Read ops`,
-        flexGrow: 1,
-        pipe: this.dimlessPipe,
-        cellTransformation: CellTemplate.perSecond
-      },
-      {
-        prop: 'stats.wr.rate',
-        name: $localize`Write ops`,
-        flexGrow: 1,
-        pipe: this.dimlessPipe,
-        cellTransformation: CellTemplate.perSecond
       }
     ];
 
