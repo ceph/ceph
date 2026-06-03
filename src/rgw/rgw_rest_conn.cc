@@ -13,6 +13,11 @@
 using namespace std;
 
 void RGWRESTConn::resolve_endpoints() {
+  // TODO: resolve endpoints concurrently using async_resolve on a shared io_context.
+  //       In practice zones have a single endpoint or at most a handful of individual
+  //       RGW instances, and resolution runs once at process startup, so sequential
+  //       cost is negligible. A natural time to address this would be when adding
+  //       periodic DNS re-resolution.
   for (auto& res_ep : resolved_endpoints) {
     const std::string& ep_url = res_ep.url;
     // parse URL
