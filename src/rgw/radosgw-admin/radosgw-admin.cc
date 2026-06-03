@@ -6,6 +6,7 @@
  */
 
 #include <cerrno>
+#include <functional>
 #include <string>
 #include <sstream>
 #include <optional>
@@ -3622,6 +3623,10 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 // Registers an option at every level of the command tree: hidden on all ancestor
 // commands for backward compatibility, visible on cmd. Returns the visible
 // Option* so callers can chain modifiers like ->option_text().
+// Assumes the same option name always binds to the same target variable across
+// all commands sharing an ancestor. If two commands register the same name with
+// different targets, the first registration wins on shared ancestors — the
+// second command's ancestor registration is silently skipped.
 template <typename T>
 CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
                                const std::string& desc = "") {
@@ -3747,6 +3752,7 @@ int main(int argc, const char **argv)
   RGWUserInfo info;
   OPT opt_cmd = OPT::NO_CMD;
   Cli11Op cli11_op = Cli11Op::None;
+  std::function<int()> cli11_action;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   enum generate_key_enum {
@@ -4017,65 +4023,138 @@ int main(int argc, const char **argv)
     add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
     add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
 
-    // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
-    try {
-      app.parse(new_argc, argv);
-    } catch (const CLI::ParseError& e) {
-      return app.exit(e);
-    }
-    
-    if (show_cli11_help) {
-      cout << app.help();
-      return 0;
-    }
-
-    if (script_put->parsed()) {
+    script_put->callback(
+        [script_put, &str_script_ctx, &infile, &tenant,
+         &cli11_op, &cli11_action] {
       warn_wrong_position(script_put);
       warn_duplicates(script_put);
-
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
       // TODO: once flags-before-subcommand support is removed, replace with ->required()
       if (!str_script_ctx) {
         cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        return EINVAL;
+        throw CLI::RuntimeError(EINVAL);
       }
       if (infile.empty()) {
         cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
-        return EINVAL;
+        throw CLI::RuntimeError(EINVAL);
       }
-
+      bufferlist bl;
+      const auto rc = read_input(infile, bl);
+      if (rc < 0) {
+        cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
+        throw CLI::RuntimeError(-rc);
+      }
+      const std::string script = bl.to_str();
+      std::string err_msg;
+      if (!rgw::lua::verify(script, err_msg)) {
+        cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
+        throw CLI::RuntimeError(EINVAL);
+      }
+      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+      if (script_ctx == rgw::lua::context::none) {
+        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+        throw CLI::RuntimeError(EINVAL);
+      }
+      if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
+        cerr << "ERROR: cannot specify tenant in background context" << std::endl;
+        throw CLI::RuntimeError(EINVAL);
+      }
       cli11_op = Cli11Op::ScriptPut;
-    }
+      cli11_action = [&tenant, script_ctx, script]() -> int {
+        auto lua_manager = driver->get_lua_manager("");
+        const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+        if (rc < 0) {
+          cerr << "ERROR: failed to put script. error: " << rc << std::endl;
+          return -rc;
+        }
+        return 0;
+      };
+    });
 
-    if (script_get->parsed()) {
+    script_get->callback(
+        [script_get, &str_script_ctx, &tenant,
+         &cli11_op, &cli11_action] {
       warn_wrong_position(script_get);
       warn_duplicates(script_get);
-
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
       // TODO: once flags-before-subcommand support is removed, replace with ->required()
       if (!str_script_ctx) {
         cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        return EINVAL;
+        throw CLI::RuntimeError(EINVAL);
       }
-
+      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+      if (script_ctx == rgw::lua::context::none) {
+        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+        throw CLI::RuntimeError(EINVAL);
+      }
       cli11_op = Cli11Op::ScriptGet;
-    }
+      cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
+        auto lua_manager = driver->get_lua_manager("");
+        std::string script;
+        const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+        if (rc == -ENOENT) {
+          std::cout << "no script exists for context: " << ctx <<
+            (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+        } else if (rc < 0) {
+          cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+          return -rc;
+        } else {
+          std::cout << script << std::endl;
+        }
+        return 0;
+      };
+    });
 
-    if (script_rm->parsed()) {
+    script_rm->callback(
+        [script_rm, &str_script_ctx, &tenant,
+         &cli11_op, &cli11_action] {
       warn_wrong_position(script_rm);
       warn_duplicates(script_rm);
-
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
       // TODO: once flags-before-subcommand support is removed, replace with ->required()
       if (!str_script_ctx) {
         cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        return EINVAL;
+        throw CLI::RuntimeError(EINVAL);
       }
-
+      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+      if (script_ctx == rgw::lua::context::none) {
+        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+        throw CLI::RuntimeError(EINVAL);
+      }
       cli11_op = Cli11Op::ScriptRm;
+      cli11_action = [&tenant, script_ctx]() -> int {
+        auto lua_manager = driver->get_lua_manager("");
+        const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+        if (rc < 0) {
+          cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
+          return -rc;
+        }
+        return 0;
+      };
+    });
+
+    // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
+    try {
+      app.parse(new_argc, argv);
+    } catch (const CLI::RuntimeError& e) {
+      // If --cli11-help was requested, a callback may have thrown RuntimeError
+      // because required options were missing. Show help instead of the error.
+      if (show_cli11_help) {
+        cout << app.help();
+        return 0;
+      }
+      return e.get_exit_code();
+    } catch (const CLI::ParseError& e) {
+      return app.exit(e);
+    }
+
+    // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
+    if (show_cli11_help) {
+      cout << app.help();
+      return 0;
     }
 
     // require_subcommand(1) guarantees one of put/get/rm was parsed if script was parsed
@@ -12425,84 +12504,8 @@ next:
     formatter->flush(cout);
   }
 
-  if (cli11_op == Cli11Op::ScriptPut) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    if (infile.empty()) {
-      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
-      return EINVAL;
-    }
-    bufferlist bl;
-    auto rc = read_input(infile, bl);
-    if (rc < 0) {
-      cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
-      return -rc;
-    }
-    const std::string script = bl.to_str();
-    std::string err_msg;
-    if (!rgw::lua::verify(script, err_msg)) {
-      cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
-      cerr << "ERROR: cannot specify tenant in background context" << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc < 0) {
-      cerr << "ERROR: failed to put script. error: " << rc << std::endl;
-      return -rc;
-    }
-  }
-
-  if (cli11_op == Cli11Op::ScriptGet) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
-        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
-    } else if (rc < 0) {
-      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
-      return -rc;
-    } else {
-      std::cout << script << std::endl;
-    }
-  }
-  
-  if (cli11_op == Cli11Op::ScriptRm) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
-    if (rc < 0) {
-      cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
-      return -rc;
-    }
+  if (cli11_action) {
+    return cli11_action();
   }
 
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
