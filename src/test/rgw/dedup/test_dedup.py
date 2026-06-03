@@ -4,7 +4,6 @@ import random
 import math
 import time
 import subprocess
-import urllib.request
 import hashlib
 from multiprocessing import Process
 import filecmp
@@ -17,6 +16,12 @@ from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
 from dataclasses import dataclass
+import urllib.parse
+import urllib.request
+import urllib.error
+from botocore.auth import HmacV1Auth
+from botocore.credentials import Credentials
+from botocore.awsrequest import AWSRequest
 
 from . import(
     configfile,
@@ -89,6 +94,84 @@ def rados(args, **kwargs):
     """ rados command """
     cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', 'noname'] + args
     return bash(cmd, **kwargs)
+
+#------------------------------------------------------------------
+# Rest API helper functions
+#------------------------------------------------------------------
+
+_dedup_caps_granted = False
+#------------------------------------------------------------------------
+def _ensure_dedup_caps():
+    """Grant 'dedup=*' caps to the test user (once) so REST calls pass
+       the RGWUserCaps check."""
+    global _dedup_caps_granted
+    if _dedup_caps_granted:
+        return
+    access_key = get_access_key()
+    result = admin(['user', 'info', '--access-key', access_key])
+    assert result[1] == 0, "failed to look up test user"
+    info = json.loads(result[0])
+    uid = info['user_id']
+    tenant = info.get('tenant', '')
+    if tenant:
+        uid = tenant + '$' + uid
+    result = admin(['caps', 'add', '--uid', uid, '--caps', 'dedup=*'])
+    assert result[1] == 0, "failed to add dedup caps"
+    log.debug("granted dedup=* caps to uid=%s", uid)
+    _dedup_caps_granted = True
+
+#-------------------------------------------------------------------------
+def _admin_rest_url():
+    hostname = get_config_host()
+    port_no = get_config_port()
+    scheme = 'https' if port_no in (443, 8443) else 'http'
+    return f'{scheme}://{hostname}:{port_no}/admin/dedup'
+
+#--------------------------------------------------------------------------
+def admin_rest(method, params):
+    """Send a signed GET/POST to /admin/dedup and return
+       (body, returncode) matching the tuple that ``admin()`` returns."""
+    _ensure_dedup_caps()
+    url = f'{_admin_rest_url()}?{urllib.parse.urlencode(params, doseq=True)}'
+
+    creds = Credentials(get_access_key(), get_secret_key())
+    aws_req = AWSRequest(method=method, url=url)
+    HmacV1Auth(creds).add_auth(aws_req)
+
+    req = urllib.request.Request(url, method=method,
+                                headers=dict(aws_req.headers))
+    try:
+        resp = urllib.request.urlopen(req, timeout=120)
+        body = resp.read().decode('utf-8')
+        return (body, 0)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        log.error("admin_rest %s [params=%s] HTTP %d: %s",
+                  method, params, e.code, body)
+        return (body, 1)
+
+#--------------------------------------------------------------
+def dedup_admin(subcmd, **kwargs):
+    """Invoke a dedup admin operation via REST API."""
+    is_read = subcmd in ('stats',) or (subcmd == 'throttle' and kwargs.pop('stat', False))
+    method = 'GET' if is_read else 'POST'
+    params = {'op': subcmd}
+    if subcmd == 'exec':
+        params['yes-i-really-mean-it'] = ''
+    for k, v in kwargs.items():
+        params[k.replace('_', '-')] = str(v)
+    log.debug("dedup_admin [REST %s]: params=%s", method, params)
+    return admin_rest(method, params)
+
+#--------------------------------------------------------------
+def dedup_admin_cli(subcmd, *args):
+    """Invoke a dedup admin operation via radosgw-admin CLI."""
+    cli_args = ['dedup', subcmd]
+    if subcmd == 'exec':
+        cli_args.append('--yes-i-really-mean-it')
+    cli_args += list(args)
+    log.debug("dedup_admin_cli: args=%s", cli_args)
+    return admin(cli_args)
 
 #-----------------------------------------------
 def gen_bucket_name():
@@ -1371,7 +1454,7 @@ def read_dedup_stats(dry_run):
     dedup_ratio_estimate=Dedup_Ratio()
     dedup_ratio_actual=Dedup_Ratio()
 
-    result = admin(['dedup', 'stats'])
+    result = dedup_admin('stats')
     assert result[1] == 0
 
     jstats=json.loads(result[0])
@@ -1414,8 +1497,7 @@ def read_dedup_stats(dry_run):
 
 #-------------------------------------------------------------------------------
 def set_bucket_index_throttling(limit):
-    cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
-    result = admin(cmd)
+    result = dedup_admin('throttle', max_bucket_index_ops=limit)
     assert result[1] == 0
     log.debug(result[0])
 
@@ -1427,10 +1509,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
 
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
-        result = admin(['dedup', 'estimate'])
+        result = dedup_admin('estimate')
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+        result = dedup_admin('exec')
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1657,11 +1739,11 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+    result = dedup_admin('exec')
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
-        result = admin(['dedup', 'abort'])
+        result = dedup_admin('abort')
         assert result[1] == 0
     else:
         log.debug("full dedup is disabled, skip all full dedup tests")
@@ -1987,8 +2069,8 @@ def corrupt_etag(key, corruption, expected_dedup_stats):
     names=result[0].split()
     for name in names:
         log.debug("name=%s", name)
-        if key in name:
-            log.debug("key=%s is a substring of name=%s", key, name);
+        if name.endswith(key):
+            log.debug("key=%s is a suffix of name=%s", key, name);
             rados_name = name
             break;
 
@@ -3488,7 +3570,8 @@ def test_dedup_dry_large_scale_with_tenants():
     try:
         threads_simple_dedup_with_tenants(files, conns, bucket_names, config, True)
     except Exception:
-        log.warning("test_dedup_dry_large_scale: failed!!")
+        log.warning("test_dedup_dry_large_scale_with_tenants: failed!!")
+        assert 0, "abort test_dedup_dry_large_scale_with_tenants "
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)
@@ -3518,6 +3601,167 @@ def test_dedup_dry_large_scale():
     finally:
         # cleanup must be executed even after a failure
         cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_cli_operations():
+    """Exercise all dedup CLI subcommands: estimate, stats, exec, pause, resume,
+       abort, throttle."""
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    try:
+        files = []
+        gen_files(files, 16*KB, 3)
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        upload_objects(bucket_name, files, indices, conn, default_config, True)
+
+        log.info("Test radosgw-admin dedup estimate");
+        result = dedup_admin_cli('estimate')
+        assert result[1] == 0, "CLI estimate failed"
+
+        dedup_time     = 0
+        dedup_timeout  = 3
+        max_dedup_time = 30
+        while True:
+            assert dedup_time < max_dedup_time
+            time.sleep(dedup_timeout)
+            dedup_time += dedup_timeout
+            ret = read_dedup_stats(dry_run=True)
+            if ret[0]:
+                break
+
+
+        log.info("Test radosgw-admin dedup stats");
+        result = dedup_admin_cli('stats')
+        assert result[1] == 0, "CLI stats after estimate failed"
+
+        log.info("Test radosgw-admin dedup exec");
+        result = dedup_admin_cli('exec')
+        assert result[1] == 0, "CLI exec failed"
+
+        log.info("Test radosgw-admin dedup throttle");
+        result = dedup_admin_cli('throttle', '--max-bucket-index-ops', '100')
+        assert result[1] == 0, "CLI throttle failed"
+
+        log.info("Test radosgw-admin dedup throttle stat");
+        result = dedup_admin_cli('throttle', '--stat')
+        assert result[1] == 0, "CLI throttle failed"
+
+        log.info("Test radosgw-admin dedup pause");
+        result = dedup_admin_cli('pause')
+        assert result[1] == 0, "CLI pause failed"
+
+        log.info("Test radosgw-admin dedup resume");
+        result = dedup_admin_cli('resume')
+        assert result[1] == 0, "CLI resume failed"
+
+        log.info("Test radosgw-admin dedup abort");
+        result = dedup_admin_cli('abort')
+        assert result[1] == 0, "CLI abort failed"
+
+        log.info("Test radosgw-admin dedup stats");
+        result = dedup_admin_cli('stats')
+        assert result[1] == 0, "CLI stats after abort failed"
+    finally:
+        cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_rest_pause_resume():
+    """Exercise pause and resume via REST API."""
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    try:
+        files = []
+        gen_files(files, 16*KB, 3)
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        upload_objects(bucket_name, files, indices, conn, default_config, True)
+
+        result = dedup_admin('exec')
+        assert result[1] == 0, "REST exec failed"
+
+        result = dedup_admin('pause')
+        assert result[1] == 0, "REST pause failed"
+
+        result = dedup_admin('throttle', stat=True)
+        assert result[1] == 0, "REST throttle stat failed"
+
+        result = dedup_admin('resume')
+        assert result[1] == 0, "REST resume failed"
+
+        result = dedup_admin('abort')
+        assert result[1] == 0, "REST abort failed"
+
+        result = dedup_admin('stats')
+        assert result[1] == 0, "REST stats after pause/resume failed"
+    finally:
+        cleanup(bucket_name, conn)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_rest_throttle():
+    """Verify REST throttle set/get preserves unmodified values."""
+    def parse_throttle(result):
+        raw = json.loads(result[0]) if result[0].strip() else {}
+        return raw.get('throttle', raw)
+
+    result = dedup_admin('throttle', stat=True)
+    assert result[1] == 0, "REST throttle initial stat failed"
+    orig = parse_throttle(result)
+    orig_bucket = orig.get('bucket_index_throttle', 0)
+    orig_metadata = orig.get('metadata_throttle', 0)
+    log.info("throttle initial: bucket_index=%s, metadata=%s",
+             orig_bucket, orig_metadata)
+
+    new_bucket=orig_bucket+17
+    new_metadata=orig_metadata+17
+    result = dedup_admin('throttle', max_bucket_index_ops=new_bucket)
+    assert result[1] == 0, "REST throttle set bucket-index failed"
+    body = parse_throttle(result)
+    log.info("throttle after set bucket_index=%d:",
+             body.get('bucket_index_throttle', 0))
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle', 0) == orig_metadata
+
+    result = dedup_admin('throttle', max_metadata_ops=new_metadata)
+    assert result[1] == 0, "REST throttle set metadata failed"
+    body = parse_throttle(result)
+    log.info("throttle after set metadata=%d",
+             body.get('metadata_throttle', 0))
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle') == new_metadata
+
+    result = dedup_admin('throttle', stat=True)
+    assert result[1] == 0, "REST throttle final stat failed"
+    body = parse_throttle(result)
+    assert body.get('bucket_index_throttle') == new_bucket
+    assert body.get('metadata_throttle') == new_metadata
+
+    kwargs = {}
+    kwargs['max_bucket_index_ops'] = orig_bucket
+    kwargs['max_metadata_ops'] = orig_metadata
+    result = dedup_admin('throttle', **kwargs)
+    assert result[1] == 0, "REST throttle restore failed"
+    body = parse_throttle(result)
+    log.info("throttle after restore: bucket_index_throttle=%d, metadata=%d",
+             body.get('bucket_index_throttle', 0),
+             body.get('metadata_throttle', 0))
+
+    log.info("throttle restored to: bucket_index=%s, metadata=%s",
+             orig_bucket, orig_metadata)
 
 
 #-------------------------------------------------------------------------------
@@ -3756,7 +4000,7 @@ def test_dedup_filter_storage_class_list_parsing():
 #-------------------------------------------------------------------------------
 def read_filter_skip_stats():
     """Read ingress_skip_filtered_bucket/storage_class from dedup stats JSON."""
-    result = admin(['dedup', 'stats'])
+    result = dedup_admin('stats')
     assert result[1] == 0
     jstats = json.loads(result[0])
     worker_stats = jstats['worker_stats']

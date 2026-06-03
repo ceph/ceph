@@ -9616,30 +9616,35 @@ next:
       ceph::encode(urgent_msg, urgent_msg_bl);
       throttle_msg_t throttle_msg;
 
-      if (throttle_stat) {
-	encode(throttle_msg, urgent_msg_bl);
-	return -cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
-      }
+      if (!throttle_stat) {
+        if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
+          std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
+          return EINVAL;
+        }
 
-      if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
-	std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
-	return EINVAL;
-      }
+        if (have_max_bucket_index_ops) {
+          throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
+                                       .limit = max_bucket_index_ops};
+          throttle_msg.vec.push_back(action);
+        }
 
-      if (have_max_bucket_index_ops) {
-	throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
-				     .limit = max_bucket_index_ops};
-	throttle_msg.vec.push_back(action);
-      }
-
-      if (have_max_metadata_ops) {
-	throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
-				     .limit = max_metadata_ops};
-	throttle_msg.vec.push_back(action);
+        if (have_max_metadata_ops) {
+          throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
+                                       .limit = max_metadata_ops};
+          throttle_msg.vec.push_back(action);
+        }
       }
 
       encode(throttle_msg, urgent_msg_bl);
-      return -cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+      int ret = cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl,
+                                          formatter.get());
+      if (ret == 0) {
+        formatter->flush(cout);
+      }
+      else {
+        cerr << "ERROR: Failed throttle command" << std::endl;
+      }
+      return -ret;
     }
 
     if (opt_cmd == OPT::DEDUP_ABORT  ||

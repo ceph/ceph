@@ -55,6 +55,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_metadata.h"
+#include "rgw_rest_dedup.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
@@ -2578,6 +2579,7 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("config", new RGWRESTMgr_Config);
   mgr->register_resource("realm", new RGWRESTMgr_Realm);
   mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
+  mgr->register_resource("dedup", new RGWRESTMgr_Dedup);
 }
 
 std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luarocks_path)

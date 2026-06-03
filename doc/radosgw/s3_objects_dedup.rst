@@ -5,6 +5,9 @@ Full RGW Object Dedup
 Full RGW object deduplication adds ``radosgw-admin`` commands to remove
 duplicated RGW tail objects and to collect and report dedup statistics.
 
+These operations are also available through the `Admin Ops API <../radosgw/adminops/#dedup>`_
+under ``/{admin}/dedup``.
+
 
 Admin Commands
 ==============
