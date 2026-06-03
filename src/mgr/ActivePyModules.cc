@@ -1107,7 +1107,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     for (auto& [key, state] : daemons) {
       std::lock_guard l(state->lock);
       with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
-        f.open_object_section(key.c_str());
+        Formatter::ObjectSection daemon_section{f, key};
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
 
@@ -1119,7 +1119,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
 	    continue;
 	  }
 
-	  f.open_object_section(counter_name.c_str());
+	  Formatter::ObjectSection counter_section{f, counter_name};
 	  auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
@@ -1128,9 +1128,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
           f.dump_unsigned("type", type.type);
           f.dump_unsigned("priority", type.priority);
           f.dump_unsigned("units", type.unit);
-          f.close_section();
         }
-        f.close_section();
       });
     }
   } else {
@@ -1170,7 +1168,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     // Hence search for the last occurence of "." to get sub counter name
     size_t pos = type.path.rfind('.');
     std::string sub_counter_name = type.path.substr(pos + 1, type.path.length());
-    Formatter::ObjectSection counter_section(*f, sub_counter_name);
+    Formatter::ObjectSection counter_section{*f, sub_counter_name};
     f->dump_string("description", type.description);
     if (!type.nick.empty()) {
       f->dump_string("nick", type.nick);
@@ -1181,19 +1179,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
   };
 
   auto dump_counter_with_labels = [&dump_sub_counter_information](
-				      PyFormatter *f, auto key_labels,
-				      auto type) {
-    f->open_object_section("");	 // counter should be enclosed by array
+  		      PyFormatter *f, auto key_labels,
+  		      auto type,
+  		      std::optional<Formatter::ObjectSection>& counter_object_section,
+  		      std::optional<Formatter::ObjectSection>& counters_section) {
+    counter_object_section.emplace(*f, "");  // counter should be enclosed by array
 
     for (Formatter::ObjectSection labels_section{*f, "labels"};
-	 const auto &label : key_labels) {
+      const auto &label : key_labels) {
       f->dump_string(label.first, label.second);
     }
 
-    f->open_object_section("counters");
+    counters_section.emplace(*f, "counters");
     dump_sub_counter_information(f, type);
   };
-
 
   if (!daemons.empty()) {
     for (auto &[key, state] : daemons) {
@@ -1201,9 +1200,11 @@ PyObject* ActivePyModules::get_perf_schema_python(
       with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
 	std::string key_name, prev_key_name;
 	perf_counter_label_pairs prev_key_labels;
-	Formatter::ObjectSection counter_section(
-	    f, key.c_str());  // Main Object Section
+	Formatter::ObjectSection counter_section{
+	    f, key.c_str()};  // Main Object Section
 	std::optional<Formatter::ArraySection> array_section;
+	std::optional<Formatter::ObjectSection> counter_object_section;
+	std::optional<Formatter::ObjectSection> counters_section;
 
 	for (const auto &[counter_name_with_labels, _] :
 	     state->perf_counters.instances) {
@@ -1271,22 +1272,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
           */
 
 	  if (prev_key_name != key_name) {
-	    if (!prev_key_name.empty()) {
-	      f.close_section();  // close 'counters'
-	      f.close_section();  // close 'counter object' section
-	    }
+	    counters_section.reset();
+	    counter_object_section.reset();
 	    prev_key_name = key_name;
 	    prev_key_labels = key_labels;
 	    array_section.emplace(f, key_name);
-	    dump_counter_with_labels(&f, key_labels, type);
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels == key_labels) {
 	    dump_sub_counter_information(&f, type);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels != key_labels) {
-	    f.close_section();	// close previous 'counters' section
-	    f.close_section();	// close previous counter object section
-	    dump_counter_with_labels(&f, key_labels, type);
+	    counters_section.reset();
+	    counter_object_section.reset();
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else {
 	    dout(4)
 		<< fmt::format(
@@ -1294,10 +1293,6 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		       __func__)
 		<< dendl;
 	  }
-	}
-	if (!prev_key_name.empty()) {
-	  f.close_section();  // close 'counters'
-	  f.close_section();  // close 'counter object' section
 	}
       });
     }
