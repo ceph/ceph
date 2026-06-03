@@ -4423,6 +4423,32 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_omap_get_vals2)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_omap_get_vals2);
 
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_omap_get_vals_rev)(
+  rados_read_op_t read_op,
+  const char *start_before,
+  const char *filter_prefix,
+  uint64_t max_return,
+  rados_omap_iter_t *iter,
+  unsigned char *pmore,
+  int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_get_vals_enter, read_op, start_before, filter_prefix, max_return, prval);
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  const char *start = start_before ? start_before : "";
+  const char *filter = filter_prefix ? filter_prefix : "";
+  ((::ObjectOperation *)read_op)->omap_get_vals_rev(
+    start,
+    filter,
+    max_return,
+    &omap_iter->values,
+    (bool*)pmore,
+    prval);
+  ((::ObjectOperation *)read_op)->set_handler(new C_OmapIter(omap_iter));
+  *iter = omap_iter;
+  tracepoint(librados, rados_read_op_omap_get_vals_exit, *iter);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_omap_get_vals_rev);
+
 struct C_OmapKeysIter : public Context {
   RadosOmapIter *iter;
   std::set<std::string> keys;
@@ -4476,6 +4502,27 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_omap_get_keys2)(
   tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_omap_get_keys2);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_omap_get_keys_rev)(
+  rados_read_op_t read_op,
+  const char *start_before,
+  uint64_t max_return,
+  rados_omap_iter_t *iter,
+  unsigned char *pmore,
+  int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_get_keys_enter, read_op, start_before, max_return, prval);
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  C_OmapKeysIter *ctx = new C_OmapKeysIter(omap_iter);
+  ((::ObjectOperation *)read_op)->omap_get_keys_rev(
+    start_before ? start_before : "",
+    max_return, &ctx->keys,
+    (bool*)pmore, prval);
+  ((::ObjectOperation *)read_op)->set_handler(ctx);
+  *iter = omap_iter;
+  tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_omap_get_keys_rev);
 
 static void internal_rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
                                                          set<string>& to_get,

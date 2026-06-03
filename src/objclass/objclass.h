@@ -113,6 +113,17 @@ extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
                                 uint64_t max_to_get,
                                 std::map<std::string, ceph::buffer::list> *vals,
                                 bool *more);
+extern int cls_cxx_map_get_keys_rev(cls_method_context_t hctx,
+                                    const std::string &start_at_before,
+                                    uint64_t max_to_get,
+                                    std::set<std::string> *keys,
+                                    bool *more);
+extern int cls_cxx_map_get_vals_rev(cls_method_context_t hctx,
+                                    const std::string& start_at_before,
+                                    const std::string& filter_prefix,
+                                    uint64_t max_to_get,
+                                    std::map<std::string, ceph::buffer::list> *vals,
+                                    bool *more);
 extern int cls_cxx_map_get_val(cls_method_context_t hctx, const std::string &key,
                                bufferlist *outbl);
 extern int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,

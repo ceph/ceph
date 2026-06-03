@@ -993,6 +993,26 @@ struct ObjectOperation {
     out_ec.back() = ec;
   }
 
+  void omap_get_keys_rev(const std::string &start_before,
+                         uint64_t max_to_get,
+                         std::set<std::string> *out_set,
+                         bool *ptruncated,
+                         int *prval) {
+    using ceph::encode;
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYSREV);
+    ceph::buffer::list bl;
+    encode(start_before, bl);
+    encode(max_to_get, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval || ptruncated || out_set) {
+      set_handler(CB_ObjectOperation_decodekeys(max_to_get, out_set, ptruncated, prval,
+						nullptr));
+      out_rval.back() = prval;
+    }
+  }
+
   void omap_get_vals(const std::string &start_after,
 		     const std::string &filter_prefix,
 		     uint64_t max_to_get,
@@ -1032,6 +1052,28 @@ struct ObjectOperation {
     set_handler(CB_ObjectOperation_decodevals(max_to_get, out_set, ptruncated,
 					      nullptr, ec));
     out_ec.back() = ec;
+  }
+
+  void omap_get_vals_rev(const std::string &start_before,
+                         const std::string &filter_prefix,
+                         uint64_t max_to_get,
+                         std::map<std::string, ceph::buffer::list> *out_set,
+                         bool *ptruncated,
+                         int *prval) {
+    using ceph::encode;
+    OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSREV);
+    ceph::buffer::list bl;
+    encode(start_before, bl);
+    encode(max_to_get, bl);
+    encode(filter_prefix, bl);
+    op.op.extent.offset = 0;
+    op.op.extent.length = bl.length();
+    op.indata.claim_append(bl);
+    if (prval || out_set || ptruncated) {
+      set_handler(CB_ObjectOperation_decodevals(max_to_get, out_set, ptruncated,
+						prval, nullptr));
+      out_rval.back() = prval;
+    }
   }
 
   void omap_get_vals_by_keys(const std::set<std::string> &to_get,
