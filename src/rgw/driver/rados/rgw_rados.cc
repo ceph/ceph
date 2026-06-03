@@ -5653,7 +5653,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                                 attrs, days, glacier_params, in_progress, &cb);
   } else {
     ldpp_dout(dpp, 20) << "Fetching  object:" << dest_obj << "from the cloud" <<  dendl;
-    ret = retry_on_busy(tier_ctx.y, dpp, cct, __func__, [&]() {
+    ret = retry_on_transient_error(tier_ctx.y, dpp, cct, __func__, [&]() {
       return rgw_cloud_tier_get_object(tier_ctx, false, headers,
                                        &set_mtime, etag, accounted_size,
                                        attrs, &cb);
