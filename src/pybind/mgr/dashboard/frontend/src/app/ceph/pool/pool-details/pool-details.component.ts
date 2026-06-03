@@ -49,14 +49,6 @@ export class PoolDetailsComponent implements OnInit, OnDestroy {
       }
     ];
 
-    if (permissions.grafana?.read) {
-      items.push({
-        label: $localize`Performance Details`,
-        route: [this.basePath, this.poolName, 'performance-details'],
-        routerLinkActiveOptions: { exact: true }
-      });
-    }
-
     items.push(
       {
         label: $localize`Configuration`,
@@ -69,6 +61,14 @@ export class PoolDetailsComponent implements OnInit, OnDestroy {
         routerLinkActiveOptions: { exact: true }
       }
     );
+
+    if (permissions.grafana?.read) {
+      items.push({
+        label: $localize`Performance`,
+        route: [this.basePath, this.poolName, 'performance-details'],
+        routerLinkActiveOptions: { exact: true }
+      });
+    }
 
     this.sidebarItems = items;
   }
