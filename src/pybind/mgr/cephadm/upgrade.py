@@ -1154,7 +1154,19 @@ class CephadmUpgrade:
         target_major: str,
         need_upgrade: List[DaemonDescription]
     ) -> bool:
-        # scale down all filesystems to 1 MDS
+        # Only prepare the filesystem(s) whose MDS daemons are actually being
+        # upgraded. When the upgrade is scoped with --services mds.<fs> or
+        # --daemon-types mds, need_upgrade only contains the relevant MDS
+        # daemons, so unrelated filesystems must be left untouched. When no
+        # filter is set, need_upgrade contains every MDS daemon and all
+        # filesystems are prepared, preserving the previous behavior.
+        target_fs_names = {
+            d.service_name()[len('mds.'):]
+            for d in need_upgrade
+            if d.service_name() and d.service_name().startswith('mds.')
+        }
+
+        # scale down the targeted filesystems to 1 MDS
         assert self.upgrade_state
         if not self.upgrade_state.fs_original_max_mds:
             self.upgrade_state.fs_original_max_mds = {}
@@ -1166,6 +1178,10 @@ class CephadmUpgrade:
             fscid = fs["id"]
             mdsmap = fs["mdsmap"]
             fs_name = mdsmap["fs_name"]
+
+            # skip filesystems that have no MDS daemon in this upgrade scope
+            if target_fs_names and fs_name not in target_fs_names:
+                continue
 
             # disable allow_standby_replay?
             if mdsmap['flags'] & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY:
