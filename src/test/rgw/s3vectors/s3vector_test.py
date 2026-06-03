@@ -2022,12 +2022,86 @@ def test_query_vectors_filter():
     # implicit AND with mixed column + JSON fields
     assert query_keys({'genre': 'rock', 'color': 'red'}) == ['v0', 'v2']
 
+    # nested $and: both inner $ands mix column and JSON fields
+    assert query_keys({'$and': [
+        {'$and': [{'genre': 'rock'}, {'color': 'red'}]},
+        {'$and': [{'year': {'$gt': 2019}}, {'color': 'red'}]}
+    ]}) == ['v0']
+
+    # nested $or inside $and: each $or is homogeneous (column-only or JSON-only)
+    assert query_keys({'$and': [
+        {'$or': [{'genre': 'rock'}, {'genre': 'jazz'}]},
+        {'color': 'red'}
+    ]}) == ['v0', 'v2', 'v4']
+
     # mixed $or: column + JSON fields should be rejected
     assert_query_vectors_validation_error(
         conn, 'filter',
         vectorBucketName=bucket_name, indexName=index_name,
         queryVector=query_vector, topK=top_k,
         filter={'$or': [{'genre': 'rock'}, {'color': 'red'}]})
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_post_filtering():
+    """Test that postFiltering forces all filtering through JSON post-filtering."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre'},
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # v0 (index=0) and v3 (index=10) are rock; v1 and v2 are jazz.
+    # query is centered at index 0, so v0 is nearest and v3 is far away.
+    # with topK=2: pre-filtering on genre=rock searches only rock vectors
+    # and returns both (v0, v3). post-filtering fetches the 2 nearest
+    # overall (v0, v1), then filters to rock, returning only v0.
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True, 'color': 'red'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'genre': 'jazz', 'year': 2019, 'popular': False, 'color': 'blue'})},
+        {'key': 'v2', 'data': generate_data(dimension, 2),
+         'metadata': json.dumps({'genre': 'jazz', 'year': 2018, 'popular': True, 'color': 'green'})},
+        {'key': 'v3', 'data': generate_data(dimension, 10),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2021, 'popular': False, 'color': 'red'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    def query_keys(filter_expr, top_k, post_filtering=False):
+        kwargs = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=top_k, filter=filter_expr)
+        if post_filtering:
+            kwargs['postFiltering'] = True
+        result = conn.query_vectors(**kwargs)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # pre-filtering on genre=rock with topK=2 returns both rock vectors
+    assert query_keys({'genre': 'rock'}, top_k=2) == ['v0', 'v3']
+    # post-filtering with topK=2 only sees the 2 nearest (v0, v1), so v3 is excluded
+    assert query_keys({'genre': 'rock'}, top_k=2, post_filtering=True) == ['v0']
+
+    # post-filtering allows mixed $or (column + JSON fields)
+    assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
@@ -2172,6 +2246,9 @@ def test_query_vectors_filter_errors():
 
     # nested mixed $or via $and
     expect_error({'$or': [{'genre': 'rock'}, {'$and': [{'genre': 'jazz'}, {'color': 'blue'}]}]})
+
+    # mixed $or nested inside $and
+    expect_error({'$and': [{'$or': [{'genre': 'rock'}, {'color': 'red'}]}, {'popular': True}]})
 
     # object value in $eq (JSON field)
     expect_error({'color': {'$eq': {'nested': 'value'}}})

@@ -48,6 +48,18 @@
                 "NumberList",
                 "BooleanList"
             ]
+        },
+        "QueryVectorsInput":{
+            "required":[],
+            "members":{
+                "postFiltering":{
+                    "shape":"PostFiltering",
+                    "documentation":"<p>If true, all filtering is done via JSON post-filtering, ignoring filterable columns. This allows $or filters to mix filterable and non-filterable metadata fields. Defaults to false.</p>"
+                }
+            }
+        },
+        "PostFiltering":{
+            "type":"boolean"
         }
     }
 }

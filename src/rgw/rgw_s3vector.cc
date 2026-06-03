@@ -1880,6 +1880,7 @@ namespace rgw::s3vector {
     ::encode_json("returnDistance", return_distance, f);
     ::encode_json("returnMetadata", return_metadata, f);
     ::encode_json("topK", top_k, f);
+    ::encode_json("postFiltering", post_filtering, f);
     f->close_section();
   }
 
@@ -1890,6 +1891,7 @@ namespace rgw::s3vector {
     JSONDecoder::decode_json("returnDistance", return_distance, obj);
     JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
     JSONDecoder::decode_json("topK", top_k, obj, true);
+    JSONDecoder::decode_json("postFiltering", post_filtering, obj);
 
     if (top_k < 1) {
       throw JSONDecoder::err(fmt::format("topK must be at least 1, got {}", top_k));
@@ -1952,7 +1954,9 @@ namespace rgw::s3vector {
     // requires the metadata column to be included in the query results
     LanceDBExpr* json_filter_expr = nullptr;
     if (filter) {
-      const auto filterable_keys = get_filterable_keys_from_schema(schema);
+      const auto filterable_keys = configuration.post_filtering
+          ? std::vector<filterable_metadata_key_t>{}
+          : get_filterable_keys_from_schema(schema);
       std::vector<std::string> nonfilterable_keys;
       if (int ret = get_nonfilterable_metadata(table, dpp, nonfilterable_keys); ret < 0) {
         lancedb_vector_query_free(query);

@@ -448,6 +448,7 @@ struct delete_vectors_t {
     "returnDistance": boolean,
     "returnMetadata": boolean,
     "topK": number,
+    "postFiltering": boolean,
   }
 */
 struct query_vectors_t {
@@ -459,6 +460,7 @@ struct query_vectors_t {
   bool return_distance = false;
   bool return_metadata = false;
   unsigned int top_k;
+  bool post_filtering = false;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
