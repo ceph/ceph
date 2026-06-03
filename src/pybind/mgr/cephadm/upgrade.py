@@ -1289,12 +1289,48 @@ class CephadmUpgrade:
             elapsed += 10
         return False
 
+    def _fs_names_of_mds_daemons(
+        self,
+        daemons: List[DaemonDescription],
+    ) -> Set[str]:
+        """
+        Names of the filesystems targeted by the given MDS daemons.
+
+        Combines the cephadm naming convention that service mds.<fs_name>
+        serves <fs_name> (MdsService sets mds_join_fs accordingly) with
+        actual membership from the fsmap: mds_join_fs is only a preference,
+        so a daemon can hold a rank in a filesystem short on MDS other than
+        its service's. Standby daemons not present in any mdsmap only map
+        through their service name.
+        """
+        fs_names = {
+            d.service_name().removeprefix('mds.')
+            for d in daemons
+            if d.service_name() and d.service_name().startswith('mds.')
+        }
+        daemon_ids = {d.daemon_id for d in daemons if d.daemon_id}
+        fsmap = self.mgr.get("fs_map")
+        for fs in fsmap.get('filesystems', []):
+            mdsmap = fs.get('mdsmap', {})
+            if any(info.get('name') in daemon_ids
+                   for info in (mdsmap.get('info') or {}).values()):
+                fs_names.add(mdsmap['fs_name'])
+        return fs_names
+
     def _prepare_for_mds_upgrade(
         self,
         target_major: str,
         need_upgrade: List[DaemonDescription]
     ) -> bool:
-        # scale down all filesystems to 1 MDS
+        # Only prepare the filesystem(s) whose MDS daemons are actually being
+        # upgraded. When the upgrade is scoped with --services mds.<fs> or
+        # --daemon-types mds, need_upgrade only contains the relevant MDS
+        # daemons, so unrelated filesystems must be left untouched. When no
+        # filter is set, need_upgrade contains every MDS daemon and all
+        # filesystems are prepared, preserving the previous behavior.
+        target_fs_names = self._fs_names_of_mds_daemons(need_upgrade)
+
+        # scale down the targeted filesystems to 1 MDS
         assert self.upgrade_state
         if not self.upgrade_state.fs_original_max_mds:
             self.upgrade_state.fs_original_max_mds = {}
@@ -1306,6 +1342,10 @@ class CephadmUpgrade:
             fscid = fs["id"]
             mdsmap = fs["mdsmap"]
             fs_name = mdsmap["fs_name"]
+
+            # skip filesystems that have no MDS daemon in this upgrade scope
+            if target_fs_names and fs_name not in target_fs_names:
+                continue
 
             # disable allow_standby_replay?
             if mdsmap['flags'] & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY:
