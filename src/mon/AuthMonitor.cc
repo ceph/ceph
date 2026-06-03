@@ -524,7 +524,7 @@ bool AuthMonitor::check_health()
   {
     auto service_key_type = mon.monmap->auth_service_cipher;
     if (!secure_key_types.contains(service_key_type)) {
-      next.add("AUTH_INSECURE_SERVICE_TICKETS", HEALTH_WARN, "Monitors are configured to issue insecure service key types", 1);
+      next.add("AUTH_INSECURE_SERVICE_TICKETS", HEALTH_ERR, "Monitors are configured to issue insecure service key types", 1);
     }
   }
 
