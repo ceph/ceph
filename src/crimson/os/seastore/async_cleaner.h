@@ -399,6 +399,18 @@ public:
     std::size_t max_proceed_size) = 0;
 
   /**
+   * maybe_remove_shadow
+   *
+   * Remove the shadow of the extent if it exists
+   */
+  using maybe_remove_shadow_iertr = base_iertr;
+  using maybe_remove_shadow_ret =
+    maybe_remove_shadow_iertr::future<>;
+  virtual maybe_remove_shadow_ret maybe_remove_shadow(
+    Transaction &t,
+    CachedExtent &e) = 0;
+
+  /**
    * get_extents_if_live
    *
    * Returns extent at specified location if still referenced by

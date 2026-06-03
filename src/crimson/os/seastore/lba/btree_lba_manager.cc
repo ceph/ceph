@@ -1139,6 +1139,11 @@ BtreeLBAManager::update_mappings(
 	      ceph_assert(in.len == len);
 	      if (likely(in.pladdr.get_paddr() == prev_addr)) {
                 ret.pladdr = addr;
+                if (c.trans.get_src() == transaction_type_t::TRIM_DIRTY) {
+                  // This is a dirty onode/omap extent that are rewritten,
+                  // the shadow extent should be removed.
+                  ret.shadow_paddr = P_ADDR_NULL;
+                }
               } else {
                 // this can only happen when the extent is EXIST_CLEAN
                 // and is demoted onto the cold tier by a DEMOTE trans.
