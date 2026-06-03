@@ -15,6 +15,7 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/Throttle.cc
   ${PROJECT_SOURCE_DIR}/src/common/Timer.cc
+  ${PROJECT_SOURCE_DIR}/src/common/tracer.cc
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
   ${PROJECT_SOURCE_DIR}/src/common/WorkQueue.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
@@ -80,4 +81,5 @@ target_link_libraries(crimson-alienstore
     crimson-alien-common
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
-    blk)
+    blk
+    $<$<BOOL:${WITH_JAEGER}>:jaeger_base>)

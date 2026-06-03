@@ -11,6 +11,6 @@ class DoutPrefixProvider;
 struct req_context {
   const DoutPrefixProvider* dpp{nullptr};
   optional_yield y;
-  const jspan* span;
+  const otel_span_t* span;
 };
 

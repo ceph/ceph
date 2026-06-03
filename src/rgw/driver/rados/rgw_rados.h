@@ -849,11 +849,11 @@ public:
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
                      bool assume_noent, void *index_op,
-                     const req_context& rctx, jspan_context& trace,
+                     const req_context& rctx, otel_span_context_t& trace,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     const req_context& rctx, jspan_context& trace, bool log_op = true);
+                     const req_context& rctx, otel_span_context_t& trace, bool log_op = true);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
@@ -963,6 +963,7 @@ public:
       bool blind;
       bool prepared{false};
       rgw_zone_set *zones_trace{nullptr};
+      otel_span_context_t bilog_trace{false, false};
 
       int init_bs(const DoutPrefixProvider *dpp, optional_yield y) {
         int r =
@@ -1009,6 +1010,10 @@ public:
 
       void set_zones_trace(rgw_zone_set *_zones_trace) {
         zones_trace = _zones_trace;
+      }
+
+      void set_bilog_trace(otel_span_context_t&& _bilog_trace) {
+        bilog_trace = _bilog_trace;
       }
 
       int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y);
@@ -1207,6 +1212,7 @@ public:
                        bool stat_follow_olh,
                        const rgw_obj& stat_dest_obj,
                        std::optional<rgw_zone_set_entry> source_trace_entry,
+                       otel_span_context_t& trace_ctx,
                        rgw_zone_set *zones_trace = nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0,
                        bool keep_tags = true);
@@ -1256,7 +1262,7 @@ public:
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace);
+               otel_span_context_t& trace);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                const ACLOwner& owner,
@@ -1539,10 +1545,12 @@ public:
                          optional_yield y);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs,
-                          uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                          uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true,
+			                    const otel_span_context_t *bilog_trace = nullptr);
   int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                           rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                           rgw_zone_set *zones_trace = nullptr, bool log_op = true,
+			                     const otel_span_context_t *bilog_trace = nullptr);
   int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
                            uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);

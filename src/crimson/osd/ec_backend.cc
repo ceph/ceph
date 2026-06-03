@@ -402,7 +402,7 @@ ECBackend::handle_sub_write(
 void ECBackend::handle_sub_read_n_reply(
   pg_shard_t from,
   ECSubRead &op,
-  const ZTracer::Trace &)
+  const otel_span_ref &otel_trace)
 {
   std::ignore = seastar::do_with(std::move(op), [this](auto&& op) {
     return handle_rep_read_op(op).si_then([this](auto&& reply) {
@@ -415,7 +415,7 @@ void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const ZTracer::Trace &trace,
+  const otel_span_ref &otel_trace,
   ECListener& eclistener)
 {
   LOG_PREFIX(ECBackend::handle_sub_write);

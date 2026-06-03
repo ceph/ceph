@@ -7735,7 +7735,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
-  jspan_context trace_ctx(false, false);
+  otel_span_context_t trace_ctx(false, false);
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
@@ -8027,7 +8027,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   meta_obj->set_in_extra_data(true);
   meta_obj->get_obj_attrs(s->yield, this);
 
-  jspan_context trace_ctx(false, false);
+  otel_span_context_t trace_ctx(false, false);
   if (tracing::rgw::tracer.is_enabled()) {
     // read meta object attributes for trace info
     extract_span_context(meta_obj->get_attrs(), trace_ctx);

@@ -24,6 +24,8 @@
 #include "ECTypes.h"
 #include "messages/MOSDPGPushReply.h"
 #include "msg/MessageRef.h"
+#include "osd/osd_tracer.h"
+
 #if WITH_CRIMSON
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -74,14 +76,14 @@ struct ECCommon {
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const ZTracer::Trace &trace,
+      const otel_span_ref &otel_trace,
       ECListener &eclistener) = 0;
 
 #ifdef WITH_CRIMSON
   virtual void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const ZTracer::Trace &trace
+    const otel_span_ref &otel_trace
     ) = 0;
 #endif
 
@@ -89,6 +91,7 @@ struct ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      OpRequestRef op,
       GenContextURef<ec_extents_t&&> &&func) = 0;
 
   struct shard_read_t {
@@ -149,6 +152,7 @@ struct ECCommon {
 
   virtual void objects_read_and_reconstruct_for_rmw(
       std::map<hobject_t, read_request_t> &&to_read,
+      OpRequestRef op,
       GenContextURef<ec_extents_t&&> &&func) = 0;
 
   struct ReadOp;
@@ -257,10 +261,11 @@ struct ECCommon {
     bool for_recovery;
     std::unique_ptr<ReadCompleter> on_complete;
 
-    ZTracer::Trace trace;
 
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
+
+    otel_span_ref otel_trace{tracing::Tracer::noop_span};
 
     std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t>> source_to_obj;
@@ -274,12 +279,14 @@ struct ECCommon {
     ReadOp(
         int priority,
         ceph_tid_t tid,
+        OpRequestRef op,
         bool do_redundant_reads,
         bool for_recovery,
         std::unique_ptr<ReadCompleter> _on_complete,
         std::map<hobject_t, read_request_t> &&_to_read)
       : priority(priority),
         tid(tid),
+        op(op),
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
@@ -310,10 +317,12 @@ struct ECCommon {
         const std::map<hobject_t, std::list<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
+        OpRequestRef op,
         GenContextURef<ec_extents_t&&> &&func);
 
     void objects_read_and_reconstruct_for_rmw(
         std::map<hobject_t, read_request_t> &&to_read,
+        OpRequestRef op,
         GenContextURef<ECCommon::ec_extents_t&&> &&func);
 
     template <class F, class G>
@@ -334,6 +343,7 @@ struct ECCommon {
     void start_read_op(
         int priority,
         std::map<hobject_t, read_request_t> &to_read,
+        OpRequestRef op,
         bool do_redundant_reads,
         bool for_recovery,
         std::unique_ptr<ReadCompleter> on_complete);
@@ -451,8 +461,8 @@ struct ECCommon {
     void handle_sub_read_n_reply(
       pg_shard_t from,
       ECSubRead &op,
-      const ZTracer::Trace &trace) {
-      ec_backend.handle_sub_read_n_reply(from, op, trace);
+      const otel_span_ref &otel_trace) {
+      ec_backend.handle_sub_read_n_reply(from, op, otel_trace);
     }
 #endif
   };
@@ -482,7 +492,6 @@ struct ECCommon {
       std::vector<pg_log_entry_t> log_entries;
       ceph_tid_t tid;
       osd_reqid_t reqid;
-      ZTracer::Trace trace;
 
       /**
        * pg_commited_to
@@ -522,6 +531,7 @@ struct ECCommon {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
+      otel_span_ref otel_trace{tracing::Tracer::noop_span};
 
       /// pin for cache
       std::list<ECExtentCache::OpRef> cache_ops;
@@ -633,6 +643,7 @@ struct ECCommon {
         Func &&on_complete) {
       ec_backend.objects_read_and_reconstruct_for_rmw(
         std::move(to_read),
+        OpRequestRef(),
         make_gen_lambda_context<
           ECCommon::ec_extents_t&&, Func>(
           std::forward<Func>(on_complete)));
@@ -642,8 +653,8 @@ struct ECCommon {
         pg_shard_t from,
         OpRequestRef msg,
         ECSubWrite &op,
-        const ZTracer::Trace &trace) const {
-      ec_backend.handle_sub_write(from, std::move(msg), op, trace,
+        const otel_span_ref &otel_trace) const {
+      ec_backend.handle_sub_write(from, std::move(msg), op, otel_trace,
                                   *get_parent());
     }
 

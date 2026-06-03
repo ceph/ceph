@@ -387,10 +387,10 @@ options:
   default: false
   services:
   - rbd
-- name: rbd_blkin_trace_all
+- name: rbd_otel_trace_all
   type: bool
   level: advanced
-  desc: create a blkin trace for all RBD requests
+  desc: create a OpenTelemetry trace for all RBD requests
   default: false
   services:
   - rbd

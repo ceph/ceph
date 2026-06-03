@@ -38,6 +38,7 @@
 #include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"
 #include "common/numa.h"
+#include "common/tracer.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -138,6 +139,10 @@ int main(int argc, const char **argv)
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
+
+  // Set root service name for hierarchical tracer naming
+  // This must be done early, before any tracer initialization
+  tracing::Tracer::set_root_service_name("ceph-osd");
 
   Preforker forker;
 
@@ -277,6 +282,13 @@ int main(int argc, const char **argv)
     derr << "must specify '-i #' where # is the osd number" << dendl;
     forker.exit(1);
   }
+
+  tracing::Tracer::set_resource_attribute(
+    "service.instance.id",
+    std::string("osd.") + std::to_string(whoami));
+  tracing::Tracer::set_resource_attribute(
+    "ceph.osd_id",
+    std::to_string(whoami));
 
   if (data_path.empty()) {
     derr << "must specify '--osd-data=foo' data path" << dendl;

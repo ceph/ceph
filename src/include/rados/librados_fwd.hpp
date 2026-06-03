@@ -1,8 +1,6 @@
 #ifndef __LIBRADOS_FWD_HPP
 #define __LIBRADOS_FWD_HPP
 
-struct blkin_trace_info;
-
 namespace opentelemetry {
 inline namespace v1 {
 namespace trace {
@@ -13,7 +11,7 @@ class SpanContext;
 } // inline namespace v1
 } // namespace opentelemetry
 
-using jspan_context = opentelemetry::v1::trace::SpanContext;
+using otel_span_context_t = opentelemetry::v1::trace::SpanContext;
 
 namespace libradosstriper {
 

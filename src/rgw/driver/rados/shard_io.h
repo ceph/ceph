@@ -31,6 +31,7 @@
 
 #include "librados/librados_asio.h"
 #include "common/dout.h"
+#include "common/tracer.h"
 
 /// Concurrent io algorithms for data sharded across rados objects.
 namespace rgwrados::shard_io {
@@ -659,9 +660,8 @@ class RadosRevertibleWriter : public RevertibleWriter {
     prepare_write(shard, op);
 
     constexpr int flags = 0;
-    constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
-                            flags, trace, std::move(handler));
+                            flags, tracing::noop_span_ctx, std::move(handler));
   }
 
   void revert(int shard, const std::string& object,
@@ -670,9 +670,8 @@ class RadosRevertibleWriter : public RevertibleWriter {
     prepare_revert(shard, op);
 
     constexpr int flags = 0;
-    constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
-                            flags, trace, std::move(handler));
+                            flags, tracing::noop_span_ctx, std::move(handler));
   }
 
   librados::IoCtx& ioctx;
@@ -697,9 +696,8 @@ class RadosWriter : public Writer {
     prepare_write(shard, op);
 
     constexpr int flags = 0;
-    constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
-                            flags, trace, std::move(handler));
+                            flags, tracing::noop_span_ctx, std::move(handler));
   }
 
   librados::IoCtx& ioctx;
@@ -724,9 +722,8 @@ class RadosReader : public Reader {
     prepare_read(shard, op);
 
     constexpr int flags = 0;
-    constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
-                            flags, trace, std::move(handler));
+                            flags, tracing::noop_span_ctx, std::move(handler));
   }
 
   librados::IoCtx& ioctx;

@@ -65,29 +65,29 @@ public:
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    const ZTracer::Trace &trace);
+    const otel_span_ref &otel_trace);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
+    const otel_span_ref &otel_trace,
     ECListener& eclistener
     ) override;
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
     ECSubReadReply *reply,
-    const ZTracer::Trace &trace
+    const otel_span_ref &otel_trace
     );
   void handle_sub_write_reply(
     pg_shard_t from,
     const ECSubWriteReply &op,
-    const ZTracer::Trace &trace
+    const otel_span_ref &otel_trace
     );
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    const ZTracer::Trace &trace
+    const otel_span_ref &otel_trace
     );
 
   /// @see ReadOp below
@@ -145,6 +145,7 @@ public:
   void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
+    OpRequestRef op,
     GenContextURef<ECCommonL::ec_extents_t &&> &&func) override;
 
     void objects_read_async(
@@ -153,7 +154,8 @@ public:
       const std::list<std::pair<ec_align_t,
                                 std::pair<ceph::buffer::list*, Context*>>> &to_read,
       Context *on_complete,
-      bool fast_read = false);
+      bool fast_read = false,
+      OpRequestRef op = OpRequestRef());
 
 private:
   friend struct ECRecoveryHandle;

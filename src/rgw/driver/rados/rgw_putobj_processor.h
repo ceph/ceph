@@ -73,13 +73,13 @@ class RadosWriter : public rgw::sal::DataProcessor {
   RawObjSet written; // set of written objects for deletion
   const DoutPrefixProvider *dpp;
   optional_yield y;
-  jspan_context& trace;
+  otel_span_context_t& trace;
 
  public:
   RadosWriter(Aio *aio, RGWRados *store,
               const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
-              const DoutPrefixProvider *dpp, optional_yield y, jspan_context& _trace)
+              const DoutPrefixProvider *dpp, optional_yield y, otel_span_context_t& _trace)
     : aio(aio), store(store), bucket_info(bucket_info),
       obj_ctx(obj_ctx), head_obj(_head_obj), dpp(dpp), y(y), trace(_trace)
   {}
@@ -106,7 +106,7 @@ class RadosWriter : public rgw::sal::DataProcessor {
   // so they aren't deleted on destruction
   void clear_written() { written.clear(); }
 
-  jspan_context& get_trace() { return trace; }
+  otel_span_context_t& get_trace() { return trace; }
 };
 
 
@@ -139,7 +139,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
                           const rgw_obj& _head_obj,
                           const DoutPrefixProvider* dpp,
                           optional_yield y,
-                          jspan_context& trace)
+                          otel_span_context_t& trace)
     : HeadObjectProcessor(0),
       store(store), bucket_info(bucket_info),
       owner(owner),
@@ -181,7 +181,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                         RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
-                        const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
+                        const DoutPrefixProvider *dpp, optional_yield y, otel_span_context_t& trace)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                               owner, obj_ctx, _head_obj, dpp, y, trace),
       olh_epoch(olh_epoch), unique_tag(unique_tag)
@@ -227,7 +227,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                            const rgw_obj& _head_obj,
                            const std::string& upload_id, uint64_t part_num,
                            const std::string& part_num_str,
-                           const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
+                           const DoutPrefixProvider *dpp, optional_yield y, otel_span_context_t& trace)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                               owner, obj_ctx, _head_obj, dpp, y, trace),
       target_obj(head_obj), upload_id(upload_id),
@@ -273,7 +273,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                           const rgw_obj& _head_obj,
                           const std::string& unique_tag, uint64_t position,
                           uint64_t *cur_accounted_size,
-                          const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
+                          const DoutPrefixProvider *dpp, optional_yield y, otel_span_context_t& trace)
             : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                                       owner, obj_ctx, _head_obj, dpp, y, trace),
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),

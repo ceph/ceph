@@ -3134,7 +3134,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   rgw_zone_id no_zone;
 
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
 
   r = copy_obj(obj_ctx,
                obj_ctx,  /* src and dest share an obj_ctx */
@@ -3235,7 +3235,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     obj_ctx.set_atomic(archive_obj, true);
     obj_ctx.set_atomic(obj, true);
 
-    jspan_context no_trace{false, false};
+    otel_span_context_t no_trace{false, false};
 
     int ret = copy_obj(obj_ctx,
                        obj_ctx,  /* src and dest share an obj_ctx */
@@ -3299,7 +3299,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, void *_index_op,
                                            const req_context& rctx,
-                                           jspan_context& trace, bool log_op)
+                                           otel_span_context_t& trace, bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3517,10 +3517,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
       return r;
   }
 
+  auto index_span = tracing::rgw::tracer.add_span("update_index", trace);
+  index_op->set_bilog_trace(index_span->GetContext());
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, &trace, &epoch);
+  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -3662,7 +3664,7 @@ done_cancel:
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                         map<string, bufferlist>& attrs, const req_context& rctx,
-                                        jspan_context& trace, bool log_op)
+                                        otel_span_context_t& trace, bool log_op)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -4574,6 +4576,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                bool stat_follow_olh,
                const rgw_obj& stat_dest_obj,
                std::optional<rgw_zone_set_entry> source_trace_entry,
+               otel_span_context_t& trace_ctx,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred,
                bool keep_tags)
@@ -4595,13 +4598,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   // use an empty owner until we decode RGW_ATTR_ACL
   ACLOwner owner;
   RGWAccessControlPolicy policy;
+  auto trace = tracing::rgw::tracer.add_span("fetch_remote_obj", trace_ctx);
+  trace->SetAttribute(tracing::rgw::OBJECT_NAME, dest_obj.key.name);
+  trace->SetAttribute(tracing::rgw::BUCKET_NAME, dest_bucket_info.bucket.name);
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  auto trace_subctx = trace->GetContext();
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
                                   owner, dest_obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y, no_trace);
+				  tag, rctx.dpp, rctx.y, trace_subctx);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -5080,7 +5086,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace)
+               otel_span_context_t& trace)
 {
   int ret;
   uint64_t obj_size;
@@ -5123,7 +5129,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                    unmod_ptr, high_precision_time,
                    if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                    olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
-                   nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt);
+                   nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt, trace);
 
         progress_tracker.done = true;
         progress_tracker.cv.notify_one();
@@ -5479,7 +5485,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
   AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
                                &dest_placement, owner,
                                obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
@@ -5677,7 +5683,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   append_rand_alpha(cct, tag, tag, 32);
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  otel_span_context_t no_trace{false, false};
 
   // bi expects empty instance for the entries created when
   // bucket versioning is not enabled or suspended.
@@ -6878,7 +6884,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   auto& ioctx = ref.ioctx;
   ioctx.set_pool_full_try(); // allow deletion at pool quota limit
   version_t epoch = 0;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, {false, false}, &epoch);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
@@ -7701,7 +7707,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.ioctx;
   version_t epoch = 0;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, {false, false}, &epoch);
   if (state) {
     if (r >= 0) {
       ACLOwner owner;
@@ -8279,7 +8285,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log);
+  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log, &bilog_trace);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, bs->shard_id, y);
@@ -10100,7 +10106,7 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   }
 
   bufferlist outbl;
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), &outbl, y, 0, nullptr, epoch);
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), &outbl, y, 0, {false, false}, epoch);
   if (r < 0)
     return r;
 
@@ -10716,7 +10722,8 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
                                   int64_t pool, uint64_t epoch,
                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                   list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                  rgw_zone_set *_zones_trace, bool log_op)
+                                  rgw_zone_set *_zones_trace, bool log_op,
+                        				  const otel_span_context_t *bilog_trace )
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
@@ -10744,7 +10751,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, remove_objs,
-                             log_op, bilog_flags, &zones_trace, obj.key.get_loc());
+                             log_op, bilog_flags, &zones_trace, obj.key.get_loc(), bilog_trace);
   complete_op_data *arg;
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
                                               log_op, bilog_flags, &zones_trace, &arg);
@@ -10760,11 +10767,12 @@ int RGWRados::cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& 
                                    int64_t pool, uint64_t epoch,
                                    rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                    list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                   rgw_zone_set *zones_trace, bool log_op)
+                                   rgw_zone_set *zones_trace, bool log_op,
+                                   const otel_span_context_t* bilog_trace)
 {
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_ADD, tag, pool, epoch,
                              ent, category, remove_objs, bilog_flags,
-                             zones_trace, log_op);
+                             zones_trace, log_op, bilog_trace);
 }
 
 int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
@@ -11297,7 +11305,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
-    r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, nullptr, &index_ver.epoch);
+    r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, {false, false}, &index_ver.epoch);
     if (r == RGWBIAdvanceAndRetryError) {
       // CLS could not return any visible entries in this round,
       // but it advanced the marker; retry with the new marker.

@@ -20,6 +20,7 @@
 #include <fmt/format.h>
 
 #include "common/sharedptr_registry.hpp"
+#include "common/tracer.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtilL.h"
 #include "ECTypes.h"
@@ -44,6 +45,7 @@ typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #else
 #include "common/WorkQueue.h"
+#include "osd/osd_tracer.h"
 #endif
 
 #include "ECTransactionL.h"
@@ -76,13 +78,14 @@ struct ECCommonL {
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
+    const otel_span_ref &otel_trace,
     ECListener& eclistener
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
+    OpRequestRef op,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
@@ -179,7 +182,7 @@ struct ECCommonL {
     bool for_recovery;
     std::unique_ptr<ReadCompleter> on_complete;
 
-    ZTracer::Trace trace;
+    otel_span_ref otel_trace{tracing::Tracer::noop_span};
 
     std::map<hobject_t, std::set<int>> want_to_read;
     std::map<hobject_t, read_request_t> to_read;
@@ -207,6 +210,7 @@ struct ECCommonL {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
+        otel_trace(op ? op->osd_parent_span : tracing::Tracer::noop_span),
         want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
@@ -228,6 +232,7 @@ struct ECCommonL {
     void objects_read_and_reconstruct(
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
+      OpRequestRef op,
       GenContextURef<ec_extents_t &&> &&func);
 
     template <class F, class G>
@@ -374,7 +379,6 @@ struct ECCommonL {
       std::vector<pg_log_entry_t> log_entries;
       ceph_tid_t tid;
       osd_reqid_t reqid;
-      ZTracer::Trace trace;
 
       /**
        * pg_commited_to
@@ -425,6 +429,7 @@ struct ECCommonL {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
+      otel_span_ref otel_trace = tracing::Tracer::noop_span;
 
       /// pin for cache
       ECExtentCacheL::write_pin pin;
@@ -514,6 +519,7 @@ struct ECCommonL {
     template <typename Func>
     void objects_read_async_no_cache(
       const std::map<hobject_t,extent_set> &to_read,
+      OpRequestRef op,
       Func &&on_complete
     ) {
       std::map<hobject_t, std::list<ec_align_t>> _to_read;
@@ -526,6 +532,7 @@ struct ECCommonL {
       ec_backend.objects_read_and_reconstruct(
         _to_read,
         false,
+        op,
         make_gen_lambda_context<
         ECCommonL::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
@@ -534,9 +541,9 @@ struct ECCommonL {
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const ZTracer::Trace &trace
+      const otel_span_ref &otel_trace
     ) {
-      ec_backend.handle_sub_write(from, std::move(msg), op, trace, *get_parent());
+      ec_backend.handle_sub_write(from, std::move(msg), op, otel_trace, *get_parent());
     }
     // end of iface
 

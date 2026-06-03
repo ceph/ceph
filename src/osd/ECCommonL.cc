@@ -419,9 +419,13 @@ void ECCommonL::ReadPipeline::start_read_op(
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
 #ifndef WITH_CRIMSON
-    op.trace = _op->pg_trace;
+    op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp (legacy)", _op->pg_trace);
 #endif
-    op.trace.event("start ec read");
+  } else {
+    // need to fix this so that the original op is passed through to here from RMWPipeline::try_state_to_reads 
+    // then we wouldnt need to start this new trace
+    op.otel_trace = tracing::osd::tracer.start_trace("EC ReadOp-created (legacy)");
+
   }
   do_read_op(op);
 }
@@ -484,11 +488,8 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
     msg->op = i->second;
     msg->op.from = get_parent()->whoami_shard();
     msg->op.tid = tid;
-    if (op.trace) {
-      // initialize a child span for this shard
-      msg->trace.init("ec sub read", nullptr, &op.trace);
-      msg->trace.keyval("shard", i->first.shard.id);
-    }
+    msg->otel_trace = op.otel_trace->GetContext();
+    op.otel_trace->AddEvent("ec sub read", {{"shard", i->first.shard.id}});
     m.push_back(std::make_pair(i->first.osd, msg));
   }
   if (!m.empty()) {
@@ -675,6 +676,7 @@ static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
+  OpRequestRef op,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
   in_progress_client_reads.emplace_back(
@@ -730,7 +732,7 @@ void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
     CEPH_MSG_PRIO_DEFAULT,
     obj_want_to_read,
     for_read_op,
-    OpRequestRef(),
+    op,
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(*this, &(in_progress_client_reads.back())));
@@ -856,6 +858,7 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
+      OpRequestRef(),
       [op, this](ec_extents_t &&results) {
 	for (auto &&i: results) {
 	  op->remote_read_result.emplace(make_pair(i.first, i.second.emap));
@@ -904,8 +907,6 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
        ++i) {
     trans[i->shard];
   }
-
-  op->trace.event("start ec write");
 
   map<hobject_t,extent_map> written;
   op->generate_transactions(
@@ -984,12 +985,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       op->temp_cleared,
       !should_send);
 
-    ZTracer::Trace trace;
-    if (op->trace) {
-      // initialize a child span for this shard
-      trace.init("ec sub write", nullptr, &op->trace);
-      trace.keyval("shard", i->shard.id);
-    }
+    op->otel_trace->AddEvent("ec sub write", {{"shard", i->shard.id}});
 
     if (*i == get_parent()->whoami_shard()) {
       should_write_local = true;
@@ -1004,7 +1000,8 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
-      r->trace = trace;
+      r->trace = ::tracing::osd::tracer.add_span("MOSDECSubOpWrite msg", op->otel_trace);
+      r->otel_trace = r->trace->GetContext();
       messages.push_back(std::make_pair(i->osd, r));
     }
   }
@@ -1018,7 +1015,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       get_parent()->whoami_shard(),
       op->client_op,
       local_write_op,
-      op->trace);
+      op->otel_trace);
   }
 
   for (auto i = op->on_write.begin();
