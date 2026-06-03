@@ -13,6 +13,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/optional.hpp>
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
@@ -34,6 +35,8 @@
 #include "rgw_sal.h"
 #include "rgw_multi_del.h"
 #include "rgw_multipart_meta_filter.h"
+#include "rgw_bucket_logging.h"
+#include "rgw_bucket_logging_types.h"
 
 #include "fmt/format.h"
 
@@ -704,6 +707,39 @@ static void send_notification(const DoutPrefixProvider* dpp,
   }
 }
 
+// Op name used in journal records for LC-driven deletions.
+static const std::string lifecycle_delete_object_op = "LIFECYCLE.DELETE.OBJECT";
+
+// LC has no req_state, so the source bucket's owner stands in as the
+// identity for the log-bucket write permission check.
+static void send_log_record(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            rgw::sal::Object* obj,
+                            rgw::sal::Bucket* bucket,
+                            const std::string& etag,
+                            uint64_t size,
+                            const std::string& version_id,
+                            const std::string& op_name) {
+  rgw::bucketlogging::record_input input;
+  input.bucket = bucket;
+  input.user_or_account = to_string(bucket->get_owner());
+  input.time = ceph::coarse_real_time::clock::now();
+  input.version_id = version_id;
+
+  const int ret = rgw::bucketlogging::log_record(
+      driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      obj, input, op_name, etag, size, dpp, y,
+      /*async_completion=*/true,
+      /*log_source_bucket=*/false);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "WARNING: bucket logging failed for lc object: "
+                      << obj->get_name() << " op: " << op_name
+                      << " ret: " << ret << dendl;
+  }
+}
+
 /* do all zones in the zone group process LC? */
 static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
 {
@@ -729,7 +765,8 @@ static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zo
 static int remove_expired_obj(const DoutPrefixProvider* dpp,
                               optional_yield y, lc_op_ctx& oc,
                               bool remove_indeed,
-                              const rgw::notify::EventTypeList& event_types) {
+                              const rgw::notify::EventTypeList& event_types,
+                              boost::optional<const std::string&> log_op_name = boost::none) {
   int ret{0};
   auto& driver = oc.driver;
   auto& bucket_info = oc.bucket->get_info();
@@ -764,7 +801,8 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   }
 
   auto have_notify = !event_types.empty();
-  if (have_notify) {
+  // etag is needed for both notifications and bucket-logging records
+  if (have_notify || log_op_name) {
     auto attrset = obj->get_attrs();
     auto iter = attrset.find(RGW_ATTR_ETAG);
     if (iter != attrset.end()) {
@@ -795,6 +833,10 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     if (have_notify) {
       send_notification(dpp, y, driver, obj.get(), oc.bucket, etag, size,
 			version_id, event_types);
+    }
+    if (log_op_name) {
+      send_log_record(dpp, y, driver, obj.get(), oc.bucket, etag, size,
+                      version_id, *log_op_name);
     }
   }
 
@@ -1300,7 +1342,8 @@ public:
       /* ! o.is_delete_marker() */
       r = remove_expired_obj(oc.dpp, y, oc, !oc.bucket->versioning_enabled(),
                              {rgw::notify::ObjectExpirationCurrent,
-                              rgw::notify::LifecycleExpirationDelete});
+                              rgw::notify::LifecycleExpirationDelete},
+                             lifecycle_delete_object_op);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1357,7 +1400,8 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, y, oc, true,
                                {rgw::notify::LifecycleExpirationDelete,
-				rgw::notify::ObjectExpirationNoncurrent});
+				rgw::notify::ObjectExpirationNoncurrent},
+                               lifecycle_delete_object_op);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 			   << oc.bucket << ":" << o.key
@@ -1488,20 +1532,23 @@ public:
      */
     if (! oc.bucket->versioning_enabled()) {
       ret =
-	remove_expired_obj(oc.dpp, y, oc, true, {/* no delete notify expected */});
+	remove_expired_obj(oc.dpp, y, oc, true, {/* no delete notify expected */},
+                           lifecycle_delete_object_op);
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                             << ") not versioned flags: " << oc.o.flags << dendl;
     } else {
       /* versioned */
       if (oc.o.is_current() && !oc.o.is_delete_marker()) {
-        ret = remove_expired_obj(oc.dpp, y, oc, false, {/* no delete notify expected */});
+        ret = remove_expired_obj(oc.dpp, y, oc, false, {/* no delete notify expected */},
+                                 lifecycle_delete_object_op);
         ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                               << ") current & not delete_marker"
                               << " versioned_epoch:  " << oc.o.versioned_epoch
                               << "flags: " << oc.o.flags << dendl;
       } else {
         ret = remove_expired_obj(oc.dpp, y, oc, true,
-				 {/* no delete notify expected */});
+				 {/* no delete notify expected */},
+                                 lifecycle_delete_object_op);
         ldpp_dout(oc.dpp, 20)
             << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
             << "versioned_epoch:  " << oc.o.versioned_epoch
