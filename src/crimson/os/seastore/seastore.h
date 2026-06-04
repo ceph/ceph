@@ -451,11 +451,12 @@ public:
     void add_latency_sample(op_type_t op_type,
         std::chrono::steady_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
+      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
       lat.sample_count++;
-      lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+      lat.sample_sum += us;
       bool found = false;
       for (auto& b : lat.buckets) {
-        if (static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(dur).count()) <= b.upper_bound) {
+        if (static_cast<double>(us) <= b.upper_bound) {
           ++b.count;
           found = true;
           break;
