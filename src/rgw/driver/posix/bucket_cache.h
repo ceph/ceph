@@ -17,6 +17,7 @@
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
 #include "common/cohort_lru.h"
+#include "include/scope_guard.h"
 #include "lmdb-safe.hh"
 #include "zpp_bits.h"
 #include "notify.h"
@@ -294,8 +295,10 @@ public:
      * Drain the AVL cache and unref each entry to trigger deletion.
      *
      * Entries should have refcount=1 (sentinel state) after normal use
-     * because list_bucket() calls lru.unref() on all code paths. When
-     * we call unref here, the refcount goes to 0 and the entry is deleted.
+     * because every public method that calls get_bucket() uses a scope_guard
+     * to pair lru.unref() with the get_bucket() ref on all paths (including
+     * exceptions). When we call unref here, the refcount goes to 0 and the
+     * entry is deleted.
      *
      * The drain() method safely removes all entries
      * from the AVL cache partitions and calls the supplied lambda on each,
@@ -435,12 +438,14 @@ public:
 		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b /* XXX again, can this fail? */) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+      unique_lock ulk{b->mtx, std::adopt_lock};
       if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
 	/* bulk load into lmdb cache */
 	rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
       }
       /* display them */
-      b->mtx.unlock();
+      ulk.unlock();
       /*! LOCKED */
 
       auto txn = b->env->getROTransaction();
@@ -477,7 +482,6 @@ public:
 	auto rc = cursor.lower_bound(k, key, data);
 	if (rc == MDB_NOTFOUND) {
 	  /* no key sorts after k/marker, so there is nothing to do */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	proc_result();
@@ -486,7 +490,6 @@ public:
 	auto rc = cursor.get(key, data, MDB_FIRST);
 	if (rc == MDB_NOTFOUND) {
 	  /* no initial key */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	if (rc == MDB_SUCCESS) {
@@ -495,12 +498,10 @@ public:
       }
       while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
 	if (!again) {
-	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	proc_result();
       }
-      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
@@ -515,6 +516,7 @@ public:
     GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
       if ((b->name != bname) ||
 	  (opaque && (b != opaque)) ||
@@ -571,6 +573,7 @@ public:
 	  mdb_drop(*txn, b->dbi, 0);
 	  txn->commit();
 	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+	  ulk.unlock();
 	  return 0; /* don't process any more events in this batch */
 	}
 	  break;
@@ -580,7 +583,6 @@ public:
 	}
       } /* all events */
       txn->commit();
-      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
     return rc;
   } /* notify */
@@ -591,6 +593,7 @@ public:
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
@@ -614,7 +617,6 @@ public:
       txn->put(b->dbi, concat_k, ser_data);
 
       txn->commit();
-      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
@@ -626,6 +628,7 @@ public:
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
@@ -633,8 +636,6 @@ public:
       auto concat_k = concat_key(key);
       txn->del(b->dbi, concat_k);
       txn->commit();
-
-      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
@@ -646,6 +647,7 @@ public:
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
 
       auto txn = b->env->getRWTransaction();
