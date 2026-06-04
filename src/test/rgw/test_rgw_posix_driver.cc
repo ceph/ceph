@@ -1073,7 +1073,9 @@ public:
 
   TestDriver(std::string _base_path) : POSIXDriver(nullptr), driver_base(_base_path)
   { }
-  virtual ~TestDriver() = default;
+  virtual ~TestDriver() {
+    RGWQuotaHandler::free_handler(quota_handler);
+  }
 
   int init(const DoutPrefixProvider* dpp)
   {
