@@ -271,6 +271,15 @@ if(WITH_RADOSGW_POSIX)
 	      driver/posix/posixDB.cc
 	      driver/posix/notify.cpp)
 endif()
+if(WITH_RADOSGW_NSFS)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_common_srcs
+	      driver/nsfs/rgw_sal_nsfs.cc
+	      driver/nsfs/nsfsDB.cc
+	      driver/posix/lmdb-safe.cc
+	      driver/posix/notify.cpp)
+endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
@@ -392,6 +401,10 @@ if(WITH_RADOSGW_DBSTORE)
 endif()
 
 if(WITH_RADOSGW_POSIX)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
+endif()
+
+if(WITH_RADOSGW_NSFS)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
