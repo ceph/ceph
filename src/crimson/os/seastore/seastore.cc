@@ -176,19 +176,19 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   for (auto& [op_type, label] : labels_by_op_type) {
     auto desc = fmt::format("latency of seastore operation (optype={})",
-                            op_type);
+        op_type);
     metrics.add_group(
-      "seastore",
-      {
+        "seastore",
+        {
         sm::make_histogram(
-          "op_lat", [this, op_type=op_type] {
+            "op_lat", [this, op_type=op_type] {
             return get_latency(op_type);
-          },
-          sm::description(desc),
-          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
-        ),
-      }
-    );
+            },
+            sm::description(desc),
+            {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+            ),
+        }
+        );
   }
 
   stats.conflict_replays.buckets.resize(REPLAY_BUCKETS);
@@ -197,21 +197,21 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     stats.conflict_replays.buckets[i].count = 0;
   }
   metrics.add_group(
-    "seastore",
-    {
+      "seastore",
+      {
       sm::make_histogram(
-        "conflict_replay_distribution",
-        [this]() -> seastar::metrics::histogram& {
+          "conflict_replay_distribution",
+          [this]() -> seastar::metrics::histogram& {
           return stats.conflict_replays;
-        },
-        sm::description("distribution of per-transaction conflict/replay counts "
-                        "before commit, for user transactions submitted via "
-                        "do_transaction (the reused-transaction / "
-                        "with_repeat_trans_intr path); not all MUTATE transactions"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
-      )
-    }
-  );
+          },
+          sm::description("distribution of per-transaction conflict/replay counts "
+            "before commit, for user transactions submitted via "
+            "do_transaction (the reused-transaction / "
+            "with_repeat_trans_intr path); not all MUTATE transactions"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          )
+      }
+      );
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
@@ -235,18 +235,18 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
       hist.buckets[i].count = 0;
     }
     metrics.add_group(
-      "seastore",
-      {
+        "seastore",
+        {
         sm::make_histogram(
-          "do_transaction_stage_lat",
-          [this, idx]() -> seastar::metrics::histogram& {
+            "do_transaction_stage_lat",
+            [this, idx]() -> seastar::metrics::histogram& {
             return stats.stage_lat[idx];
-          },
-          sm::description("per-stage latency (microseconds) of do_transaction"),
-          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
-        )
-      }
-    );
+            },
+            sm::description("per-stage latency (microseconds) of do_transaction"),
+            {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+            )
+        }
+        );
   }
 
   metrics.add_group(
@@ -301,24 +301,79 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     "seastore",
     {
       sm::make_gauge(
-	"concurrent_transactions",
-	[this] {
-	  return throttler.get_current();
-	},
-  sm::description("transactions that are running inside seastore"),
-  {sm::label_instance("shard_store_index", std::to_string(store_index))}
-      ),
+          "concurrent_transactions",
+          [this] {
+          return throttler.get_current();
+          },
+          sm::description("transactions that are running inside seastore"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          ),
       sm::make_gauge(
-	"pending_transactions",
-	[this] {
-	  return throttler.get_pending();
-	},
-  sm::description("transactions waiting to get "
-		        "through seastore's throttler"),
-  {sm::label_instance("shard_store_index", std::to_string(store_index))}
-      )
-    }
+          "pending_transactions",
+          [this] {
+          return throttler.get_pending();
+          },
+          sm::description("transactions waiting to get "
+            "through seastore's throttler"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          )
+      }
   );
+
+  // seastore: Add Seastore phase latency scaffolding
+  std::pair<phase_latency_bucket_t, sm::label_instance> labels_by_phase[] = {
+    {phase_latency_bucket_t::metadata_lookup,
+      sm::label_instance("phase", std::string(phase_latency_bucket_name(
+              phase_latency_bucket_t::metadata_lookup)))},
+      {phase_latency_bucket_t::mapping_management,
+        sm::label_instance("phase", std::string(phase_latency_bucket_name(
+                phase_latency_bucket_t::mapping_management)))},
+        {phase_latency_bucket_t::cache_mutation,
+          sm::label_instance("phase", std::string(phase_latency_bucket_name(
+                  phase_latency_bucket_t::cache_mutation)))},
+          {phase_latency_bucket_t::transaction_commit,
+            sm::label_instance("phase", std::string(phase_latency_bucket_name(
+                    phase_latency_bucket_t::transaction_commit)))},
+            {phase_latency_bucket_t::write_packing,
+              sm::label_instance("phase", std::string(phase_latency_bucket_name(
+                      phase_latency_bucket_t::write_packing)))},
+              {phase_latency_bucket_t::durability,
+                sm::label_instance("phase", std::string(phase_latency_bucket_name(
+                        phase_latency_bucket_t::durability)))},
+  };
+
+  for (auto& [bucket, label] : labels_by_phase) {
+    auto desc = fmt::format("aggregated latency of seastore write phase ({})",
+        phase_latency_bucket_name(bucket));
+    metrics.add_group(
+        "seastore",
+        {
+        sm::make_histogram(
+            "phase_lat", [this, bucket] {
+            return get_phase_latency(bucket);
+            },
+            sm::description(desc),
+            {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+            ),
+        sm::make_counter(
+            "phase_lat_ns",
+            stats.phase_lat_ns[static_cast<std::size_t>(bucket)],
+            sm::description(fmt::format(
+                "cumulative nanoseconds spent in seastore write phase ({})",
+                phase_latency_bucket_name(bucket))),
+            {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+            ),
+        sm::make_counter(
+            "phase_lat_samples",
+            stats.phase_lat_samples[static_cast<std::size_t>(bucket)],
+            sm::description(fmt::format(
+                "number of timed scopes accumulated for seastore write phase ({})",
+                phase_latency_bucket_name(bucket))),
+            {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
+            ),
+        }
+    );
+  }
 }
 
 seastar::future<> SeaStore::get_shard_nums()
@@ -1804,6 +1859,8 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       DEBUGT("completed all {} ops for cid={}",
              t, total_ops, ctx.ch->get_cid());
       auto submit_start = std::chrono::steady_clock::now();
+      auto phase_latency =
+          t.record_phase_latency(phase_latency_bucket_t::transaction_commit);
       co_await transaction_manager->submit_transaction(*ctx.transaction);
       ctx.submit_time += std::chrono::steady_clock::now() - submit_start;
     })
@@ -1835,6 +1892,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     op_type_t::DO_TRANSACTION,
     std::chrono::steady_clock::now() - ctx.begin_timestamp);
   add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
+  publish_phase_latency_samples(ctx.transaction->get_phase_latency_stats());
 
   throttler.put();
 
@@ -1933,9 +1991,13 @@ SeaStore::Shard::_do_transaction_step(
       op->op == Transaction::OP_ZERO) {
     create = true;
   }
+  /* onode is not already in the onodes vector, we need to fetch it from the OnodeManager. */
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
     auto t0 = std::chrono::steady_clock::now();
+    auto phase_latency =
+        ctx.transaction->record_phase_latency(
+          phase_latency_bucket_t::metadata_lookup);
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
@@ -1945,6 +2007,23 @@ SeaStore::Shard::_do_transaction_step(
              *ctx.transaction, (uint32_t)op->op, oid);
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
+    /* TODO: coroutines
+      fut = seastar::coroutine::lambda(
+      [&, this, op, create, oid, FNAME]() -> onode_iertr::future<OnodeRef> {
+      auto phase_latency =
+        ctx.transaction->record_phase_latency(
+          phase_latency_bucket_t::metadata_lookup);
+      if (!create) {
+        DEBUGT("op {}, get oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        co_return co_await onode_manager->get_onode(*ctx.transaction, oid);
+      } else {
+        DEBUGT("op {}, get_or_create oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        co_return co_await onode_manager->get_or_create_onode(
+          *ctx.transaction, oid);
+      }
+    })(); */
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
       ctx.get_onode_time += std::chrono::steady_clock::now() - t0;
       return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
@@ -1965,23 +2044,56 @@ SeaStore::Shard::_do_transaction_step(
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_or_create dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
+      auto phase_latency =
+          ctx.transaction->record_phase_latency(
+            phase_latency_bucket_t::metadata_lookup);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
       ).si_then([&d_onode](auto dest_onode) {
-	assert(dest_onode);
-	assert(!d_onode);
-	d_onode = dest_onode;
-	return seastar::now();
+       assert(dest_onode);
+       assert(!d_onode);
+       d_onode = dest_onode;
+       return seastar::now();
       });
+      /* TODO: parallelize the above with the below, but need to make sure that
+         the onode tree supports parallel loading of extents
+      return seastar::coroutine::lambda(
+        [this, &ctx, &d_onode, dest_oid]()
+        -> OnodeManager::get_or_create_onode_iertr::future<> {
+        auto phase_latency =
+          ctx.transaction->record_phase_latency(
+            phase_latency_bucket_t::metadata_lookup);
+        auto dest_onode = co_await onode_manager->get_or_create_onode(
+          *ctx.transaction, dest_oid);
+        assert(dest_onode);
+        assert(!d_onode);
+        d_onode = dest_onode;
+        co_return;
+      })(); */
     } else if (op->op == Transaction::OP_TOUCH_TEMP && !d_onode) {
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_onode dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
+      auto phase_latency =
+          ctx.transaction->record_phase_latency(
+            phase_latency_bucket_t::metadata_lookup);
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
       ).si_then([&d_onode](auto target_onode) {
         d_onode = target_onode;
       });
+      /* TODO: use coroutines:
+      return seastar::coroutine::lambda(
+        [this, &ctx, &d_onode, dest_oid]()
+        -> OnodeManager::get_or_create_onode_iertr::future<> {
+        auto phase_latency =
+          ctx.transaction->record_phase_latency(
+            phase_latency_bucket_t::metadata_lookup);
+        d_onode = co_await onode_manager->get_or_create_onode(
+          *ctx.transaction, dest_oid);
+        co_return;
+      })();
+      */
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
     }

@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <iostream>
+#include <string_view>
 
 #include <boost/intrusive/list.hpp>
 
@@ -99,6 +102,102 @@ struct btree_cursor_stats_t {
   }
 };
 
+enum class phase_latency_bucket_t : uint8_t {
+  metadata_lookup = 0,
+  mapping_management,
+  cache_mutation,
+  transaction_commit,
+  write_packing,
+  durability,
+  MAX
+};
+
+static constexpr auto PHASE_LATENCY_BUCKET_MAX =
+  static_cast<std::size_t>(phase_latency_bucket_t::MAX);
+
+constexpr std::string_view phase_latency_bucket_name(
+  phase_latency_bucket_t bucket)
+{
+  switch (bucket) {
+  case phase_latency_bucket_t::metadata_lookup:
+    return "metadata_lookup";
+  case phase_latency_bucket_t::mapping_management:
+    return "mapping_management";
+  case phase_latency_bucket_t::cache_mutation:
+    return "cache_mutation";
+  case phase_latency_bucket_t::transaction_commit:
+    return "transaction_commit";
+  case phase_latency_bucket_t::write_packing:
+    return "write_packing";
+  case phase_latency_bucket_t::durability:
+    return "durability";
+  case phase_latency_bucket_t::MAX:
+    break;
+  }
+  return "unknown";
+}
+
+struct phase_latency_stats_t {
+  using clock = std::chrono::steady_clock;
+  using duration_t = clock::duration;
+
+  std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> total_ns = {};
+  std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> sample_counts = {};
+  std::array<uint8_t, PHASE_LATENCY_BUCKET_MAX> active_depth = {};
+  std::array<clock::time_point, PHASE_LATENCY_BUCKET_MAX> active_start = {};
+
+  static uint64_t to_ns(duration_t dur) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
+  }
+
+  bool is_clear() const {
+    return std::all_of(
+      total_ns.begin(), total_ns.end(),
+      [](auto total) { return total == 0; });
+  }
+
+  void add(phase_latency_bucket_t bucket, duration_t dur) {
+    auto idx = static_cast<std::size_t>(bucket);
+    // Assert to ensure bucket enum values are within bounds of the arrays is too harsh, consider whether to raise a log error instead and ignore out-of-bounds buckets.
+    ceph_assert(idx < total_ns.size());
+    ++sample_counts[idx];
+    total_ns[idx] += to_ns(dur);
+  }
+
+  void enter(phase_latency_bucket_t bucket, clock::time_point now) {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < active_depth.size());
+    if (active_depth[idx]++ == 0) {
+      active_start[idx] = now;
+    }
+  }
+
+  void exit(phase_latency_bucket_t bucket, clock::time_point now) {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < active_depth.size());
+    ceph_assert(active_depth[idx] > 0);
+    if (--active_depth[idx] == 0) {
+      add(bucket, now - active_start[idx]);
+    }
+  }
+
+  uint64_t get_total_ns(phase_latency_bucket_t bucket) const {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < total_ns.size());
+    return total_ns[idx];
+  }
+
+  uint64_t get_sample_count(phase_latency_bucket_t bucket) const {
+    auto idx = static_cast<std::size_t>(bucket);
+    ceph_assert(idx < sample_counts.size());
+    return sample_counts[idx];
+  }
+
+  duration_t get_total_duration(phase_latency_bucket_t bucket) const {
+    return std::chrono::nanoseconds(get_total_ns(bucket));
+  }
+};
+
 struct rbm_pending_ool_t {
   bool is_conflicted = false;
   std::list<CachedExtentRef> pending_extents;
@@ -120,6 +219,30 @@ class Transaction : public boost::intrusive_ref_counter<
 public:
   using Ref = boost::intrusive_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
+  class phase_latency_timer_t {
+  public:
+    phase_latency_timer_t(Transaction &t, phase_latency_bucket_t bucket)
+      : stats(&t.phase_latency_stats),
+        bucket(bucket) {
+      stats->enter(bucket, phase_latency_stats_t::clock::now());
+    }
+    phase_latency_timer_t(const phase_latency_timer_t&) = delete;
+    phase_latency_timer_t& operator=(const phase_latency_timer_t&) = delete;
+    phase_latency_timer_t(phase_latency_timer_t&& other) noexcept
+      : stats(other.stats),
+        bucket(other.bucket) {
+      other.stats = nullptr;
+    }
+    phase_latency_timer_t& operator=(phase_latency_timer_t&&) = delete;
+    ~phase_latency_timer_t() {
+      if (stats != nullptr) {
+        stats->exit(bucket, phase_latency_stats_t::clock::now());
+      }
+    }
+  private:
+    phase_latency_stats_t *stats = nullptr;
+    phase_latency_bucket_t bucket;
+  };
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
@@ -546,6 +669,7 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_stats = {};
+    phase_latency_stats = {};
     conflicted = false;
     need_wait_visibility = false;
     force_rewrite_conflict = false;
@@ -617,6 +741,16 @@ public:
   }
   rewrite_stats_t& get_rewrite_stats() {
     return rewrite_stats;
+  }
+  phase_latency_stats_t& get_phase_latency_stats() {
+    return phase_latency_stats;
+  }
+  const phase_latency_stats_t& get_phase_latency_stats() const {
+    return phase_latency_stats;
+  }
+  phase_latency_timer_t record_phase_latency(
+    phase_latency_bucket_t bucket) {
+    return phase_latency_timer_t(*this, bucket);
   }
 
   struct existing_block_stats_t {
@@ -907,6 +1041,7 @@ private:
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
   rewrite_stats_t rewrite_stats;
+  phase_latency_stats_t phase_latency_stats;
 
   bool conflicted = false;
 
