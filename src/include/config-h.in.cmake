@@ -337,6 +337,9 @@
 /* Support POWER8 instructions */
 #cmakedefine HAVE_POWER8
 
+/* Support PPC64LE */
+#cmakedefine HAVE_PPC64LE
+
 /* Define if endian type is big endian */
 #cmakedefine CEPH_BIG_ENDIAN
 
