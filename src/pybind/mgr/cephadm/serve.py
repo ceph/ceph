@@ -2147,6 +2147,7 @@ def _ceph_service_next_action(
     mgr: 'CephadmOrchestrator',
     last_config: Optional[datetime.datetime],
 ) -> Optional[str]:
+    action = None
     if daemon_type not in CEPH_TYPES:
         return action
     if last_config is None:
@@ -2155,8 +2156,12 @@ def _ceph_service_next_action(
         return action
 
     if mgr.last_monmap and mgr.last_monmap > last_config:
-        logger.info('Reconfiguring %s (monmap changed)...', name)
-        return 'reconfig'
+        if mgr.upgrade.upgrade_state is not None and not mgr.upgrade.upgrade_state.paused:
+            logger.debug('Skipping reconfig of %s for monmap change (upgrade in progress)' % name)
+        else:
+            logger.info('Reconfiguring %s (monmap changed)...' % name)
+            return 'reconfig'
+
     if mgr.extra_ceph_conf_is_newer(last_config):
         logger.info('Reconfiguring %s (extra config changed)...', name)
         return 'reconfig'
