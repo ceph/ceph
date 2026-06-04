@@ -2261,10 +2261,16 @@ class CephManager:
 
                 if erasure_code_crush_rule_name:
                     cmd_args.extend([erasure_code_crush_rule_name])
+
+                if num_zones is not None:
+                    cmd_args.extend(['--num_zones', str(num_zones)])
                 self.raw_cluster_cmd(*cmd_args)
             else:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num))
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num)]
+                if num_zones is not None:
+                    cmd_args.extend(['--num_zones', str(num_zones)])
+                self.raw_cluster_cmd(*cmd_args)
             if min_size is not None:
                 self.raw_cluster_cmd(
                     'osd', 'pool', 'set', pool_name,
@@ -2275,11 +2281,6 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'allow_ec_overwrites',
                     'true')
-            if num_zones is not None:
-                self.raw_cluster_cmd(
-                    'osd', 'pool', 'set', pool_name,
-                    'num_zones',
-                    str(num_zones))
             self.raw_cluster_cmd(
                 'osd', 'pool', 'application', 'enable',
                 pool_name, 'rados', '--yes-i-really-mean-it',
