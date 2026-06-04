@@ -24,7 +24,7 @@ RADOS_TESTS=(
 )
 
 NEORADOS_TESTS=(
-    cls cmd handler_error io ec_io list ec_list misc pool
+    cls cmd completions handler_error io ec_io list ec_list misc pool
     read_operations snapshots watch_notify write_operations
 )
 
