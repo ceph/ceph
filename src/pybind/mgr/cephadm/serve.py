@@ -1130,8 +1130,11 @@ class CephadmServe:
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
-                action = 'reconfig'
+                if self.mgr.upgrade.upgrade_state is not None and not self.mgr.upgrade.upgrade_state.paused:
+                    self.log.debug('Skipping reconfig of %s for monmap change (upgrade in progress)' % dd.name())
+                else:
+                    self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
+                    action = 'reconfig'
             elif self.mgr.extra_ceph_conf_is_newer(last_config) and \
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
