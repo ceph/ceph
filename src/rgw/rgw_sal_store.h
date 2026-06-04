@@ -150,6 +150,21 @@ class StoreDriver : public Driver {
                                  const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
     }
+
+    virtual int load_vector_bucket(const DoutPrefixProvider* dpp,
+                                   const rgw_bucket& b,
+                                   std::unique_ptr<VectorBucket>* bucket,
+                                   optional_yield y) override {
+      return -EOPNOTSUPP;
+    }
+
+    virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
+                                    const rgw_owner& owner, const std::string& ns,
+                                    const std::string& marker,
+                                    const std::string& end_marker, uint64_t max,
+                                    BucketList& buckets, optional_yield y) override {
+      return -EOPNOTSUPP;
+    }
 };
 
 class StoreUser : public User {
