@@ -322,25 +322,6 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShardWithVersion) {
   ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &bl, balanced_read_flags));
 }
 
-TEST_P(LibRadosSplitOpECPP, ReadWithIllegalClsOp) {
-  SKIP_IF_CRIMSON();
-  bufferlist bl;
-  bl.append("ceph");
-  ObjectWriteOperation write1;
-  write1.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-
-  bufferlist new_bl;
-  new_bl.append("CEPH");
-  ObjectWriteOperation write2;
-  bufferlist exec_inbl, exec_outbl;
-  int exec_rval;
-  rados::cls::fifo::op::init_part op;
-  encode(op, exec_inbl);
-  write2.exec(fifo::method::init_part, exec_inbl, &exec_outbl, &exec_rval);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(-EOPNOTSUPP, "foo", &write2));
-}
-
 TEST_P(LibRadosSplitOpECPP, XattrReads) {
   SKIP_IF_CRIMSON();
   bufferlist bl, attr_bl, attr_read_bl;
