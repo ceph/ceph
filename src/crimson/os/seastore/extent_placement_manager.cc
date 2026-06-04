@@ -1128,10 +1128,12 @@ RandomBlockOolWriter::do_write(
   DEBUGT("start with {} allocated extents",
          t, extents.size());
   std::vector<write_info_t> writes;
+  auto phase_latency =
+    t.record_phase_latency(phase_latency_bucket_t::write_packing);
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
     assert(paddr.is_absolute());
-    RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
+    RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr);
     assert(rbm);
     TRACE("write extent {}, paddr {} ...",
           fmt::ptr(ex.get()), paddr);
@@ -1147,7 +1149,7 @@ RandomBlockOolWriter::do_write(
       ceph_assert(r.has_value());
       extent_len_t offset = p2align(r->offset, rbm->get_block_size());
       extent_len_t len =
-	p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
+        p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
       bp = ceph::bufferptr(ex->get_bptr(), offset, len);
       paddr = ex->get_paddr() + offset;
     } else {
@@ -1169,11 +1171,11 @@ RandomBlockOolWriter::do_write(
 
     // TODO : allocate a consecutive address based on a transaction
     if (writes.size() != 0 &&
-	writes.back().offset + writes.back().get_mergeable_length() == paddr) {
+      writes.back().offset + writes.back().get_mergeable_length() == paddr) {
       // We can write both the currrent extent and the previous one at once
       // if the extents are located in a row
       if (writes.back().mergeable_bps.size() == 0) {
-	 writes.back().mergeable_bps.push_back(writes.back().bp);
+        writes.back().mergeable_bps.push_back(writes.back().bp);
       }
       writes.back().mergeable_bps.push_back(ex->get_bptr());
     } else {
@@ -1185,21 +1187,21 @@ RandomBlockOolWriter::do_write(
       writes.push_back(w_info);
     }
     TRACE("current extent: {}~0x{:x},\
-      maybe-merged current extent: {}~0x{:x}",
-      paddr, ex->get_length(), writes.back().offset, writes.back().bp.length());
+          maybe-merged current extent: {}~0x{:x}",
+          paddr, ex->get_length(), writes.back().offset, writes.back().bp.length());
   }
 
   for (auto &w : writes) {
     if (w.mergeable_bps.size() > 0) {
       extent_len_t len = 0;
       for (auto &b : w.mergeable_bps) {
-	len += b.length();
+        len += b.length();
       }
       w.bp = ceph::bufferptr(ceph::buffer::create_page_aligned(len));
       extent_len_t cursor = 0;
       for (auto &b : w.mergeable_bps) {
-	w.bp.copy_in(cursor, b.length(), b.c_str());
-	cursor += b.length();
+        w.bp.copy_in(cursor, b.length(), b.c_str());
+        cursor += b.length();
       }
       w.mergeable_bps.clear();
     }

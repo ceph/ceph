@@ -495,6 +495,10 @@ public:
       // same metrics collected two more times for high tail txns.
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_very_slow;
+      // Seastore phase latency scaffolding
+      std::array<seastar::metrics::histogram, PHASE_LATENCY_BUCKET_MAX> phase_lat;
+      std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> phase_lat_ns = {};
+      std::array<uint64_t, PHASE_LATENCY_BUCKET_MAX> phase_lat_samples = {};
     } stats;
 
     void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
@@ -511,6 +515,11 @@ public:
       op_type_t op_type) {
       assert(static_cast<std::size_t>(op_type) < stats.op_lat.size());
       return stats.op_lat[static_cast<std::size_t>(op_type)];
+    }
+
+    static double duration_to_milliseconds(
+      std::chrono::steady_clock::duration dur) {
+      return std::chrono::duration<double, std::milli>(dur).count();
     }
 
     void add_latency_sample(op_type_t op_type,
@@ -570,6 +579,33 @@ public:
       }
       ++hist.sample_count;
       hist.sample_sum += ms;
+    }
+
+
+    // seastore: Add Seastore phase latency scaffolding
+    seastar::metrics::histogram& get_phase_latency(
+      phase_latency_bucket_t bucket) {
+      auto idx = static_cast<std::size_t>(bucket);
+      assert(idx < stats.phase_lat.size());
+      return stats.phase_lat[idx];
+    }
+
+    void publish_phase_latency_samples(const phase_latency_stats_t &phase_stats) {
+      for (std::size_t idx = 0; idx < PHASE_LATENCY_BUCKET_MAX; ++idx) {
+        const auto bucket = static_cast<phase_latency_bucket_t>(idx);
+        auto total_ns = phase_stats.get_total_ns(bucket);
+        if (total_ns == 0) {
+          continue;
+        }
+        auto samples = phase_stats.get_sample_count(bucket);
+        ceph_assert(samples > 0);
+        stats.phase_lat_ns[idx] += total_ns;
+        stats.phase_lat_samples[idx] += samples;
+        auto &lat = get_phase_latency(bucket);
+        lat.sample_count += samples;
+        lat.sample_sum += duration_to_milliseconds(
+          phase_stats.get_total_duration(bucket));
+      }
     }
 
     /*
