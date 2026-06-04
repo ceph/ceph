@@ -137,3 +137,12 @@ export type MirroringEntityRow = {
   monCaps: string;
   osdCaps: string;
 };
+
+export interface BootstrapTokenResponse {
+  token?: string;
+  data?: string;
+}
+
+export const CLIENT_PREFIX = 'client.';
+export const MAX_TYPEAHEAD_SUGGESTIONS = 10;
+export const VALID_USERNAME_PATTERN = /[^a-zA-Z0-9_-]/;
