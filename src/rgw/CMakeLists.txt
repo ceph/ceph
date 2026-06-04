@@ -293,6 +293,11 @@ list(APPEND librgw_posix_srcs
   driver/posix/posixDB.cc
   driver/posix/notify.cpp
 )
+list(APPEND librgw_nsfs_srcs
+  driver/nsfs/rgw_sal_nsfs.cc
+  driver/nsfs/nsfsDB.cc
+  driver/posix/lmdb-safe.cc
+  driver/posix/notify.cpp)
 list(APPEND librgw_d4n_srcs
   rgw_redis_driver.cc
   rgw_ssd_driver.cc
@@ -309,7 +314,7 @@ if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
   list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
   list(APPEND rgw_common_libs sqlite3)
-set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
 endif()
 if(WITH_RADOSGW_MOTR)
   list(APPEND librgw_driver_srcs ${librgw_motr_srcs})
@@ -322,6 +327,18 @@ if(WITH_RADOSGW_POSIX)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_driver_srcs ${librgw_posix_srcs})
   list(APPEND librgw_driver_standalone_srcs ${librgw_posix_srcs})
+  list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
+endif()
+if(WITH_RADOSGW_NSFS)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_driver_srcs ${librgw_nsfs_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_nsfs_srcs})
+  list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
+  list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
+  set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_driver_srcs ${librgw_d4n_srcs})
@@ -396,7 +413,7 @@ if(WITH_RADOSGW_RADOS)
     PUBLIC "-DWITH_RADOSGW_RADOS")
 endif()
 
-if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
+if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_POSIX OR WITH_RADOSGW_NSFS)
   target_compile_OPTIONS(rgw_common PUBLIC "-DSQLITE_THREADSAFE=1")
 endif()
 
