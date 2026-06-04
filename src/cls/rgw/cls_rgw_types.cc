@@ -741,8 +741,7 @@ list<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
 
   list<rgw_bucket_dir_header> l = rgw_bucket_dir_header::generate_test_instances();
 
-  uint8_t i = 0;
-  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
+  for (auto iter = l.begin(); iter != l.end(); ++iter) {
     rgw_bucket_dir d;
     rgw_bucket_dir_header& h = *iter;
     d.header = h;
