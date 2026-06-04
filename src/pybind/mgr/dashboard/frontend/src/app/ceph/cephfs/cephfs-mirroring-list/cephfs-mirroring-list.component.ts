@@ -1,16 +1,11 @@
-import { Component, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { catchError, switchMap } from 'rxjs/operators';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
+import { Subject, of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
-import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Permission } from '~/app/shared/models/permissions';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
 
-export const MIRRORING_PATH = 'cephfs/mirroring';
 @Component({
   selector: 'cd-cephfs-mirroring-list',
   templateUrl: './cephfs-mirroring-list.component.html',
@@ -19,82 +14,33 @@ export const MIRRORING_PATH = 'cephfs/mirroring';
   encapsulation: ViewEncapsulation.None
 })
 export class CephfsMirroringListComponent implements OnInit {
-  @ViewChild('table', { static: true }) table: TableComponent;
-
   columns: CdTableColumn[];
   isPrepareModalOpen = false;
-  subject$ = new BehaviorSubject<MirroringRow[]>([]);
-  daemonStatus$: Observable<MirroringRow[]>;
-  context: CdTableFetchDataContext;
-  permission: Permission;
 
-  constructor(
-    private authStorageService: AuthStorageService,
-    private cephfsService: CephfsService
-  ) {
-    this.permission = this.authStorageService.getPermissions().cephfs;
-  }
+  private subject$ = new Subject<void>();
+
+  daemonStatus$ = this.subject$.pipe(
+    switchMap(() =>
+      this.cephfsService.listDaemonStatus().pipe(catchError(() => of([] as Daemon[])))
+    ),
+    map((daemons) => this.buildRows(daemons))
+  );
+
+  constructor(private cephfsService: CephfsService) {}
 
   ngOnInit() {
     this.columns = [
-      {
-        name: $localize`Remote cluster`,
-        prop: 'remote_cluster_name',
-        flexGrow: 2
-      },
-      { name: $localize`Local filesystem`, prop: 'local_fs_name', flexGrow: 2 },
-      { name: $localize`Remote filesystem`, prop: 'fs_name', flexGrow: 2 },
-      { name: $localize`Remote client`, prop: 'client_name', flexGrow: 2 },
-      { name: $localize`Snapshot directories`, prop: 'directory_count', flexGrow: 1 }
+      { name: $localize`Filesystem`, prop: 'local_fs_name', flexGrow: 2 },
+      { name: $localize`Destination cluster`, prop: 'remote_cluster_name', flexGrow: 2 },
+      { name: $localize`Mirroring status`, prop: 'mirroring_status', flexGrow: 2 },
+      { name: $localize`Bytes replicated`, prop: 'bytes_replicated', flexGrow: 2 },
+      { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
+      { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
     ];
-
-    this.daemonStatus$ = this.subject$.pipe(
-      switchMap(() =>
-        this.cephfsService.listDaemonStatus()?.pipe(
-          switchMap((daemons: Daemon[]) => {
-            const result: MirroringRow[] = [];
-
-            daemons.forEach((d) => {
-              d.filesystems.forEach((fs) => {
-                if (!fs.peers || fs.peers.length === 0) {
-                  result.push({
-                    remote_cluster_name: '-',
-                    local_fs_name: fs.name,
-                    fs_name: fs.name,
-                    client_name: '-',
-                    directory_count: fs.directory_count,
-                    peerId: '-',
-                    id: `${d.daemon_id}-${fs.filesystem_id}`
-                  });
-                } else {
-                  fs.peers.forEach((peer) => {
-                    result.push({
-                      remote_cluster_name: peer.remote.cluster_name,
-                      local_fs_name: fs.name,
-                      fs_name: peer.remote.fs_name,
-                      client_name: peer.remote.client_name,
-                      directory_count: fs.directory_count,
-                      id: `${d.daemon_id}-${fs.filesystem_id}`
-                    });
-                  });
-                }
-              });
-            });
-            return of(result);
-          }),
-          catchError(() => {
-            this.context?.error();
-            return of(null);
-          })
-        )
-      )
-    );
-
-    this.loadDaemonStatus();
   }
 
   loadDaemonStatus() {
-    this.subject$.next([]);
+    this.subject$.next();
   }
 
   openPrepareToReceive() {
@@ -110,6 +56,47 @@ export class CephfsMirroringListComponent implements OnInit {
     this.loadDaemonStatus();
   }
 
-  updateSelection(_selection: any) {
+  private buildRows(daemons: Daemon[]): MirroringRow[] {
+    const rows: MirroringRow[] = [];
+    if (!daemons?.length) {
+      return rows;
+    }
+
+    for (const daemon of daemons) {
+      if (!daemon?.filesystems) continue;
+      for (const fs of daemon.filesystems) {
+        if (fs.peers?.length) {
+          for (const peer of fs.peers) {
+            rows.push(this.peerToRow(daemon, fs, peer));
+          }
+        } else {
+          rows.push(this.noPeerRow(daemon, fs));
+        }
+      }
+    }
+    return rows;
+  }
+
+  private peerToRow(daemon: Daemon, fs: Filesystem, peer: Peer): MirroringRow {
+    return {
+      remote_cluster_name: peer.remote?.cluster_name ?? '-',
+      local_fs_name: fs.name,
+      fs_name: peer.remote?.fs_name ?? '-',
+      client_name: peer.remote?.client_name ?? '-',
+      directory_count: fs.directory_count ?? 0,
+      id: `${daemon.daemon_id}-${fs.filesystem_id}`
+    };
+  }
+
+  private noPeerRow(daemon: Daemon, fs: Filesystem): MirroringRow {
+    return {
+      remote_cluster_name: '-',
+      local_fs_name: fs.name,
+      fs_name: fs.name,
+      client_name: '-',
+      directory_count: fs.directory_count ?? 0,
+      peerId: '-',
+      id: `${daemon.daemon_id}-${fs.filesystem_id}`
+    };
   }
 }

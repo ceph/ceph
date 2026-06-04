@@ -1,10 +1,8 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
 
 describe('CephfsMirroringListComponent', () => {
@@ -20,8 +18,7 @@ describe('CephfsMirroringListComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [CephfsMirroringListComponent],
-      providers: [{ provide: CephfsService, useValue: cephfsServiceMock }],
-      schemas: [NO_ERRORS_SCHEMA]
+      providers: [{ provide: CephfsService, useValue: cephfsServiceMock }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(CephfsMirroringListComponent);
