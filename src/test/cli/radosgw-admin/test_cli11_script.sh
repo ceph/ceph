@@ -119,6 +119,39 @@ check_warns() {
   [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
 }
 
+# check_cluster "desc" expected_exit "expected_msg_or_empty" -- command args
+# Runs against a real cluster. Skips if no cluster is running.
+check_cluster() {
+  local desc="$1" expected_exit="$2" expected_msg="$3"
+  shift 3
+  shift  # skip --
+
+  if ! cluster_running; then
+    echo "SKIP [$desc]: no cluster running"
+    SKIP=$((SKIP+1))
+    return
+  fi
+
+  local tmpfile; tmpfile=$(mktemp)
+  "$RGW_ADMIN" "$@" >"$tmpfile" 2>&1
+  local exit_code=$?
+  local output; output=$(filter <"$tmpfile")
+  rm -f "$tmpfile"
+
+  local ok=1
+  if [ "$exit_code" != "$expected_exit" ]; then
+    echo "FAIL [$desc]: expected exit $expected_exit, got $exit_code"
+    echo "     output: $output"
+    ok=0
+  fi
+  if [ -n "$expected_msg" ] && ! echo "$output" | grep -qF -- "$expected_msg"; then
+    echo "FAIL [$desc]: expected message not found: $expected_msg"
+    echo "     output: $output"
+    ok=0
+  fi
+  [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
+}
+
 check_help() {
   local desc="$1"; shift
   _run "$@" >/dev/null 2>&1
@@ -368,6 +401,105 @@ check "remove: stray between script and remove" 22 "ERROR: unexpected argument: 
 # unrecognized flag
 check "remove: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
   script remove --context prerequest --fakeflag
+
+# ============================================================
+echo ""
+echo "=== script put: callback validation errors (no cluster needed) ==="
+# ============================================================
+
+# invalid context string
+check "put: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" \
+  script put --context invalid_ctx --infile /dev/null
+
+# ============================================================
+echo ""
+echo "=== script get: callback validation errors (no cluster needed) ==="
+# ============================================================
+
+check "get: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" \
+  script get --context invalid_ctx
+
+# ============================================================
+echo ""
+echo "=== script rm: callback validation errors (no cluster needed) ==="
+# ============================================================
+
+check "rm: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" \
+  script rm --context invalid_ctx
+
+# invalid lua syntax
+_bad_lua=$(mktemp /tmp/bad_lua_XXXXXX.lua)
+echo "this is not valid lua !!!" > "$_bad_lua"
+check "put: invalid lua syntax" 22 "has error:" \
+  script put --context prerequest --infile "$_bad_lua"
+rm -f "$_bad_lua"
+
+# non-existent infile
+check "put: file not found" 2 "ERROR: failed to read script" \
+  script put --context prerequest --infile /tmp/cli11_test_nonexistent_xyz
+
+# background context with tenant
+check "put: background context with tenant" 22 \
+  "ERROR: cannot specify tenant in background context" \
+  script put --context background --tenant foo --infile /dev/null
+
+# ============================================================
+echo ""
+echo "=== integration: put/get/rm full cycle ==="
+# ============================================================
+
+_script_file=$(mktemp /tmp/cli11_test_XXXXXX.lua)
+_SCRIPT_CONTENT='function handle(input) return "cli11-test-ok" end'
+echo "$_SCRIPT_CONTENT" > "$_script_file"
+
+check_cluster "integration: put prerequest script"    0 "" -- \
+  script put --context prerequest --infile "$_script_file"
+check_cluster "integration: get prerequest script"    0 "$_SCRIPT_CONTENT" -- \
+  script get --context prerequest
+check_cluster "integration: get different context"    0 "no script exists for context: postrequest" -- \
+  script get --context postrequest
+check_cluster "integration: rm prerequest script"     0 "" -- \
+  script rm --context prerequest
+check_cluster "integration: get after rm"             0 "no script exists for context: prerequest" -- \
+  script get --context prerequest
+check_cluster "integration: rm non-existent (silent)" 0 "" -- \
+  script rm --context prerequest
+
+# same cycle using remove alias
+check_cluster "integration: put for remove alias"     0 "" -- \
+  script put --context prerequest --infile "$_script_file"
+check_cluster "integration: get before remove"        0 "$_SCRIPT_CONTENT" -- \
+  script get --context prerequest
+check_cluster "integration: remove prerequest script" 0 "" -- \
+  script remove --context prerequest
+check_cluster "integration: get after remove"         0 "no script exists for context: prerequest" -- \
+  script get --context prerequest
+check_cluster "integration: remove non-existent (silent)" 0 "" -- \
+  script remove --context prerequest
+
+# tenant isolation
+check_cluster "integration: put with tenant"          0 "" -- \
+  script put --context prerequest --tenant testenant --infile "$_script_file"
+check_cluster "integration: get with same tenant"     0 "$_SCRIPT_CONTENT" -- \
+  script get --context prerequest --tenant testenant
+check_cluster "integration: get without tenant"       0 "no script exists for context: prerequest" -- \
+  script get --context prerequest
+check_cluster "integration: rm with tenant"           0 "" -- \
+  script rm --context prerequest --tenant testenant
+check_cluster "integration: get after tenant rm"      0 "no script exists for context: prerequest" -- \
+  script get --context prerequest --tenant testenant
+
+# background context (no tenant allowed)
+check_cluster "integration: put background script"    0 "" -- \
+  script put --context background --infile "$_script_file"
+check_cluster "integration: get background script"    0 "$_SCRIPT_CONTENT" -- \
+  script get --context background
+check_cluster "integration: rm background script"     0 "" -- \
+  script rm --context background
+check_cluster "integration: get after background rm"  0 "no script exists for context: background" -- \
+  script get --context background
+
+rm -f "$_script_file"
 
 # ============================================================
 echo ""
