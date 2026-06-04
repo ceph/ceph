@@ -1524,32 +1524,6 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
   if (dir == NULL) {
     ret = errno;
     ::close(dir_fd);
-    ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << " for listing: "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  rewinddir(dir);
-
-  ret = 0;
-  while ((entry = readdir(dir)) != NULL) {
-    std::string_view vname(entry->d_name);
-
-    if (vname == "." || vname == "..")
-      continue;
-
-    int r = func(entry->d_name);
-    if (r < 0) {
-      ret = r;
-      break;
-    }
-  }
-
-  if (ret == -EAGAIN) {
-    /* Limit reached */
-    ret = 0;
-  }
-
   closedir(dir); /* closes dir_fd only; Directory::fd remains valid */
   return ret;
 }

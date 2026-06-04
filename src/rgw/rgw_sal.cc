@@ -231,6 +231,17 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
 
+#ifdef WITH_RADOSGW_NSFS
+  else if (cfg.store_name.compare("nsfs") == 0) {
+    driver = newNSFSDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+  }
+#endif
+
 #ifdef WITH_RADOSGW_MOTR
   else if (cfg.store_name.compare("motr") == 0) {
     driver = newMotrStore(cct);
