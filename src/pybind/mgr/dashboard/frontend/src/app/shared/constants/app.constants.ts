@@ -389,5 +389,6 @@ export const VERSION_PREFIX = 'ceph version';
 
 export const CEPHFS_MIRRORING_PAGE_HEADER = {
   title: $localize`CephFS Mirroring`,
-  description: $localize`Centralised view of all CephFS Mirroring relationships.`
+  subtitle: $localize`Manage snapshot-based replication for CephFS across clusters.`,
+  description: $localize`Configure mirroring between filesystems and monitor replication status.`
 };

@@ -20,7 +20,9 @@ describe('Page header component', () => {
 
   it('should show the expected description in the page header', () => {
     pageHeader.getHeaderDescription().then((text) => {
-      expect(text.trim()).to.equal('Centralised view of all CephFS Mirroring relationships.');
+      expect(text.trim()).to.equal(
+        'Configure mirroring between filesystems and monitor replication status.'
+      );
     });
   });
 });
