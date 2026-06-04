@@ -1913,7 +1913,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   // Issue RADOS op
   objecter->linger_notify(linger_op.get(),
 			  rd, snap_seq, inbl, NULL,
-			  onack, &c->objver);
+			  onack, nullptr);
   return 0;
 }
 
