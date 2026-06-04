@@ -4,3 +4,15 @@ overrides:
   ceph:
     pool-config:
       num_zones: 2
+      crush_map_config:
+        failure_domain: osd
+        zones:
+          - name: zone1
+            osds: [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+            monitors: [ a ]
+          - name: zone2
+            osds: [ 8, 9, 10, 11, 12, 13, 14, 15 ]
+            monitors: [ b ]
+        tiebreak_monitor: c
+
+
