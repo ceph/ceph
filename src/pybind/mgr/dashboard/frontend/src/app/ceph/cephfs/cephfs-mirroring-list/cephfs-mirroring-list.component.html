@@ -29,7 +29,7 @@
       </div>
       <div cdsCol
            [columnNumbers]="{lg: 4, md: 4, sm: 4}">
-        <cds-clickable-tile>
+        <cds-clickable-tile (click)="openPrepareToReceive(); $event.preventDefault()">
           <div cdsStack="vertical"
                gap="5">
             <p class="cds--type-heading-compact-01"
@@ -56,14 +56,22 @@
   <h3 class="cds--type-heading-03 cds-mb-3"
       i18n>Mirrored filesystems</h3>
   <cd-table
-    #table
     [data]="daemonStatus$ | async"
     [columns]="columns"
     columnMode="flex"
     selectionType="single"
     (fetchData)="loadDaemonStatus()"
-    (updateSelection)="updateSelection($event)"
   >
   </cd-table>
 </section>
+
+<!-- Prepare to receive modal -->
+@if (isPrepareModalOpen) {
+  <cd-cephfs-generate-token
+    [open]="true"
+    (tokenGenerated)="onTokenGenerated($event)"
+    (cancelled)="closePrepareModal()"
+  >
+  </cd-cephfs-generate-token>
+}
 

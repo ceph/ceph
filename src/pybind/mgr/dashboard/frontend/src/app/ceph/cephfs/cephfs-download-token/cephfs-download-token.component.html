@@ -1,0 +1,53 @@
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="onClose()">
+  <cds-modal-header (closeSelect)="onClose()"
+                    i18n>Ceph filesystem mirroring
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <div class="cds--type-heading-03 cds-mb-5"
+         i18n>Secure token successfully generated</div>
+
+    <cd-alert-panel type="success">
+      <div [cdsStack]="'vertical'"
+           [gap]="2">
+        <div class="cds--type-heading-compact-01"
+             i18n>Secure token generated</div>
+        <div class="cds--type-body-compact-01"
+             i18n>Bootstrap token generated successfully. Share this token with the source cluster administrator.</div>
+      </div>
+    </cd-alert-panel>
+
+    <div cdsRow class="cds-mt-5 cds-mb-5">
+      <div cdsCol [columnNumbers]="{lg: 16, md: 8, sm: 4}">
+        <label class="cds--label"
+               i18n>Secure token</label>
+        <div class="cds--text-area__wrapper">
+          <textarea class="cds--text-area"
+                    id="secureToken"
+                    rows="6"
+                    cols="80"
+                    readonly>{{ token }}</textarea>
+        </div>
+        <span class="cds--form__helper-text cds-mt-2"
+              i18n>Copy or download token to finish setup on the source cluster</span>
+      </div>
+    </div>
+
+    <button cdsButton="tertiary"
+            size="sm"
+            (click)="copyToken()"
+            i18n>
+      Copy token to share
+      <cd-icon type="copy"
+               class="cds-ml-2"></cd-icon>
+    </button>
+  </section>
+
+  <cds-modal-footer>
+    <button cdsButton="primary"
+            (click)="downloadToken()"
+            i18n>Download token</button>
+  </cds-modal-footer>
+</cds-modal>
