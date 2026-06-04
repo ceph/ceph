@@ -554,7 +554,7 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
           if (it != merged.end()) {
             TRACE("{} -> {}, {} -> {}",
               me, mextent, (pladdr_t)buf.val.pladdr, it->second);
-            buf.val.pladdr = pladdr_le_t(it->second);
+            buf.val = lba::lba_map_val_le_t(it->second);
           }
         }
       });
