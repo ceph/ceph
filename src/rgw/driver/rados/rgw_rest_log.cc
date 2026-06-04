@@ -560,15 +560,21 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   map<RGWObjCategory, RGWStorageStats> stats;
   const auto& last_log = logs.back();
-  const auto& index = log_to_index_layout(last_log);
-
-  int ret = bucket->read_stats(s, y, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
-  if (ret < 0 && ret != -ENOENT) {
-    op_ret = ret;
-    return;
-  }
 
   if (last_log.layout.type == rgw::BucketLogType::FIFO) {
+    const auto& current_index = bucket->get_info().layout.current_index;
+    ldpp_dout(s, 20) << __func__ << ": FIFO bucket, reading stats from"
+                     << " current_index gen=" << current_index.gen
+                     << " num_shards=" << current_index.layout.normal.num_shards
+                     << dendl;
+    int ret = bucket->read_stats(s, y, current_index, shard_id,
+                                 &bucket_ver, &master_ver, stats,
+                                 &max_marker, &syncstopped);
+    if (ret < 0 && ret != -ENOENT) {
+      op_ret = ret;
+      return;
+    }
+
     auto rados_store = static_cast<rgw::sal::RadosStore*>(driver);
     std::map<int, std::string> fifo_markers;
     ret = rados_store->svc()->bilog_rados->get_log_status(
@@ -589,7 +595,21 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
       }
       mgr.to_string(&max_marker);
     }
+    // TODO: FIFO SYNCSTOP/START needs to be fixed
     syncstopped = false;
+  } else {
+    const auto& index = log_to_index_layout(last_log);
+    ldpp_dout(s, 20) << __func__ << ": InIndex bucket, reading stats from"
+                     << " index gen=" << index.gen
+                     << " num_shards=" << index.layout.normal.num_shards
+                     << dendl;
+    int ret = bucket->read_stats(s, y, index, shard_id,
+                                 &bucket_ver, &master_ver, stats,
+                                 &max_marker, &syncstopped);
+    if (ret < 0 && ret != -ENOENT) {
+      op_ret = ret;
+      return;
+    }
   }
 
   oldest_gen = logs.front().gen;
