@@ -320,14 +320,14 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 
-  std::map<laddr_t, pladdr_t> merge_content_to(
+  std::map<laddr_t, lba_map_val_t> merge_content_to(
     Transaction &t,
     LBALeafNode &pending_version,
     iterator &iter)
   {
     LOG_PREFIX(LBALeafNode::merge_content_to);
     SUBTRACET(seastore_lba, "merging with {}", t, pending_version);
-    std::map<laddr_t, pladdr_t> modified;
+    std::map<laddr_t, lba_map_val_t> modified;
     auto it = pending_version.begin();
     while (it != pending_version.end() && iter != this->end()) {
       const auto &v1 = iter->get_val();
@@ -395,7 +395,7 @@ struct LBALeafNode
             m_v2.checksum = v1.checksum;
           }
           it->set_val(m_v2);
-          auto [_it, inserted] = modified.emplace(it->get_key(), paddr);
+          auto [_it, inserted] = modified.emplace(it->get_key(), m_v2);
           ceph_assert(inserted);
         }
         it++;
