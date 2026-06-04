@@ -73,10 +73,12 @@ target_link_libraries(unittest_mgr_servicemap
   ceph-common
 )
 
-# unittest_mgr_ttlcache
-add_executable(unittest_mgr_ttlcache test_ttlcache.cc)
-add_ceph_unittest(unittest_mgr_ttlcache)
-target_link_libraries(unittest_mgr_ttlcache ceph-common
+# unittest_mgr_map_cache
+add_executable(unittest_mgr_map_cache
+  test_mgrmapcache.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrMapCache.cc)
+add_ceph_unittest(unittest_mgr_map_cache)
+target_link_libraries(unittest_mgr_map_cache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
 #scripts
