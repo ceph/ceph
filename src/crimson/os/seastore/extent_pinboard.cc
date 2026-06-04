@@ -379,7 +379,7 @@ public:
         extents.emplace_back(&extent);
       }
       for (auto &extent : extents) {
-        remove_extent(*extent, extent_pin_state_t::Fresh);
+        remove_extent(*extent, extent_pin_state_t::Promoting);
       }
       for (auto &extent : extents) {
         co_await trans_intr::make_interruptible(extent->wait_io());
@@ -388,6 +388,11 @@ public:
     }
     // existing extents in lru will be retired after transaction submitted
     co_await ecb->submit_transaction_direct(t);
+#ifndef NDEBUG
+    for (auto &extent : extents) {
+      assert(extent->get_pin_state() == extent_pin_state_t::Fresh);
+    }
+#endif
     promoted_count += extents.size();
     promoted_size += promote_size;
     DEBUGT("finish promoting {} {}B extents", t, extents.size(), promote_size);
@@ -517,7 +522,8 @@ public:
 	promoter.remove_extent(extent, extent_pin_state_t::Fresh);
       }
     } else {
-      ceph_assert(s == extent_pin_state_t::Fresh);
+      ceph_assert(s == extent_pin_state_t::Fresh ||
+                  s == extent_pin_state_t::Promoting);
     }
   }
 
@@ -539,8 +545,10 @@ public:
     const Transaction::src_t* p_src,
     extent_len_t /*load_start*/,
     extent_len_t /*load_length*/) final {
-    if (extent.is_linked_to_list()) {
-      auto s = extent.get_pin_state();
+    if (auto s = extent.get_pin_state();
+        s == extent_pin_state_t::Promoting) {
+      assert(!extent.is_linked_to_list());
+    } else if (extent.is_linked_to_list()) {
       assert(s <= extent_pin_state_t::PendingPromote);
       if (s == extent_pin_state_t::Fresh) {
 	lru.move_to_top(extent, p_src);
@@ -564,7 +572,7 @@ public:
       lru.increase_cached_size(extent, increased_length, p_src);
     } else {
       // promoter take the complete extent size for content size calculation
-      assert(extent.get_pin_state() <= extent_pin_state_t::PendingPromote);
+      assert(extent.get_pin_state() <= extent_pin_state_t::Promoting);
     }
   }
 
@@ -758,7 +766,8 @@ public:
       }
       extent.set_pin_state(extent_pin_state_t::Fresh);
     } else {
-      ceph_assert(s == extent_pin_state_t::Fresh);
+      ceph_assert(s == extent_pin_state_t::Fresh ||
+                  s == extent_pin_state_t::Promoting);
     }
   }
 
@@ -769,6 +778,10 @@ public:
     extent_len_t load_length) final {
     auto state = extent.get_pin_state();
     auto type = extent.get_type();
+    if (state == extent_pin_state_t::Promoting) {
+      assert(!extent.is_linked_to_list());
+      return;
+    }
     if (extent.is_linked_to_list()) {
       if (state == extent_pin_state_t::Hot) {
 	hot.move_to_top(extent, p_src);

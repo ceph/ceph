@@ -1355,8 +1355,9 @@ TransactionManager::promote_extent(
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
       extent->rewrite(t, *orig_ext, offset);
-      assert(!extent->get_paddr().is_absolute() ||
-             !cache->is_on_cold_tier(extent->get_paddr()));
+      if (extent->get_paddr().is_absolute()) {
+        assert(!cache->is_on_cold_tier(extent->get_paddr()));
+      }
 
       auto lext = extent->cast<LogicalChildNode>();
       lext->set_laddr(slice_laddr);
@@ -1403,8 +1404,9 @@ TransactionManager::promote_extent(
     auto lext = promoted_extent->cast<LogicalChildNode>();
     lext->set_laddr(orig_ext->get_laddr());
     lext->rewrite(t, *orig_ext, 0);
-    assert(!extent->get_paddr().is_absolute() ||
-           !cache->is_on_cold_tier(lext->get_paddr()));
+    if (lext->get_paddr().is_absolute()) {
+      assert(!cache->is_on_cold_tier(lext->get_paddr()));
+    }
     t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
     //TODO: this memory copy should be saved
     orig_ext->get_bptr().copy_out(
