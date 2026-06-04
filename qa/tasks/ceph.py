@@ -359,6 +359,170 @@ def crush_setup(ctx, config):
               'osd', 'crush', 'tunables', profile])
     yield
 
+def _apply_crush_zones(mon_remote, cluster_name, crush_config):
+    """
+    Apply CRUSH zone configuration to the cluster.
+    
+
+    :param mon_remote: Remote connection to monitor
+    :param cluster_name: Name of the cluster
+    :param crush_config: CRUSH configuration dict with zones
+    """
+    zones = crush_config.get('zones', [])
+    failure_domain = crush_config.get('failure_domain', 'osd')
+    
+    log.info(f"Applying CRUSH zone configuration with {len(zones)} zones, "
+             f"failure_domain={failure_domain}")
+    
+    for zone in zones:
+        zone_name = zone['name']
+        log.info(f"Creating datacenter bucket: {zone_name}")
+        mon_remote.run(
+            args=['sudo', 'ceph', '--cluster', cluster_name,
+                  'osd', 'crush', 'add-bucket', zone_name, 'datacenter']
+        )
+        
+        log.info(f"Moving {zone_name} to root=default")
+        mon_remote.run(
+            args=['sudo', 'ceph', '--cluster', cluster_name,
+                  'osd', 'crush', 'move', zone_name, 'root=default']
+        )
+    
+    if failure_domain == 'osd':
+        for zone in zones:
+            zone_name = zone['name']
+            for osd_id in zone['osds']:
+                log.info(f"Assigning osd.{osd_id} to {zone_name}")
+                mon_remote.run(
+                    args=['sudo', 'ceph', '--cluster', cluster_name,
+                          'osd', 'crush', 'set', f'osd.{osd_id}', '1.0',
+                          'root=default', f'datacenter={zone_name}']
+                )
+    
+    elif failure_domain == 'host':
+        for zone in zones:
+            zone_name = zone['name']
+            hosts = zone.get('hosts', [])
+            
+            for host in hosts:
+                host_name = host['name']
+                host_osds = host['osds']
+                
+                log.info(f"Creating host bucket: {host_name} in {zone_name}")
+                mon_remote.run(
+                    args=['sudo', 'ceph', '--cluster', cluster_name,
+                          'osd', 'crush', 'add-bucket', host_name, 'host']
+                )
+                
+                log.info(f"Moving {host_name} to datacenter={zone_name}")
+                mon_remote.run(
+                    args=['sudo', 'ceph', '--cluster', cluster_name,
+                          'osd', 'crush', 'move', host_name, f'datacenter={zone_name}']
+                )
+                
+                for osd_id in host_osds:
+                    log.info(f"Assigning osd.{osd_id} to host={host_name}")
+                    mon_remote.run(
+                        args=['sudo', 'ceph', '--cluster', cluster_name,
+                              'osd', 'crush', 'set', f'osd.{osd_id}', '1.0',
+                              f'host={host_name}']
+                    )
+    
+    for zone in zones:
+        zone_name = zone['name']
+        for mon_id in zone.get('monitors', []):
+            log.info(f"Setting mon.{mon_id} location to datacenter={zone_name}")
+            mon_remote.run(
+                args=['sudo', 'ceph', '--cluster', cluster_name,
+                      'mon', 'set_location', mon_id, f'datacenter={zone_name}']
+            )
+    
+    tiebreak_monitor = crush_config.get('tiebreak_monitor')
+    if tiebreak_monitor:
+        log.info(f"Setting mon.{tiebreak_monitor} location to datacenter=tiebreak")
+        mon_remote.run(
+            args=['sudo', 'ceph', '--cluster', cluster_name,
+                  'mon', 'set_location', tiebreak_monitor, 'datacenter=tiebreak']
+        )
+
+
+@contextlib.contextmanager
+def crush_zone_setup(ctx, config):
+    """
+    Configure CRUSH map with zones for stretch EC pools.
+    
+    Reads CRUSH configuration from overrides/ceph/pool-config/crush_map_config
+    and applies it to the cluster. This is required for stretch erasure-coded pools
+    (num_zones > 1).
+    
+    Example configuration for OSD failure domain:
+        overrides:
+          ceph:
+            pool-config:
+              num_zones: 2
+              crush_map_config:
+                failure_domain: osd
+                zones:
+                  - name: zone1
+                    osds: [0, 1, 2]
+                    monitors: [a]
+                  - name: zone2
+                    osds: [3, 4, 5]
+                    monitors: [b]
+                tiebreak_monitor: c
+    
+    Example configuration for host failure domain:
+        overrides:
+          ceph:
+            pool-config:
+              num_zones: 2
+              crush_map_config:
+                failure_domain: host
+                zones:
+                  - name: zone1
+                    monitors: [a]
+                    hosts:
+                      - name: host0
+                        osds: [0, 4, 8]
+                      - name: host1
+                        osds: [1, 5, 9]
+                  - name: zone2
+                    monitors: [b]
+                    hosts:
+                      - name: host2
+                        osds: [2, 6, 10]
+                      - name: host3
+                        osds: [3, 7, 11]
+                tiebreak_monitor: c
+    
+
+    :param ctx: Test context
+    :param config: Ceph configuration
+    """
+    cluster_name = config['cluster']
+    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
+    
+    pool_config = config.get('pool-config', {})
+    crush_config = pool_config.get('crush_map_config')
+    
+    if not crush_config:
+        log.info('No crush_map_config found in pool-config, skipping CRUSH zone setup')
+        yield
+        return
+    
+    log.info('Setting up CRUSH zones from explicit configuration')
+    
+    try:
+        _apply_crush_zones(mon_remote, cluster_name, crush_config)
+        log.info('CRUSH zone setup complete')
+        
+    except Exception as e:
+        log.error('Failed to setup CRUSH zones: %s', e)
+        raise
+    
+    yield
+
 
 @contextlib.contextmanager
 def module_setup(ctx, config):
@@ -1993,6 +2157,7 @@ def task(ctx, config):
         lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
+        lambda: crush_zone_setup(ctx=ctx, config=config),
         lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: watchdog_setup(ctx=ctx, config=config),
         lambda: conf_epoch(ctx=ctx, config=config),
