@@ -178,6 +178,14 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {op_type_t::OMAP_ITERATE,     sm::label_instance("latency", "OMAP_ITERATE")},
   };
 
+  for (auto& hist : stats.op_lat) {
+    hist.buckets.resize(lat_hist_bounds_us.size());
+    for (std::size_t i = 0; i < lat_hist_bounds_us.size(); ++i) {
+      hist.buckets[i].upper_bound = lat_hist_bounds_us[i];
+      hist.buckets[i].count = 0;
+    }
+  }
+
   for (auto& [op_type, label] : labels_by_op_type) {
     auto desc = fmt::format("latency of seastore operation (optype={})",
                             op_type);

@@ -425,6 +425,19 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
+    // Histogram bucket upper bounds in microseconds (0.25ms–20ms).
+    // Ops above 20ms land in the last bucket as overflow.
+    static constexpr std::array<double, 14> lat_hist_bounds_us = {
+      250, 500, 1000,
+      1500, 2000, 3000,
+      5000,
+      7500, 10000,
+      15000, 20000,
+      30000, 50000,
+      100000
+    };
+
+
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
     } stats;
@@ -440,6 +453,17 @@ public:
       seastar::metrics::histogram& lat = get_latency(op_type);
       lat.sample_count++;
       lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+      bool found = false;
+      for (auto& b : lat.buckets) {
+        if (static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(dur).count()) <= b.upper_bound) {
+          ++b.count;
+          found = true;
+          break;
+        }
+      }
+      if (!found && !lat.buckets.empty()) {
+        ++lat.buckets.back().count;
+      }
     }
 
     /*
