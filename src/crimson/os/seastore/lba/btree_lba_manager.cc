@@ -1495,7 +1495,8 @@ BtreeLBAManager::remap_mappings(
 void BtreeLBAManager::update_paddr_sync(
   Transaction &t,
   laddr_t laddr,
-  paddr_t paddr)
+  paddr_t paddr,
+  std::optional<paddr_t> shadow)
 {
   LOG_PREFIX(BtreeLBAManager::update_paddr_sync);
   DEBUGT("laddr={}, paddr={}", t, laddr, paddr);
@@ -1513,12 +1514,28 @@ void BtreeLBAManager::update_paddr_sync(
   ceph_assert(child->is_exist_clean());
   auto cursor = iter.get_cursor(c);
   assert(cursor->get_laddr() == laddr);
+  paddr_t shadow_paddr;
+  if (shadow) {
+    // the committing txn changed the shadow
+    // to *shadow
+    shadow_paddr = *shadow;
+  } else if (cursor->has_shadow_paddr()) {
+    // shadow is preserved by the committer,
+    // and the copy inherited one, so the source
+    // was promoted when it's copied
+    shadow_paddr = cursor->get_shadow_paddr();
+  } else {
+    // shadow is preserved, and nothing is
+    // inherited: not currently promoted
+    shadow_paddr = P_ADDR_NULL;
+  }
   btree.update(
     c,
     std::move(iter),
     lba_map_val_t{
       cursor->get_length(),
       pladdr_t{std::move(paddr)},
+      shadow_paddr,
       cursor->get_refcount(),
       cursor->get_checksum(),
       cursor->get_extent_type()},
@@ -1577,8 +1594,8 @@ BtreeLBAManager::_copy_mapping(
   c.trans.new_lba_key_copied(
     ret.src->get_key(),
     dest_laddr,
-    [this, c](laddr_t laddr, paddr_t paddr) {
-      update_paddr_sync(c.trans, laddr, paddr);
+    [this, c](laddr_t laddr, paddr_t paddr, std::optional<paddr_t> shadow) {
+      update_paddr_sync(c.trans, laddr, paddr, shadow);
     });
   auto [niter, inserted] = co_await btree.copy(
       c,
