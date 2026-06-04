@@ -480,10 +480,9 @@ void PgScrubber::update_targets(utime_t scrub_clock_now)
 
   // the next periodic scrubs:
   m_scrub_job->adjust_shallow_schedule(
-      m_pg->info.history.last_scrub_stamp, applicable_conf, scrub_clock_now);
+      m_pg->info.history.last_scrub_stamp, applicable_conf);
   m_scrub_job->adjust_deep_schedule(
-      m_pg->info.history.last_deep_scrub_stamp, applicable_conf,
-      scrub_clock_now);
+      m_pg->info.history.last_deep_scrub_stamp, applicable_conf);
 
   dout(10) << fmt::format("{}: adjusted:{}", __func__, *m_scrub_job) << dendl;
 }
