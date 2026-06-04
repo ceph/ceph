@@ -504,8 +504,29 @@ void ExtentCommitter::maybe_sync_copied_lba_key() {
   auto &lextent = static_cast<LogicalChildNode&>(extent);
   auto &prior = *extent.prior_instance;
   for (auto &item : prior.read_transactions) {
-    item.t->maybe_sync_copied_lba_key(
-      lextent.get_laddr(), lextent.get_paddr());
+    switch (t.get_src()) {
+    case transaction_type_t::PROMOTE:
+      {
+        auto &shadow = *lextent.get_shadow();
+        item.t->maybe_sync_copied_lba_key(
+          lextent.get_laddr(),
+          lextent.get_paddr(),
+          shadow.get_paddr());
+        break;
+      }
+    case transaction_type_t::DEMOTE:
+      item.t->maybe_sync_copied_lba_key(
+        lextent.get_laddr(),
+        lextent.get_paddr(),
+        P_ADDR_NULL);
+      break;
+    default:
+      item.t->maybe_sync_copied_lba_key(
+        lextent.get_laddr(),
+        lextent.get_paddr(),
+        std::nullopt);
+      break;
+    }
   }
 }
 
