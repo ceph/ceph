@@ -20,6 +20,7 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/ppc.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
@@ -31,9 +32,14 @@ TEST(Arch, all)
   ceph_arch_probe();
   EXPECT_TRUE(ceph_arch_probed);
   
-#if (__arm__ || __aarch64__ || __x86_64__) && __linux__
+#if (__arm__ || __aarch64__ || __x86_64__ || __powerpc64__) && __linux__
   char flags[FLAGS_SIZE];
-  FILE *f = popen("grep '^\\(flags\\|Features\\)[	 ]*:' "
+  // For Power, cpuinfo output is different
+  // cat /proc/cpuinfo
+  // processor	: 0
+  // cpu		: POWER9, altivec supported
+  // clock		: 3800.000000MHz
+  FILE *f = popen("grep '^\\(flags\\|Features\\|cpu\\)[	 ]*:' "
                   "/proc/cpuinfo | head -1", "r");
   if(f == NULL || fgets(flags, FLAGS_SIZE - 1, f) == NULL) {
     // silently do nothing if /proc/cpuinfo does exist, is not
@@ -78,6 +84,12 @@ TEST(Arch, all)
 
   expected = strstr(flags, " sse2 ") ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_sse2);
+
+#endif
+#if (__powerpc64__)
+
+  expected = strstr(flags, " altivec ") ? 1 : 0;
+  EXPECT_EQ(expected, ceph_arch_ppc_crc32);
 
 #endif
 
