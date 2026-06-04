@@ -345,6 +345,8 @@ class SplitOp {
   std::map<int, std::vector<int>> op_offset_map;
 
  public:
+ static inline constexpr uint64_t REPLICA_MIN_SPLIT_SIZE = 4096;
+
  /**
   * @brief Construct a SplitOp.
   * @param op Original operation to be split
