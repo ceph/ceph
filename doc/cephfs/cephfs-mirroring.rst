@@ -1424,3 +1424,36 @@ transfers. Users can fine-tune these operations using configuration parameters:
 - ``cephfs_mirror_max_concurrent_directory_syncs``: controls the number of concurrent snapshots being crawled.
 - ``cephfs_mirror_max_datasync_threads``: controls the total threads available for data sync.
 For more information, see https://tracker.ceph.com/issues/73452
+
+
+Snapshot Mirroring Checkpoints
+-------------------------------
+
+CephFS mirroring supports checkpoints to track the replication status of specific snapshots.
+Checkpoints allow you to mark important snapshots and monitor whether they have been successfully
+synchronized to the remote site, providing visibility into disaster recovery readiness.
+
+**Key Features:**
+
+- Mark snapshots as checkpoints to track their replication status
+- Automatic status detection (created/complete/failed)
+- Per-directory tracking with persistent metadata
+
+**Basic Usage:**
+
+.. code-block:: bash
+
+    # Add a checkpoint to a snapshot
+    ceph fs snapshot mirror checkpoint add <fs_name> <dir_path> <snap_name>
+
+    # List all checkpoints for a directory
+    ceph fs snapshot mirror checkpoint ls <fs_name> <dir_path>
+
+    # Remove a checkpoint
+    ceph fs snapshot mirror checkpoint remove <fs_name> <dir_path> <snap_name>
+
+    # Create checkpoint on latest snapshot
+    ceph fs snapshot mirror checkpoint now <fs_name> <dir_path>
+
+For detailed information about checkpoint commands, lifecycle, and best practices, see
+:doc:`cephfs-mirroring-checkpoints`.
