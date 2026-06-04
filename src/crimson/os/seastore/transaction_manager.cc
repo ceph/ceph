@@ -508,6 +508,8 @@ TransactionManager::update_lba_mappings(
   std::list<CachedExtentRef> &pre_allocated_extents)
 {
   LOG_PREFIX(TransactionManager::update_lba_mappings);
+  auto phase_latency =
+    t.record_phase_latency(phase_latency_bucket_t::mapping_management);
   SUBTRACET(seastore_t, "update extent lba mappings", t);
   return seastar::do_with(
     std::list<LogicalChildNodeRef>(),
@@ -629,25 +631,29 @@ TransactionManager::do_submit_transaction(
   }
 
   SUBTRACET(seastore_t, "submitting record", tref);
-  co_await journal->submit_record(
-    std::move(record),
-    tref.get_handle(),
-    tref.get_src(),
-    [this, FNAME, &tref](record_locator_t submit_result) {
-    SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
-    auto start_seq = submit_result.write_result.start_seq;
-    journal->get_trimmer().set_journal_head(start_seq);
-    cache->complete_commit(
-      tref,
-      submit_result.record_block_base,
-      start_seq);
-    journal->get_trimmer().update_journal_tails(
-      cache->get_oldest_dirty_from().value_or(start_seq),
-      cache->get_oldest_backref_dirty_from().value_or(start_seq));
-    }).handle_error(
-      submit_transaction_iertr::pass_further{},
-      crimson::ct_error::assert_all("Hit error submitting to journal")
-    );
+  {
+    auto phase_latency =
+      tref.record_phase_latency(phase_latency_bucket_t::durability);
+    co_await journal->submit_record(
+      std::move(record),
+      tref.get_handle(),
+      tref.get_src(),
+      [this, FNAME, &tref](record_locator_t submit_result) {
+      SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
+      auto start_seq = submit_result.write_result.start_seq;
+      journal->get_trimmer().set_journal_head(start_seq);
+      cache->complete_commit(
+        tref,
+        submit_result.record_block_base,
+        start_seq);
+      journal->get_trimmer().update_journal_tails(
+        cache->get_oldest_dirty_from().value_or(start_seq),
+        cache->get_oldest_backref_dirty_from().value_or(start_seq));
+      }).handle_error(
+        submit_transaction_iertr::pass_further{},
+        crimson::ct_error::assert_all("Hit error submitting to journal")
+      );
+  }
 
   co_await trans_intr::make_interruptible(
     tref.get_handle().complete()
