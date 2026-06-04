@@ -151,6 +151,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
+%global c_ares_min_version 1.28.0
 %if 0%{?rhel} && 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
 %endif
@@ -951,6 +952,11 @@ Group:		System/Filesystems
 Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-osd < %{_epoch_prefix}%{version}-%{release}
 Requires:	binutils
+%if 0%{?suse_version}
+Requires:	libcares2 >= %{c_ares_min_version}
+%else
+Requires:	c-ares >= %{c_ares_min_version}
+%endif
 Requires:	protobuf
 %description osd-crimson
 crimson-osd is the object storage daemon for the Ceph distributed file
