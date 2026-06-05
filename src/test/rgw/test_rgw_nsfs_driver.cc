@@ -1116,6 +1116,154 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   }
 }
 
+TEST_F(NSFSObjectTest, HierarchicalList)
+{
+  // SetUp already wrote one flat object (testname)
+  // Write hierarchical objects
+  std::unique_ptr<rgw::sal::Object> obj1 = write_object("dir1/a.txt");
+  EXPECT_NE(obj1.get(), nullptr);
+  std::unique_ptr<rgw::sal::Object> obj2 = write_object("dir1/b.txt");
+  EXPECT_NE(obj2.get(), nullptr);
+  std::unique_ptr<rgw::sal::Object> obj3 = write_object("dir2/c.txt");
+  EXPECT_NE(obj3.get(), nullptr);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+
+  // List all (no delimiter) — should return all 4 objects in lex order
+  int ret = bucket->list(env->dpp, params, 128, results, null_yield);
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(results.is_truncated);
+  EXPECT_EQ(results.objs.size(), 4);
+
+  if (verbose) {
+    std::cout << "  all objects:" << std::endl;
+    for (auto& e : results.objs) {
+      std::cout << "    " << e.key.name << std::endl;
+    }
+  }
+
+  // Verify lexicographic order: dir1/a.txt, dir1/b.txt, dir2/c.txt, testname
+  EXPECT_EQ(results.objs[0].key.name, "dir1/a.txt");
+  EXPECT_EQ(results.objs[1].key.name, "dir1/b.txt");
+  EXPECT_EQ(results.objs[2].key.name, "dir2/c.txt");
+  EXPECT_EQ(results.objs[3].key.name, testname);
+}
+
+TEST_F(NSFSBucketTest, ListWithDelimiter)
+{
+  // Write flat + hierarchical objects
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("top.txt");
+  write("dir1/a.txt");
+  write("dir1/b.txt");
+  write("dir2/c.txt");
+
+  // List with delimiter "/"
+  rgw::sal::Bucket::ListParams params;
+  params.delim = "/";
+  rgw::sal::Bucket::ListResults results;
+
+  int ret = bucket->list(env->dpp, params, 128, results, null_yield);
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(results.is_truncated);
+
+  if (verbose) {
+    std::cout << "  objects:" << std::endl;
+    for (auto& e : results.objs) {
+      std::cout << "    " << e.key.name << std::endl;
+    }
+    std::cout << "  common_prefixes:" << std::endl;
+    for (auto& cp : results.common_prefixes) {
+      std::cout << "    " << cp.first << std::endl;
+    }
+  }
+
+  // Contents: just top.txt
+  EXPECT_EQ(results.objs.size(), 1);
+  EXPECT_EQ(results.objs[0].key.name, "top.txt");
+
+  // CommonPrefixes: dir1/, dir2/
+  EXPECT_EQ(results.common_prefixes.size(), 2);
+  EXPECT_TRUE(results.common_prefixes.contains("dir1/"));
+  EXPECT_TRUE(results.common_prefixes.contains("dir2/"));
+}
+
+TEST_F(NSFSBucketTest, ListWithPrefix)
+{
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("top.txt");
+  write("dir1/a.txt");
+  write("dir1/b.txt");
+  write("dir2/c.txt");
+
+  // List with prefix "dir1/" and delimiter "/"
+  rgw::sal::Bucket::ListParams params;
+  params.prefix = "dir1/";
+  params.delim = "/";
+  rgw::sal::Bucket::ListResults results;
+
+  int ret = bucket->list(env->dpp, params, 128, results, null_yield);
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(results.is_truncated);
+
+  if (verbose) {
+    std::cout << "  prefix=dir1/ objects:" << std::endl;
+    for (auto& e : results.objs) {
+      std::cout << "    " << e.key.name << std::endl;
+    }
+  }
+
+  EXPECT_EQ(results.objs.size(), 2);
+  EXPECT_EQ(results.objs[0].key.name, "dir1/a.txt");
+  EXPECT_EQ(results.objs[1].key.name, "dir1/b.txt");
+  EXPECT_EQ(results.common_prefixes.size(), 0);
+}
+
 
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
