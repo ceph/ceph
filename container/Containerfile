@@ -16,6 +16,9 @@ ARG CEPH_GIT_REPO
 # (optional) Define the baseurl= for the ganesha.repo
 ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-9/"
 
+# NFS-Ganesha upstream version to install from ganesha.repo (see GANESHA_REPO_BASEURL).
+ARG GANESHA_VERSION="9.6"
+
 # (optional) Set to "crimson" to install crimson packages.
 ARG OSD_FLAVOR="default"
 
@@ -29,6 +32,7 @@ RUN /bin/echo -e "\
 FROM_IMAGE: ${FROM_IMAGE}\n\
 CEPH_REF: ${CEPH_REF}\n\
 GANESHA_REPO_BASEURL: ${GANESHA_REPO_BASEURL} \n\
+GANESHA_VERSION: ${GANESHA_VERSION} \n\
 OSD_FLAVOR: ${OSD_FLAVOR} \n\
 CI_CONTAINER: ${CI_CONTAINER}"
 
@@ -44,6 +48,7 @@ CEPH_REF=${CEPH_REF} \
 CEPH_SHA1=${CEPH_SHA1} \
 CEPH_GIT_REPO=${CEPH_GIT_REPO} \
 GANESHA_REPO_BASEURL=${GANESHA_REPO_BASEURL} \
+GANESHA_VERSION=${GANESHA_VERSION} \
 OSD_FLAVOR=${OSD_FLAVOR}
 
 # Use bash so var setting works.
@@ -183,15 +188,14 @@ RUN set -euo pipefail; \
     fi
 
 # NFS-Ganesha
-RUN echo "\
-dbus-daemon \
-nfs-ganesha-ceph \
-nfs-ganesha-rados-grace \
-nfs-ganesha-rados-urls \
-nfs-ganesha-rgw \
-nfs-ganesha \
-rpcbind \
-sssd-client" >> packages.txt
+RUN set -euo pipefail; \
+    echo dbus-daemon >> packages.txt; \
+    echo rpcbind >> packages.txt; \
+    echo sssd-client >> packages.txt; \
+    for pkg in nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace \
+               nfs-ganesha-rados-urls nfs-ganesha-rgw; do \
+        echo "${pkg}-${GANESHA_VERSION}*" >> packages.txt; \
+    done
 
 # ISCSI
 RUN echo "ceph-iscsi tcmu-runner python3-rtslib" >> packages.txt
