@@ -220,6 +220,13 @@ class CircularJournalSpace : public JournalAllocator {
     return device->read(offset, bptr);
   }
 
+  void update_journal_tail_on_startup(
+    journal_seq_t dirty,
+    journal_seq_t alloc) {
+    header.dirty_tail = dirty;
+    header.alloc_tail = alloc;
+  }
+
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
     journal_seq_t alloc) {

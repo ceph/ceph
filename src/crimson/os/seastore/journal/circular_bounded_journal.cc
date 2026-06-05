@@ -343,6 +343,25 @@ Journal::replay_ret CircularBoundedJournal::replay(
   cjs.set_initialized(true);
   std::map<paddr_t, journal_seq_t> map;
   std::map<paddr_t, std::pair<CachedExtentRef, uint32_t>> crc_info;
+  auto tail = get_dirty_tail() <= get_alloc_tail() ?
+    get_dirty_tail() : get_alloc_tail();
+  set_written_to(tail);
+  // the first pass to find the real journal tail.
+  auto find_tail = [this](
+    const auto&,
+    const auto &e,
+    sea_time_point) {
+    if (e.type == extent_types_t::JOURNAL_TAIL) {
+      journal_tail_delta_t tails;
+      decode(tails, e.bl);
+      cjs.update_journal_tail_on_startup(
+        tails.dirty_tail, tails.alloc_tail);
+    }
+    return replay_ertr::make_ready_future<bool>(true);
+  };
+  co_await scan_valid_record_delta(std::move(find_tail), tail);
+  tail = get_dirty_tail() <= get_alloc_tail() ?
+    get_dirty_tail() : get_alloc_tail();
   auto build_paddr_seq_map = [&map](
     const auto &offsets,
     const auto &e,
@@ -359,10 +378,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
     }
     return replay_ertr::make_ready_future<bool>(true);
   };
-  auto tail = get_dirty_tail() <= get_alloc_tail() ?
-    get_dirty_tail() : get_alloc_tail();
-  set_written_to(tail);
-  // The first pass to build the paddr->journal_seq_t map 
+  // The second pass to build the paddr->journal_seq_t map
   // from extent allocations
   co_await scan_valid_record_delta(std::move(build_paddr_seq_map), tail);
   auto call_d_handler_if_valid = [this, &map, &d_handler, &crc_info](
@@ -390,7 +406,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
     }
     return replay_ertr::make_ready_future<bool>(true);
   };
-  // The second pass to replay deltas
+  // The third pass to replay deltas
   co_await scan_valid_record_delta(std::move(call_d_handler_if_valid), tail);
   for (auto p : crc_info) {
     ceph_assert_always(p.second.first->get_last_committed_crc() == p.second.second);	
