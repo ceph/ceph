@@ -3529,8 +3529,11 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   const auto& index = bucket.get_info().layout.current_index;
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
 
-  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories, sc_stats);
   if (r < 0) {
     return r;
   }

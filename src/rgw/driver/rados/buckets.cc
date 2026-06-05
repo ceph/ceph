@@ -30,26 +30,8 @@ static int set(const DoutPrefixProvider* dpp, optional_yield y,
                const RGWBucketEnt* ent)
 {
   std::list<cls_user_bucket_entry> entries;
-  cls_user_bucket_entry main_entry = std::move(entry);
-  main_entry.storage_class = "";
-  entries.push_back(main_entry);
-  if (ent != nullptr) {
-    std::string placement_target = ent->placement_rule.name;
-    if (main_entry.count > 0 && ent->storage_class_ents.empty()) {
-      cls_user_bucket_entry do_not_initialize_storage_classes;
-      ent->convert(&do_not_initialize_storage_classes);
-      do_not_initialize_storage_classes.storage_class.reset();
-      entries.push_back(do_not_initialize_storage_classes);
-    }
-    for (auto it = ent->storage_class_ents.begin(); it != ent->storage_class_ents.end(); ++it) {
-      std::string storage_class = it->first;
-      RGWBucketEnt bent = it->second;
-      cls_user_bucket_entry en;
-      bent.convert(&en);
-      en.storage_class = placement_target + "::" + storage_class;
-      entries.push_back(en);
-    }
-  }
+  entries.push_back(std::move(entry));
+
   rgw_rados_ref ref;
   int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
   if (r < 0) {

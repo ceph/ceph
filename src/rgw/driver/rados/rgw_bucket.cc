@@ -302,7 +302,7 @@ static void dump_bucket_index(const vector<rgw_bucket_dir_entry>& objs,  Formatt
   }
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
+static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, std::optional<std::map<std::string, RGWStorageStats>> sc_stats, Formatter *formatter)
 {
   map<RGWObjCategory, RGWStorageStats>::iterator iter;
 
@@ -310,18 +310,6 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
     RGWStorageStats& s = iter->second;
     formatter->open_object_section(to_string(iter->first));
-    s.dump(formatter);
-    formatter->close_section();
-  }
-  formatter->close_section();
-}
-
-static void dump_bucket_storage_classes_usage(map<RGWObjCategory, RGWStorageStats>& stats, std::optional<map<std::string, RGWStorageStats>> sc_stats, Formatter *formatter)
-{
-  formatter->open_object_section("usage");
-  for (auto it = stats.begin(); it != stats.end(); ++it) {
-    RGWStorageStats& s = it->second;
-    formatter->open_object_section(to_string(it->first));
     s.dump(formatter);
     formatter->close_section();
   }
@@ -345,12 +333,13 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
         map<RGWObjCategory, RGWStorageStats> calculated_stats,
         Formatter *formatter)
 {
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
   formatter->open_object_section("check_result");
   formatter->open_object_section("existing_header");
-  dump_bucket_usage(existing_stats, formatter);
+  dump_bucket_usage(existing_stats, sc_stats, formatter);
   formatter->close_section();
   formatter->open_object_section("calculated_header");
-  dump_bucket_usage(calculated_stats, formatter);
+  dump_bucket_usage(calculated_stats, sc_stats, formatter);
   formatter->close_section();
   formatter->close_section();
 }
@@ -1622,8 +1611,9 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
-  std::optional<map<string, RGWStorageStats>> sc_stats;
-  sc_stats.emplace();
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
 
   int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
                                 &bucket, y);
@@ -1645,7 +1635,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   std::string max_marker;
 
   if (has_index) {
-    ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, sc_stats, &max_marker);
     if (ret < 0) {
       cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
       return ret;
@@ -1656,14 +1646,6 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   if (!radosdriver) {
     cerr << "rados store only" << std::endl;
     return -ENOTSUP;
-  }
-
-  ret = radosdriver->getRados()->get_bucket_storage_classes_stats(dpp, y, bucket_info, RGW_NO_SHARD,
-                                                            &bucket_ver, &master_ver, sc_stats,
-                                                            &max_marker, index);
-  if (ret < 0) {
-    cerr << "error getting bucket storage class stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1695,11 +1677,10 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     formatter->dump_string("ver", bucket_ver);
     formatter->dump_string("master_ver", master_ver);
     formatter->dump_string("max_marker", max_marker);
-    dump_bucket_usage(stats, formatter);
+    dump_bucket_usage(stats, sc_stats, formatter);
   }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
-  dump_bucket_storage_classes_usage(stats, sc_stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
 
   // bucket tags
@@ -1783,7 +1764,10 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
+	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, sc_stats, nullptr);
 
 	if (ret < 0)
 	  continue;

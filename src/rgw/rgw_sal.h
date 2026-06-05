@@ -949,6 +949,7 @@ class Bucket {
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+			   std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			   std::string* max_marker = nullptr,
 			   bool* syncstopped = nullptr) = 0;
     /** Read the bucket stats from the backing Store, asynchronous */

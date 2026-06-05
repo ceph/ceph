@@ -498,6 +498,9 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
   map<string, bool> common_prefixes;
   RGWObjectCtx obj_ctx(store);
   CephContext *cct = store->ctx();
@@ -509,7 +512,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
 
   const auto& index = info.get_current_index();
-  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, sc_stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -661,9 +664,10 @@ int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
+			    std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats,sc_stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,

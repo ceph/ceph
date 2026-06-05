@@ -208,6 +208,7 @@ namespace rgw::sal {
       int shard_id,
       std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats,
+      std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
       std::string *max_marker, bool *syncstopped)
   {
     return 0;

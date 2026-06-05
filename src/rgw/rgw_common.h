@@ -1522,6 +1522,17 @@ struct RGWBucketEnt {
     b->size_rounded = size_rounded;
     b->creation_time = creation_time;
     b->count = count;
+    for (auto it = storage_class_ents.begin(); it != storage_class_ents.end(); ++it) {
+      std::string storage_class = it->first;
+      RGWBucketEnt bent = it->second;
+      std::string placement_target = placement_rule.name;
+      b->storage_class_stats.emplace();
+      cls_user_bucket_entry stats;
+      stats.count = bent.count;
+      stats.size = bent.size;
+      stats.size_rounded = bent.size_rounded;
+      b->storage_class_stats.value()[placement_target + "::" + storage_class] = stats;
+    }
   }
 
   void encode(bufferlist& bl) const {
