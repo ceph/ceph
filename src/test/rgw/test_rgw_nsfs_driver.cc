@@ -907,6 +907,215 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 }
 
+TEST_F(NSFSBucketTest, HierarchicalPut)
+{
+  std::string objname = "dir1/dir2/file.txt";
+  sf::path obj_path{bp / "root" / testname / "dir1" / "dir2" / "file.txt"};
+  sf::path dir1_path{bp / "root" / testname / "dir1"};
+  sf::path dir2_path{bp / "root" / testname / "dir1" / "dir2"};
+
+  EXPECT_FALSE(sf::exists(obj_path));
+
+  std::unique_ptr<rgw::sal::Object> obj =
+    bucket->get_object(rgw_obj_key(objname));
+  EXPECT_NE(obj.get(), nullptr);
+
+  std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+  EXPECT_NE(writer.get(), nullptr);
+
+  int ret = writer->prepare(null_yield);
+  EXPECT_EQ(ret, 0);
+
+  bufferlist bl;
+  std::string content{"hello hierarchical world"};
+  encode(content, bl);
+  int len = bl.length();
+
+  ret = writer->process(std::move(bl), 0);
+  EXPECT_EQ(ret, 0);
+
+  ret = writer->process({}, len);
+  EXPECT_EQ(ret, 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+
+  ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                         real_time(), nullptr, nullptr, nullptr, nullptr,
+                         nullptr, rctx, 0);
+  EXPECT_EQ(ret, 0);
+
+  EXPECT_TRUE(sf::is_directory(dir1_path));
+  EXPECT_TRUE(sf::is_directory(dir2_path));
+  EXPECT_TRUE(sf::is_regular_file(obj_path));
+}
+
+TEST_F(NSFSBucketTest, HierarchicalGet)
+{
+  std::string objname = "dir1/dir2/file.txt";
+  std::string content{"hello hierarchical world"};
+
+  // PUT
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(objname));
+    std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+
+    bufferlist bl;
+    encode(content, bl);
+    int len = bl.length();
+
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  }
+
+  // GET
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(objname));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+
+    int ret = read_op->prepare(null_yield, env->dpp);
+    EXPECT_EQ(ret, 0);
+
+    bufferlist bl;
+    Read_CB cb(&bl);
+    ret = read_op->iterate(env->dpp, 0, obj->get_size(), &cb, null_yield);
+    EXPECT_EQ(ret, 0);
+
+    std::string result;
+    auto bufit = bl.cbegin();
+    decode(result, bufit);
+    EXPECT_EQ(result, content);
+  }
+}
+
+TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
+{
+  std::string flat_name = "flat.txt";
+  std::string hier_name = "subdir/nested.txt";
+  std::string flat_content{"flat content"};
+  std::string hier_content{"nested content"};
+
+  // PUT flat
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(flat_name));
+    std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+
+    bufferlist bl;
+    encode(flat_content, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  }
+
+  // PUT hierarchical
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(hier_name));
+    std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+
+    bufferlist bl;
+    encode(hier_content, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  }
+
+  // Verify filesystem layout
+  sf::path flat_path{bp / "root" / testname / "flat.txt"};
+  sf::path subdir_path{bp / "root" / testname / "subdir"};
+  sf::path nested_path{bp / "root" / testname / "subdir" / "nested.txt"};
+  EXPECT_TRUE(sf::is_regular_file(flat_path));
+  EXPECT_TRUE(sf::is_directory(subdir_path));
+  EXPECT_TRUE(sf::is_regular_file(nested_path));
+
+  // GET flat
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(flat_name));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    int ret = read_op->prepare(null_yield, env->dpp);
+    EXPECT_EQ(ret, 0);
+
+    bufferlist bl;
+    Read_CB cb(&bl);
+    ret = read_op->iterate(env->dpp, 0, obj->get_size(), &cb, null_yield);
+    EXPECT_EQ(ret, 0);
+
+    std::string result;
+    auto bufit = bl.cbegin();
+    decode(result, bufit);
+    EXPECT_EQ(result, flat_content);
+  }
+
+  // GET hierarchical
+  {
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(hier_name));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    int ret = read_op->prepare(null_yield, env->dpp);
+    EXPECT_EQ(ret, 0);
+
+    bufferlist bl;
+    Read_CB cb(&bl);
+    ret = read_op->iterate(env->dpp, 0, obj->get_size(), &cb, null_yield);
+    EXPECT_EQ(ret, 0);
+
+    std::string result;
+    auto bufit = bl.cbegin();
+    decode(result, bufit);
+    EXPECT_EQ(result, hier_content);
+  }
+}
+
 
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
