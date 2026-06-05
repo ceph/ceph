@@ -203,6 +203,21 @@ check "a.txt removed" '[ ! -f "$NSFS_ROOT/$BUCKET/shared/a.txt" ]'
 check "shared/ preserved (b.txt remains)" '[ -d "$NSFS_ROOT/$BUCKET/shared" ]'
 check "b.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/shared/b.txt" ]'
 
+# --- verify xattr naming on disk ---
+
+log "xattr naming verification"
+XATTRS=$(getfattr -d -m '.*' "$NSFS_ROOT/$BUCKET/flat.txt" 2>/dev/null || true)
+check "xattr uses user.nsfs. prefix" 'echo "$XATTRS" | grep -q "user.nsfs\."'
+check "xattr has user.nsfs.object_type" 'echo "$XATTRS" | grep -q "user.nsfs.object_type"'
+check "xattr has user.nsfs.owner" 'echo "$XATTRS" | grep -q "user.nsfs.owner"'
+check "xattr has user.nsfs.rgw.etag" 'echo "$XATTRS" | grep -q "user.nsfs.rgw.etag"'
+check "no old user.X-RGW- prefix" '! echo "$XATTRS" | grep -q "user.X-RGW-"'
+
+if [ "$VERBOSE" -eq 1 ]; then
+  echo "  xattrs on flat.txt:"
+  echo "$XATTRS" | sed 's/^/    /'
+fi
+
 # --- filesystem layout dump ---
 
 if [ "$VERBOSE" -eq 1 ]; then

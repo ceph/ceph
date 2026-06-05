@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <filesystem>
+#include <sys/xattr.h>
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
@@ -1000,6 +1001,48 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
   EXPECT_TRUE(object->get_attrs().contains("owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
+}
+
+TEST_F(NSFSObjectTest, XattrOnDisk)
+{
+  sf::path obj_path{bp / "root" / testname / testname};
+  ASSERT_TRUE(sf::is_regular_file(obj_path));
+
+  char buf[8192];
+  ssize_t len = listxattr(obj_path.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0);
+
+  std::set<std::string> xattr_names;
+  const char* p = buf;
+  while (p < buf + len) {
+    xattr_names.insert(p);
+    p += strlen(p) + 1;
+  }
+
+  if (verbose) {
+    std::cout << "  on-disk xattrs for " << obj_path << ":" << std::endl;
+    for (auto& x : xattr_names) {
+      std::cout << "    " << x << std::endl;
+    }
+  }
+
+  // nsfs-specific attrs use user.nsfs.* prefix
+  EXPECT_TRUE(xattr_names.contains("user.nsfs.object_type"));
+  EXPECT_TRUE(xattr_names.contains("user.nsfs.owner"));
+
+  // user-supplied attrs use user.nsfs.* prefix
+  EXPECT_TRUE(xattr_names.contains("user.nsfs." + ATTR1));
+
+  // RGW common attrs use user.nsfs.rgw.* prefix
+  EXPECT_TRUE(xattr_names.contains("user.nsfs.rgw.etag"));
+
+  // no old-style prefixes
+  for (auto& x : xattr_names) {
+    EXPECT_EQ(x.find("user.X-RGW-"), std::string::npos)
+      << "stale prefix in xattr: " << x;
+    EXPECT_EQ(x.find("NSFS-"), std::string::npos)
+      << "old NSFS- key in xattr: " << x;
+  }
 }
 
 TEST_F(NSFSBucketTest, HierarchicalPut)
