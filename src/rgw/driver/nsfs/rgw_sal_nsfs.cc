@@ -78,20 +78,60 @@ namespace nsfs {
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version)
 {
-  std::string oid;
+  std::string fname;
   if (use_version) {
-    oid = key.get_oid();
+    fname = key.get_oid();
   } else {
-    oid = key.get_index_key_name();
+    fname = key.get_index_key_name();
   }
-  std::string fname = url_encode(oid, true);
 
   if (!key.get_ns().empty()) {
-    /* Namespaced objects are hidden */
     fname.insert(0, 1, '.');
   }
 
   return fname;
+}
+
+int resolve_path(const DoutPrefixProvider* dpp,
+                 Directory* root,
+                 const std::string& key_path,
+                 bool create_dirs,
+                 CephContext* cct,
+                 std::vector<std::unique_ptr<Directory>>& dir_chain,
+                 Directory*& leaf_dir,
+                 std::string& leaf_name)
+{
+  leaf_dir = root;
+  leaf_name = key_path;
+
+  size_t pos = 0;
+  size_t slash;
+  while ((slash = key_path.find('/', pos)) != std::string::npos) {
+    std::string component = key_path.substr(pos, slash - pos);
+    if (component.empty()) {
+      pos = slash + 1;
+      continue;
+    }
+
+    auto dir = std::make_unique<Directory>(component, leaf_dir, cct);
+    int ret = dir->open(dpp);
+    if (ret < 0) {
+      if (!create_dirs || ret != -ENOENT) {
+        return ret;
+      }
+      ret = dir->create(dpp);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    leaf_dir = dir.get();
+    dir_chain.push_back(std::move(dir));
+    pos = slash + 1;
+  }
+
+  leaf_name = key_path.substr(pos);
+  return 0;
 }
 
 } // namespace nsfs
@@ -151,18 +191,11 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
   return true;
 }
 
-static inline rgw_obj_key decode_obj_key(const char* fname)
-{
-  std::string dname, oname, ns; // XXX ns is unused?
-  dname = url_decode(fname);
-  rgw_obj_key key;
-  rgw_obj_key::parse_raw_oid(dname, &key);
-  return key;
-}
-
 static inline rgw_obj_key decode_obj_key(const std::string& fname)
 {
-  return decode_obj_key(fname.c_str());
+  rgw_obj_key key;
+  rgw_obj_key::parse_raw_oid(fname, &key);
+  return key;
 }
 
 int decode_owner(Attrs& attrs, NSFSOwner& owner)
@@ -2951,8 +2984,20 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   int ret;
 
   if (!ent) {
-    ret = static_cast<NSFSBucket *>(bucket)->get_dir()->get_ent(
-        dpp, null_yield, get_fname(/*use_version=*/false), state.obj.key.instance, ent);
+    nsfs::Directory* leaf_dir;
+    std::string leaf_name;
+    ret = nsfs::resolve_path(dpp,
+        static_cast<NSFSBucket *>(bucket)->get_dir(),
+        get_fname(/*use_version=*/false),
+        /*create_dirs=*/false,
+        driver->ctx(),
+        dir_chain, leaf_dir, leaf_name);
+    if (ret < 0) {
+      state.exists = false;
+      return ret;
+    }
+    ret = leaf_dir->get_ent(dpp, null_yield, leaf_name,
+        state.obj.key.instance, ent);
     if (ret < 0) {
       state.exists = false;
       return ret;
@@ -2985,20 +3030,28 @@ int NSFSObject::make_ent(ObjectType type)
   if (ent)
     return 0;
 
+  nsfs::Directory* leaf_dir;
+  std::string leaf_name;
+  int ret = nsfs::resolve_path(nullptr,
+      static_cast<NSFSBucket *>(bucket)->get_dir(),
+      get_fname(/*use_version=*/true),
+      /*create_dirs=*/true,
+      driver->ctx(),
+      dir_chain, leaf_dir, leaf_name);
+  if (ret < 0)
+    return ret;
+
   switch (type.type) {
     case ObjectType::UNKNOWN:
       return -EINVAL;
     case ObjectType::FILE:
-      ent = std::make_unique<File>(
-          get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
+      ent = std::make_unique<File>(leaf_name, leaf_dir, driver->ctx());
       break;
     case ObjectType::DIRECTORY:
-      ent = std::make_unique<Directory>(
-          get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
+      ent = std::make_unique<Directory>(leaf_name, leaf_dir, driver->ctx());
       break;
     case ObjectType::MULTIPART:
-      ent = std::make_unique<MPDirectory>(
-          get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
+      ent = std::make_unique<MPDirectory>(leaf_name, leaf_dir, driver->ctx());
       break;
   }
 
@@ -3294,7 +3347,11 @@ std::string NSFSObject::gen_temp_fname()
   char buf[RAND_SUFFIX_SIZE + 1];
 
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, RAND_SUFFIX_SIZE);
-  temp_fname = "." + get_fname(/*use_version=*/true) + ".";
+  std::string key_path = get_fname(/*use_version=*/true);
+  auto last_slash = key_path.rfind('/');
+  std::string basename = (last_slash != std::string::npos)
+    ? key_path.substr(last_slash + 1) : key_path;
+  temp_fname = "." + basename + ".";
   temp_fname.append(buf);
 
   return temp_fname;
