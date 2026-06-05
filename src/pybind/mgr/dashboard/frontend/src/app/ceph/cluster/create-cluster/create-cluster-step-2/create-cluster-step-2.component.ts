@@ -37,6 +37,10 @@ export class CreateClusterStep2Component implements OnInit, TearsheetStep {
     this.formGroup.patchValue({ skipped: true });
   }
 
+  onFormCancelled() {
+    this.showForm = false;
+  }
+
   onCreateAction() {
     this.showForm = true;
   }

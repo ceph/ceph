@@ -271,13 +271,15 @@ const routes: Routes = [
       },
       {
         path: 'osd',
+        component: OsdListComponent,
         data: { breadcrumbs: 'Cluster/OSDs' },
         children: [
-          { path: '', component: OsdListComponent },
+          // { path: '', component: OsdListComponent },
           {
             path: URLVerbs.CREATE,
             component: OsdFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
+            // data: { breadcrumbs: ActionLabels.CREATE }
           }
         ]
       },

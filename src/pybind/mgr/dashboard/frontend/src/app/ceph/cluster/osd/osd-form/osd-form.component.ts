@@ -8,6 +8,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
+import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -94,6 +95,8 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   @Output() osdCreated: EventEmitter<void> = new EventEmitter();
 
+  @Output() cancelled: EventEmitter<void> = new EventEmitter();
+
   icons = Icons;
 
   form!: CdFormGroup;
@@ -140,6 +143,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private router: Router,
+    private location: Location,
     private formatterService: FormatterService,
     private modalService: ModalService,
     private osdService: OsdService,
@@ -454,6 +458,14 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       this.dbDeviceSelectionGroups,
       'dbSlots'
     );
+  }
+
+  onCancel() {
+    if (this.hideTitle) {
+      this.cancelled.emit();
+      return;
+    }
+    this.location.back();
   }
 
   private navigateAfterCreate() {
