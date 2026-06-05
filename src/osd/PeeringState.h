@@ -1712,6 +1712,23 @@ private:
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
+  
+public:
+  static void calc_ec_acting_stretch(
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+
+private:
 
   static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(

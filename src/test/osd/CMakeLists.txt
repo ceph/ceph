@@ -164,15 +164,32 @@ target_link_libraries(ec_crush_test_fixture osd os global GTest::GTest)
 # unittest_ec_with_crush
 add_executable(unittest_ec_with_crush
   TestECWithCRUSH.cc
-  $<TARGET_OBJECTS:unit-main>
-  $<TARGET_OBJECTS:store_test_fixture>
-  $<TARGET_OBJECTS:pg_backend_test_fixture>
-  $<TARGET_OBJECTS:ec_peering_test_fixture>
   $<TARGET_OBJECTS:ec_crush_test_fixture>
   )
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush ec_isa ec_jerasure)
+
+# unittest_objecttracker
+add_executable(unittest_objecttracker
+  TestObjectTracker.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_objecttracker)
+target_link_libraries(unittest_objecttracker osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+
+# unittest_ec_acting_stretch
+add_executable(unittest_ec_acting_stretch
+  TestECActingStretch.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_acting_stretch)
+target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
 
 # unittest_hitset
 add_executable(unittest_hitset
