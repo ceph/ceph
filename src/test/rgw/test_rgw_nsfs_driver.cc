@@ -26,7 +26,7 @@ using namespace rgw::sal;
 const std::string ATTR1{"attr1"};
 const std::string ATTR2{"attr2"};
 const std::string ATTR3{"attr3"};
-const std::string ATTR_OBJECT_TYPE{"NSFS-Object-Type"};
+const std::string ATTR_OBJECT_TYPE{"object_type"};
 
 namespace {
   bool do_create = false;
@@ -998,7 +998,7 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
 
   EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("NSFS-Owner"));
+  EXPECT_TRUE(object->get_attrs().contains("owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 }
 
