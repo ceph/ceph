@@ -28,6 +28,7 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/consign.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/execution_context.hpp>
@@ -58,8 +59,8 @@ class async_cond : public service_list_base_hook {
 
   std::mutex m;
   std::vector<std::pair<
-    boost::asio::any_completion_handler<
-    void(boost::system::error_code)>, std::unique_lock<BasicLockable>*>> handlers;
+    boost::asio::any_completion_handler<void(boost::system::error_code)>,
+    std::unique_lock<BasicLockable>*>> handlers;
 
   void service_shutdown() {
     std::unique_lock l(m);
@@ -135,12 +136,13 @@ public:
       handlers.resize(0);
       l.unlock();
       for (auto&& [handler, lock] : workhandlers) {
+	auto ex = asio::get_associated_executor(handler, executor);
 	asio::post(executor,
-		   [handler = std::move(handler), lock = lock]() mutable {
-		     lock->lock();
-		     std::move(handler)(sys::error_code{});
-		   });
-
+		   asio::bind_executor(ex,
+		     [handler = std::move(handler), lock = lock]() mutable {
+		       lock->lock();
+		       std::move(handler)(sys::error_code{});
+		     }));
       }
     }
   }
@@ -157,12 +159,13 @@ public:
       handlers.resize(0);
       l.unlock();
       for (auto&& [handler, lock] : workhandlers) {
+	auto ex = asio::get_associated_executor(handler, executor);
 	asio::post(executor,
-		   [handler = std::move(handler), lock = lock]() mutable {
-		     lock->lock();
-		     std::move(handler)(asio::error::operation_aborted);
-		   });
-
+		   asio::bind_executor(ex,
+		     [handler = std::move(handler), lock = lock]() mutable {
+		       lock->lock();
+		       std::move(handler)(asio::error::operation_aborted);
+		     }));
       }
     }
   }
