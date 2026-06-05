@@ -18,6 +18,7 @@
 #include "include/stringify.h"
 #include "common/Checksummer.h"
 #include "common/config_proxy.h" // for class ConfigProxy
+#include "common/ceph_json.h"
 #include "mds/mdstypes.h"
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
@@ -472,6 +473,56 @@ TEST_P(LibRadosMiscPP, CopyPP) {
   }
 }
 
+// Helper function to check if a pool supports omap operations
+// This function will cause the test to fail if it cannot determine the pool's omap support
+static bool supports_omap(librados::IoCtx& ioctx, librados::Rados& cluster) {
+  std::string pool_name = ioctx.get_pool_name();
+  
+  bufferlist inbl, outbl;
+  std::ostringstream cmd;
+  cmd << "{\"prefix\": \"osd pool get\", "
+      << "\"pool\": \"" << pool_name << "\", "
+      << "\"var\": \"supports_omap\", "
+      << "\"format\": \"json\"}";
+  
+  // Send command to determine omap support for the pool
+  int ret = cluster.mon_command(cmd.str(), std::move(inbl), &outbl, nullptr);
+  EXPECT_EQ(0, ret);
+  if (ret != 0) {
+    return false;
+  }
+  
+  // Parse JSON response safely
+  std::string outstr = outbl.to_str();
+  EXPECT_FALSE(outstr.empty());
+  if (outstr.empty()) {
+    return false;
+  }
+  
+  JSONParser parser;
+  bool parse_success = parser.parse(outstr.c_str(), outstr.length());
+  EXPECT_TRUE(parse_success);
+  if (!parse_success) {
+    return false;
+  }
+  
+  // Extract supports_omap value from JSON
+  bool supports_omap_value = false;
+  bool decode_success = false;
+  try {
+    JSONDecoder::decode_json("supports_omap", supports_omap_value, &parser);
+    decode_success = true;
+  } catch (const JSONDecoder::err& e) {
+    // Will be caught by EXPECT below
+  }
+  EXPECT_TRUE(decode_success);
+  if (!decode_success) {
+    return false;
+  }
+  
+  return supports_omap_value;
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
@@ -533,6 +584,9 @@ TEST_P(LibRadosTwoPoolsECPP, CopyFrom) {
   bufferlist b;
   b.append("copyfrom");
 
+  // Check if target pool supports omap
+  bool target_supports_omap = supports_omap(ioctx, cluster);
+
   // create big object w/ omapheader
   {
     ASSERT_EQ(0, src_ioctx.write_full("foo", z));
@@ -540,7 +594,8 @@ TEST_P(LibRadosTwoPoolsECPP, CopyFrom) {
     version_t uv = src_ioctx.get_last_version();
     ObjectWriteOperation op;
     op.copy_from("foo", src_ioctx, uv, 0);
-    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+    int expected = target_supports_omap ? 0 : -EOPNOTSUPP;
+    ASSERT_EQ(expected, ioctx.operate("foo.copy", &op));
   }
 
   // same with small object
@@ -549,7 +604,8 @@ TEST_P(LibRadosTwoPoolsECPP, CopyFrom) {
     version_t uv = src_ioctx.get_last_version();
     ObjectWriteOperation op;
     op.copy_from("bar", src_ioctx, uv, 0);
-    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("bar.copy", &op));
+    int expected = target_supports_omap ? 0 : -EOPNOTSUPP;
+    ASSERT_EQ(expected, ioctx.operate("bar.copy", &op));
   }
 }
 

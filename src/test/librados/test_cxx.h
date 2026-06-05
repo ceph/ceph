@@ -14,13 +14,11 @@ std::string create_one_pool_pp(const std::string &pool_name,
 std::string create_one_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
-  bool optimised_ec = false,
-  bool enable_omap = false);
+  bool fast_ec = false);
 std::string create_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
-  bool optimised_ec = false,
-  bool enable_omap = false);
+  bool fast_ec = false);
 std::string create_pool_pp(const std::string &pool_name,
                             librados::Rados &cluster);
 std::string set_allow_ec_overwrites_pp(const std::string &pool_name,

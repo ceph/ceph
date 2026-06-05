@@ -46,39 +46,19 @@ protected:
 
   void SetUp() override {
     SKIP_IF_CRIMSON();
-    // Skip EC pools before creating resources
-    if (GetParam() == PoolType::FAST_EC) {
-      GTEST_SKIP() << "EC pools do not support omap yet";
-    }
+
     // Call base class SetUp to create pool and ioctx
     PoolTypeTestFixture::SetUp();
     
     nspace = get_temp_pool_name();
     ioctx.set_namespace(nspace);
-    
-    // Enable omap for EC pools
-    if (pool_type == PoolType::FAST_EC) {
-      enable_omap();
-    }
   }
   
   void TearDown() override {
     SKIP_IF_CRIMSON();
-    if (GetParam() == PoolType::FAST_EC) {
-      GTEST_SKIP() << "EC pools do not support omap yet";
-    }
+    
     // Call base class TearDown to clean up pool
     PoolTypeTestFixture::TearDown();
-  }
-
-  // Helper methods
-  void enable_omap() {
-    bufferlist inbl, outbl;
-    std::ostringstream oss;
-    oss << "{\"prefix\": \"osd pool set\", \"pool\": \"" << pool_name
-        << "\", \"var\": \"supports_omap\", \"val\": \"true\"}";
-    int ret = rados.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
-    ASSERT_EQ(0, ret);
   }
 
   void turn_balancing_off() {

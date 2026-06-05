@@ -1996,9 +1996,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
         }
       }
 
-      // Auto-enable omap support for replicated pools
+      // Auto-enable omap support for replicated and fast EC pools
+      // Omap is not supported by EC pools in crimson
       for (auto& [pool_id, pool] : tmp.get_pools()) {
-        if (!pool.has_flag(pg_pool_t::FLAG_OMAP) && pool.is_replicated()) {
+        if (!pool.has_flag(pg_pool_t::FLAG_OMAP) &&
+            (pool.is_replicated() ||
+             (pool.allows_ecoptimizations() && !pool.is_crimson()))) {
           pg_pool_t p = pool;
           p.flags |= pg_pool_t::FLAG_OMAP;
           pending_inc.new_pools[pool_id] = p;
@@ -8351,10 +8354,6 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
   }
-  if (pool_type == pg_pool_t::TYPE_REPLICATED
-      && osdmap.require_osd_release >= ceph_release_t::umbrella) {
-    pi->set_flag(pg_pool_t::FLAG_OMAP);
-  }
 
   pi->size = size;
   pi->min_size = min_size;
@@ -8455,6 +8454,14 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   maybe_enable_pool_split_ops(*pi);
 
+  // Auto-enable omap support for replicated and fast EC pools
+  // Omap is not supported by EC pools in crimson
+  if (osdmap.require_osd_release >= ceph_release_t::umbrella &&
+      (pool_type == pg_pool_t::TYPE_REPLICATED ||
+       (pi->allows_ecoptimizations() && !crimson))) {
+    pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -8546,6 +8553,12 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+
+    // Automatically enable omap support in fast EC pools
+    // Omap is not supported by EC pools in crimson
+    if (!p.is_crimson() && osdmap.require_osd_release >= ceph_release_t::umbrella) {
+      p.flags |= pg_pool_t::FLAG_OMAP;
+    }
   } else {
     if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
       if (ss) {
@@ -9148,25 +9161,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       p.set_flag(n);
     } else {
       p.unset_flag(n);
-    }
-  } else if (var == "supports_omap") {
-    if ((val == "true") && osdmap.require_osd_release < ceph_release_t::umbrella) {
-      ss << "supports_omap cannot be enabled until require_osd_release is set to umbrella or later";
-      return -EPERM;
-    }
-    // Disabling omap support will leave omap data in RocksDB which cannot be cleaned up
-    // It will also break any services that depend on this pool to store metadata
-    if ((val == "false") && (p.has_flag(pg_pool_t::FLAG_OMAP))) {
-      ss << "supports_omap cannot be disabled once enabled";
-      return -EINVAL;
-    }
-    // This restriction is temporary until omap support is well tested in Fast EC pools
-    if ((val == "true") && p.is_erasure()) {
-      ss << "supports_omap cannot be enabled in ec pools";
-      return -EINVAL;
-    }
-    if (val == "true") {
-      p.flags |= pg_pool_t::FLAG_OMAP;
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
