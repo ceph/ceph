@@ -468,6 +468,20 @@ TEST_F(StretchECMinSizeTest, PerDatacenterTakeRule_FindsBothZones)
 }
 
 // stretch_set_can_peer skips NONE entries and honors the mandatory member.
+TEST_F(StretchECMinSizeTest, StretchSetCanPeer_NoneEntriesAndMandatoryMember)
+{
+  const int N = CRUSH_ITEM_NONE;
+  EXPECT_FALSE(pool->stretch_set_can_peer(vector<int>{0, 1, 2, N, N, N}, *osdmap, nullptr));
+  EXPECT_TRUE(pool->stretch_set_can_peer(vector<int>{0, N, N, 3, N, N}, *osdmap, nullptr));
+  EXPECT_FALSE(pool->stretch_set_can_peer(vector<int>(6, N), *osdmap, nullptr));
+
+  pg_pool_t degraded = *pool;
+  degraded.peering_crush_bucket_count = 1;
+  degraded.peering_crush_mandatory_member = osdmap->crush->get_item_id("dc1");
+  EXPECT_FALSE(degraded.stretch_set_can_peer(vector<int>{0, 1, 2, N, N, N}, *osdmap, nullptr));
+  EXPECT_TRUE(degraded.stretch_set_can_peer(vector<int>{N, N, N, 3, 4, 5}, *osdmap, nullptr));
+  EXPECT_TRUE(degraded.stretch_set_can_peer(vector<int>{N, N, N, 3, N, N}, *osdmap, nullptr));
+}
 
 // A profile with crush-device-class makes the stretch rule TAKE the shadow
 // root default~hdd; its datacenters are shadow buckets and must still count
@@ -549,6 +563,35 @@ TEST_F(StretchECMinSizeTest, TwoDeviceClassRule_ZonesAreDatacenters)
   two_class.peering_crush_mandatory_member = osdmap->crush->get_item_id("dc0");
   EXPECT_EQ(0u, osdmap->num_acting_below_min_size(
     two_class, {0, N, 2, N}));
+}
+
+// calc_ec_acting_stretch() serves each zone block from one zone, so an upmap
+// that puts a block's shards in two zones leaves the PG unable to peer.
+TEST_F(StretchECMinSizeTest, CleanPGUpmapsCancelsUpmapAcrossZoneBlocks)
+{
+  const pg_t pgid(0, 1);
+  OSDMap::Incremental in(osdmap->get_epoch() + 1);
+  in.fsid = osdmap->get_fsid();
+  for (int osd = 0; osd < 8; ++osd) {
+    in.new_weight[osd] = CEPH_OSD_IN;
+  }
+  osdmap->apply_incremental(in);
+  auto has_upmap_after_clean = [&](const vector<int32_t> &up) {
+    OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+    inc.fsid = osdmap->get_fsid();
+    inc.new_pg_upmap[pgid] =
+      mempool::osdmap::vector<int32_t>(up.begin(), up.end());
+    osdmap->apply_incremental(inc);
+    OSDMap::Incremental clean(osdmap->get_epoch() + 1);
+    clean.fsid = osdmap->get_fsid();
+    osdmap->clean_pg_upmaps(g_ceph_context, &clean);
+    osdmap->apply_incremental(clean);
+    return osdmap->have_pg_upmaps(pgid);
+  };
+  // zone dc0 is OSDs 0-2, dc1 OSDs 3-5; each block is 3 positions
+  EXPECT_TRUE(has_upmap_after_clean({1, 0, 2, 4, 3, 5}));
+  EXPECT_TRUE(has_upmap_after_clean({3, 4, 5, 0, 1, 2}));
+  EXPECT_FALSE(has_upmap_after_clean({0, 1, 3, 2, 4, 5}));
 }
 
 // A datacenter with no OSDs, e.g. a site still being built, cannot hold any
