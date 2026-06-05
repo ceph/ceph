@@ -2662,7 +2662,7 @@ std::string PeerReplayer::format_bytes(double bytes) {
   return out.str();
 };
 
-double PeerReplayer::compute_eta(PeerReplayer::SnapSyncStat& sync_stat) {
+double PeerReplayer::compute_eta(const PeerReplayer::SnapSyncStat& sync_stat) {
   // mlock is held by the caller
 
   static constexpr uint64_t MIN_FILES_SAMPLE = 25;
@@ -2720,119 +2720,129 @@ double PeerReplayer::compute_eta(PeerReplayer::SnapSyncStat& sync_stat) {
   }
 }
 
-void PeerReplayer::peer_status(Formatter *f) {
-  std::scoped_lock locker(m_lock);
-  f->open_object_section("stats");
-  for (auto &[dir_root, sync_stat] : m_snap_sync_stats) {
-    f->open_object_section(dir_root);
-    if (sync_stat.failed) {
-      f->dump_string("state", "failed");
-      if (sync_stat.last_failed_reason) {
-	f->dump_string("failure_reason", *sync_stat.last_failed_reason);
-      }
-    } else if (!sync_stat.current_syncing_snap) {
-      f->dump_string("state", "idle");
-    } else {
-      f->dump_string("state", "syncing");
-      f->open_object_section("current_syncing_snap");
-      f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
-      f->dump_string("name", (*sync_stat.current_syncing_snap).second);
-      if (sync_stat.snapdiff)
-        f->dump_string("sync-mode", "delta");
-      else
-        f->dump_string("sync-mode", "full");
-
-      //avg read/write throughput
-      double read_bps = sync_stat.read_time_sec > 0 ?
-          sync_stat.bytes_read / sync_stat.read_time_sec : 0;
-      double write_bps = sync_stat.write_time_sec > 0 ?
-          sync_stat.bytes_written / sync_stat.write_time_sec : 0;
-      f->dump_string("avg_read_throughput_bytes", format_bytes(read_bps) + "/s");
-      f->dump_string("avg_write_throughput_bytes", format_bytes(write_bps) + "/s");
-
-      f->open_object_section("crawl");
-      if (sync_stat.crawl_finished) {
-        f->dump_string("state", "completed");
-        f->dump_string("duration", format_time(sync_stat.crawl_duration));
-      } else {
-        f->dump_string("state", "in-progress");
-        auto cur_time = clock::now();
-        sec_duration crawl_duration_till_now{0};
-        crawl_duration_till_now = sec_duration(cur_time - sync_stat.crawl_start_time);
-        f->dump_string("duration", format_time(crawl_duration_till_now.count()));
-      }
-      f->close_section(); //crawl
-      if (sync_stat.datasync_queue_wait_duration ||
-          sync_stat.datasync_queue_wait_start_time) {
-        f->open_object_section("datasync_queue_wait");
-        if (sync_stat.datasync_queue_wait_duration) {
-          f->dump_string("state", "completed");
-          f->dump_string("duration",
-                         format_time(*sync_stat.datasync_queue_wait_duration));
-        } else {
-          f->dump_string("state", "waiting");
-          auto cur_time = clock::now();
-          sec_duration dq_wait{0};
-          dq_wait = sec_duration(cur_time - *sync_stat.datasync_queue_wait_start_time);
-          f->dump_string("duration", format_time(dq_wait.count()));
-        }
-        f->close_section();
-      }
-      f->open_object_section("bytes");
-      f->dump_string("sync_bytes", format_bytes(sync_stat.sync_bytes));
-      f->dump_string("total_bytes", format_bytes(sync_stat.total_bytes));
-      if (sync_stat.total_bytes > 0) {
-        double sync_pct = (static_cast<double>(sync_stat.sync_bytes) * 100.0) / sync_stat.total_bytes;
-        std::ostringstream os;
-        os << std::fixed << std::setprecision(2) << sync_pct << "%";
-        f->dump_string("sync_percent", os.str());
-      }
-      f->close_section(); //bytes
-      f->open_object_section("files");
-      f->dump_unsigned("sync_files", sync_stat.sync_files);
-      f->dump_unsigned("total_files", sync_stat.total_files);
-      if (sync_stat.total_files > 0) {
-        double sync_file_pct = (static_cast<double>(sync_stat.sync_files) * 100.0) / sync_stat.total_files;
-        std::ostringstream os;
-        os << std::fixed << std::setprecision(2) << sync_file_pct << "%";
-        f->dump_string("sync_percent", os.str());
-      }
-      f->close_section(); //files
-      double eta = compute_eta(sync_stat);
-      if (eta == -1.0)
-        f->dump_string("eta", "calculating...");
-      else
-        f->dump_string("eta", format_time(compute_eta(sync_stat)));
-      f->close_section(); //current_syncing_snap
+void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
+  if (sync_stat.failed) {
+    f->dump_string("state", "failed");
+    if (sync_stat.last_failed_reason) {
+      f->dump_string("failure_reason", *sync_stat.last_failed_reason);
     }
-    if (sync_stat.last_synced_snap) {
-      f->open_object_section("last_synced_snap");
-      f->dump_unsigned("id", (*sync_stat.last_synced_snap).first);
-      f->dump_string("name", (*sync_stat.last_synced_snap).second);
-      if (sync_stat.last_sync_crawl_duration) {
-        f->dump_string("crawl_duration", format_time(*sync_stat.last_sync_crawl_duration));
-      }
-      if (sync_stat.last_sync_datasync_queue_wait_duration) {
-        f->dump_string("datasync_queue_wait_duration",
-                       format_time(*sync_stat.last_sync_datasync_queue_wait_duration));
-      }
-      if (sync_stat.last_sync_duration) {
-        f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
-        f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
-      }
-      if (sync_stat.last_sync_bytes) {
-	    f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));
-      }
-      if (sync_stat.last_sync_files) {
-	    f->dump_unsigned("sync_files", *sync_stat.last_sync_files);
+  } else if (!sync_stat.current_syncing_snap) {
+    f->dump_string("state", "idle");
+  } else {
+    f->dump_string("state", "syncing");
+    f->open_object_section("current_syncing_snap");
+    f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
+    f->dump_string("name", (*sync_stat.current_syncing_snap).second);
+    if (sync_stat.snapdiff)
+      f->dump_string("sync-mode", "delta");
+    else
+      f->dump_string("sync-mode", "full");
+
+    //avg read/write throughput
+    double read_bps = sync_stat.read_time_sec > 0 ?
+        sync_stat.bytes_read / sync_stat.read_time_sec : 0;
+    double write_bps = sync_stat.write_time_sec > 0 ?
+        sync_stat.bytes_written / sync_stat.write_time_sec : 0;
+    f->dump_string("avg_read_throughput_bytes", format_bytes(read_bps) + "/s");
+    f->dump_string("avg_write_throughput_bytes", format_bytes(write_bps) + "/s");
+
+    f->open_object_section("crawl");
+    if (sync_stat.crawl_finished) {
+      f->dump_string("state", "completed");
+      f->dump_string("duration", format_time(sync_stat.crawl_duration));
+    } else {
+      f->dump_string("state", "in-progress");
+      auto cur_time = clock::now();
+      sec_duration crawl_duration_till_now{0};
+      crawl_duration_till_now = sec_duration(cur_time - sync_stat.crawl_start_time);
+      f->dump_string("duration", format_time(crawl_duration_till_now.count()));
+    }
+    f->close_section(); //crawl
+    if (sync_stat.datasync_queue_wait_duration ||
+        sync_stat.datasync_queue_wait_start_time) {
+      f->open_object_section("datasync_queue_wait");
+      if (sync_stat.datasync_queue_wait_duration) {
+        f->dump_string("state", "completed");
+        f->dump_string("duration",
+                       format_time(*sync_stat.datasync_queue_wait_duration));
+      } else {
+        f->dump_string("state", "waiting");
+        auto cur_time = clock::now();
+        sec_duration dq_wait{0};
+        dq_wait = sec_duration(cur_time - *sync_stat.datasync_queue_wait_start_time);
+        f->dump_string("duration", format_time(dq_wait.count()));
       }
       f->close_section();
     }
-    f->dump_unsigned("snaps_synced", sync_stat.synced_snap_count);
-    f->dump_unsigned("snaps_deleted", sync_stat.deleted_snap_count);
-    f->dump_unsigned("snaps_renamed", sync_stat.renamed_snap_count);
+    f->open_object_section("bytes");
+    f->dump_string("sync_bytes", format_bytes(sync_stat.sync_bytes));
+    f->dump_string("total_bytes", format_bytes(sync_stat.total_bytes));
+    if (sync_stat.total_bytes > 0) {
+      double sync_pct = (static_cast<double>(sync_stat.sync_bytes) * 100.0) / sync_stat.total_bytes;
+      std::ostringstream os;
+      os << std::fixed << std::setprecision(2) << sync_pct << "%";
+      f->dump_string("sync_percent", os.str());
+    }
+    f->close_section(); //bytes
+    f->open_object_section("files");
+    f->dump_unsigned("sync_files", sync_stat.sync_files);
+    f->dump_unsigned("total_files", sync_stat.total_files);
+    if (sync_stat.total_files > 0) {
+      double sync_file_pct = (static_cast<double>(sync_stat.sync_files) * 100.0) / sync_stat.total_files;
+      std::ostringstream os;
+      os << std::fixed << std::setprecision(2) << sync_file_pct << "%";
+      f->dump_string("sync_percent", os.str());
+    }
+    f->close_section(); //files
+    double eta = compute_eta(sync_stat);
+    if (eta == -1.0)
+      f->dump_string("eta", "calculating...");
+    else
+      f->dump_string("eta", format_time(compute_eta(sync_stat)));
+    f->close_section(); //current_syncing_snap
+  }
+  if (sync_stat.last_synced_snap) {
+    f->open_object_section("last_synced_snap");
+    f->dump_unsigned("id", (*sync_stat.last_synced_snap).first);
+    f->dump_string("name", (*sync_stat.last_synced_snap).second);
+    if (sync_stat.last_sync_crawl_duration) {
+      f->dump_string("crawl_duration", format_time(*sync_stat.last_sync_crawl_duration));
+    }
+    if (sync_stat.last_sync_datasync_queue_wait_duration) {
+      f->dump_string("datasync_queue_wait_duration",
+                     format_time(*sync_stat.last_sync_datasync_queue_wait_duration));
+    }
+    if (sync_stat.last_sync_duration) {
+      f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
+      f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+    }
+    if (sync_stat.last_sync_bytes) {
+      f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));
+    }
+    if (sync_stat.last_sync_files) {
+      f->dump_unsigned("sync_files", *sync_stat.last_sync_files);
+    }
+    f->close_section();
+  }
+  f->dump_unsigned("snaps_synced", sync_stat.synced_snap_count);
+  f->dump_unsigned("snaps_deleted", sync_stat.deleted_snap_count);
+  f->dump_unsigned("snaps_renamed", sync_stat.renamed_snap_count);
+}
+
+void PeerReplayer::peer_status(Formatter *f) {
+  std::scoped_lock locker(m_lock);
+  f->open_object_section("stats");
+  f->open_object_section("metrics");
+  for (auto &[dir_root, sync_stat] : m_snap_sync_stats) {
+    f->open_object_section(dir_root);
+    f->open_object_section("peer");
+    f->open_object_section(m_peer.uuid);
+    dump_sync_stat(f, sync_stat);
+    f->close_section(); // peer uuid
+    f->close_section(); // peer
     f->close_section(); // dir_root
   }
+  f->close_section(); // metrics
   f->close_section(); // stats
 }
 

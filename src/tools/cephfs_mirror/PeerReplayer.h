@@ -735,9 +735,10 @@ private:
   }
 
   // format routines for peer_status
+  static void dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat);
   static std::string format_bytes(double bytes);
   static std::string format_time(double total_seconds);
-  static double compute_eta(SnapSyncStat& sync_stat);
+  static double compute_eta(const SnapSyncStat& sync_stat);
 };
 
 } // namespace mirror
