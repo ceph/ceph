@@ -2046,6 +2046,13 @@ public:
     return shard_id_t(shard.id % get_zone_size());
   }
 
+  int get_shard_zone(const shard_id_t shard) const {
+    if (std::cmp_less(shard.id, get_zone_size())) {
+      return 0;
+    }
+    return shard.id / get_zone_size();
+  }
+
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
 

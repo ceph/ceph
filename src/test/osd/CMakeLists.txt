@@ -188,6 +188,18 @@ add_executable(unittest_ec_with_crush
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush ${EC_ISA_LIB} ec_jerasure)
+# unittest_ec_acting_stretch
+add_executable(unittest_ec_acting_stretch
+  TestECActingStretch.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_acting_stretch)
+target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc

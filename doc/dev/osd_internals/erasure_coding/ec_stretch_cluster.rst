@@ -1462,12 +1462,40 @@ level, but for EC pools the acting set has **shard semantics** — position
 ``i`` must serve shard ``i``. A new ``calc_ec_acting_stretch`` function (or
 an extension of the existing ``calc_ec_acting``) is required.
 
-Algorithm for each position ``i`` (0 to ``num_zones×(K+M)−1``):
+Objects are stored per absolute shard, so an OSD is usable for position ``i``
+only if it holds shard ``i`` itself. When ``num_zones > 1``, all positions of a
+zone block are served from one CRUSH zone, and no two blocks share a zone.
+The blocks are given the zones that together serve the most distinct relative
+shards, up to ``K``, so the PG stays recoverable if any assignment keeps it
+so. A zone holding fewer than ``K`` of a block's shards cannot serve it on its
+own, so ties go to the zones that together hold the most of their shards,
+counting a zone only if it holds at least ``K`` of its block's shards, then to
+the assignment that uses the most ``up`` OSDs in such zones, then holds the
+most shards, then uses the most ``up`` OSDs, then the most ``acting`` OSDs. A
+block therefore keeps being served from where its data is (for example from
+``acting`` after ``up`` swaps the zone blocks) while the ``up`` OSDs are
+backfilled, and moves to the ``up`` OSDs once they hold it.
+
+Algorithm for each position ``i`` (0 to ``num_zones×(K+M)−1``), considering
+only OSDs in the CRUSH zone chosen for its block:
 
 1. Prefer ``up[i]`` if usable
 2. Otherwise prefer ``acting[i]`` if usable
 3. Otherwise search strays for an OSD with shard ``i``
 4. If no usable OSD found, leave as ``CRUSH_ITEM_NONE``
+
+An ``up[i]`` not chosen for position ``i`` is backfilled only if its block
+would be served from ``up[i]``'s zone once the ``up`` OSDs hold their shards.
+That goal is the same zone choice made over every ``up[i]``, the usable
+``acting[i]`` and the chosen positions (other strays are left out, so calls
+restricted to ``up`` and ``acting``, such as the one from ``Recovered``, reach
+the same goal). An ``up[i]`` that already holds shard ``i`` is backfilled too:
+outside the acting set it gets no writes, and the log may be trimmed past it
+before ``Recovered``. A completed backfill target therefore always joins the
+new acting set, as it does with ``calc_ec_acting``, and ``choose_acting`` never
+finds ``want == acting`` with fewer backfill targets. An ``up[i]`` placed in a
+zone its block will not be served from, for example by a ``pg-upmap-items``
+entry into another zone, is not backfilled and the ``pg_temp`` stays.
 
 CRUSH ``bucket_max`` constraints apply: no zone may contribute more than
 ``size / peering_crush_bucket_target`` OSDs.
@@ -1585,7 +1613,10 @@ logic described in Section 11.2:
 
 - **Removal**: If fewer than ``k`` OSDs from a zone are present in the up set,
   the remaining OSDs for that zone are also removed. This forces a zone
-  failover and prevents partial-zone IO.
+  failover and prevents partial-zone IO. Removal from the up set alone is not
+  enough: ``calc_ec_acting_stretch`` also serves a zone block from ``acting``
+  and strays that hold its shards (Section 11.5.1), so it must also skip
+  holders in an offline zone.
 - **Reintegration**: When enough OSDs return to meet the per-zone threshold,
   they are added back into the up set. Standard peering will handle resyncing
   data — no new recovery code is required for reintegration.
