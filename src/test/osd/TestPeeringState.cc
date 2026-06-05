@@ -265,6 +265,8 @@ protected:
         erasure_code_profile);
     p->erasure_code_profile =
         "default";
+    p->ec_data_shard_count = k;
+    p->ec_coding_shard_count = m;
     p->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
     if (fast_ec) {
       p->nonprimary_shards.clear();
