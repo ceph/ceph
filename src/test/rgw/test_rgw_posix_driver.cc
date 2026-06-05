@@ -21,7 +21,7 @@
 #include "global/global_init.h"
 
 using namespace rgw::sal;
-using namespace rgw::sal::posix;
+using namespace posix;
 
 const std::string ATTR1{"attr1"};
 const std::string ATTR2{"attr2"};
