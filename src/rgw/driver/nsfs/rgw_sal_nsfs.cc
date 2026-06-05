@@ -32,12 +32,35 @@ namespace rgw { namespace sal {
 using namespace nsfs;
 
 const int64_t READ_SIZE = 128 * 1024;
-const std::string ATTR_PREFIX = "user.X-RGW-";
-#define RGW_NSFS_ATTR_BUCKET_INFO "NSFS-Bucket-Info"
-#define RGW_NSFS_ATTR_MPUPLOAD "NSFS-Multipart-Upload"
-#define RGW_NSFS_ATTR_OWNER "NSFS-Owner"
-#define RGW_NSFS_ATTR_OBJECT_TYPE "NSFS-Object-Type"
-#define RGW_NSFS_ATTR_MANIFEST "NSFS-Manifest"
+
+static const std::string NSFS_XATTR_PREFIX = "user.nsfs.";
+static const std::string NSFS_RGW_XATTR_PREFIX = "user.nsfs.rgw.";
+static const std::string RGW_ATTR_PFX = "user.rgw.";
+
+static inline std::string make_xattr_name(const std::string& key) {
+  if (key.compare(0, RGW_ATTR_PFX.size(), RGW_ATTR_PFX) == 0) {
+    return NSFS_RGW_XATTR_PREFIX + key.substr(RGW_ATTR_PFX.size());
+  }
+  return NSFS_XATTR_PREFIX + key;
+}
+
+static inline bool parse_xattr_name(const std::string& xattr, std::string& key) {
+  if (xattr.compare(0, NSFS_RGW_XATTR_PREFIX.size(), NSFS_RGW_XATTR_PREFIX) == 0) {
+    key = RGW_ATTR_PFX + xattr.substr(NSFS_RGW_XATTR_PREFIX.size());
+    return true;
+  }
+  if (xattr.compare(0, NSFS_XATTR_PREFIX.size(), NSFS_XATTR_PREFIX) == 0) {
+    key = xattr.substr(NSFS_XATTR_PREFIX.size());
+    return true;
+  }
+  return false;
+}
+
+#define RGW_NSFS_ATTR_BUCKET_INFO "bucket_info"
+#define RGW_NSFS_ATTR_MPUPLOAD "mp_upload"
+#define RGW_NSFS_ATTR_OWNER "owner"
+#define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
+#define RGW_NSFS_ATTR_MANIFEST "manifest"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -241,18 +264,14 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     char* vp;
 
     keylen = strlen(keyptr) + 1;
-    std::string key(keyptr);
-    std::string::size_type prefixloc = key.find(ATTR_PREFIX);
+    std::string xattr_name(keyptr);
+    std::string key;
 
-    if (prefixloc == std::string::npos) {
-      /* Not one of our attributes */
+    if (!parse_xattr_name(xattr_name, key)) {
       buflen -= keylen;
       keyptr += keylen;
       continue;
     }
-
-    /* Make a key that has just the attribute name */
-    key.erase(prefixloc, ATTR_PREFIX.length());
 
     vallen = fgetxattr(fd, keyptr, nullptr, 0);
     if (vallen < 0) {
@@ -294,7 +313,7 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
   int ret;
   std::string attrname;
 
-  attrname = ATTR_PREFIX + key;
+  attrname = make_xattr_name(key);
 
   ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(), 0);
   if (ret < 0) {
@@ -311,7 +330,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
                          const std::string &display)
 {
   int ret;
-  std::string attrname{ATTR_PREFIX + key};
+  std::string attrname{make_xattr_name(key)};
 
   ret = fremovexattr(fd, attrname.c_str());
   if (ret < 0) {
