@@ -870,6 +870,11 @@ Per mapping (block device) `rbd device map` options:
 * read_from_replica=balance - When issued a read on a replicated pool, pick
   a random OSD for serving it (since 5.8).
 
+  When issued a read on an erasure-coded pool, pick the shard that stores the
+  data, giving a performance uplift over routing the request via the primary
+  (requires Umbrella server and client; kernel client support is planned for a
+  future release).
+
   This mode is safe for general use only since Octopus (i.e. after "ceph osd
   require-osd-release octopus").  Otherwise it should be limited to read-only
   workloads such as images mapped read-only everywhere or snapshots.
