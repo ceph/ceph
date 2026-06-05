@@ -86,6 +86,10 @@ class PerShardState {
     return per_shard_superblock.cluster_osdmap_trim_lower_bound;
   }
 
+  const epoch_t& get_cluster_oldest_map() {
+    return per_shard_superblock.cluster_oldest_map;
+  }
+
   // Op Management
   OSDOperationRegistry registry;
   OperationThrottler throttler;
@@ -671,6 +675,7 @@ public:
   FORWARD_TO_LOCAL(get_hb_stamps)
   FORWARD_TO_LOCAL(update_shard_superblock)
   FORWARD_TO_LOCAL(get_osdmap_tlb)
+  FORWARD_TO_LOCAL(get_cluster_oldest_map)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 
