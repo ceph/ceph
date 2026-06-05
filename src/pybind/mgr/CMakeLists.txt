@@ -22,6 +22,7 @@ set(mgr_modules
   alerts
   balancer
   cephadm
+  cli_api
   crash
   # dashboard (optional)
   devicehealth

@@ -160,6 +160,8 @@ ceph-mgr-cephadm \
 ceph-mgr-dashboard \
 ceph-mgr-diskprediction-local \
 ceph-mgr-k8sevents \
+ceph-mgr-modules-core \
+ceph-mgr-modules-standard \
 ceph-mgr-rook \
 ceph-mgr \
 ceph-mon \
