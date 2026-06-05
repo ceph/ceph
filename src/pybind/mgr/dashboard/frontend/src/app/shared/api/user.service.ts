@@ -21,7 +21,7 @@ export class UserService {
   }
 
   get(username: string) {
-    return this.http.get(`api/user/${username}`);
+    return this.http.get(`api/user/${encodeURIComponent(username)}`);
   }
 
   create(user: UserFormModel) {
