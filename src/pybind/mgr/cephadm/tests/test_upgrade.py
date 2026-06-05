@@ -870,6 +870,50 @@ def test_prepare_for_mds_upgrade_all_mds_touches_all_filesystems(
     assert 'cephfs2' in failed
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_rejoins_only_fs_failed_by_upgrade(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # Only filesystems the upgrade itself failed (recorded in
+    # fs_failed_for_upgrade) must be set joinable again. A filesystem an admin
+    # set NOT_JOINABLE for another reason (here 'cephfs') must be left alone.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=True, fs_failed_for_upgrade=['cephfs2'])
+
+    cephadm_module.upgrade._complete_mds_upgrade()
+
+    rejoined = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+                if c.args and c.args[0].get('prefix') == 'fs set'
+                and c.args[0].get('var') == 'joinable']
+    assert 'cephfs2' in rejoined
+    assert 'cephfs' not in rejoined
+    # the tracking list is cleared once completion has run
+    assert cephadm_module.upgrade.upgrade_state.fs_failed_for_upgrade == []
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_rejoins_nothing_when_upgrade_failed_no_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # If the upgrade did not fail any filesystem (empty fs_failed_for_upgrade),
+    # completion must not set any filesystem joinable.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=True, fs_failed_for_upgrade=[])
+
+    cephadm_module.upgrade._complete_mds_upgrade()
+
+    rejoined = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+                if c.args and c.args[0].get('prefix') == 'fs set'
+                and c.args[0].get('var') == 'joinable']
+    assert rejoined == []
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
