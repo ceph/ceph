@@ -29,6 +29,8 @@
 
 namespace rgw { namespace sal {
 
+using namespace nsfs;
+
 const int64_t READ_SIZE = 128 * 1024;
 const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_NSFS_ATTR_BUCKET_INFO "NSFS-Bucket-Info"
@@ -72,6 +74,8 @@ struct NSFSOwner {
 };
 WRITE_CLASS_ENCODER(NSFSOwner);
 
+namespace nsfs {
+
 std::string get_key_fname(rgw_obj_key& key, bool use_version)
 {
   std::string oid;
@@ -89,6 +93,8 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
 
   return fname;
 }
+
+} // namespace nsfs
 
 static inline std::string gen_rand_instance_name()
 {
@@ -367,6 +373,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 
   return 0;
 }
+
+namespace nsfs {
 
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 {
@@ -1841,6 +1849,8 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
 
   return 0;
 }
+
+} // namespace nsfs
 
 bool NSFSZoneGroup::placement_target_exists(std::string& target) const {
   return !!group->placement_targets.count(target);

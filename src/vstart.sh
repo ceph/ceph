@@ -248,7 +248,7 @@ options:
 	--rgw_frontend specify the rgw frontend configuration
 	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
-	--rgw_store storage backend: rados|dbstore|posix
+	--rgw_store storage backend: rados|dbstore|posix|nsfs
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	--cyanstore use cyanstore as the osd objectstore backend
@@ -1001,6 +1001,26 @@ EOF
         rgw posix base path = $posix_dir/root
         rgw posix userdb dir = $posix_dir/userdb
         rgw posix database root = $posix_dir/lmdb
+
+EOF
+    fi
+    if [ "$rgw_store" == "nsfs" ] ; then
+        nsfs_dir="$CEPH_DEV_DIR/rgw/nsfs"
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$nsfs_dir/root"
+            prun rm -rf "$nsfs_dir/lmdb"
+            prun rm -rf "$nsfs_dir/userdb"
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore/config.db"
+        fi
+
+        prun mkdir -p $nsfs_dir/root $nsfs_dir/lmdb $nsfs_dir/userdb "$CEPH_DEV_DIR/rgw/dbstore"
+        wconf <<EOF
+        rgw backend store = nsfs
+        rgw config store = dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+        rgw nsfs base path = $nsfs_dir/root
+        rgw nsfs userdb dir = $nsfs_dir/userdb
+        rgw nsfs database root = $nsfs_dir/lmdb
 
 EOF
     fi

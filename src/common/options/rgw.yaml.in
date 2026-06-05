@@ -4223,6 +4223,7 @@ options:
   - motr
   - daos
   - posix
+  - nsfs
 - name: rgw_config_store
   type: str
   level: advanced
@@ -4382,6 +4383,58 @@ options:
   type: int
   level: advanced
   desc: experimental Number of lmdb partitions in the ordered listing cache
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_base_path
+  type: str
+  level: advanced
+  desc: Option to set base path for NSFS Driver
+  long_desc: Base path for the NSFS driver.  All operations are relative to this path.
+    Defaults to /tmp/rgw_nsfs_driver
+  default: /tmp/rgw_nsfs_driver
+  services:
+  - rgw
+- name: rgw_nsfs_userdb_dir
+  type: str
+  level: advanced
+  desc: path for the directory for storing the User db
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_nsfs_database_root
+  type: str
+  level: advanced
+  desc: Path to parent of NSFS Driver LMDB bucket listing cache
+  long_desc: Parent directory of LMDB bucket listing cache databases.
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_nsfs_cache_max_buckets
+  type: int
+  level: advanced
+  desc: Number of buckets to maintain in the ordered listing cache
+  default: 100
+  services:
+  - rgw
+- name: rgw_nsfs_cache_lanes
+  type: int
+  level: advanced
+  desc: Number of lanes in cache LRU
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_cache_partitions
+  type: int
+  level: advanced
+  desc: Number of partitions in cache AVL
+  default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_cache_lmdb_count
+  type: int
+  level: advanced
+  desc: Number of lmdb partitions in the ordered listing cache
   default: 3
   services:
   - rgw
