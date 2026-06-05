@@ -172,7 +172,6 @@ class Store {
    * entries.
    */
   bufferlist merge_encoded_error_wrappers(
-      hobject_t obj,
       ExpCacherPosData& latest_sh,
       ExpCacherPosData& latest_dp) const;
 };
