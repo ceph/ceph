@@ -7969,16 +7969,14 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     }
 
     for (auto& iter : src_attrset) {
-      /**
-       * Skip object-level encryption attributes when reading individual parts.
-       * These attrs describe the complete multipart object, not this part:
-       *   - ORIGINAL_SIZE: would cause Content-Length mismatch
-       *   - PARTS: contains sizes of all parts, not applicable to single part
-       *   - PART_NUMS: maps part indices to S3 part numbers for the full object
+      /*
+       * Skip object-level crypt attrs (ORIGINAL_SIZE, PARTS) that describe the
+       * whole object and would break a single-part read. PART_NUMS passes
+       * through; it carries the per-part (num, salt) needed to derive this
+       * part's key.
        */
       if (iter.first == RGW_ATTR_CRYPT_ORIGINAL_SIZE ||
-          iter.first == RGW_ATTR_CRYPT_PARTS ||
-          iter.first == RGW_ATTR_CRYPT_PART_NUMS) {
+          iter.first == RGW_ATTR_CRYPT_PARTS) {
         ldpp_dout(dpp, 4) << "skip crypt attr for part read: " << iter.first << dendl;
         continue;
       }

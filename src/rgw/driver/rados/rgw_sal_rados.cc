@@ -4290,6 +4290,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     std::string crypt_mode = mode_iter->second.to_str();
     is_aead = is_aead_mode(crypt_mode);
   }
+  // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
+  std::vector<std::pair<uint32_t, std::string>> part_keys;
 
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
@@ -4409,6 +4411,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       // Track plaintext size for AEAD encryption
       if (is_aead) {
+        part_keys.push_back({obj_part.num, obj_part.crypt_salt});
         if (part_compressed) {
           // For compressed parts, use the uncompressed size directly
           plaintext_ofs += obj_part.accounted_size;
@@ -4460,17 +4463,13 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     bl.append(std::to_string(plaintext_ofs));
     attrs[RGW_ATTR_CRYPT_ORIGINAL_SIZE] = std::move(bl);
 
-    // Store actual S3 part numbers for correct IV/key derivation during decrypt
-    std::vector<uint32_t> part_nums;
-    part_nums.reserve(part_etags.size());
-    for (const auto& part : part_etags) {
-      part_nums.push_back(static_cast<uint32_t>(part.first));
-    }
-    bufferlist part_nums_bl;
+    // Store (S3 part number, GCM salt) pairs (collected in selection order
+    // above) for correct key derivation during decrypt.
+    bufferlist part_keys_bl;
     using ceph::encode;
-    encode(part_nums, part_nums_bl);
-    attrs[RGW_ATTR_CRYPT_PART_NUMS] = std::move(part_nums_bl);
-    ldpp_dout(dpp, 20) << "Stored CRYPT_PART_NUMS with " << part_nums.size()
+    encode(part_keys, part_keys_bl);
+    attrs[RGW_ATTR_CRYPT_PART_NUMS] = std::move(part_keys_bl);
+    ldpp_dout(dpp, 20) << "Stored CRYPT_PART_NUMS with " << part_keys.size()
                        << " parts" << dendl;
   }
 

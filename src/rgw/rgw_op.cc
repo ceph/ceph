@@ -10370,27 +10370,43 @@ int get_decrypt_filter(
   // correctly decrypt across part boundaries
   std::vector<size_t> parts_len;
 
-  // Read actual S3 part numbers from attribute (set by CompleteMultipartUpload)
-  std::vector<uint32_t> part_nums;
+  // Read (S3 part number, GCM salt) pairs from the attribute (set by Complete).
+  std::vector<std::pair<uint32_t, std::string>> part_keys;
   if (auto it = attrs.find(RGW_ATTR_CRYPT_PART_NUMS); it != attrs.end()) {
     try {
       auto p = it->second.cbegin();
       using ceph::decode;
-      decode(part_nums, p);
+      decode(part_keys, p);
     } catch (const buffer::error&) {
       ldpp_dout(s, 1) << "failed to decode RGW_ATTR_CRYPT_PART_NUMS" << dendl;
-      // Continue with empty part_nums - will fail for multipart, ok for single-part
+      // Continue with empty part_keys - will fail for multipart, ok for single-part
     }
   }
 
-  /**
-   * Fallback for GET ?partNumber=N (single part read).
-   * When reading an individual part, the CRYPT_PART_NUMS attribute is skipped
-   * (see rgw_rados.cc skip list), so we use the requested part_num to ensure
-   * correct key derivation and IV generation.
+  /*
+   * GET ?partNumber=N receives the full pair vector; reduce it to the requested
+   * part so the salt/key derivation is correct and the vector matches the
+   * single-part manifest.
    */
-  if (part_nums.empty() && part_num > 0) {
-    part_nums.push_back(part_num);
+  if (part_num > 0 && !part_keys.empty()) {
+    size_t idx = part_keys.size();
+    for (size_t k = 0; k < part_keys.size(); k++) {
+      if (part_keys[k].first == static_cast<uint32_t>(part_num)) { idx = k; break; }
+    }
+    if (idx == part_keys.size()) {
+      return -ERR_INVALID_PART;
+    }
+    auto sel = std::move(part_keys[idx]);
+    part_keys.clear();
+    part_keys.push_back(std::move(sel));
+  }
+
+  /*
+   * No CRYPT_PART_NUMS attr but a part was requested: derive from part_num with
+   * an empty salt.
+   */
+  if (part_keys.empty() && part_num > 0) {
+    part_keys.push_back({static_cast<uint32_t>(part_num), {}});
   }
 
   // for replicated objects, the original part lengths are preserved in an xattr
@@ -10442,7 +10458,7 @@ int get_decrypt_filter(
   const bool has_compression = attrs.count(RGW_ATTR_COMPRESSION);
   *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
       s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), std::move(part_nums), encrypted_total_size,
+      std::move(parts_len), std::move(part_keys), encrypted_total_size,
       has_compression, s->yield);
   return 0;
 }
