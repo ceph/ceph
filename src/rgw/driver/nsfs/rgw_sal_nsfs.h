@@ -30,6 +30,8 @@ class NSFSDriver;
 class NSFSBucket;
 class NSFSObject;
 
+namespace nsfs {
+
 using BucketCache = file::listing::BucketCache<NSFSDriver, NSFSBucket>;
 
 /* integration w/bucket listing cache */
@@ -353,6 +355,8 @@ public:
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
+} // namespace nsfs
+
 class NSFSZoneGroup : public StoreZoneGroup {
   NSFSDriver* store;
   std::unique_ptr<RGWZoneGroup> group;
@@ -478,9 +482,9 @@ protected:
   std::unique_ptr<rgw::store::NSFSUserDB> userDB;
   std::unique_ptr<rgw::store::NSFSAccountDB> accountDB;
   NSFSZone zone;
-  std::unique_ptr<BucketCache> bucket_cache;
+  std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::string base_path;
-  std::unique_ptr<Directory> root_dir;
+  std::unique_ptr<nsfs::Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
@@ -782,11 +786,11 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::NSFSUserDB* get_user_db() { return userDB.get(); }
-  Directory* get_root_dir() { return root_dir.get(); }
+  nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
-  BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
 
-  /* called by BucketCache layer when a new object is discovered
+  /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
@@ -849,18 +853,18 @@ private:
   NSFSDriver* driver;
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
-  std::unique_ptr<Directory> dir;
+  std::unique_ptr<nsfs::Directory> dir;
 
 public:
-  NSFSBucket(NSFSDriver *_dr, Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
     ns(_ns),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<nsfs::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
-  NSFSBucket(NSFSDriver *_dr, std::unique_ptr<Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  NSFSBucket(NSFSDriver *_dr, std::unique_ptr<nsfs::Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
@@ -868,12 +872,12 @@ public:
     dir(std::move(_this_dir))
     { }
 
-  NSFSBucket(NSFSDriver *_dr, Directory* _p_dir, const RGWBucketInfo& _i)
+  NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const RGWBucketInfo& _i)
     : StoreBucket(_i),
     driver(_dr),
     acls(),
     ns(),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<nsfs::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
   NSFSBucket(const NSFSBucket& _b) :
@@ -960,7 +964,7 @@ public:
 
   /* Internal APIs */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
-  Directory* get_dir() { return dir.get(); }
+  nsfs::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
   std::string get_fname();
@@ -968,7 +972,7 @@ public:
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 
   /* enumerate all entries by callback, in any order */
-  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
@@ -996,7 +1000,7 @@ public:
 private:
   NSFSDriver* driver;
   RGWAccessControlPolicy acls;
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<nsfs::FSEnt> ent;
   std::map<std::string, int64_t> parts;
 
 public:
@@ -1132,7 +1136,7 @@ public:
     return std::unique_ptr<Object>(new NSFSObject(*this));
   }
 
-  FSEnt* get_fsent() { return ent.get(); }
+  nsfs::FSEnt* get_fsent() { return ent.get(); }
   int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
@@ -1144,10 +1148,10 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj);
-  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int set_cur_version(const DoutPrefixProvider *dpp);
   int stat(const DoutPrefixProvider *dpp);
-  int make_ent(ObjectType type);
+  int make_ent(nsfs::ObjectType type);
   bool versioned() { return bucket->versioned(); }
 
 protected:
@@ -1257,7 +1261,7 @@ class NSFSMultipartPart : public StoreMultipartPart {
 protected:
   NSFSUploadPartInfo info;
   NSFSMultipartUpload* upload;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<nsfs::File> part_file;
 
 public:
   NSFSMultipartPart(NSFSMultipartUpload* _upload) :
@@ -1387,8 +1391,8 @@ private:
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
-  std::unique_ptr<Directory> upload_dir;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<nsfs::Directory> upload_dir;
+  std::unique_ptr<nsfs::File> part_file;
 
 public:
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1405,7 +1409,7 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<File>(get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
   { upload_dir->open(dpp); }
   virtual ~NSFSMultipartWriter() = default;
 

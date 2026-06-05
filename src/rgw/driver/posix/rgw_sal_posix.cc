@@ -29,6 +29,8 @@
 
 namespace rgw { namespace sal {
 
+using namespace posix;
+
 const int64_t READ_SIZE = 128 * 1024;
 const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
@@ -72,6 +74,8 @@ struct POSIXOwner {
 };
 WRITE_CLASS_ENCODER(POSIXOwner);
 
+namespace posix {
+
 std::string get_key_fname(rgw_obj_key& key, bool use_version)
 {
   std::string oid;
@@ -89,6 +93,8 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
 
   return fname;
 }
+
+} // namespace posix
 
 static inline std::string gen_rand_instance_name()
 {
@@ -367,6 +373,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 
   return 0;
 }
+
+namespace posix {
 
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 {
@@ -1841,6 +1849,8 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
 
   return 0;
 }
+
+} // namespace posix
 
 bool POSIXZoneGroup::placement_target_exists(std::string& target) const {
   return !!group->placement_targets.count(target);
