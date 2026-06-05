@@ -137,7 +137,7 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "");
   virtual std::string get_cur_version() { return ""; };
 };
 
@@ -209,7 +209,7 @@ public:
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
@@ -247,7 +247,7 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);

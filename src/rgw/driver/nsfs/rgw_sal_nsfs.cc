@@ -476,11 +476,12 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix)
 {
   rgw_bucket_dir_entry bde{};
 
-  rgw_obj_key key = decode_obj_key(get_name());
+  std::string full_key = path_prefix + get_name();
+  rgw_obj_key key = decode_obj_key(full_key);
   if (parent->get_type() == ObjectType::MULTIPART) {
     key.ns = mp_ns;
   }
@@ -1092,7 +1093,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
   if (S_ISREG(nstx.stx_mode)) {
     nent = std::make_unique<File>(name, this, nstx, ctx);
   } else if (S_ISDIR(nstx.stx_mode)) {
-    ObjectType type{ObjectType::MULTIPART};
+    ObjectType type{ObjectType::DIRECTORY};
     int tmpfd;
     Attrs attrs;
 
@@ -1124,13 +1125,13 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 }
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb, uint32_t flags)
+                          fill_cache_cb_t &cb, uint32_t flags,
+                          const std::string& path_prefix)
 {
-  int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
+  int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (name[0] == '.') {
-      /* Skip dotfiles */
       return 0;
     }
 
@@ -1138,9 +1139,18 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     if (ret < 0)
       return ret;
 
-    ent->stat(dpp); // Stat the object to get the type
+    ent->stat(dpp);
 
-    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+    if (ent->get_type() == ObjectType::DIRECTORY) {
+      Directory* subdir = static_cast<Directory*>(ent.get());
+      ret = subdir->open(dpp);
+      if (ret < 0)
+        return ret;
+      return subdir->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE,
+                                path_prefix + name + "/");
+    }
+
+    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
     if (ret < 0)
       return ret;
     return 0;
@@ -1282,13 +1292,14 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 }
 
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                            fill_cache_cb_t &cb, uint32_t flags)
+                            fill_cache_cb_t &cb, uint32_t flags,
+                            const std::string& path_prefix)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
 }
 
 } // namespace nsfs
