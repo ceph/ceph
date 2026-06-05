@@ -17,12 +17,16 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
+#include <sys/file.h>
 #include <unistd.h>
 #include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "common/split.h"
+#include <boost/range/algorithm_ext.hpp>
+#include "rgw_lc.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -1970,6 +1974,32 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       }
     }
   }
+  lc = new RGWLC();
+  lc->initialize(cct, this);
+
+  if (use_lc_thread) { // TODO: what if file already exists due to distributed environment? Make sure it doesn't fail
+    std::string fname = url_encode(get_lc_global_entry_path(), true);
+    auto lc_global_entry = std::make_unique<File>(
+	    fname, get_root_dir(), ctx());
+
+    ret = lc_global_entry->create(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 10) << __func__ << "ERROR: Failed to create lc global entry file, ret=" << ret << dendl;
+      return ret;
+    }
+
+    fname = url_encode(get_lc_global_head_path(), true);
+    auto lc_global_head = std::make_unique<File>(
+	    fname, get_root_dir(), ctx());
+
+    ret = lc_global_head->create(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 10) << __func__ << "ERROR: Failed to create lc global head file, ret=" << ret << dendl;
+      return ret;
+    }
+    lc->start_processor();
+  }
+
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
@@ -2197,6 +2227,11 @@ int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
 int POSIXDriver::cluster_stat(RGWClusterStat& stats)
 {
   return 0;
+}
+
+std::unique_ptr<Lifecycle> POSIXDriver::get_lifecycle(void) 
+{
+  return std::make_unique<POSIXLifecycle>(this);
 }
 
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
@@ -2941,8 +2976,17 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs extra_attrs;
+  Attrs orig_attrs, extra_attrs;
   extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
+
+  ret = dir->read_attrs(dpp, y, orig_attrs);
+
+  for (auto attr : orig_attrs) {
+    if (auto found = attrs.find(attr.first); found == attrs.end()) {
+      /* Attribute needs to be erased */
+      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
+    }
+  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -4454,6 +4498,808 @@ int POSIXMultipartWriter::prepare(optional_yield y)
 int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
   return part_file->write(offset, data, dpp, null_yield);
+}
+
+LCPOSIXSerializer::LCPOSIXSerializer(POSIXDriver* driver, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
+  StoreLCSerializer(_oid)
+{
+  // TODO: are cookies used here?
+  unsigned int init_value = 10; // TOOO: what init value should be used?
+  lock = sem_open(lock_name.c_str(), O_CREAT, O_RDWR, init_value);
+}
+
+int LCPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
+{ 
+  struct timespec ts;
+  auto seconds = std::chrono::duration_cast<std::chrono::seconds>(dur);
+  ts.tv_sec = seconds.count();
+  sem_timedwait(lock, &ts);
+  return 0;
+} 
+
+int LCPOSIXSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  sem_post(lock);
+  return 0;
+}
+
+int POSIXLifecycle::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket)
+{
+  // Taken from RADOS code
+  auto lc = this->driver->get_rgwlc();
+  RGWLC::LCWorker worker(lc, this->driver->ctx(), lc, 0);
+  auto ret = lc->process(&worker, optional_bucket, true /* once */);
+  lc->stop_processor(); // sets down_flag, but returns immediately
+  return ret;
+}
+
+int POSIXLifecycle::read_lc_global(const DoutPrefixProvider* dpp, optional_yield y, const std::string& type, std::string& out, std::unique_ptr<File>& lc_global_out) 
+{
+  std::string fname;
+  if (type == "head") {
+    fname = url_encode(get_lc_global_head_path(), true);
+  } else if (type == "entry") {
+    fname = url_encode(get_lc_global_entry_path(), true);
+  }
+
+  auto lc_global = std::make_unique<File>(
+          fname, driver->get_root_dir(), driver->ctx());
+
+  int fd = lc_global->open(dpp);
+  if (fd < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "ERROR: Failed to open lc global, ret=" << fd << dendl;
+    return fd;
+  }
+
+  int ret = lc_global->stat(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "ERROR: Failed to stat lc global, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist bl;
+  if (flock(fd, LOCK_SH) != 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << __func__ << "(): Failed to lock lc global: "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  ret = lc_global->read(0, lc_global->get_size(), bl, dpp, y);
+  flock(fd, LOCK_UN);
+
+  out = bl.to_str();
+  lc_global_out = std::move(lc_global);
+  return 0;
+}
+
+int POSIXLifecycle::write_lc_global(const DoutPrefixProvider* dpp, optional_yield y, bufferlist& bl, std::unique_ptr<File>& lc_global) 
+{
+  int ret;
+  int fd = lc_global->get_fd();
+  if (flock(fd, LOCK_EX) != 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << __func__ << "(): Failed to lock lc global: "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  lseek(fd, 0, SEEK_SET);
+  ftruncate(fd, 0);
+  ret = lc_global->write(0, bl, dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << __func__ << "(): Failed to write lc global, ret=" << ret << dendl;
+    return ret;
+  }
+  flock(fd, LOCK_UN);
+  return 0;
+}
+
+int POSIXLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const std::string& marker,
+                              LCEntry& entry)
+{
+  std::string out;
+  int ret;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "entry", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  if (!out.size()) {
+    return -ENOENT;
+  }
+
+  bool found = false;
+  auto parts = split(out, "}"); 
+  std::vector<std::string> process_entries;
+  process_entries.assign(parts.begin(), parts.end());
+  for (auto& process_entry : process_entries) {
+    process_entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+    int i = 0;
+    JSONParser jp;
+    if (!jp.parse(process_entry.c_str(), process_entry.length())) {
+      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+      return -EINVAL;
+    }
+    auto iter = jp.find_first();
+    for (; !iter.end(); ++iter) {
+      std::string entry_oid;
+      switch (i) {
+	case 0:
+	  entry.bucket = (*iter)->get_data();
+	  break;
+	case 1:
+	  entry_oid = (*iter)->get_data();
+	  if (entry_oid != oid) {
+	    i = 0;
+	    break;;
+	  } else {
+	    found = true;
+	  }
+	  break;
+	case 2:
+	  if (found) {
+	    try {
+	      entry.start_time = std::stoull((*iter)->get_data());
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	case 3:
+	  if (found) {
+	    try {
+	      entry.status = static_cast<uint32_t>(std::stoul((*iter)->get_data()));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	default:
+	  break;
+      }
+
+      if (i == 3) {
+	if (found) {
+	  break;
+	}
+	i = 0;
+      } else {
+	i++;
+      }
+    }
+    if (found) {
+      break;
+    }
+  }
+
+  if (found) {
+    return 0; 
+  } else {
+    return -ENOENT;
+  }
+}
+
+int POSIXLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                   const std::string& oid, const std::string& marker,
+                                   LCEntry& entry)
+{
+  std::string out;
+  int ret;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "entry", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  if (!out.size()) {
+    return -ENOENT;
+  }
+
+  bool found = false, next = false;
+  auto parts = split(out, "}"); 
+  std::string bucket;
+  std::vector<std::string> process_entries;
+  process_entries.assign(parts.begin(), parts.end());
+  for (auto& process_entry : process_entries) {
+    process_entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+    int i = 0;
+    JSONParser jp;
+    if (!jp.parse(process_entry.c_str(), process_entry.length())) {
+      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+      return -EINVAL;
+    }
+    auto iter = jp.find_first();
+    for (; !iter.end(); ++iter) {
+      std::string entry_oid;
+      switch (i) {
+	case 0:
+	  bucket = (*iter)->get_data();
+	  break;
+	case 1:
+	  entry_oid = (*iter)->get_data();
+	  if (entry_oid != oid && !next) {
+	    i = 0;
+	    goto out;
+	  } else {
+	    found = true;
+	    break;
+	  }
+	  break;
+	case 2:
+	  if (next) {
+	    entry.bucket = bucket;
+	    try {
+	      entry.start_time = std::stoull((*iter)->get_data());
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	case 3:
+	  if (next) {
+	    try {
+	      entry.status = static_cast<uint32_t>(std::stoul((*iter)->get_data()));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	default:
+	  break;
+      }
+
+      if (i == 3) {
+	if (next) {
+	  goto out_entry;
+	}
+	if (found) {
+	  next = true; // next entry is what we want to return
+	}
+	i = 0;
+	break;
+      } else {
+	i++;
+      }
+    }
+out: ; 
+  }
+out_entry: ;
+
+  if (next && entry.bucket.size()) {
+    return 0; 
+  } else {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+int POSIXLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const LCEntry& entry)
+{
+  int ret;
+  std::string out;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "entry", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist bl;
+  if (!out.size()) { // New file
+    JSONFormatter formatter;
+    formatter.open_object_section("entry");
+    formatter.dump_string("oid", oid.c_str());
+    formatter.dump_string("bucket", entry.bucket);
+    formatter.dump_string("start_time", std::to_string(entry.start_time));
+    formatter.dump_string("status", std::to_string(entry.status));
+    formatter.close_section();
+    formatter.flush(bl);
+  } else {
+    bool found = false;
+    std::string entry_oid, bucket;
+    uint64_t start_time;
+    uint32_t status;
+
+    auto parts = split(out, "}"); 
+    std::vector<std::string> entries;
+    std::vector<std::string> process_entries;
+    process_entries.assign(parts.begin(), parts.end());
+    for (auto& process_entry : process_entries) {
+      process_entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+      int i = 0;
+      JSONParser jp;
+      if (!jp.parse(process_entry.c_str(), process_entry.length())) {
+	ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	return -EINVAL;
+      }
+      auto iter = jp.find_first();
+      for (; !iter.end(); ++iter) {
+	switch (i) {
+	  case 0: // bucket
+	    bucket = (*iter)->get_data();
+	    break;
+	  case 1: // oid
+	    entry_oid = (*iter)->get_data();
+	    if (entry_oid == oid) { // entry already exists; overwrite
+	      found = true;
+	      bucket = entry.bucket; // TODO: get bucket id
+	    }
+	    break;
+	  case 2: // start time
+	    try {
+	      if (found) {
+		start_time = entry.start_time;
+	      } else {
+		start_time = std::stoull((*iter)->get_data());
+	      }
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	    break;
+	  case 3: // status
+	    try {
+	      if (found) {
+		status = entry.status;
+	      } else {
+		status = static_cast<uint32_t>(std::stoul((*iter)->get_data()));
+	      }
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	    break;
+	  default:
+	    break;
+	}
+
+	if (i == 3) {
+	  bl.clear();
+	  JSONFormatter formatter; // handle existing entries
+	  formatter.open_object_section("entry");
+	  formatter.dump_string("oid", entry_oid.c_str());
+	  formatter.dump_string("bucket", bucket);
+	  formatter.dump_string("start_time", std::to_string(start_time));
+	  formatter.dump_string("status", std::to_string(status));
+	  formatter.close_section();
+	  formatter.flush(bl);
+	  entries.push_back(bl.to_str());
+	  i = 0;
+	} else {
+	  i++;
+	}
+      }
+    }
+
+    if (!found) { // new entry
+      JSONFormatter formatter;
+      bl.clear();
+      formatter.open_object_section("entry");
+      formatter.dump_string("oid", oid.c_str());
+      formatter.dump_string("bucket", entry.bucket);
+      formatter.dump_string("start_time", std::to_string(entry.start_time));
+      formatter.dump_string("status", std::to_string(entry.status));
+      formatter.close_section();
+      formatter.flush(bl);
+      entries.push_back(bl.to_str());
+    }
+
+    bl.clear();
+    bl.append(std::accumulate(entries.begin(), entries.end(), std::string("")));
+  }
+
+  if ((ret = write_lc_global(dpp, y, bl, lc_global)) < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+int POSIXLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                 const std::string& oid, const std::string& marker,
+                                 uint32_t max_entries, std::vector<LCEntry>& entries)
+{
+  entries.clear();
+  std::string out;
+  int ret;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "entry", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  if (!out.size()) {
+    return 0;
+  }
+
+  std::vector<std::string> buckets;
+  std::vector<uint64_t> start_times;
+  std::vector<uint32_t> statuses;
+  bool found = false;
+
+  auto parts = split(out, "}"); 
+  std::vector<std::string> process_entries;
+  process_entries.assign(parts.begin(), parts.end());
+  for (auto& process_entry : process_entries) {
+    process_entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+    int i = 0;
+    JSONParser jp;
+    if (!jp.parse(process_entry.c_str(), process_entry.length())) {
+      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+      return -EINVAL;
+    }
+    auto iter = jp.find_first();
+    for (; !iter.end(); ++iter) {
+      std::string entry_oid;
+      switch (i) {
+	case 0:
+	  buckets.push_back((*iter)->get_data());
+	  break;
+	case 1:
+	  entry_oid = (*iter)->get_data();
+	  if (entry_oid != oid) {
+	    buckets.clear();
+	    i = 0;
+	    continue;
+	  } else {
+	    found = true;
+	  }
+	  break;
+	case 2:
+	  if (found) {
+	    try {
+	      start_times.push_back(std::stoull((*iter)->get_data()));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	case 3:
+	  if (found) {
+	    try {
+	      statuses.push_back(static_cast<uint32_t>(std::stoul((*iter)->get_data())));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	default:
+	  break;
+      }
+
+      if (i == 3) {
+	if (found) {
+	  break;
+	}
+	i = 0;
+      } else {
+	i++;
+      }
+    }
+    if (found) {
+      break;
+    }
+  }
+
+  if (found) {
+    for (uint64_t i = 0; i < buckets.size(); ++i) {
+      entries.push_back(LCEntry{buckets[i], start_times[i], statuses[i]});
+    }
+  }
+  return 0;
+}
+
+int POSIXLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCEntry& entry)
+{
+  std::string out;
+  int ret;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "entry", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  if (!out.size()) {
+    return 0;
+  }
+
+  bufferlist bl;
+  std::string entry_oid, bucket;
+  uint64_t start_time;
+  uint32_t status;
+
+  auto parts = split(out, "}"); 
+  std::vector<std::string> entries;
+  std::vector<std::string> process_entries;
+  process_entries.assign(parts.begin(), parts.end());
+  for (auto& process_entry : process_entries) {
+    process_entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+    int i = 0;
+    JSONParser jp;
+    if (!jp.parse(process_entry.c_str(), process_entry.length())) {
+      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+      return -EINVAL;
+    }
+    auto iter = jp.find_first();
+    for (; !iter.end(); ++iter) {
+      switch (i) {
+	case 0: // bucket
+	  bucket = (*iter)->get_data();
+	  break;
+	case 1: // oid
+	  entry_oid = (*iter)->get_data();
+	  if (entry_oid == oid) {
+	    i = 0;
+	    continue; // skip the entry to be removed
+	  }
+	  break;
+	case 2: // start time
+	  try {
+	    start_time = std::stoull((*iter)->get_data());
+	  } catch (std::exception& e) {
+	    ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	    return -EINVAL;
+	  }
+	  break;
+	case 3: // status
+	  try {
+	    status = static_cast<uint32_t>(std::stoul((*iter)->get_data()));
+	  } catch (std::exception& e) {
+	    ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct entry list" << dendl;
+	    return -EINVAL;
+	  }
+	  break;
+	default:
+	  break;
+      }
+
+      if (i == 3) {
+	bl.clear();
+	JSONFormatter formatter; // handle existing entries
+	formatter.open_object_section("entry");
+	formatter.dump_string("oid", entry_oid.c_str());
+	formatter.dump_string("bucket", bucket);
+	formatter.dump_string("start_time", std::to_string(start_time));
+	formatter.dump_string("status", std::to_string(status));
+	formatter.close_section();
+	formatter.flush(bl);
+	entries.push_back(bl.to_str());
+	i = 0;
+      } else {
+	i++;
+      }
+    }
+  }
+
+  bl.clear();
+  bl.append(std::accumulate(entries.begin(), entries.end(), std::string("")));
+
+  if ((ret = write_lc_global(dpp, y, bl, lc_global)) < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+int POSIXLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCHead& head)
+{
+  std::string out;
+  int ret;
+
+  std::unique_ptr<File> lc_global;
+  if ((ret = read_lc_global(dpp, y, "head", out, lc_global)) == -ENOENT) {
+    return 0;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  if (!out.size()) {
+    return 0;
+  }
+
+  bool found = false;
+  auto parts = split(out, "}"); 
+  std::vector<std::string> process_head_entries;
+  process_head_entries.assign(parts.begin(), parts.end());
+  for (auto& process_head : process_head_entries) {
+    process_head += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+    int i = 0;
+    JSONParser jp;
+    if (!jp.parse(process_head.c_str(), process_head.length())) {
+      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct head list" << dendl;
+      return -EINVAL;
+    }
+    auto iter = jp.find_first();
+    for (; !iter.end(); ++iter) {
+      std::string head_oid;
+      switch (i) {
+	case 0: // oid
+	  head_oid = (*iter)->get_data();
+	  if (head_oid != oid) {
+	    i = 0;
+	    break;
+	  } else {
+	    found = true;
+	  }
+	  break;
+	case 1: // start date
+	  if (found) {
+	    try {
+	      head.start_date = ceph::real_clock::to_time_t(ceph::real_clock::from_double(std::stod((*iter)->get_data())));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct head" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	case 2: // marker
+	  if (found) {
+            head.marker = (*iter)->get_data();
+	  }
+	  break;
+	case 3: // shard rollover date
+	  if (found) {
+	    try {
+	      head.shard_rollover_date = ceph::real_clock::to_time_t(ceph::real_clock::from_double(std::stod((*iter)->get_data())));
+	    } catch (std::exception& e) {
+	      ldpp_dout(dpp, 0) << __func__ << "(): ERROR: Failed to construct head" << dendl;
+	      return -EINVAL;
+	    }
+	  }
+	  break;
+	default:
+	  break;
+      }
+
+      if (i == 3) {
+	if (found) {
+	  break;
+	}
+	i = 0;
+      } else {
+	i++;
+      }
+    }
+    if (found) {
+      break;
+    }
+  }
+
+  return 0;
+}
+
+int POSIXLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCHead& head)
+{
+  int ret;
+  std::string fname = url_encode(get_lc_global_head_path(), true);
+  auto lc_global = std::make_unique<File>(
+          fname, driver->get_root_dir(), driver->ctx());
+
+  ret = lc_global->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = lc_global->stat(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << __func__ << "ERROR: Failed to stat lc global, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist bl;
+  auto size = lc_global->get_size();
+  auto fd = lc_global->get_fd();
+  if (size > 0) {
+    if (flock(fd, LOCK_SH) != 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to lock lc global: "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    ret = lc_global->read(0, size, bl, dpp, y); 
+    flock(fd, LOCK_UN);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to read lc global, ret=" << ret << dendl;
+      return ret;
+    }
+
+    // TODO: encode, decode (which is why we cannot use JSON Parser)
+    std::string data = bl.to_str();
+    auto parts = split(data, "}"); 
+    std::vector<std::string> entries;
+    entries.assign(parts.begin(), parts.end());
+    bool found = false;
+    for (auto& entry : entries) {
+      parts = split(entry, ","); 
+      std::vector<std::string> vals;
+      vals.assign(parts.begin(), parts.end());
+      parts = split(vals[0], ":"); 
+      std::vector<std::string> oids;
+      oids.assign(parts.begin(), parts.end());
+      if (boost::remove_erase_if(oids[1], boost::is_any_of("\\\"")) == oid) {
+	JSONFormatter formatter;
+	bl.clear();
+	formatter.open_object_section("head");
+	formatter.dump_string("oid", oid.c_str());
+	formatter.dump_string("start_date", std::to_string(head.start_date).c_str());
+	formatter.dump_string("marker", head.marker.c_str());
+	formatter.dump_string("shard_rollover_date", std::to_string(head.shard_rollover_date).c_str());
+	formatter.close_section();
+	formatter.flush(bl);
+	entry = bl.to_str();
+	found = true;
+      } else {
+	entry += "}"; // add back delimiter (removed by split call) --> TODO: better way?
+      }
+    }
+
+    if (!found) { // new entry
+      bl.clear();
+      JSONFormatter formatter;
+      formatter.open_object_section("head");
+      formatter.dump_string("oid", oid.c_str());
+      formatter.dump_string("start_date", std::to_string(head.start_date).c_str());
+      formatter.dump_string("marker", head.marker.c_str());
+      formatter.dump_string("shard_rollover_date", std::to_string(head.shard_rollover_date).c_str());
+      formatter.close_section();
+      formatter.flush(bl);
+      entries.push_back(bl.to_str());
+    }
+
+    bl.clear();
+    bl.append(std::accumulate(entries.begin(), entries.end(), std::string("")));
+  } else {
+    JSONFormatter formatter;
+    formatter.open_object_section("head");
+    formatter.dump_string("oid", oid.c_str());
+    formatter.dump_string("start_date", std::to_string(head.start_date).c_str());
+    formatter.dump_string("marker", head.marker.c_str());
+    formatter.dump_string("shard_rollover_date", std::to_string(head.shard_rollover_date).c_str());
+    formatter.close_section();
+    formatter.flush(bl);
+  }
+
+  if (flock(fd, LOCK_EX) != 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << __func__ << "(): Failed to lock lc global: "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  lseek(fd, 0, SEEK_SET);
+  ftruncate(fd, 0);
+  ret = lc_global->write(0, bl, dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << __func__ << "(): Failed to write lc global, ret=" << ret << dendl;
+    return ret;
+  }
+  flock(fd, LOCK_UN);
+
+  return 0;
+}
+
+std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& lock_name,
+                                                             const std::string& oid,
+                                                             const std::string& cookie)
+{
+  return std::make_unique<LCPOSIXSerializer>(driver, oid, lock_name, cookie);
 }
 
 int POSIXMultipartWriter::complete(

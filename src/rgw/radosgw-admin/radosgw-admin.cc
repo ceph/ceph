@@ -98,6 +98,9 @@ extern "C" {
 #ifdef WITH_RADOSGW_RADOS
 #include "driver/rados/rgw_sal_rados.h"
 #endif
+#ifdef WITH_RADOSGW_POSIX
+#include "driver/posix/rgw_sal_posix.h"
+#endif
 #include "driver/rados/rgw_bl_rados.h"
 
 #include <iomanip>
@@ -818,9 +821,7 @@ enum class OPT {
 #endif
   LC_LIST,
   LC_GET,
-#ifdef WITH_RADOSGW_RADOS
   LC_PROCESS,
-#endif
   LC_RESHARD_FIX,
 #ifdef WITH_RADOSGW_RADOS
   ORPHANS_FIND,
@@ -1110,9 +1111,7 @@ static SimpleCmd::Commands all_cmds = {
 #endif
   { "lc list", OPT::LC_LIST },
   { "lc get", OPT::LC_GET },
-#ifdef WITH_RADOSGW_RADOS
   { "lc process", OPT::LC_PROCESS },
-#endif
   { "lc reshard fix", OPT::LC_RESHARD_FIX },
 #ifdef WITH_RADOSGW_RADOS
   { "orphans find", OPT::ORPHANS_FIND },
@@ -4873,8 +4872,8 @@ int main(int argc, const char **argv)
 			 OPT::USER_RM,    // --purge-data
 			 OPT::OBJECTS_EXPIRE,
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
-#ifdef WITH_RADOSGW_RADOS
 			 OPT::LC_PROCESS,
+#ifdef WITH_RADOSGW_RADOS
        OPT::BUCKET_SYNC_RUN,
        OPT::DATA_SYNC_RUN,
        OPT::BUCKET_REWRITE,
@@ -9805,7 +9804,6 @@ next:
     formatter->flush(cout);
   }
 
-#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::LC_PROCESS) {
     if ((! bucket_name.empty()) ||
 	(! bucket_id.empty())) {
@@ -9817,14 +9815,22 @@ next:
 	}
     }
 
-    int ret =
+    int ret;
+#ifdef WITH_RADOSGW_RADOS
+    ret =
       static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_lc(bucket);
+#endif
+#ifdef WITH_RADOSGW_POSIX
+    rgw::sal::POSIXLifecycle* lc = static_cast<rgw::sal::POSIXLifecycle *>(driver->get_rgwlc()->get_lc());
+    lc->set_bucket(static_cast<rgw::sal::POSIXBucket *>(bucket.get()));
+
+    ret = lc->process_lc(bucket);
+#endif
     if (ret < 0) {
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
   }
-#endif
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
     ret = RGWBucketAdminOp::fix_lc_shards(driver, bucket_op, stream_flusher, dpp(), null_yield);
