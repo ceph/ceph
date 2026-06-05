@@ -1906,6 +1906,239 @@ void PeeringState::calc_ec_acting(
   _want->swap(want);
 }
 
+void PeeringState::calc_ec_acting_stretch(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  unsigned size,
+  const vector<int> &acting,
+  const vector<int> &up,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool restrict_to_up_acting,
+  vector<int> *_want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
+  const PGPool& pool,
+  ostream &ss)
+{
+  // For EC pools with stretch mode, each zone must have a complete set of k+m shards.
+  // We don't support zones having a subset of k+m shards.
+  ceph_assert(pool.info.peering_crush_bucket_target > 0);
+  if (pool.info.size % pool.info.peering_crush_bucket_target != 0)
+  {
+    ss << "pool size " << pool.info.size << " is not evenly divisible by peering_crush_bucket_target "
+       << pool.info.peering_crush_bucket_target << std::endl;
+  }
+  ceph_assert(pool.info.size % pool.info.peering_crush_bucket_target == 0);
+  // bucket_max is the maximum number of items that can be in a single bucket.
+  // With the assertion above, size is evenly divisible by num_zones, so this is always exact.
+  unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
+
+  vector<int> want(size, CRUSH_ITEM_NONE);
+
+  boost::container::flat_map<int, int> osd_to_zone; // osd id -> CRUSH zone id
+  auto get_crush_zone = [&](int osd) -> int {
+    auto [it, inserted] = osd_to_zone.try_emplace(osd, 0);
+    if (inserted) {
+      it->second = osdmap->crush->get_parent_of_type(
+        osd,
+        pool.info.peering_crush_bucket_barrier,
+        pool.info.crush_rule);
+    }
+    return it->second;
+  };
+
+  auto usable = [&](const pg_shard_t &shard) {
+    auto it = all_info.find(shard);
+    return it != all_info.end() &&
+           !it->second.is_incomplete() &&
+           it->second.last_update >= auth_log_shard->second.log_tail;
+  };
+
+  // OSDs with a usable copy of each absolute shard, most preferred first:
+  // up[i], acting[i], then strays.
+  vector<vector<int>> holders(size);
+  auto add_holder = [&](vector<int> &h, unsigned shard, int osd) {
+    if (osd != CRUSH_ITEM_NONE &&
+        usable(pg_shard_t(osd, shard_id_t(shard))) &&
+        std::find(h.begin(), h.end(), osd) == h.end()) {
+      h.push_back(osd);
+    }
+  };
+  for (unsigned i = 0; i < size; ++i) {
+    if (i < up.size()) {
+      add_holder(holders[i], i, up[i]);
+    }
+    if (i < acting.size()) {
+      add_holder(holders[i], i, acting[i]);
+    }
+  }
+  if (!restrict_to_up_acting) {
+    for (const auto &[shard, info] : all_info) {
+      if (shard.shard.id >= 0 && std::cmp_less(shard.shard.id, size)) {
+        add_holder(holders[shard.shard.id], shard.shard.id, shard.osd);
+      }
+    }
+  }
+
+  // With more than one zone, each zone block is served from a single CRUSH
+  // zone that no other block uses.  Choose the zones serving the most
+  // distinct relative shards, up to k, then those holding the most of their
+  // blocks' shards, counting a zone only if it holds at least k of them,
+  // then the most up[i] in those zones, then the most shards, then the most
+  // up[i], then the most acting[i].
+  const bool one_zone_per_block = pool.info.get_num_zone() > 1;
+  auto choose_block_zones = [&](const vector<vector<int>> &shard_holders) {
+    // (any holder if at least k, up[i] if at least k, any holder, up[i],
+    //  acting[i])
+    using held_t = std::array<unsigned, 5>;
+    using block_held_t = map<int, map<int, held_t>>; // block -> zone -> held
+    block_held_t held;
+    map<int, map<int, shard_id_set>> rel_held; // block -> zone -> rel shards
+    for (unsigned i = 0; i < size; ++i) {
+      const shard_id_t shard(i);
+      const int block_id = pool.info.get_shard_zone(shard);
+      auto &block = held[block_id];
+      set<int> zones;
+      for (int osd : shard_holders[i]) {
+        const int zone = get_crush_zone(osd);
+        auto &h = block[zone];
+        if (zones.insert(zone).second) {
+          ++h[2];
+          rel_held[block_id][zone].insert(pool.info.get_relative_shard(shard));
+        }
+        if (i < up.size() && osd == up[i]) {
+          ++h[3];
+        }
+        if (i < acting.size() && osd == acting[i]) {
+          ++h[4];
+        }
+      }
+    }
+    const unsigned k = pool.info.get_ec_data_shard_count();
+    for (auto &[block, zones] : held) {
+      for (auto &[zone, h] : zones) {
+        if (h[2] >= k) {
+          h[0] = h[2];
+          h[1] = h[3];
+        }
+      }
+    }
+
+    map<int, int> block_zone, trial;
+    set<int> used_zones;
+    std::pair<size_t, held_t> best{};
+    std::function<void(block_held_t::const_iterator, const held_t&,
+                       const shard_id_set&)> assign =
+      [&](block_held_t::const_iterator b, const held_t &total,
+          const shard_id_set &served) {
+        if (b == held.cend()) {
+          const std::pair score{std::min<size_t>(served.size(), k), total};
+          if (score > best) {
+            best = score;
+            block_zone = trial;
+          }
+          return;
+        }
+        assign(std::next(b), total, served);
+        for (const auto &[zone, h] : b->second) {
+          if (used_zones.insert(zone).second) {
+            trial[b->first] = zone;
+            held_t sum = total;
+            for (unsigned j = 0; j < sum.size(); ++j) {
+              sum[j] += h[j];
+            }
+            assign(std::next(b), sum, served | rel_held[b->first][zone]);
+            trial.erase(b->first);
+            used_zones.erase(zone);
+          }
+        }
+      };
+    assign(held.cbegin(), held_t{}, shard_id_set{});
+    return block_zone;
+  };
+  map<int, int> block_zone;
+  if (one_zone_per_block) {
+    block_zone = choose_block_zones(holders);
+    for (const auto &[block, zone] : block_zone) {
+      ss << "zone block " << block << " served from zone " << zone
+         << std::endl;
+    }
+  }
+
+  std::map<int, unsigned> zone_shard_count;
+  for (unsigned i = 0; i < size; ++i) {
+    ss << "For position " << i << ":";
+    const auto bz = block_zone.find(pool.info.get_shard_zone(shard_id_t(i)));
+    for (int osd : holders[i]) {
+      pg_shard_t shard(osd, shard_id_t(i));
+      const int zone = get_crush_zone(osd);
+      if (one_zone_per_block &&
+          (bz == block_zone.end() || zone != bz->second)) {
+        ss << " skipping " << shard << " (zone " << zone << ")";
+      } else if (zone_shard_count[zone] >= bucket_max) {
+        ss << " skipping " << shard << " (zone at bucket_max "
+           << bucket_max << ")";
+      } else {
+        ss << " selecting " << shard;
+        want[i] = osd;
+        ++zone_shard_count[zone];
+        break;
+      }
+    }
+    if (want[i] == CRUSH_ITEM_NONE) {
+      ss << " failed to fill position";
+    }
+    ss << std::endl;
+  }
+
+  // Backfill an up[i] not chosen for position i only if its block would be
+  // served from its zone once up holds its data, so that a completed
+  // backfill target joins want.  Strays outside want are left out so that
+  // calls restricted to up and acting (from Recovered) reach the same goal.
+  map<int, int> goal_zone;
+  if (one_zone_per_block && want != up) {
+    vector<vector<int>> goal(size);
+    for (unsigned i = 0; i < size; ++i) {
+      if (i < up.size() && up[i] != CRUSH_ITEM_NONE) {
+        goal[i].push_back(up[i]);
+      }
+      if (i < acting.size()) {
+        add_holder(goal[i], i, acting[i]);
+      }
+      add_holder(goal[i], i, want[i]);
+    }
+    goal_zone = choose_block_zones(goal);
+  }
+  for (unsigned i = 0; i < size && i < up.size(); ++i) {
+    if (up[i] == CRUSH_ITEM_NONE || want[i] == up[i]) {
+      continue;
+    }
+    pg_shard_t shard(up[i], shard_id_t(i));
+    if (one_zone_per_block) {
+      const int zone = get_crush_zone(up[i]);
+      const auto gz = goal_zone.find(pool.info.get_shard_zone(shard.shard));
+      if (gz == goal_zone.end() || gz->second != zone) {
+        ss << "not backfilling up[" << i << "]: " << shard << " (zone "
+           << zone << ")" << std::endl;
+        continue;
+      }
+    } else if (usable(shard)) {
+      continue;
+    }
+    ss << "backfilling up[" << i << "]: " << shard << std::endl;
+    backfill->insert(shard);
+  }
+
+  // acting_backfill includes all want and backfill items.
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
+    }
+  }
+  acting_backfill->insert(backfill->begin(), backfill->end());
+  _want->swap(want);
+}
+
 std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
 PeeringState::select_replicated_primary(
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -2483,11 +2716,12 @@ void PeeringState::choose_async_recovery_ec(
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
     ceph_assert(want_acting_size > 0);
-    --want_acting_size;
-    if ((want_acting_size >= pool.info.min_size) &&
+    if ((want_acting_size > pool.info.min_size) &&
+        pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL) &&
 	recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
+      --want_acting_size;
     }
   }
   psdout(20) << "result want=" << *want
@@ -2645,6 +2879,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       get_osdmap(),
       ss);
     if (pool.info.is_stretch_pool()) {
+      psdout(20) << "calling calc_replicated_acting_stretch for replicated pool in stretch mode" << dendl;
       calc_replicated_acting_stretch(
 	primary_shard,
 	oldest_log,
@@ -2661,6 +2896,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	pool,
 	ss);
     } else {
+      psdout(20) << "calling calc_replicated_acting for replicated pool (non-stretch mode)" << dendl;
       calc_replicated_acting(
 	primary_shard,
 	oldest_log,
@@ -2678,6 +2914,23 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
+    if (pool.info.is_stretch_pool()) {
+      psdout(20) << "calling calc_ec_acting_stretch for EC pool in stretch mode" << dendl;
+      calc_ec_acting_stretch(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      up,
+      all_info,
+      restrict_to_up_acting,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      get_osdmap(),
+      pool,
+      ss);
+    } else {
+      psdout(20) << "calling calc_ec_acting for EC pool (non-stretch mode)" << dendl;
     calc_ec_acting(
       auth_log_shard,
       get_osdmap()->get_pg_size(info.pgid.pgid),
@@ -2689,6 +2942,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       &want_backfill,
       &want_acting_backfill,
       ss);
+    }
   }
   psdout(10) << ss.str() << dendl;
 
