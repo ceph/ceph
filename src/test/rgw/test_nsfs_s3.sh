@@ -161,14 +161,28 @@ s3 get "s3://$BUCKET/shared/b.txt" /tmp/nsfs-sib2-get-$$.txt > /dev/null 2>&1
 check "sibling a GET matches" 'diff -q /tmp/nsfs-sib1-$$.txt /tmp/nsfs-sib1-get-$$.txt > /dev/null'
 check "sibling b GET matches" 'diff -q /tmp/nsfs-sib2-$$.txt /tmp/nsfs-sib2-get-$$.txt > /dev/null'
 
-# --- test listing (expected to be incomplete until Phase 3) ---
+# --- test listing ---
 
-log "listing (Phase 3 coverage — may show known gaps)"
+log "listing"
 LIST_OUT=$(s3 ls "s3://$BUCKET/" 2>/dev/null || true)
 check "listing returns something" '[ -n "$LIST_OUT" ]'
+check "listing shows flat.txt" 'echo "$LIST_OUT" | grep -q "flat.txt"'
+check "listing shows dir1/" 'echo "$LIST_OUT" | grep -q "dir1/"'
+
+LIST_DIR1=$(s3 ls "s3://$BUCKET/dir1/" 2>/dev/null || true)
+check "dir1/ listing shows file.txt" 'echo "$LIST_DIR1" | grep -q "file.txt"'
+
+LIST_SHARED=$(s3 ls "s3://$BUCKET/shared/" 2>/dev/null || true)
+check "shared/ listing shows a.txt" 'echo "$LIST_SHARED" | grep -q "a.txt"'
+check "shared/ listing shows b.txt" 'echo "$LIST_SHARED" | grep -q "b.txt"'
+
 if [ "$VERBOSE" -eq 1 ]; then
-  echo "  listing output:"
+  echo "  bucket listing:"
   echo "$LIST_OUT" | sed 's/^/    /'
+  echo "  dir1/ listing:"
+  echo "$LIST_DIR1" | sed 's/^/    /'
+  echo "  shared/ listing:"
+  echo "$LIST_SHARED" | sed 's/^/    /'
 fi
 
 # --- filesystem layout dump ---
