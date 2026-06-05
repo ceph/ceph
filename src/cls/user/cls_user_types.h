@@ -104,9 +104,9 @@ struct cls_user_bucket_entry {
   ceph::real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
-  std::optional<std::string> storage_class;
+  std::optional<std::unordered_map<std::string, cls_user_bucket_entry>> storage_class_stats;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false), storage_class({}) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false), storage_class_stats({}) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(10, 5, bl);
@@ -123,7 +123,7 @@ struct cls_user_bucket_entry {
     encode(user_stats_sync, bl);
     encode(creation_time, bl);
     //::encode(placement_rule, bl); removed in v9
-    encode(storage_class, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
@@ -154,7 +154,7 @@ struct cls_user_bucket_entry {
       decode(placement_rule, bl);
     }
     if (struct_v >= 10) {
-      decode(storage_class, bl);
+      decode(storage_class_stats, bl);
     }
     DECODE_FINISH(bl);
   }
