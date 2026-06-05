@@ -252,6 +252,15 @@ public:
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
+int resolve_path(const DoutPrefixProvider* dpp,
+                 Directory* root,
+                 const std::string& key_path,
+                 bool create_dirs,
+                 CephContext* cct,
+                 std::vector<std::unique_ptr<Directory>>& dir_chain,
+                 Directory*& leaf_dir,
+                 std::string& leaf_name);
+
 } // namespace nsfs
 
 class NSFSZoneGroup : public StoreZoneGroup {
@@ -898,6 +907,7 @@ private:
   NSFSDriver* driver;
   RGWAccessControlPolicy acls;
   std::unique_ptr<nsfs::FSEnt> ent;
+  std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
   std::map<std::string, int64_t> parts;
 
 public:
