@@ -456,20 +456,12 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   bde.ver.epoch = 1;
 
   switch (parent->get_type().type) {
-    case ObjectType::VERSIONED:
-      bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-      bde.exists = true;
-      if (flags & FSEnt::FLAG_CURRENT) {
-	  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-      }
-      break;
     case ObjectType::MULTIPART:
     case ObjectType::DIRECTORY:
       bde.exists = true;
       break;
     case ObjectType::UNKNOWN:
     case ObjectType::FILE:
-    case ObjectType::SYMLINK:
       return -EINVAL;
   }
 
@@ -1080,9 +1072,6 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     }
     ::close(tmpfd);
     switch (type.type) {
-    case ObjectType::VERSIONED:
-      nent = std::make_unique<VersionedDirectory>(name, this, instance, nstx, ctx);
-      break;
     case ObjectType::MULTIPART:
       nent = std::make_unique<MPDirectory>(name, this, nstx, ctx);
       break;
@@ -1093,8 +1082,6 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
       ldpp_dout(dpp, 0) << "ERROR: invalid type " << type << dendl;
       return -EINVAL;
     }
-  } else if (S_ISLNK(nstx.stx_mode)) {
-    nent = std::make_unique<Symlink>(name, this, nstx, ctx);
   } else {
     return -EINVAL;
   }
@@ -1131,103 +1118,6 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       << cpp_strerror(ret) << dendl;
     return ret;
   }
-
-  return 0;
-}
-
-int Symlink::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
-{
-  if (temp_file) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot create symlink with temp_file " << get_name() << dendl;
-    return -EINVAL;
-  }
-
-  int ret = symlinkat(target->get_name().c_str(), parent->get_fd(), fname.c_str());
-  if (ret < 0) {
-    ret = errno;
-    if (ret == EEXIST && existed != nullptr) {
-      *existed = true;
-    }
-    ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
-                      << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  return 0;
-}
-
-int Symlink::fill_target(const DoutPrefixProvider *dpp, Directory* parent, std::string sname, std::string tname, std::unique_ptr<FSEnt>& ent, CephContext* _ctx)
-{
-  int ret;
-
-  if (!tname.empty()) {
-      ret = parent->get_ent(dpp, null_yield, tname, std::string(), ent);
-      if (ret < 0) {
-	ent = std::make_unique<File>(tname, parent, _ctx);
-      }
-      return 0;
-  }
-
-  char link[PATH_MAX];
-  memset(link, 0, sizeof(link));
-  ret = readlinkat(parent->get_fd(), sname.c_str(), link, sizeof(link));
-  if (ret < 0) {
-    ret = errno;
-    return -ret;
-  }
-  ret = parent->get_ent(dpp, null_yield, link, std::string(), ent);
-  if (ret < 0) {
-    ent = std::make_unique<File>(link, parent, _ctx);
-  }
-  return 0;
-}
-
-int Symlink::stat(const DoutPrefixProvider* dpp, bool force)
-{
-  int ret = FSEnt::stat(dpp, force);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (!S_ISLNK(stx.stx_mode)) {
-    /* Not a symlink */
-    ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " is not a symlink" << dendl;
-    return -EINVAL;
-  }
-
-  struct statx sstx;
-  ret = statx(parent->get_fd(), fname.c_str(), 0, STATX_BASIC_STATS, &sstx);
-  if (ret >= 0) {
-    stx.stx_size = sstx.stx_size;
-  }
-
-  exist = true;
-  return fill_target(dpp, parent, get_name(), std::string(), target, ctx);
-}
-
-int Symlink::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
-{
-  if (target)
-    return target->read_attrs(dpp, y, attrs);
-
-  return FSEnt::read_attrs(dpp, y, attrs);
-}
-
-int Symlink::copy(const DoutPrefixProvider *dpp, optional_yield y,
-                      Directory* dst_dir, const std::string& dst_name)
-{
-  int ret = stat(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not stat source file " << get_name()
-                      << dendl;
-    return ret;
-  }
-  rgw_obj_key skey = decode_obj_key(target->get_name());
-  rgw_obj_key dkey = decode_obj_key(dst_name);
-  dkey.instance = skey.instance;
-  std::string tgtname = get_key_fname(dkey, /*use_version=*/true);
-
-  ret = symlinkat(tgtname.c_str(), dst_dir->get_fd(), dst_name.c_str());
 
   return 0;
 }
@@ -1368,489 +1258,8 @@ int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
-int VersionedDirectory::open(const DoutPrefixProvider* dpp)
-{
-  if (fd > 0) {
-    return 0;
-  }
-  int ret = Directory::open(dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (!instance_id.empty()) {
-    rgw_obj_key key = decode_obj_key(get_name());
-    key.instance = instance_id;
-    get_ent(dpp, null_yield, get_key_fname(key, /*use_version=*/true), std::string(), cur_version);
-  }
-
-  if (!cur_version) {
-    /* Can't open File, probably doesn't exist yet */
-    return 0;
-  }
-
-  return cur_version->open(dpp);
-}
-
-int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
-{
-  int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
-  if (ret < 0) {
-    ret = errno;
-    if (ret != EEXIST) {
-      if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create versioned directory " << get_name() << ": "
-	  << cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-  }
-
-  ret = open(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open versioned directory " << get_name()
-                      << dendl;
-    return ret;
-  }
-
-  /* Need type attribute written */
-  Attrs attrs;
-  ret = write_attrs(dpp, null_yield, attrs, nullptr);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attrs for versioned directory " << get_name()
-                      << dendl;
-    return ret;
-  }
-
-  if (temp_file) {
-    /* Want to create an actual versioned object */
-    rgw_obj_key key = decode_obj_key(get_name());
-    key.instance = instance_id;
-    std::unique_ptr<FSEnt> file = 
-        std::make_unique<File>(get_key_fname(key, /*use_version=*/true), this, ctx);
-    ret = add_file(dpp, std::move(file), existed, temp_file);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
-  return 0;
-}
-
-std::string VersionedDirectory::get_new_instance()
-{
-  return gen_rand_instance_name();
-}
-
-int VersionedDirectory::add_file(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt>&& file, bool* existed, bool temp_file)
-{
-  int ret = open(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open versioned directory " << get_name()
-                      << dendl;
-    return ret;
-  }
-
-  ret = file->create(dpp, existed, temp_file);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (!temp_file) {
-    return set_cur_version_ent(dpp, file.get());
-  }
-
-  cur_version = std::move(file);
-  return 0;
-}
-
-int VersionedDirectory::set_cur_version_ent(const DoutPrefixProvider* dpp, FSEnt* file)
-{
-  /* Delete current version symlink */
-  std::unique_ptr<FSEnt> del;
-  int ret = get_ent(dpp, null_yield, get_name(), std::string(), del);
-  if (ret >= 0) {
-    ret = del->remove(dpp, null_yield, /*delete_children=*/true);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove cur_version " << get_name()
-                        << dendl;
-      return ret;
-    }
-  }
-
-  /* Create new current version symlink */
-  std::unique_ptr<Symlink> sl =
-      std::make_unique<Symlink>(get_name(), this, file->get_name(), ctx);
-  ret = sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create cur_version symlink "
-                      << get_name() << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
-{
-  int ret = Directory::stat(dpp, force);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = open(dpp);
-  if (ret < 0)
-    return ret;
-
-  if (cur_version) {
-    /* Already have a File for the current version, use it */
-    ret = cur_version->stat(dpp);
-    if (ret < 0)
-      return ret;
-    stx.stx_size = cur_version->get_stx().stx_size;
-
-    return 0;
-  }
-
-  /* Try to read the symlink */
-  std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
-  ret = sl->stat(dpp);
-  if (ret < 0) {
-    if (ret == -ENOENT)
-      return 0;
-    return ret;
-  }
-
-  if (!sl->exists()) {
-    stx.stx_size = 0;
-    return 0;
-  }
-
-  cur_version = sl->get_target()->clone_base();
-  ret = cur_version->open(dpp);
-  if (ret < 0) {
-    /* If target doesn't exist, it's a delete marker */
-    cur_version.reset();
-    stx.stx_size = 0;
-    return 0;
-  }
-  ret = cur_version->stat(dpp);
-  if (ret < 0)
-    return ret;
-  stx.stx_size = cur_version->get_stx().stx_size;
-
-  return 0;
-}
-
-int VersionedDirectory::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
-{
-  if (!cur_version)
-    return FSEnt::read_attrs(dpp, y, attrs);
-
-  int ret = cur_version->read_attrs(dpp, y, attrs);
-  if (ret < 0) {
-    return ret;
-  }
-
-  /* Override type, it should be VERSIONED */
-  bufferlist type_bl;
-  ObjectType type{get_type()};
-  type.encode(type_bl);
-  attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
-
-  return 0;
-}
-
-int VersionedDirectory::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs)
-{
-  if (cur_version) {
-    int ret = cur_version->write_attrs(dpp, y, attrs, extra_attrs);
-    if (ret < 0)
-      return ret;
-  }
-
-  return FSEnt::write_attrs(dpp, y, attrs, extra_attrs);
-}
-
-int VersionedDirectory::write(int64_t ofs, bufferlist &bl,
-                              const DoutPrefixProvider *dpp, optional_yield y)
-{
-  if (!cur_version)
-    return 0;
-  return cur_version->write(ofs, bl, dpp, y);
-}
-
-int VersionedDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
-                    const DoutPrefixProvider *dpp, optional_yield y)
-{
-  if (!cur_version)
-    return 0;
-  return cur_version->read(ofs, left, bl, dpp, y);
-}
-
-int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                              std::string temp_fname)
-{
-  if (!cur_version)
-    return -EINVAL;
-  int ret = cur_version->link_temp_file(dpp, y, temp_fname);
-  if (ret < 0)
-    return ret;
-
-  return set_cur_version_ent(dpp, cur_version.get());
-}
-
-int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
-                      Directory* dst_dir, const std::string& dst_name)
-{
-  int ret;
-  rgw_obj_key dest_key = decode_obj_key(dst_name);
-  std::string basename = get_key_fname(dest_key, /*use_version=*/false);
-
-  // Delete the target
-  {
-    std::unique_ptr<FSEnt> del;
-    ret = dst_dir->get_ent(dpp, y, basename, std::string(), del);
-    if (ret >= 0) {
-      ret = del->remove(dpp, y, /*delete_children=*/true);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << basename
-                          << dendl;
-        return ret;
-      }
-    }
-  }
-
-  ret = dst_dir->open(dpp);
-  std::unique_ptr<VersionedDirectory> dest = clone();
-  dest->parent = dst_dir;
-  dest->fname = basename;
-
-  ret = dest->create(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create dest " << dest->get_name() << dendl;
-    return ret;
-  }
-
-  Attrs attrs;
-  ret = read_attrs(dpp, y, attrs);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not read attrs from " << get_name() << dendl;
-    return ret;
-  }
-  ret = dest->write_attrs(dpp, y, attrs, nullptr);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attrs to " << dest->get_name() << dendl;
-    return ret;
-  }
-
-  std::string tgtname;
-  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &dpp, &y](const char* name) {
-    std::unique_ptr<FSEnt> sobj;
-
-    if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
-    }
-    rgw_obj_key key = decode_obj_key(name);
-    if (!dest_key.instance.empty() && dest_key.instance != key.instance) {
-      /* Were asked to copy a single version, and this is not it */
-      return 0;
-    }
-
-    int r = this->get_ent(dpp, y, name, std::string(), sobj);
-    if (r < 0)
-      return r;
-    key.name = dest_key.name;
-    tgtname = get_key_fname(key, /*use_version=*/true);
-    return sobj->copy(dpp, y, dest.get(), tgtname);
-  });
-
-  if (!dest_key.instance.empty()) {
-    /* We didn't copy the symlink, make a new one */
-    std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(basename, dest.get(), tgtname, ctx);
-    ret = sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
-  }
-
-  return ret;
-}
-
-int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
-{
-  std::string tgtname;
-  bool newlink = false;
-
-  int ret = open(dpp);
-  if (ret < 0)
-    return ret;
-
-  if (instance_id.empty()) {
-    /* Check if directory is empty */
-    ret = for_each(dpp, [](const char *n) {
-      return -ENOENT;
-    });
-
-    if (ret == 0) {
-      /* We're empty, nuke us */
-      return Directory::remove(dpp, y, /*delete_children=*/true);
-    }
-
-    /* Add a delete marker */
-    rgw_obj_key key = decode_obj_key(get_name());
-    key.instance = gen_rand_instance_name();
-    tgtname = get_key_fname(key, /*use_version=*/true);
-    newlink = true;
-    ret = remove_symlink(dpp, y);
-    if (ret < 0) {
-      return ret;
-    }
-  } else {
-    /* Delete specific version */
-    rgw_obj_key key = decode_obj_key(get_name());
-    key.instance = instance_id;
-    std::string name = get_key_fname(key, /*use_version=*/true);
-
-    std::unique_ptr<FSEnt> f;
-    ret = get_ent(dpp, y, name, std::string(), f);
-    if (ret == 0) {
-      ret = f->stat(dpp);
-      if (ret < 0)
-        return ret;
-      ret = f->remove(dpp, y, /*delete_children=*/true);
-      if (ret < 0)
-        return ret;
-    } else if (ret == -ENOENT) {
-      /* See if we're removing a delete marker */
-      std::unique_ptr<Symlink> sl =
-          std::make_unique<Symlink>(get_name(), this, ctx);
-      ret = sl->stat(dpp);
-      if (ret == 0) {
-        if (name != sl->get_target()->get_name()) {
-	  /* Symlink didn't match, don't change anything */
-	  return 0;
-	}
-      }
-      /* FALLTHROUGH */
-    } else {
-      return ret;
-    }
-
-    /* Possibly move symlink */
-    ret = remove_symlink(dpp, y, name);
-    if (ret < 0) {
-      if (ret == -ENOKEY) {
-        return 0;
-      }
-      return ret;
-    }
-    newlink = true;
-    /* Create new current version symlink */
-    ret = for_each(dpp, [&tgtname](const char *n) {
-      if (n[0] == '.') {
-        /* Skip dotfiles */
-        return 0;
-      }
-
-      tgtname = n;
-      return 0;
-    });
-
-    if (tgtname.empty()) {
-      /* We're empty, nuke us */
-      exist = false;
-      return Directory::remove(dpp, y, /*delete_children=*/true);
-    }
-  }
-
-  if (newlink) {
-    exist = true;
-    std::unique_ptr<Symlink> sl =
-        std::make_unique<Symlink>(get_name(), this, tgtname, ctx);
-    return sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
-  }
-  return 0;
-}
-
-int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                                   fill_cache_cb_t &cb, uint32_t flags)
-{
-  /* Fill cur_version */
-  stat(dpp, /*force=*/false);
-
-  int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
-    std::unique_ptr<FSEnt> ent;
-
-    if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
-    }
-
-    int ret = get_ent(dpp, y, name, std::string(), ent);
-    if (ret < 0)
-      return ret;
-
-    ent->stat(dpp); // Stat the object to get the type
-
-    if (ent->get_type() != ObjectType::SYMLINK) {
-      uint32_t fill_flags =
-          (cur_version &&
-           (ent->get_name() == cur_version->get_name())) ?
-        FSEnt::FLAG_CURRENT :
-        FSEnt::FLAG_NONE;
-
-      ret = ent->fill_cache(dpp, y, cb, fill_flags);
-      if (ret < 0)
-        return ret;
-    }
-    return 0;
-  });
-
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list directory " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-std::string VersionedDirectory::get_cur_version()
-{
-  if (!cur_version)
-    return "";
-
-  rgw_obj_key key = decode_obj_key(cur_version->get_name());
-
-  return key.instance;
-}
-
-int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match)
-{
-  int ret;
-
-  std::unique_ptr<Symlink> sl =
-      std::make_unique<Symlink>(get_name(), this, ctx);
-  ret = sl->stat(dpp);
-  if (ret < 0) {
-    /* Doesn't exist, nothing to do */
-    if (ret == -ENOENT)
-      return 0;
-    return ret;
-  }
-
-  if (!match.empty()) {
-    if (match != sl->get_target()->get_name())
-      return -ENOKEY;
-  }
-
-  ret = sl->remove(dpp, y, /*delete_children=*/false);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
-}
-
 } // namespace nsfs
+
 
 bool NSFSZoneGroup::placement_target_exists(std::string& target) const {
   return !!group->placement_targets.count(target);
@@ -2642,9 +2051,6 @@ if (max <= 0) {
 	// bde.key can be encoded with the namespace.  Decode it here
 	rgw_obj_key bde_key{bde.key};
 	if (!params.list_versions && !bde.is_visible()) {
-	  return true;
-	}
-	if (params.list_versions && versioned() && bde_key.instance.empty()) {
 	  return true;
 	}
         if (bde_key.ns != params.ns) {
@@ -3540,18 +2946,6 @@ int NSFSObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key)
   return 0;
 }
 
-int NSFSObject::set_cur_version(const DoutPrefixProvider *dpp)
-{
-  VersionedDirectory* vdir = static_cast<VersionedDirectory*>(ent.get());
-  std::unique_ptr<FSEnt> child;
-  int ret = vdir->get_ent(dpp, null_yield, get_fname(true), std::string(), child);
-  if (ret < 0)
-    return ret;
-
-  ret = vdir->set_cur_version_ent(dpp, child.get());
-  return ret;
-}
-
 int NSFSObject::stat(const DoutPrefixProvider* dpp)
 {
   int ret;
@@ -3602,17 +2996,9 @@ int NSFSObject::make_ent(ObjectType type)
       ent = std::make_unique<Directory>(
           get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
       break;
-    case ObjectType::SYMLINK:
-      ent = std::make_unique<Symlink>(
-          get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
-      break;
     case ObjectType::MULTIPART:
       ent = std::make_unique<MPDirectory>(
           get_fname(/*use_version=*/true), static_cast<NSFSBucket *>(bucket)->get_dir(), driver->ctx());
-      break;
-    case ObjectType::VERSIONED:
-      ent = std::make_unique<VersionedDirectory>(
-          get_fname(/*use_version=*/false), static_cast<NSFSBucket *>(bucket)->get_dir(), get_instance(), driver->ctx());
       break;
   }
 
@@ -3654,11 +3040,7 @@ int NSFSObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
       if (!create) {
 	return ret;
       }
-      if (versioned()) {
-        ret = make_ent(ObjectType::VERSIONED);
-      } else {
-        ret = make_ent(ObjectType::FILE);
-      }
+      ret = make_ent(ObjectType::FILE);
     }
   }
   if (ret < 0) {
@@ -4347,14 +3729,6 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  NSFSObject *to = static_cast<NSFSObject*>(target_obj);
-  NSFSBucket *sb = static_cast<NSFSBucket*>(target_obj->get_bucket());
-  if (sb->versioned()) {
-    ret = to->set_cur_version(dpp);
-    if (ret < 0) {
-      return ret;
-    }
-  }
   return 0;
 }
 
@@ -4532,11 +3906,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
 {
   int ret;
 
-  if (obj->versioned()) {
-    ret = obj->make_ent(ObjectType::VERSIONED);
-  } else {
-    ret = obj->make_ent(ObjectType::FILE);
-  }
+  ret = obj->make_ent(ObjectType::FILE);
   if (ret < 0) {
     return ret;
   }
