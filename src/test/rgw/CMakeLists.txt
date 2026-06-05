@@ -462,6 +462,20 @@ target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
   ${rgw_libs} ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
+if(WITH_RADOSGW_NSFS)
+# unittest_rgw_nsfs_driver
+add_executable(unittest_rgw_nsfs_driver
+	test_rgw_nsfs_driver.cc)
+add_ceph_unittest(unittest_rgw_nsfs_driver)
+target_compile_definitions(unittest_rgw_nsfs_driver PUBLIC LMDB_SAFE_NO_CPP_UTILITIES)
+target_include_directories(unittest_rgw_nsfs_driver
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/nsfs"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
+target_link_libraries(unittest_rgw_nsfs_driver ${UNITTEST_LIBS}
+  ${rgw_libs} ${LMDB_LIBRARIES})
+endif(WITH_RADOSGW_NSFS)
+
 if(WITH_RADOSGW_RADOS)
 # ceph_test_datalog
 add_executable(ceph_test_datalog test_datalog.cc)
