@@ -864,6 +864,101 @@ TEST_F(NSFSObjectTest, ObjectDelete)
   EXPECT_FALSE(sf::exists(tp));
 }
 
+TEST_F(NSFSBucketTest, HierarchicalDelete)
+{
+  // Write a deep object
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("dir1/dir2/file.txt");
+
+  sf::path dir1{bp / "root" / testname / "dir1"};
+  sf::path dir2{bp / "root" / testname / "dir1" / "dir2"};
+  sf::path file{bp / "root" / testname / "dir1" / "dir2" / "file.txt"};
+  ASSERT_TRUE(sf::is_directory(dir1));
+  ASSERT_TRUE(sf::is_directory(dir2));
+  ASSERT_TRUE(sf::is_regular_file(file));
+
+  // Delete the object
+  std::unique_ptr<rgw::sal::Object> obj =
+    bucket->get_object(rgw_obj_key("dir1/dir2/file.txt"));
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  int ret = del_op->delete_obj(env->dpp, null_yield, 0);
+  EXPECT_EQ(ret, 0);
+
+  // File and empty parent dirs should be gone
+  EXPECT_FALSE(sf::exists(file));
+  EXPECT_FALSE(sf::exists(dir2));
+  EXPECT_FALSE(sf::exists(dir1));
+}
+
+TEST_F(NSFSBucketTest, DeletePreservesNeighbors)
+{
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("dir1/a.txt");
+  write("dir1/b.txt");
+
+  sf::path dir1{bp / "root" / testname / "dir1"};
+  sf::path file_a{bp / "root" / testname / "dir1" / "a.txt"};
+  sf::path file_b{bp / "root" / testname / "dir1" / "b.txt"};
+  ASSERT_TRUE(sf::is_regular_file(file_a));
+  ASSERT_TRUE(sf::is_regular_file(file_b));
+
+  // Delete only a.txt
+  std::unique_ptr<rgw::sal::Object> obj =
+    bucket->get_object(rgw_obj_key("dir1/a.txt"));
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  int ret = del_op->delete_obj(env->dpp, null_yield, 0);
+  EXPECT_EQ(ret, 0);
+
+  // a.txt gone, but dir1/ and b.txt preserved
+  EXPECT_FALSE(sf::exists(file_a));
+  EXPECT_TRUE(sf::is_directory(dir1));
+  EXPECT_TRUE(sf::is_regular_file(file_b));
+}
+
 TEST_F(NSFSObjectTest, BucketList)
 {
   std::unique_ptr<rgw::sal::Object> obj1 = write_object(testname + "-1");
