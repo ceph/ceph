@@ -170,7 +170,10 @@ check "listing shows flat.txt" 'echo "$LIST_OUT" | grep -q "flat.txt"'
 check "listing shows dir1/" 'echo "$LIST_OUT" | grep -q "dir1/"'
 
 LIST_DIR1=$(s3 ls "s3://$BUCKET/dir1/" 2>/dev/null || true)
-check "dir1/ listing shows file.txt" 'echo "$LIST_DIR1" | grep -q "file.txt"'
+check "dir1/ listing shows dir2/" 'echo "$LIST_DIR1" | grep -q "dir2/"'
+
+LIST_DIR2=$(s3 ls "s3://$BUCKET/dir1/dir2/" 2>/dev/null || true)
+check "dir1/dir2/ listing shows file.txt" 'echo "$LIST_DIR2" | grep -q "file.txt"'
 
 LIST_SHARED=$(s3 ls "s3://$BUCKET/shared/" 2>/dev/null || true)
 check "shared/ listing shows a.txt" 'echo "$LIST_SHARED" | grep -q "a.txt"'
@@ -184,6 +187,21 @@ if [ "$VERBOSE" -eq 1 ]; then
   echo "  shared/ listing:"
   echo "$LIST_SHARED" | sed 's/^/    /'
 fi
+
+# --- test DELETE with directory cleanup ---
+
+log "hierarchical DELETE"
+s3 del "s3://$BUCKET/dir1/dir2/file.txt" > /dev/null 2>&1
+check "file.txt removed from disk" '[ ! -f "$NSFS_ROOT/$BUCKET/dir1/dir2/file.txt" ]'
+check "dir2/ cleaned up" '[ ! -d "$NSFS_ROOT/$BUCKET/dir1/dir2" ]'
+check "dir1/ cleaned up" '[ ! -d "$NSFS_ROOT/$BUCKET/dir1" ]'
+
+log "DELETE preserves neighbors"
+check "shared/ still exists" '[ -d "$NSFS_ROOT/$BUCKET/shared" ]'
+s3 del "s3://$BUCKET/shared/a.txt" > /dev/null 2>&1
+check "a.txt removed" '[ ! -f "$NSFS_ROOT/$BUCKET/shared/a.txt" ]'
+check "shared/ preserved (b.txt remains)" '[ -d "$NSFS_ROOT/$BUCKET/shared" ]'
+check "b.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/shared/b.txt" ]'
 
 # --- filesystem layout dump ---
 

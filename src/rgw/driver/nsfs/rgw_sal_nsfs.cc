@@ -2599,6 +2599,15 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   ret = ent->remove(dpp, y, /*delete_children=*/false);
+  if (ret < 0)
+    return ret;
+
+  for (auto it = dir_chain.rbegin(); it != dir_chain.rend(); ++it) {
+    int r = (*it)->remove(dpp, y, /*delete_children=*/false);
+    if (r < 0)
+      break;
+  }
+  dir_chain.clear();
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
