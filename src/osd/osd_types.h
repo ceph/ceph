@@ -1940,6 +1940,7 @@ public:
     }
     return shard.id / get_zone_size();
   }
+
   /// EC multi-zone: inverse of get_relative_shard() for the given zone
   shard_id_t get_abs_shard(const shard_id_t rel_shard, int zone) const {
     return shard_id_t(rel_shard.id + zone * get_zone_size());

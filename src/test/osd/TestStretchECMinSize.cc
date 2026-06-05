@@ -459,6 +459,20 @@ TEST_F(StretchECMinSizeTest, PerDatacenterTakeRule_FindsBothZones)
 }
 
 // stretch_set_can_peer skips NONE entries and honors the mandatory member.
+TEST_F(StretchECMinSizeTest, StretchSetCanPeer_NoneEntriesAndMandatoryMember)
+{
+  const int N = CRUSH_ITEM_NONE;
+  EXPECT_FALSE(pool->stretch_set_can_peer(vector<int>{0, 1, 2, N, N, N}, *osdmap, nullptr));
+  EXPECT_TRUE(pool->stretch_set_can_peer(vector<int>{0, N, N, 3, N, N}, *osdmap, nullptr));
+  EXPECT_FALSE(pool->stretch_set_can_peer(vector<int>(6, N), *osdmap, nullptr));
+
+  pg_pool_t degraded = *pool;
+  degraded.peering_crush_bucket_count = 1;
+  degraded.peering_crush_mandatory_member = osdmap->crush->get_item_id("dc1");
+  EXPECT_FALSE(degraded.stretch_set_can_peer(vector<int>{0, 1, 2, N, N, N}, *osdmap, nullptr));
+  EXPECT_TRUE(degraded.stretch_set_can_peer(vector<int>{N, N, N, 3, 4, 5}, *osdmap, nullptr));
+  EXPECT_TRUE(degraded.stretch_set_can_peer(vector<int>{N, N, N, 3, N, N}, *osdmap, nullptr));
+}
 
 // A profile with crush-device-class makes the stretch rule TAKE the shadow
 // root default~hdd; its datacenters are shadow buckets and must still count

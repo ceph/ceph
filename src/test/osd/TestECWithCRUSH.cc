@@ -403,12 +403,104 @@ protected:
 };
 
 // Losing a whole zone leaves the PG peered until degraded stretch mode names the surviving zone as mandatory.
+TEST_F(TestECStretchPeering, ZoneLoss_PeeredUntilDegradedStretchMode)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> acting;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &acting, &acting_primary);
+  const int zone_size = k + m;
+  const int primary_zone =
+    osdmap->crush->get_parent_of_type(acting_primary, 8,
+                                      osdmap->get_pg_pool(pool_id)->crush_rule);
+  vector<int> other_zone_osds;
+  for (int i = 0; i < num_zones * zone_size; ++i) {
+    if (osdmap->crush->get_parent_of_type(
+          i, 8, osdmap->get_pg_pool(pool_id)->crush_rule) != primary_zone) {
+      other_zone_osds.push_back(i);
+    }
+  }
+  ASSERT_EQ(other_zone_osds.size(), (size_t)zone_size);
+
+  mark_osds_down(other_zone_osds);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  EXPECT_TRUE(ps->is_peered()) << get_state_name(0);
+  EXPECT_FALSE(ps->is_active()) << get_state_name(0);
+
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  pg_pool_t degraded = *new_osdmap->get_pg_pool(pool_id);
+  degraded.peering_crush_bucket_count = 1;
+  degraded.peering_crush_bucket_target = 1;
+  degraded.peering_crush_mandatory_member = primary_zone;
+  OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
+  inc.fsid = new_osdmap->get_fsid();
+  inc.new_pools[pool_id] = degraded;
+  new_osdmap->apply_incremental(inc);
+  update_osdmap_with_peering(new_osdmap);
+
+  ps = get_primary_test_pg()->get_peering_state();
+  EXPECT_TRUE(ps->is_active()) << get_state_name(0);
+}
 
 // A pg-upmap swapping the two zone blocks while a pg_temp still pins the old
 // acting set, with a trimmed log so the up OSDs need backfill for their new
 // shards.  The old acting set keeps serving and the up OSDs are backfilled.
 
-// Zone 1 loses two OSDs, then a pg-upmap moves zone block 1 onto the zone 0
-// OSDs serving block 0 while a pg_temp keeps block 0 there with a lone
-// shard 3 in zone 1.  Once the up OSDs are backfilled, Recovered must ask to
-// drop the pg_temp rather than abort in choose_acting.
+// A pg-upmap swaps the two zone blocks while a pg_temp keeps the old acting
+// set.  Once every up OSD is backfilled, Recovered must ask to drop the
+// pg_temp rather than abort in choose_acting.
+
+// An older release's 'osd pool stretch set' gave this 2+1 pool stretch values
+// over two datacenters and left its size at 3, so the pool has one zone.
+class TestECOlderStretchValues : public ECCrushTestFixture {
+public:
+  TestECOlderStretchValues() : ECCrushTestFixture() {
+    k = 2;
+    m = 1;
+    ec_plugin = "isa";
+  }
+
+protected:
+  void pre_peering_hook() override {
+    ECCrushTestFixture::pre_peering_hook();
+    // osd.0 and osd.1 in datacenter zone-0, osd.2 in zone-1
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+    int root = 0;
+    int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             crush.get_type_id("root"), 0, nullptr, nullptr,
+                             &root);
+    ceph_assert(r == 0);
+    crush.set_item_name(root, "default");
+    for (int osd = 0; osd < k + m; ++osd) {
+      OSDMapTestHelpers::insert_stretch_osd(g_ceph_context, crush, osd, osd / 2);
+    }
+    std::stringstream ss;
+    const int rule = crush.add_simple_rule(
+      "ec_rule", "default", "host", "", "indep", pg_pool_t::TYPE_ERASURE, &ss);
+    ceph_assert(rule >= 0);
+    crush.finalize();
+
+    pg_pool_t updated = *osdmap->get_pg_pool(pool_id);
+    updated.crush_rule = rule;
+    updated.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
+    updated.peering_crush_bucket_target = 2;
+    updated.peering_crush_bucket_count = 2;
+    updated.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+    inc.fsid = osdmap->get_fsid();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    inc.new_pools[pool_id] = updated;
+    osdmap->apply_incremental(inc);
+  }
+};
+
+TEST_F(TestECOlderStretchValues, PeersAsOneZone)
+{
+  ASSERT_EQ(1u, osdmap->get_pg_pool(pool_id)->get_num_zones());
+  ASSERT_TRUE(all_shards_active());
+  const std::string data(stripe_unit * k, 'A');
+  create_and_write_verify("obj", data);
+}
