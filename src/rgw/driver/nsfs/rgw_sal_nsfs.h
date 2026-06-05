@@ -42,9 +42,7 @@ struct ObjectType {
     UNKNOWN = 0,
     FILE = 1,
     DIRECTORY = 2,
-    VERSIONED = 3,
     MULTIPART = 4,
-    SYMLINK = 5,
   };
   uint32_t type{UNKNOWN};
 
@@ -82,14 +80,8 @@ struct ObjectType {
     case DIRECTORY:
       out << "DIRECTORY";
       break;
-    case VERSIONED:
-      out << "VERSIONED";
-      break;
     case MULTIPART:
       out << "MULTIPART";
-      break;
-    case SYMLINK:
-      out << "SYMLINK";
       break;
     }
     return out;
@@ -222,40 +214,6 @@ public:
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
 
-class Symlink: public File {
-  std::unique_ptr<FSEnt> target;
-public:
-  Symlink(std::string _name, Directory* _parent, std::string _tgt, CephContext* _ctx) :
-    File(_name, _parent, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
-  Symlink(std::string _name, Directory* _parent, CephContext* _ctx) :
-    File(_name, _parent, _ctx)
-    {}
-  Symlink(std::string _name, Directory* _parent, struct statx& _stx, std::string _tgt, CephContext* _ctx) :
-    File(_name, _parent, _stx, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
-  Symlink(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) :
-    File(_name, _parent, _stx, _ctx)
-    {}
-  Symlink(const Symlink& _s) : File(_s) {}
-  virtual ~Symlink() { close(); }
-
-  static int fill_target(const DoutPrefixProvider *dpp, Directory* parent, std::string sname, std::string tname, std::unique_ptr<FSEnt>& ent, CephContext* _ctx);
-
-  virtual ObjectType get_type() override { return ObjectType::SYMLINK; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
-  FSEnt* get_target() { return target.get(); }
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<Symlink>(*this);
-  }
-  std::unique_ptr<Symlink> clone() {
-    return std::make_unique<Symlink>(*this);
-  }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-};
-
 class MPDirectory : public Directory {
   std::string tmpname;
 protected:
@@ -289,67 +247,6 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
-};
-
-class VersionedDirectory : public Directory {
-protected:
-  std::string instance_id;
-  std::unique_ptr<FSEnt> cur_version;
-
-public:
-  VersionedDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::string _instance_id, CephContext* _ctx) :
-    Directory(_name, _parent, _ctx),
-    instance_id(_instance_id)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::unique_ptr<FSEnt>&& _cur, CephContext* _ctx) :
-    Directory(_name, _parent, _ctx),
-    cur_version(std::move(_cur))
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : Directory(_name, _parent, _stx, _ctx)
-    {}
-  VersionedDirectory(std::string _name, Directory* _parent, std::string _instance_id, struct statx& _stx, CephContext* _ctx) :
-    Directory(_name, _parent, _stx, _ctx),
-    instance_id(_instance_id)
-    {}
-  VersionedDirectory(const VersionedDirectory& _d) :
-    Directory(_d),
-    instance_id(_d.instance_id),
-    cur_version(_d.cur_version ? _d.cur_version->clone_base() : nullptr)
-    { }
-  VersionedDirectory(const Directory& _d) :
-    Directory(_d)
-    { }
-  virtual ~VersionedDirectory() { close(); }
-
-  virtual ObjectType get_type() override { return ObjectType::VERSIONED; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int open(const DoutPrefixProvider *dpp) override;
-  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
-  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs) override;
-  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
-  virtual std::string get_cur_version() override;
-  std::string get_new_instance();
-  int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
-  int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
-  FSEnt* get_cur_version_ent() { return cur_version.get(); };
-  int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
-  virtual std::unique_ptr<FSEnt> clone_base() override {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  virtual std::unique_ptr<Directory> clone_dir() override {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  std::unique_ptr<VersionedDirectory> clone() {
-    return std::make_unique<VersionedDirectory>(*this);
-  }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 };
 
@@ -1149,10 +1046,8 @@ public:
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj);
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
-  int set_cur_version(const DoutPrefixProvider *dpp);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
-  bool versioned() { return bucket->versioned(); }
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
