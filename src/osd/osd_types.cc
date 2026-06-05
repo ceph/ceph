@@ -2553,6 +2553,9 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
   // PGs until the upgrade is committed, so they must count alike.
   const bool stretch_zones = osdmap.stretch_zones();
   for (int osdid : want) {
+    if (stretch_zones && osdid == CRUSH_ITEM_NONE) {
+      continue;
+    }
     int ancestor = crush->get_parent_of_type(osdid, barrier_id,
 					     crush_rule);
     ancestors.insert(stretch_zones ? crush->get_non_shadow_id(ancestor)
