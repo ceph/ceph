@@ -6,6 +6,8 @@ overrides:
       - or freeform for custom applications
       - POOL_APP_NOT_ENABLED
       - is down
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
       - OSD_DOWN
       - mons down
       - mon down
