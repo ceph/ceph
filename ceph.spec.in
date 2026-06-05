@@ -952,10 +952,14 @@ Group:		System/Filesystems
 Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-osd < %{_epoch_prefix}%{version}-%{release}
 Requires:	binutils
+%if 0%{?rhel} && 0%{?rhel} < 10
+Requires:	c-ares
+%else
 %if 0%{?suse_version}
 Requires:	libcares2 >= %{c_ares_min_version}
 %else
 Requires:	c-ares >= %{c_ares_min_version}
+%endif
 %endif
 Requires:	protobuf
 %description osd-crimson
