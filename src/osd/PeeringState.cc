@@ -1883,6 +1883,262 @@ void PeeringState::calc_ec_acting(
   _want->swap(want);
 }
 
+namespace {
+// How well a CRUSH zone can serve a zone block, counted over the block's
+// positions that the zone holds.  Like calc_ec_acting, prefer up[i] and
+// acting[i] to strays.  Compared member by member, in order.  Not local to
+// calc_ec_acting_stretch(): GCC 13 cannot compare a local class with a
+// defaulted operator<=> inside std::pair.
+struct zone_fit_t {
+  unsigned up_or_acting = 0; // positions held by up[i] or acting[i]
+  unsigned up = 0;           // positions held by up[i]
+  unsigned held_if_recoverable = 0; // held, if these shards can recover
+  unsigned held = 0;         // positions held
+  unsigned acting = 0;       // positions held by acting[i]
+
+  auto operator<=>(const zone_fit_t &) const = default;
+  zone_fit_t operator+(const zone_fit_t &o) const {
+    return {up_or_acting + o.up_or_acting, up + o.up,
+            held_if_recoverable + o.held_if_recoverable, held + o.held,
+            acting + o.acting};
+  }
+};
+} // anonymous namespace
+
+void PeeringState::calc_ec_acting_stretch(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  unsigned size,
+  const vector<int> &acting,
+  const vector<int> &up,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool restrict_to_up_acting,
+  vector<int> *_want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
+  const PGPool& pool,
+  const IsPGRecoverablePredicate &is_recoverable,
+  ostream &ss)
+{
+  // For EC pools with stretch mode, each zone must have a complete set of k+m shards.
+  // We don't support zones having a subset of k+m shards.
+  ceph_assert(pool.info.peering_crush_bucket_target > 0);
+  ceph_assert(pool.info.size % pool.info.peering_crush_bucket_target == 0);
+  // bucket_max is the maximum number of items that can be in a single bucket.
+  // With the assertion above, size is evenly divisible by num_zones, so this is always exact.
+  unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
+
+  vector<int> want(size, CRUSH_ITEM_NONE);
+
+  boost::container::flat_map<int, int> osd_to_zone; // osd id -> CRUSH zone id
+  auto get_crush_zone = [&](int osd) -> int {
+    auto [it, inserted] = osd_to_zone.try_emplace(osd, 0);
+    if (inserted) {
+      it->second = osdmap->crush->get_parent_of_type(
+        osd,
+        pool.info.peering_crush_bucket_barrier,
+        pool.info.crush_rule);
+    }
+    return it->second;
+  };
+
+  auto usable = [&](const pg_shard_t &shard) {
+    auto it = all_info.find(shard);
+    return it != all_info.end() &&
+           !it->second.is_incomplete() &&
+           it->second.last_update >= auth_log_shard->second.log_tail;
+  };
+
+  // OSDs with a usable copy of each absolute shard, most preferred first:
+  // up[i], acting[i], then strays.
+  vector<vector<int>> holders(size);
+  auto add_holder = [&](vector<int> &h, unsigned shard, int osd) {
+    if (osd != CRUSH_ITEM_NONE &&
+        usable(pg_shard_t(osd, shard_id_t(shard))) &&
+        std::find(h.begin(), h.end(), osd) == h.end()) {
+      h.push_back(osd);
+    }
+  };
+  for (unsigned i = 0; i < size; ++i) {
+    if (i < up.size()) {
+      add_holder(holders[i], i, up[i]);
+    }
+    if (i < acting.size()) {
+      add_holder(holders[i], i, acting[i]);
+    }
+  }
+  if (!restrict_to_up_acting) {
+    for (const auto &[shard, info] : all_info) {
+      if (shard.shard.id >= 0 && std::cmp_less(shard.shard.id, size)) {
+        add_holder(holders[shard.shard.id], shard.shard.id, shard.osd);
+      }
+    }
+  }
+
+  // With more than one zone, each zone block is served from a single CRUSH
+  // zone that no other block uses.
+  const bool one_zone_per_block = pool.info.get_num_zones() > 1;
+
+  struct zone_holding_t {
+    zone_fit_t fit;
+    set<pg_shard_t> shards;
+  };
+  using block_holdings_t = map<int, map<int, zone_holding_t>>; // block -> zone
+
+  // Returns the CRUSH zone serving each block that is served.
+  auto choose_block_zones = [&](const vector<vector<int>> &shard_holders,
+                                const vector<int> &cur_acting) {
+    block_holdings_t holdings;
+    for (unsigned i = 0; i < size; ++i) {
+      auto &block = holdings[pool.info.get_shard_zone(shard_id_t(i))];
+      set<int> held_zones, up_acting_zones;
+      for (int osd : shard_holders[i]) {
+        const int zone = get_crush_zone(osd);
+        auto &h = block[zone];
+        h.shards.insert(pg_shard_t(osd, shard_id_t(i)));
+        if (held_zones.insert(zone).second) {
+          ++h.fit.held;
+        }
+        const bool is_up = i < up.size() && osd == up[i];
+        const bool is_acting = i < cur_acting.size() && osd == cur_acting[i];
+        if ((is_up || is_acting) && up_acting_zones.insert(zone).second) {
+          ++h.fit.up_or_acting;
+        }
+        if (is_up) {
+          ++h.fit.up;
+        }
+        if (is_acting) {
+          ++h.fit.acting;
+        }
+      }
+    }
+    for (auto &[block, zones] : holdings) {
+      for (auto &[zone, h] : zones) {
+        if (is_recoverable(h.shards)) {
+          h.fit.held_if_recoverable = h.fit.held;
+        }
+      }
+    }
+
+    // assign() tries, for each block from b on, every zone holding some of
+    // its shards that no earlier block uses, and also leaving the block
+    // unserved.  fit and served are the sums for the blocks before b.  Once
+    // every block is decided, it keeps the first best choice: one whose
+    // shards can recover the PG, then the one with the highest fit.
+    using score_t = std::pair<bool, zone_fit_t>;
+    score_t best{};
+    map<int, int> block_zone, trial;
+    set<int> used_zones;
+    std::function<void(block_holdings_t::const_iterator, const zone_fit_t &,
+                       const set<pg_shard_t> &)> assign =
+      [&](block_holdings_t::const_iterator b, const zone_fit_t &fit,
+          const set<pg_shard_t> &served) {
+        if (b == holdings.cend()) {
+          const score_t score{is_recoverable(served), fit};
+          if (score > best) {
+            best = score;
+            block_zone = trial;
+          }
+          return;
+        }
+        assign(std::next(b), fit, served);
+        for (const auto &[zone, h] : b->second) {
+          if (used_zones.insert(zone).second) {
+            trial[b->first] = zone;
+            set<pg_shard_t> more = served;
+            more.insert(h.shards.begin(), h.shards.end());
+            assign(std::next(b), fit + h.fit, more);
+            trial.erase(b->first);
+            used_zones.erase(zone);
+          }
+        }
+      };
+    assign(holdings.cbegin(), zone_fit_t{}, set<pg_shard_t>{});
+    return block_zone;
+  };
+  map<int, int> block_zone;
+  if (one_zone_per_block) {
+    block_zone = choose_block_zones(holders, acting);
+    for (const auto &[block, zone] : block_zone) {
+      ss << "zone block " << block << " served from zone " << zone
+         << std::endl;
+    }
+  }
+
+  std::map<int, unsigned> zone_shard_count;
+  for (unsigned i = 0; i < size; ++i) {
+    ss << "For position " << i << ":";
+    const auto bz = block_zone.find(pool.info.get_shard_zone(shard_id_t(i)));
+    for (int osd : holders[i]) {
+      pg_shard_t shard(osd, shard_id_t(i));
+      const int zone = get_crush_zone(osd);
+      if (one_zone_per_block &&
+          (bz == block_zone.end() || zone != bz->second)) {
+        ss << " skipping " << shard << " (zone " << zone << ")";
+      } else if (zone_shard_count[zone] >= bucket_max) {
+        ss << " skipping " << shard << " (zone at bucket_max "
+           << bucket_max << ")";
+      } else {
+        ss << " selecting " << shard;
+        want[i] = osd;
+        ++zone_shard_count[zone];
+        break;
+      }
+    }
+    if (want[i] == CRUSH_ITEM_NONE) {
+      ss << " failed to fill position";
+    }
+    ss << std::endl;
+  }
+
+  // Backfill an up[i] not chosen for position i only if its block would be
+  // served from its zone once up holds its data, so that a completed
+  // backfill target joins want.  Strays outside want are left out so that
+  // calls restricted to up and acting (from Recovered) reach the same goal.
+  map<int, int> goal_zone;
+  if (one_zone_per_block && want != up) {
+    vector<vector<int>> goal(size);
+    for (unsigned i = 0; i < size; ++i) {
+      if (i < up.size() && up[i] != CRUSH_ITEM_NONE) {
+        goal[i].push_back(up[i]);
+      }
+      if (i < acting.size()) {
+        add_holder(goal[i], i, acting[i]);
+      }
+      add_holder(goal[i], i, want[i]);
+    }
+    goal_zone = choose_block_zones(goal, want);
+  }
+  for (unsigned i = 0; i < size && i < up.size(); ++i) {
+    if (up[i] == CRUSH_ITEM_NONE || want[i] == up[i]) {
+      continue;
+    }
+    pg_shard_t shard(up[i], shard_id_t(i));
+    if (one_zone_per_block) {
+      const int zone = get_crush_zone(up[i]);
+      const auto gz = goal_zone.find(pool.info.get_shard_zone(shard.shard));
+      if (gz == goal_zone.end() || gz->second != zone) {
+        ss << "not backfilling up[" << i << "]: " << shard << " (zone "
+           << zone << ")" << std::endl;
+        continue;
+      }
+    } else if (usable(shard)) {
+      continue;
+    }
+    ss << "backfilling up[" << i << "]: " << shard << std::endl;
+    backfill->insert(shard);
+  }
+
+  // acting_backfill includes all want and backfill items.
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
+    }
+  }
+  acting_backfill->insert(backfill->begin(), backfill->end());
+  _want->swap(want);
+}
+
 std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
 PeeringState::select_replicated_primary(
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -2629,6 +2885,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       get_osdmap(),
       ss);
     if (pool.info.is_stretch_pool()) {
+      psdout(20) << "calling calc_replicated_acting_stretch for replicated pool in stretch mode" << dendl;
       calc_replicated_acting_stretch(
 	primary_shard,
 	oldest_log,
@@ -2645,6 +2902,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	pool,
 	ss);
     } else {
+      psdout(20) << "calling calc_replicated_acting for replicated pool (non-stretch mode)" << dendl;
       calc_replicated_acting(
 	primary_shard,
 	oldest_log,
@@ -2662,6 +2920,24 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
+    if (pool.info.is_stretch_pool() && pool.info.get_num_zones() > 1) {
+      psdout(20) << "calling calc_ec_acting_stretch for EC pool in stretch mode" << dendl;
+      calc_ec_acting_stretch(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      up,
+      all_info,
+      restrict_to_up_acting,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      get_osdmap(),
+      pool,
+      missing_loc.get_recoverable_predicate(),
+      ss);
+    } else {
+      psdout(20) << "calling calc_ec_acting for EC pool (non-stretch mode)" << dendl;
     calc_ec_acting(
       auth_log_shard,
       get_osdmap()->get_pg_size(info.pgid.pgid),
@@ -2673,6 +2949,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       &want_backfill,
       &want_acting_backfill,
       ss);
+    }
   }
   psdout(10) << ss.str() << dendl;
 
