@@ -223,6 +223,7 @@ class UpgradeState:
                  fail_fs: bool = False,
                  fs_original_max_mds: Optional[Dict[str, int]] = None,
                  fs_original_allow_standby_replay: Optional[Dict[str, bool]] = None,
+                 fs_failed_for_upgrade: Optional[List[int]] = None,
                  daemon_types: Optional[List[str]] = None,
                  hosts: Optional[List[str]] = None,
                  services: Optional[List[str]] = None,
@@ -248,6 +249,12 @@ class UpgradeState:
         self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
         self.fs_original_allow_standby_replay: Optional[Dict[str,
                                                              bool]] = fs_original_allow_standby_replay
+        # filesystems that THIS upgrade put into 'fs fail' state, so completion
+        # only re-joins those (and not filesystems an admin failed for other
+        # reasons). Stored by fscid: 'fs rename' is only permitted while a
+        # filesystem is offline (the state created here), so tracking by name
+        # could lose the restoration target across a rename.
+        self.fs_failed_for_upgrade: Optional[List[int]] = fs_failed_for_upgrade
         self.fail_fs = fail_fs
         self.daemon_types = daemon_types
         self.hosts = hosts
@@ -271,6 +278,7 @@ class UpgradeState:
             'target_digests': self.target_digests,
             'target_version': self.target_version,
             'fail_fs': self.fail_fs,
+            'fs_failed_for_upgrade': self.fs_failed_for_upgrade,
             'fs_original_max_mds': self.fs_original_max_mds,
             'fs_original_allow_standby_replay': self.fs_original_allow_standby_replay,
             'error': self.error,
@@ -1334,6 +1342,8 @@ class CephadmUpgrade:
         assert self.upgrade_state
         if not self.upgrade_state.fs_original_max_mds:
             self.upgrade_state.fs_original_max_mds = {}
+        if not self.upgrade_state.fs_failed_for_upgrade:
+            self.upgrade_state.fs_failed_for_upgrade = []
         if not self.upgrade_state.fs_original_allow_standby_replay:
             self.upgrade_state.fs_original_allow_standby_replay = {}
         fsmap = self.mgr.get("fs_map")
@@ -1371,6 +1381,16 @@ class CephadmUpgrade:
                             len(mdsmap['up']) > 0:
                         self.mgr.log.info(f'Upgrade: failing fs {fs_name} for '
                                           f'rapid multi-rank mds upgrade')
+                        # remember that WE are failing this fs, so completion
+                        # only re-joins filesystems failed by the upgrade
+                        # itself. Saved before issuing 'fs fail' so a mgr
+                        # failover in between does not lose track of the
+                        # filesystem to re-join. Worst case, if 'fs fail'
+                        # fails below, setting a joinable fs joinable again
+                        # on completion is a no-op.
+                        if fscid not in self.upgrade_state.fs_failed_for_upgrade:
+                            self.upgrade_state.fs_failed_for_upgrade.append(fscid)
+                            self._save_upgrade_state()
                         ret, out, err = self.mgr.check_mon_command({
                             'prefix': 'fs fail',
                             'fs_name': fs_name
@@ -2035,27 +2055,37 @@ class CephadmUpgrade:
     def _complete_mds_upgrade(self) -> None:
         assert self.upgrade_state is not None
         if self.upgrade_state.fail_fs:
-            for fs in self.mgr.get("fs_map")['filesystems']:
-                fs_name = fs['mdsmap']['fs_name']
-                self.mgr.log.info('Upgrade: Setting filesystem '
-                                  f'{fs_name} Joinable')
-                try:
-                    ret, _, err = self.mgr.check_mon_command({
-                        'prefix': 'fs set',
-                        'fs_name': fs_name,
-                        'var': 'joinable',
-                        'val': 'true',
-                    })
-                except Exception as e:
-                    logger.error("Failed to set fs joinable "
-                                 f"true due to {e}")
-                    raise OrchestratorError("Failed to set"
-                                            "fs joinable true"
-                                            f"due to {e}")
-                if not self._wait_for_fs_mdss_active(fs_name):
-                    raise OrchestratorError(
-                        f'MDS daemons for filesystem {fs_name} did not become '
-                        f'up:active after fail_fs upgrade')
+            # Only re-join filesystems that THIS upgrade failed, leaving any
+            # filesystem an admin set NOT_JOINABLE for other reasons untouched.
+            # When the list is empty (e.g. _complete_mds_upgrade re-invoked
+            # during final cleanup) there is nothing to do and nothing to save.
+            failed = self.upgrade_state.fs_failed_for_upgrade or []
+            if failed:
+                for fs in self.mgr.get("fs_map")['filesystems']:
+                    if fs["id"] not in failed:
+                        continue
+                    fs_name = fs['mdsmap']['fs_name']
+                    self.mgr.log.info('Upgrade: Setting filesystem '
+                                      f'{fs_name} Joinable')
+                    try:
+                        ret, _, err = self.mgr.check_mon_command({
+                            'prefix': 'fs set',
+                            'fs_name': fs_name,
+                            'var': 'joinable',
+                            'val': 'true',
+                        })
+                    except Exception as e:
+                        logger.error("Failed to set fs joinable "
+                                     f"true due to {e}")
+                        raise OrchestratorError("Failed to set"
+                                                "fs joinable true"
+                                                f"due to {e}")
+                    if not self._wait_for_fs_mdss_active(fs_name):
+                        raise OrchestratorError(
+                            f'MDS daemons for filesystem {fs_name} did not become '
+                            f'up:active after fail_fs upgrade')
+                self.upgrade_state.fs_failed_for_upgrade = []
+                self._save_upgrade_state()
         elif self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
                 fscid = fs["id"]
@@ -2410,6 +2440,15 @@ class CephadmUpgrade:
                 return
 
             logger.debug('Upgrade: Upgraded %s daemon(s).' % daemon_type)
+
+        # Ensure any filesystem that was failed for the MDS upgrade is restored,
+        # even when the upgrade was scoped (e.g. --services mds.<fs>) and the
+        # per-daemon-type completion hook was not reached in the final serve()
+        # cycle (its need-upgrade check is cluster-wide). Done before the
+        # key-rotation handler, which can return early for many cycles and
+        # would otherwise leave the filesystem down until rotation completes.
+        # _complete_mds_upgrade is idempotent.
+        self._complete_mds_upgrade()
 
         if not self.handle_osd_mds_key_rotation(target_image, target_digests):
             return
