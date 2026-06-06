@@ -20,7 +20,15 @@ function sqlite {
   # We're doing job control gymnastics here to make sure that sqlite3 is the
   # main process (i.e. the process group leader) in the background, not a bash
   # function or job pipeline.
-  sqlite3 -cmd '.bail on' -cmd '.output /dev/null' -cmd '.load libcephsqlite.so' -cmd 'pragma journal_mode = PERSIST' -cmd ".open file:///$pool:$ns/baz.db?vfs=ceph" -cmd '.output stdout' <<<"$a" &
+  sqlite3 \
+      -cmd '.bail on' \
+      -cmd '.output /dev/null' \
+      -cmd '.load libcephsqlite.so' \
+      -cmd 'PRAGMA journal_mode = PERSIST' \
+      -cmd ".open file:///$pool:$ns/baz.db?vfs=ceph" \
+      -cmd 'PRAGMA busy_timeout = 300000;' \
+      -cmd '.output stdout' \
+      <<<"$a" &
   if [ "$background" != b ]; then
     wait
   fi
