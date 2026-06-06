@@ -259,6 +259,27 @@ check "sideloaded HEAD has ContentType" 'echo "$SIDELOAD_HEADERS" | grep -q "Con
 
 rm -f /tmp/nsfs-sideload-$$.txt /tmp/nsfs-sideload-nested-$$.txt
 
+# --- test directory objects (keys ending in /) ---
+
+log "directory objects"
+echo "folder body" > /tmp/nsfs-dirobj-$$.txt
+s3 put /tmp/nsfs-dirobj-$$.txt "s3://$BUCKET/myfolder/" > /dev/null 2>&1
+check ".folder sentinel on disk" '[ -f "$NSFS_ROOT/$BUCKET/myfolder/.folder" ]'
+check "myfolder/ is a directory" '[ -d "$NSFS_ROOT/$BUCKET/myfolder" ]'
+
+s3 get "s3://$BUCKET/myfolder/" /tmp/nsfs-dirobj-get-$$.txt > /dev/null 2>&1
+check "directory object GET succeeds" '[ -f /tmp/nsfs-dirobj-get-$$.txt ]'
+check "directory object content matches" 'diff -q /tmp/nsfs-dirobj-$$.txt /tmp/nsfs-dirobj-get-$$.txt > /dev/null'
+
+DIROBJ_LIST=$(s3 ls "s3://$BUCKET/" 2>/dev/null || true)
+check "directory object in listing" 'echo "$DIROBJ_LIST" | grep -q "myfolder/"'
+
+s3 del "s3://$BUCKET/myfolder/" > /dev/null 2>&1
+check ".folder removed after delete" '[ ! -f "$NSFS_ROOT/$BUCKET/myfolder/.folder" ]'
+check "empty dir cleaned up" '[ ! -d "$NSFS_ROOT/$BUCKET/myfolder" ]'
+
+rm -f /tmp/nsfs-dirobj-$$.txt /tmp/nsfs-dirobj-get-$$.txt
+
 # --- test multipart upload via aws s3api ---
 
 log "multipart upload (aws s3api)"
