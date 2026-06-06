@@ -1448,38 +1448,6 @@ int RGWOp::init_quota()
   return 0;
 }
 
-static bool validate_cors_rule_method(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_meth) {
-  if (!req_meth) {
-    ldpp_dout(dpp, 5) << "req_meth is null" << dendl;
-    return false;
-  }
-
-  uint8_t flags = get_cors_method_flags(req_meth);
-
-  if (rule->get_allowed_methods() & flags) {
-    ldpp_dout(dpp, 10) << "Method " << req_meth << " is supported" << dendl;
-  } else {
-    ldpp_dout(dpp, 5) << "Method " << req_meth << " is not supported" << dendl;
-    return false;
-  }
-
-  return true;
-}
-
-static bool validate_cors_rule_header(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs) {
-  if (req_hdrs) {
-    vector<string> hdrs;
-    get_str_vec(req_hdrs, hdrs);
-    for (const auto& hdr : hdrs) {
-      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
-        ldpp_dout(dpp, 5) << "Header " << hdr << " is not registered in this rule" << dendl;
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 int RGWOp::read_bucket_cors()
 {
   bufferlist bl;
