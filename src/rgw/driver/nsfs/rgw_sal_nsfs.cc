@@ -3667,7 +3667,74 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
       /* non-versioned or no specific version requested */
       ret = leaf_dir->get_ent(dpp, null_yield, leaf_name,
           state.obj.key.instance, ent);
-      if (ret < 0) {
+      if (ret < 0 && versioned) {
+        int parent_fd = leaf_dir->get_fd();
+        if (parent_fd < 0) {
+          leaf_dir->open(dpp);
+          parent_fd = leaf_dir->get_fd();
+        }
+        if (parent_fd >= 0) {
+          int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+                             O_RDONLY | O_DIRECTORY);
+          if (vfd >= 0) {
+            /* find the newest version entry for this key */
+            DIR* vdir = fdopendir(dup(vfd));
+            if (vdir) {
+              uint64_t max_mtime = 0;
+              std::string max_name;
+              struct dirent* de;
+              while ((de = readdir(vdir)) != nullptr) {
+                if (de->d_name[0] == '.') {
+                  continue;
+                }
+                std::string vname(de->d_name);
+                /* match entries for this key: "leafname_..." */
+                if (vname.size() <= leaf_name.size() + 1 ||
+                    vname.compare(0, leaf_name.size(), leaf_name) != 0 ||
+                    vname[leaf_name.size()] != '_') {
+                  continue;
+                }
+                std::string vid = vname.substr(leaf_name.size() + 1);
+                nsfs_version_info vinfo;
+                if (nsfs_parse_version_id(vid, vinfo) &&
+                    vinfo.mtime_ns > max_mtime) {
+                  max_mtime = vinfo.mtime_ns;
+                  max_name = vname;
+                }
+              }
+              closedir(vdir);
+
+              if (!max_name.empty()) {
+                /* check if it's a delete marker */
+                int dm_fd = ::openat(vfd, max_name.c_str(), O_RDONLY);
+                if (dm_fd >= 0) {
+                  char buf[8];
+                  std::string dm_xattr =
+                    NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+                  ssize_t xlen = ::fgetxattr(
+                    dm_fd, dm_xattr.c_str(), buf, sizeof(buf));
+                  if (xlen > 0) {
+                    state.is_dm = true;
+                    state.exists = false;
+                    std::string vid =
+                      max_name.substr(leaf_name.size() + 1);
+                    state.obj.key.instance = vid;
+                  }
+                  ::close(dm_fd);
+                }
+              }
+            }
+            ::close(vfd);
+
+            if (state.is_dm) {
+              state.accounted_size = state.size = 0;
+              return -ENOENT;
+            }
+          }
+        }
+        state.exists = false;
+        return ret;
+      } else if (ret < 0) {
         state.exists = false;
         return ret;
       }
@@ -3686,14 +3753,8 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     }
   }
 
-  if (state.obj.key.instance.empty() && ent && ent->exists()) {
-    /* for versioned buckets, set instance to computed version ID */
-    NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
-    if (b && b->get_info().versioned()) {
-      state.obj.key.instance = nsfs_version_id_from_statx(ent->get_stx());
-    } else {
-      state.obj.key.instance = ent->get_cur_version();
-    }
+  if (state.obj.key.instance.empty()) {
+    state.obj.key.instance = ent ? ent->get_cur_version() : "";
   }
 
   state.exists = ent ? ent->exists() : false;
@@ -3878,6 +3939,15 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   int ret = source->stat(dpp);
   if (ret < 0)
     return ret;
+
+  /* set version ID for GET/HEAD response if not already set */
+  NSFSBucket* sb = static_cast<NSFSBucket*>(source->get_bucket());
+  if (sb && sb->get_info().versioned() &&
+      source->get_instance().empty() &&
+      source->get_fsent() && source->get_fsent()->exists()) {
+    source->set_instance(
+      nsfs_version_id_from_statx(source->get_fsent()->get_stx()));
+  }
 
   ret = source->get_obj_attrs(y, dpp);
   if (ret < 0)
@@ -4180,7 +4250,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   const auto& binfo = b->get_info();
   bool versioned = binfo.versioned();
   bool ver_enabled = binfo.versioning_enabled();
-  std::string req_version_id = source->get_instance();
+  /*
+   * Single DELETE with ?versionId= → params.marker_version_id.
+   * Multi-object DeleteObjects → object key instance.
+   * Plain DELETE without versionId → both empty (stat() does not
+   * set instance, matching rados behavior).
+   */
+  std::string req_version_id = params.marker_version_id;
+  if (req_version_id.empty()) {
+    req_version_id = source->get_instance();
+  }
 
   if (!versioned) {
     return source->delete_object(dpp, y, flags, nullptr, nullptr);
