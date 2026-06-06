@@ -1856,38 +1856,6 @@ int RGWOp::init_quota()
   return 0;
 }
 
-static bool validate_cors_rule_method(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_meth) {
-  if (!req_meth) {
-    ldpp_dout(dpp, 5) << "req_meth is null" << dendl;
-    return false;
-  }
-
-  uint8_t flags = get_multi_cors_method_flags(req_meth);
-
-  if (rule->get_allowed_methods() & flags) {
-    ldpp_dout(dpp, 10) << "Method " << req_meth << " is supported" << dendl;
-  } else {
-    ldpp_dout(dpp, 5) << "Method " << req_meth << " is not supported" << dendl;
-    return false;
-  }
-
-  return true;
-}
-
-static bool validate_cors_rule_header(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs) {
-  if (req_hdrs) {
-    vector<string> hdrs;
-    get_str_vec(req_hdrs, hdrs);
-    for (const auto& hdr : hdrs) {
-      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
-        ldpp_dout(dpp, 5) << "Header " << hdr << " is not registered in this rule" << dendl;
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 int RGWOp::read_bucket_cors()
 {
   bufferlist bl;
@@ -2008,7 +1976,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
   RGWCORSRule *rule = bucket_cors.match_rule(orig, req_meth, req_hdrs);
-  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age] (RGWCORSRule *rule) {
+  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age, req_meth, req_hdrs] (RGWCORSRule *rule) {
     if (!rule)
       return false;
 
@@ -2025,20 +1993,12 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
       origin = "*";
 
     /* CORS 6.2.3. */
-    const char *req_meth_inner = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-    if (!req_meth_inner) {
-      req_meth_inner = s->info.method;
+    if (req_meth) {
+      method = req_meth;
     }
-
-    if (req_meth_inner) {
-      method = req_meth_inner;
-    }
-
-    /* CORS 6.2.4. */
-    const char *req_hdrs_inner = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
     /* CORS 6.2.6. */
-    get_cors_response_headers(this, rule, req_hdrs_inner, headers, exp_headers, max_age);
+    get_cors_response_headers(this, rule, req_hdrs, headers, exp_headers, max_age);
 
     return true;
   };
