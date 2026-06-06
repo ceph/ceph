@@ -3729,6 +3729,9 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   int ret;
 
   if (!ent) {
+    dir_chain.clear();
+    state.is_dm = false;
+    dm_version_id.clear();
     Directory* leaf_dir;
     std::string leaf_name;
     ret = resolve_path(dpp,
@@ -4494,6 +4497,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* versioned delete without versionId — create delete marker */
   {
+  /* clear instance so stat() doesn't enter the version-specific path
+   * (instance may have been set by load_obj_state's dm detection) */
+  source->clear_instance();
   int ret = source->stat(dpp);
 
   nsfs::FSEnt* ent = source->get_fsent();
@@ -4510,14 +4516,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dm_leaf = ent->get_name();
   }
 
+  std::vector<std::unique_ptr<nsfs::Directory>> dm_chain;
   if (parent_fd < 0) {
     /* current doesn't exist — resolve path just to get the parent dir */
-    std::vector<std::unique_ptr<nsfs::Directory>> chain;
     nsfs::Directory* leaf_dir = nullptr;
     int r = nsfs::resolve_path(dpp, b->get_dir(),
         source->get_fname(/*use_version=*/false),
         /*create_dirs=*/true, source->driver->ctx(),
-        chain, leaf_dir, dm_leaf);
+        dm_chain, leaf_dir, dm_leaf);
     if (r == 0 && leaf_dir) {
       parent_fd = leaf_dir->get_fd();
       if (parent_fd < 0) {
