@@ -3329,7 +3329,30 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = pot;
   }
-  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  ret = dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* versioned copy: compute version ID from dest file's stat */
+  if (db->get_info().versioned() && dobj->get_fsent()) {
+    dobj->get_fsent()->stat(dpp, /*force=*/true);
+    std::string new_ver_id = db->get_info().versioning_enabled()
+      ? nsfs_version_id_from_statx(dobj->get_fsent()->get_stx())
+      : NULL_VERSION_ID;
+    dest_object->set_instance(new_ver_id);
+    if (version_id) {
+      *version_id = new_ver_id;
+    }
+    int obj_fd = dobj->get_fsent()->get_fd();
+    if (obj_fd >= 0) {
+      std::string vid_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+      ::fsetxattr(obj_fd, vid_xattr.c_str(),
+                  new_ver_id.c_str(), new_ver_id.size(), 0);
+    }
+  }
+
+  return 0;
 }
 
 int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -4467,14 +4490,12 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       NSFSBucket *sb, NSFSBucket *db, NSFSObject *dobj)
 {
   rgw_obj_key dst_key = dobj->get_key();
-  if (!get_key().instance.empty())
-    dst_key.instance = get_key().instance;
 
   std::vector<std::unique_ptr<Directory>> dst_chain;
   Directory* dst_leaf_dir;
   std::string dst_leaf_name;
   int ret = resolve_path(dpp, db->get_dir(),
-      get_key_fname(dst_key, /*use_version=*/true),
+      get_key_fname(dst_key, /*use_version=*/false),
       /*create_dirs=*/true, driver->ctx(),
       dst_chain, dst_leaf_dir, dst_leaf_name);
   if (ret < 0)

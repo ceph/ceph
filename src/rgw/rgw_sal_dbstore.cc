@@ -789,7 +789,11 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
-        return 0;
+    if (dest_bucket->get_info().versioning_enabled() &&
+        !dest_object->have_instance()) {
+      dest_object->gen_rand_obj_instance_name();
+    }
+    return 0;
   }
 
   int DBObject::DBReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y)

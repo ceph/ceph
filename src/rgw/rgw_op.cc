@@ -6532,8 +6532,6 @@ void RGWCopyObj::execute(optional_yield y)
 
   if ( ! version_id.empty()) {
     s->object->set_instance(version_id);
-  } else if (s->bucket->versioning_enabled()) {
-    s->object->gen_rand_obj_instance_name();
   }
 
   s->src_object->set_atomic(true);
