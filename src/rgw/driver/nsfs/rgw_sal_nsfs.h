@@ -107,6 +107,7 @@ protected:
 public:
   static constexpr uint32_t FLAG_NONE =      0x0;
   static constexpr uint32_t FLAG_CURRENT =   0x2;
+  static constexpr uint32_t FLAG_LIST_VERSIONS = 0x4;
 
   FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
   FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
@@ -889,6 +890,8 @@ public:
 
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
+
+  static MDB_cmp_func* lmdb_cmp();
 
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
