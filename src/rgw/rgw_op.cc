@@ -5009,9 +5009,6 @@ void RGWPutObj::execute(optional_yield y)
     if (s->bucket->versioning_enabled()) {
       if (!version_id.empty()) {
         s->object->set_instance(version_id);
-      } else {
-	s->object->gen_rand_obj_instance_name();
-        version_id = s->object->get_instance();
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
@@ -5458,6 +5455,11 @@ void RGWPutObj::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
+
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
+  }
+
   auto ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
