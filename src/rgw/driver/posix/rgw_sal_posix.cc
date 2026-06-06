@@ -4707,9 +4707,12 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
       if (!exists) {
-	return -ERR_PRECONDITION_FAILED;
+	return -ENOENT;
       }
     } else {
+      if (!exists) {
+	return -ENOENT;
+      }
       bufferlist bl;
       if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
