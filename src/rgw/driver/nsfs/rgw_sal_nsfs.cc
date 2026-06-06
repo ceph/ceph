@@ -19,6 +19,7 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <cstdint>
+#include "rgw_mime.h"
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -96,6 +97,26 @@ struct NSFSOwner {
   }
 };
 WRITE_CLASS_ENCODER(NSFSOwner);
+
+static std::string synthesize_etag(const struct statx& stx)
+{
+  uint64_t mtime_ns = (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+                    + stx.stx_mtime.tv_nsec;
+  uint64_t ino = stx.stx_ino;
+  // format matches noobaa nsfs: "mtime-<base36>-ino-<base36>"
+  // the dash prevents S3 clients from treating it as MD5
+  auto to_base36 = [](uint64_t v) -> std::string {
+    if (v == 0) return "0";
+    const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    std::string result;
+    while (v > 0) {
+      result.insert(result.begin(), digits[v % 36]);
+      v /= 36;
+    }
+    return result;
+  };
+  return "mtime-" + to_base36(mtime_ns) + "-ino-" + to_base36(ino);
+}
 
 namespace nsfs {
 
@@ -612,6 +633,8 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   bufferlist etag_bl;
   if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
     bde.meta.etag = etag_bl.to_str();
+  } else {
+    bde.meta.etag = synthesize_etag(stx);
   }
 
   return cb(dpp, bde);
@@ -2896,8 +2919,6 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 
 int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  //int fd;
-
   int ret = open(dpp, false);
   if (ret < 0) {
     return ret;
@@ -2908,6 +2929,26 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
     state.has_attrs = true;
   else
     state.has_attrs = false;
+
+  if (state.has_attrs && state.attrset.find(RGW_ATTR_ETAG) == state.attrset.end()) {
+    bufferlist bl;
+    std::string etag = synthesize_etag(ent->get_stx());
+    bl.append(etag);
+    state.attrset[RGW_ATTR_ETAG] = std::move(bl);
+  }
+
+  if (state.has_attrs && state.attrset.find(RGW_ATTR_CONTENT_TYPE) == state.attrset.end()) {
+    std::string name = ent->get_name();
+    auto dot = name.rfind('.');
+    if (dot != std::string::npos && dot < name.size() - 1) {
+      auto mime = rgw_find_mime_by_ext(name.substr(dot + 1));
+      if (!mime.empty()) {
+        bufferlist bl;
+        bl.append(mime.data(), mime.size());
+        state.attrset[RGW_ATTR_CONTENT_TYPE] = std::move(bl);
+      }
+    }
+  }
 
   return ret;
 }
