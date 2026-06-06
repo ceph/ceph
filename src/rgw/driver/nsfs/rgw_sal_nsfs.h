@@ -18,6 +18,7 @@
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
+#include "include/encoding.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
@@ -385,7 +386,7 @@ public:
 };
 
 class NSFSDriver : public StoreDriver {
-protected:	
+protected:
   CephContext *cct;
   std::unique_ptr<rgw::store::NSFSUserDB> userDB;
   std::unique_ptr<rgw::store::NSFSAccountDB> accountDB;
@@ -690,7 +691,7 @@ public:
 				const std::string& unique_tag) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
-  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
+  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
 
   virtual void finalize(void) override;
 
@@ -888,27 +889,11 @@ public:
 
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
-  
+
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* NSFSBucket */
 
-struct NSFSManifest {
-  int64_t  multipart_part_count{-1};
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(multipart_part_count, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(multipart_part_count, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(NSFSManifest);
 
 class NSFSObject : public StoreObject {
 public:
@@ -922,6 +907,7 @@ private:
 public:
   struct NSFSReadOp : ReadOp {
     NSFSObject* source;
+    int64_t part_ofs{0};
 
     NSFSReadOp(NSFSObject* _source) :
       source(_source) {}

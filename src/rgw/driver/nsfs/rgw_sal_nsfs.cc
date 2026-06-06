@@ -62,7 +62,8 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 #define RGW_NSFS_ATTR_MPUPLOAD "mp_upload"
 #define RGW_NSFS_ATTR_OWNER "owner"
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
-#define RGW_NSFS_ATTR_MANIFEST "manifest"
+#define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
+#define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -3132,7 +3133,7 @@ int NSFSObject::restore_obj_from_cloud(Bucket* bucket,
           std::optional<uint64_t> days,
           bool& in_progress,
 	  uint64_t& size,
-          const DoutPrefixProvider* dpp, 
+          const DoutPrefixProvider* dpp,
           optional_yield y)
 {
   return -ERR_NOT_IMPLEMENTED;
@@ -3340,7 +3341,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   int ret = ent->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
- 
+
   NSFSBucket *b = static_cast<NSFSBucket *>(get_bucket());
   if (!b) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
@@ -3422,17 +3423,47 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     return -EINVAL;
   }
 
-  buffer::list manifest_bl;
-  if (source->get_attr(RGW_NSFS_ATTR_MANIFEST, manifest_bl)) {
-    NSFSManifest manifest;
-    auto iter = manifest_bl.cbegin();
+  buffer::list pc_bl;
+  if (source->get_attr(RGW_NSFS_ATTR_MULTIPART_PART_COUNT, pc_bl)) {
     try {
-      manifest.decode(iter);
-      if (manifest.multipart_part_count > 0) {
-        params.parts_count = manifest.multipart_part_count;
+      auto iter = pc_bl.cbegin();
+      uint16_t part_count;
+      ceph::decode(part_count, iter);
+      if (part_count > 0) {
+        params.parts_count = part_count;
       }
     } catch (buffer::error& err) {
       // pass
+    }
+  }
+
+  if (params.part_num) {
+    int pn = *params.part_num;
+    buffer::list ps_bl;
+    if (!source->get_attr(RGW_NSFS_ATTR_MULTIPART_PART_SIZES, ps_bl)) {
+      if (pn == 1) {
+        // non-multipart object: part 1 returns the whole object
+        params.parts_count = 1;
+      } else {
+        return -ERR_INVALID_PART;
+      }
+    } else {
+      std::vector<uint64_t> part_sizes;
+      try {
+        auto iter = ps_bl.cbegin();
+        ceph::decode(part_sizes, iter);
+      } catch (buffer::error& err) {
+        return -ERR_INVALID_PART;
+      }
+      if (pn < 1 || pn > (int)part_sizes.size()) {
+        return -ERR_INVALID_PART;
+      }
+      int64_t ofs = 0;
+      for (int i = 0; i < pn - 1; ++i) {
+        ofs += part_sizes[i];
+      }
+      part_ofs = ofs;
+      source->set_obj_size(part_sizes[pn - 1]);
     }
   }
 
@@ -3505,7 +3536,7 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return source->read(ofs, end + 1, bl, dpp, y);
+  return source->read(ofs + part_ofs, end + 1, bl, dpp, y);
 }
 
 int NSFSObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -3584,7 +3615,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
   int64_t left;
-  int64_t cur_ofs = ofs;
+  int64_t cur_ofs = ofs + part_ofs;
+  end += part_ofs;
 
   if (end < 0)
     left = 0;
@@ -3938,6 +3970,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
+  std::vector<uint64_t> part_sizes;
 
   ofs = accounted_size = 0;
 
@@ -4021,6 +4054,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 #endif
 
+      part_sizes.push_back(part->get_size());
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
@@ -4044,11 +4078,14 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   {
-    NSFSManifest manifest;
-    manifest.multipart_part_count = total_parts;
-    buffer::list manifest_bl;
-    manifest.encode(manifest_bl);
-    attrs[RGW_NSFS_ATTR_MANIFEST] = std::move(manifest_bl);
+    buffer::list pc_bl;
+    uint16_t part_count = total_parts;
+    ceph::encode(part_count, pc_bl);
+    attrs[RGW_NSFS_ATTR_MULTIPART_PART_COUNT] = std::move(pc_bl);
+
+    buffer::list ps_bl;
+    ceph::encode(part_sizes, ps_bl);
+    attrs[RGW_NSFS_ATTR_MULTIPART_PART_SIZES] = std::move(ps_bl);
   }
 
   NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
