@@ -51,6 +51,8 @@ bool RGWMultiDelObject::xml_end(const char *el)
     string last_modified_time_str_decoded = url_decode(last_modified_time_str);
     if (parse_time(last_modified_time_str_decoded.c_str(), &last_mod_time) < 0)
       return false;
+    auto ns = last_mod_time.time_since_epoch() % std::chrono::seconds(1);
+    last_mod_time_precise = (ns != decltype(ns)::zero());
   }
 
   if (size) {
