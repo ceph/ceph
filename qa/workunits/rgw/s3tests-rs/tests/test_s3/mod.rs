@@ -1,0 +1,17 @@
+mod acl;
+mod bucket_list;
+mod bucket_logging;
+mod bucket_policy;
+mod conditional;
+mod copy;
+mod cors;
+mod encryption;
+mod headers;
+mod lifecycle;
+mod signing;
+mod multipart;
+mod object_lock;
+mod post_object;
+mod object_ops;
+mod tagging;
+mod versioning;

@@ -36,83 +36,71 @@ on the I/O path. Most of these should already work from the posix fork;
 the audit identifies what our nsfs adaptations (hierarchical paths,
 xattr prefix swap, url_encode removal) may have broken.
 
-### 1. Conditional operations
-If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since on
-GET/PUT/DELETE. Relies on `RGW_ATTR_ETAG` and mtime from
-`get_obj_attrs()`. Includes sideloaded-file synthesized etags.
+### 1. Conditional operations — VERIFIED
+If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since.
+Op layer compares against etag/mtime from `get_obj_attrs()`.
+`NSFSReadOp::prepare()` handles all four conditions correctly.
 
-- **Status:** needs audit
-- **Risk:** low — op layer does the comparisons, store just provides attrs
+### 2. Byte-range GET — VERIFIED
+`NSFSReadOp::iterate()` honors ofs/end via `File::read()` + `lseek()`.
+Multipart range reads route through `MPDirectory::read()` with
+per-part offset adjustment.
 
-### 2. Byte-range GET
-Range header support. `NSFSReadOp::iterate()` receives ofs/end params
-and must pass them through to `File::read()`.
+### 3. Content-MD5 validation on PUT — VERIFIED
+Op layer computes MD5, stores in `attrs[RGW_ATTR_ETAG]` before
+calling `Writer::complete()`. Flows through `write_attrs()` →
+`make_xattr_name()` → `user.nsfs.rgw.etag` on disk.
 
-- **Status:** needs audit
-- **Risk:** low — inherited from posix, unlikely broken
+### 4. Additional checksums (CRC32, CRC32C, SHA256) — VERIFIED
+Op layer stores `RGW_ATTR_CKSUM` in attrs map before calling
+`Writer::complete()`. Multipart parts store per-part cksum in
+`NSFSUploadPartInfo`. `get_info()` restores `cksum_type`/`cksum_flags`.
+Op layer reconstructs composite via `try_sum_part_cksums()` →
+`part->get_cksum()`.
 
-### 3. Content-MD5 validation on PUT
-Client sends Content-MD5 header, op layer validates against computed MD5.
-Store just needs to store the etag correctly via `Writer::complete()`.
+### 5. Object metadata round-trip — VERIFIED
+`user.rgw.*` → `user.nsfs.rgw.*` prefix swap via
+`make_xattr_name()`/`parse_xattr_name()` is bijective. All RGW_ATTR_*
+keys (content-type, content-encoding, content-disposition, cache-control,
+x-amz-meta-*) round-trip correctly.
 
-- **Status:** needs audit
-- **Risk:** low — op layer handles validation
+### 6. S3 Object Tagging — VERIFIED
+`RGW_ATTR_TAGS` = `"user.rgw.x-amz-tagging"` flows through standard
+attr storage. No special driver handling needed.
 
-### 4. Additional checksums (CRC32, CRC32C, SHA256)
-Newer S3 feature. Op layer computes checksums during upload. Store
-persists `RGW_ATTR_CKSUM` through attrs. Needs xattr round-trip
-verification.
+### 7. ACLs — VERIFIED
+`RGW_ATTR_ACL` = `"x-rgw-acl"` stored via attrs. Maps to
+`user.nsfs.x-rgw-acl` on disk. Bucket ACL persisted in
+`NSFSBucket::set_acl()`.
 
-- **Status:** needs audit
-- **Risk:** medium — newer feature, may have assumptions about store capabilities
+### 8. Object Lock / Retention / Legal Hold — VERIFIED
+`RGW_ATTR_OBJECT_RETENTION` and `RGW_ATTR_OBJECT_LEGAL_HOLD` flow
+through standard attrs. Multipart `upload_info` carries
+retention/legal-hold through init → meta xattr → get_info() cycle.
 
-### 5. Object metadata round-trip
-x-amz-meta-*, content-type, content-encoding, content-disposition,
-cache-control. Stored as `RGW_ATTR_PREFIX + header` attrs. Must
-round-trip through `make_xattr_name()`/`parse_xattr_name()` correctly.
+### 9. Presigned URLs — VERIFIED
+Path encoding handled at HTTP layer (rgw_auth_s3.cc). Store receives
+decoded keys. `decode_obj_key()` does no url_decode — keys are literal
+filesystem paths. No encoding mismatch possible.
 
-- **Status:** needs audit
-- **Risk:** medium — the xattr prefix swap is the most likely breakage point
+## Empirical validation
 
-### 6. S3 Object Tagging
-GetObjectTagging, PutObjectTagging, DeleteObjectTagging. Tags stored
-as `RGW_ATTR_TAGS`. Needs `get_obj_attrs()`/`set_obj_attrs()` to
-handle tag attrs correctly.
+The code audit above confirms no regressions from the nsfs adaptations.
+Empirical validation uses s3-tests-rs (`~/debug/clone-of-s3-tests-rs`),
+a Rust port of the s3-tests suite, pointed at a vstart nsfs cluster.
 
-- **Status:** needs audit
-- **Risk:** low — pure attr storage
+Relevant test modules and coverage:
 
-### 7. ACLs
-At minimum, canned ACLs on PUT. `RGW_ATTR_ACL` storage. Check
-`NSFSObject::set_acl()`, `get_acl()`.
-
-- **Status:** needs audit
-- **Risk:** low — inherited from posix
-
-### 8. Object Lock / Retention / Legal Hold
-`RGW_ATTR_OBJECT_RETENTION`, `RGW_ATTR_OBJECT_LEGAL_HOLD`. Primarily
-attr storage — the op layer enforces the semantics, the store just
-persists and returns the attrs.
-
-- **Status:** needs audit
-- **Risk:** low — pure attr storage, but multipart complete() already
-  threads retention/legal-hold through
-
-### 9. Presigned URLs
-Should work if GET/PUT work correctly. Main risk is path-encoding
-issues from our url_encode elimination — presigned URL signatures
-include the object key, and if the key contains characters that
-need encoding, there could be signature mismatches.
-
-- **Status:** needs audit
-- **Risk:** medium — path encoding is a known area of change
-
-## Approach
-
-For each item: read the relevant code paths, identify gaps, write a
-test that exercises the feature via the integration test, fix any
-breakage found. Items that pass without changes get documented as
-verified; items that need fixes get committed individually.
+| Module | Tests | Covers items |
+|--------|-------|-------------|
+| `conditional.rs` | 33 | 1 |
+| `headers.rs` | 21 | 2, 3, 5 |
+| `object_ops.rs` | 98 | 1, 2, 3, 5, 9 |
+| `copy.rs` | 18 | 5 |
+| `multipart.rs` | 36 | 3, 4 |
+| `tagging.rs` | 16 | 6 |
+| `acl.rs` | 60 | 7 |
+| `object_lock.rs` | 39 | 8 |
 
 ## Future milestones (out of scope for now)
 
