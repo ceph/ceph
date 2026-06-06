@@ -161,7 +161,8 @@ void RGWCORSRule::format_exp_headers(string& s) {
 bool RGWCORSRule::matches_method(const char *req_meth)
 {
   if (!req_meth || !*req_meth) {
-    return true;
+    dout(5) << "matches_method: req_meth is null or empty" << dendl;
+    return false;
   }
   const uint8_t flags = get_multi_cors_method_flags(req_meth);
   return flags != 0 && (allowed_methods & flags);
