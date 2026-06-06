@@ -5330,9 +5330,6 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
-    if (s->bucket->versioning_enabled()) {
-      obj->gen_rand_obj_instance_name();
-    }
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
@@ -8819,10 +8816,6 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     return op_ret;
-  }
-
-  if (bucket->versioning_enabled()) {
-    obj->gen_rand_obj_instance_name();
   }
 
   rgw_placement_rule dest_placement = s->dest_placement;
