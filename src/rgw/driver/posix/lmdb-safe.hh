@@ -79,6 +79,10 @@ public:
     }
     explicit MDBDbi(MDB_env *env, MDB_txn *txn, string_view dbname, unsigned int flags);
 
+    void set_compare(MDB_txn *txn, MDB_cmp_func *cmp) {
+        mdb_set_compare(txn, d_dbi, cmp);
+    }
+
     operator const MDB_dbi &() const
     {
         return d_dbi;
@@ -110,6 +114,7 @@ public:
     }
 
     MDBDbi openDB(const string_view dbname, unsigned int flags);
+    MDBDbi openDB(const string_view dbname, unsigned int flags, MDB_cmp_func *cmp);
 
     MDBRWTransaction getRWTransaction();
     MDBROTransaction getROTransaction();
