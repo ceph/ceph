@@ -170,8 +170,6 @@ inline std::ostream& operator <<(std::ostream& m, const rgw_rados_ref& ref) {
 int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
 		      rgw_raw_obj obj, rgw_rados_ref* ref);
 
-
-
 int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct);
 void rgw_tools_cleanup();
 

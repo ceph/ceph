@@ -21,6 +21,7 @@
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "global/global_init.h"
+#include "rgw_mime.h"
 
 using namespace rgw::sal;
 
@@ -65,6 +66,8 @@ public:
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
     dpp = nullptr;
+
+    rgw_mime_init(dpp, cct.get());
 
     root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get());
     ASSERT_EQ(root->open(dpp), 0);
@@ -997,10 +1000,12 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  // attr1 + owner + object_type + synthesized etag
+  EXPECT_EQ(object->get_attrs().size(), 4);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
   EXPECT_TRUE(object->get_attrs().contains("owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
+  EXPECT_TRUE(object->get_attrs().contains(RGW_ATTR_ETAG));
 }
 
 TEST_F(NSFSObjectTest, XattrOnDisk)
@@ -1557,6 +1562,100 @@ TEST_F(NSFSBucketTest, ListWithPrefix)
   EXPECT_EQ(results.common_prefixes.size(), 0);
 }
 
+
+TEST_F(NSFSBucketTest, SideloadedGet)
+{
+  // create a file directly on disk (bypassing RGW)
+  sf::path sideloaded{bp / "root" / testname / "external.txt"};
+  {
+    int fd = ::open(sideloaded.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GT(fd, 0);
+    const char *data = "sideloaded content";
+    ASSERT_EQ(::write(fd, data, strlen(data)), (ssize_t)strlen(data));
+    ::close(fd);
+  }
+  ASSERT_TRUE(sf::is_regular_file(sideloaded));
+
+  // GET via SAL
+  auto obj = bucket->get_object(rgw_obj_key("external.txt"));
+  int ret = obj->get_obj_attrs(null_yield, env->dpp);
+  EXPECT_EQ(ret, 0);
+
+  // etag should be synthesized (stat-based, contains a dash)
+  auto& attrs = obj->get_attrs();
+  EXPECT_TRUE(attrs.contains(RGW_ATTR_ETAG));
+  std::string etag = attrs[RGW_ATTR_ETAG].to_str();
+  EXPECT_NE(etag.find('-'), std::string::npos);
+
+  // content-type should be synthesized from .txt extension
+  EXPECT_TRUE(attrs.contains(RGW_ATTR_CONTENT_TYPE));
+  std::string ct = attrs[RGW_ATTR_CONTENT_TYPE].to_str();
+  EXPECT_EQ(ct, "text/plain");
+
+  // read the data
+  ret = obj->load_obj_state(env->dpp, null_yield);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(obj->get_size(), strlen("sideloaded content"));
+}
+
+TEST_F(NSFSBucketTest, SideloadedList)
+{
+  // create an RGW object
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("rgw-created.txt");
+
+  // sideload a file directly on disk
+  sf::path sideloaded{bp / "root" / testname / "sideloaded.txt"};
+  {
+    int fd = ::open(sideloaded.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GT(fd, 0);
+    const char *data = "external";
+    ASSERT_EQ(::write(fd, data, strlen(data)), (ssize_t)strlen(data));
+    ::close(fd);
+  }
+
+  // LIST should show both
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  int ret = bucket->list(env->dpp, params, 100, results, null_yield);
+  EXPECT_EQ(ret, 0);
+
+  std::set<std::string> names;
+  for (auto& e : results.objs) {
+    names.insert(e.key.name);
+  }
+  EXPECT_TRUE(names.contains("rgw-created.txt"));
+  EXPECT_TRUE(names.contains("sideloaded.txt"));
+
+  // sideloaded entry should have a synthesized etag with a dash
+  for (auto& e : results.objs) {
+    if (e.key.name == "sideloaded.txt") {
+      EXPECT_NE(e.meta.etag.find('-'), std::string::npos);
+    }
+  }
+}
 
 TEST_F(NSFSBucketTest, HierarchicalCopy)
 {

@@ -233,6 +233,32 @@ rm -f /tmp/nsfs-copy-get-$$.txt
 
 check "original flat.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/flat.txt" ]'
 
+# --- test sideloaded files ---
+
+log "sideloaded file GET/LIST"
+echo "sideloaded content" > "$NSFS_ROOT/$BUCKET/external.txt"
+mkdir -p "$NSFS_ROOT/$BUCKET/extdir"
+echo "nested sideload" > "$NSFS_ROOT/$BUCKET/extdir/nested.txt"
+
+s3 get "s3://$BUCKET/external.txt" /tmp/nsfs-sideload-$$.txt > /dev/null 2>&1
+check "sideloaded GET succeeds" '[ -f /tmp/nsfs-sideload-$$.txt ]'
+check "sideloaded content matches" 'echo "sideloaded content" | diff -q - /tmp/nsfs-sideload-$$.txt > /dev/null'
+
+s3 get "s3://$BUCKET/extdir/nested.txt" /tmp/nsfs-sideload-nested-$$.txt > /dev/null 2>&1
+check "nested sideloaded GET succeeds" '[ -f /tmp/nsfs-sideload-nested-$$.txt ]'
+check "nested sideloaded content matches" 'echo "nested sideload" | diff -q - /tmp/nsfs-sideload-nested-$$.txt > /dev/null'
+
+SIDELOAD_LIST=$(s3 ls "s3://$BUCKET/" 2>/dev/null || true)
+check "sideloaded file in listing" 'echo "$SIDELOAD_LIST" | grep -q "external.txt"'
+check "sideloaded dir in listing" 'echo "$SIDELOAD_LIST" | grep -q "extdir/"'
+
+SIDELOAD_HEADERS=$(awsapi s3api head-object --bucket "$BUCKET" --key "external.txt" 2>/dev/null || true)
+check "sideloaded HEAD has ETag" 'echo "$SIDELOAD_HEADERS" | grep -q "ETag"'
+check "sideloaded ETag contains dash" 'echo "$SIDELOAD_HEADERS" | grep "ETag" | grep -q "\-"'
+check "sideloaded HEAD has ContentType" 'echo "$SIDELOAD_HEADERS" | grep -q "ContentType"'
+
+rm -f /tmp/nsfs-sideload-$$.txt /tmp/nsfs-sideload-nested-$$.txt
+
 # --- test multipart upload via aws s3api ---
 
 log "multipart upload (aws s3api)"
