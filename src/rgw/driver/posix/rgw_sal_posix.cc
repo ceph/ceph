@@ -28,6 +28,29 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+template <typename T>
+static bool decode_raw_attr(rgw::sal::Attrs& attrs, const char* name, T& val) {
+  auto it = attrs.find(name);
+  if (it == attrs.end()) {
+    return false;
+  }
+  bufferlist bl = it->second;
+  try {
+    auto it = bl.cbegin();
+    decode(val, it);
+  } catch (buffer::error&) {
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+static void encode_attr(rgw::sal::Attrs& attrs, const char* name, const T& val) {
+  bufferlist bl;
+  encode(val, bl);
+  attrs[name] = std::move(bl);
+}
+
 namespace rgw { namespace sal {
 
 using namespace posix;
@@ -153,6 +176,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 
   return true;
 }
+
 
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
@@ -3896,38 +3920,23 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
-  buffer::list pc_bl;
-  if (source->get_attr(RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc_bl)) {
-    try {
-      auto iter = pc_bl.cbegin();
-      uint16_t part_count;
-      ceph::decode(part_count, iter);
-      if (part_count > 0) {
-        params.parts_count = part_count;
-      }
-    } catch (buffer::error& err) {
-      // pass
+  {
+    uint16_t pc = 0;
+    if (decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc) && pc > 0) {
+      params.parts_count = pc;
     }
   }
 
   if (params.part_num) {
     int pn = *params.part_num;
-    buffer::list ps_bl;
-    if (!source->get_attr(RGW_POSIX_ATTR_MULTIPART_PART_SIZES, ps_bl)) {
+    std::vector<uint64_t> part_sizes;
+    if (!decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes)) {
       if (pn == 1) {
-        // non-multipart object: part 1 returns the whole object
         params.parts_count = 1;
       } else {
         return -ERR_INVALID_PART;
       }
     } else {
-      std::vector<uint64_t> part_sizes;
-      try {
-        auto iter = ps_bl.cbegin();
-        ceph::decode(part_sizes, iter);
-      } catch (buffer::error& err) {
-        return -ERR_INVALID_PART;
-      }
       if (pn < 1 || pn > (int)part_sizes.size()) {
         return -ERR_INVALID_PART;
       }
@@ -4541,14 +4550,9 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   {
-    buffer::list pc_bl;
-    uint16_t part_count = total_parts;
-    ceph::encode(part_count, pc_bl);
-    attrs[RGW_POSIX_ATTR_MULTIPART_PART_COUNT] = std::move(pc_bl);
-
-    buffer::list ps_bl;
-    ceph::encode(part_sizes, ps_bl);
-    attrs[RGW_POSIX_ATTR_MULTIPART_PART_SIZES] = std::move(ps_bl);
+    uint16_t pc = total_parts;
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc);
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes);
 
     ret = shadow->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
