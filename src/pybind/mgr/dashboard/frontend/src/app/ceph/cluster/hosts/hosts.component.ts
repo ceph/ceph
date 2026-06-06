@@ -104,6 +104,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   icons = Icons;
   private tableContext: CdTableFetchDataContext = null;
   count = 5;
+  viewUrl = '/hosts';
 
   messages = {
     nonOrchHost: $localize`The feature is disabled because the selected host is not managed by Orchestrator.`

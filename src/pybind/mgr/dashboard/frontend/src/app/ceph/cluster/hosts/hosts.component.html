@@ -18,11 +18,9 @@
         (fetchData)="getHosts($event)"
         selectionType="single"
         [searchableObjects]="true"
-        [hasDetails]="hasTableDetails"
         [serverSide]="true"
         [count]="count"
         [maxLimit]="25"
-        (setExpandedRow)="setExpandedRow($event)"
         (updateSelection)="updateSelection($event)"
         [toolHeader]="!hideToolHeader"
       >
@@ -44,12 +42,6 @@
           >
           </cd-table-actions>
         </div>
-        <cd-host-details
-          *cdTableDetail
-          [permissions]="permissions"
-          [selection]="expandedRow"
-        >
-        </cd-host-details>
       </cd-table>
     </ng-template>
   </ng-container>
@@ -100,7 +92,15 @@
   #hostNameTpl
   let-row="data.row"
 >
-  <span data-testid="hostname"> {{ row.hostname }} </span><br />
+  <span data-testid="hostname">
+    <a
+      cdsLink
+      [routerLink]="[viewUrl, row.hostname | encodeUri]"
+      (click)="$event.stopPropagation()"
+    >
+      {{ row.hostname }}
+    </a> </span
+  ><br />
   <span
     class="text-muted fst-italic"
     *ngIf="row.addr"
