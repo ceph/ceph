@@ -3814,11 +3814,11 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
-  static const std::string meta_name{".meta"};
   if (!shadow) {
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   } else {
-    meta_obj = shadow->get_object(rgw_obj_key(meta_name, std::string()));
+    std::string meta_path = get_fname() + "/.meta";
+    meta_obj = bucket->get_object(rgw_obj_key(meta_path, std::string()));
   }
 
   auto nsfs_meta_obj = static_cast<NSFSObject*>(meta_obj.get());
