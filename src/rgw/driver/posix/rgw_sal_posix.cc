@@ -4734,11 +4734,10 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+        if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }
