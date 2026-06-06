@@ -2699,6 +2699,9 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  const std::string& unique_tag)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
+  if (bucket_info.versioning_enabled() && !obj->have_instance()) {
+    obj->gen_rand_obj_instance_name();
+  }
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();
   auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
   return std::make_unique<RadosAtomicWriter>(dpp, y,

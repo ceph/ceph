@@ -1531,6 +1531,10 @@ namespace rgw::sal {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
+    if (obj->get_bucket()->get_info().versioning_enabled() &&
+        !obj->have_instance()) {
+      obj->gen_rand_obj_instance_name();
+    }
     return std::make_unique<DBAtomicWriter>(dpp, y, obj, this, owner,
                     ptail_placement_rule, olh_epoch, unique_tag);
   }
