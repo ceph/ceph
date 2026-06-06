@@ -4255,7 +4255,6 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
-      // test the object is existing
       if (!exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
@@ -4264,7 +4263,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+      std::string if_match_str = rgw_string_unquote(if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
@@ -4277,7 +4277,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     } else {
       bufferlist bl;
       if (get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        if (if_nomatch_str.compare(0, bl.length(), bl.c_str(), bl.length()) == 0) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
