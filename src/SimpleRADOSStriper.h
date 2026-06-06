@@ -28,7 +28,7 @@
 #include <chrono>
 #include "common/perf_counters.h"
 
-class [[gnu::visibility("default")]] SimpleRADOSStriper
+class [[gnu::visibility("hidden")]] SimpleRADOSStriper
 {
 public:
   enum class LockLevel : int {
