@@ -3091,9 +3091,9 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   int ret;
 
   if (!ent) {
-    nsfs::Directory* leaf_dir;
+    Directory* leaf_dir;
     std::string leaf_name;
-    ret = nsfs::resolve_path(dpp,
+    ret = resolve_path(dpp,
         static_cast<NSFSBucket *>(bucket)->get_dir(),
         get_fname(/*use_version=*/false),
         /*create_dirs=*/false,
@@ -3137,9 +3137,9 @@ int NSFSObject::make_ent(ObjectType type)
   if (ent)
     return 0;
 
-  nsfs::Directory* leaf_dir;
+  Directory* leaf_dir;
   std::string leaf_name;
-  int ret = nsfs::resolve_path(nullptr,
+  int ret = resolve_path(nullptr,
       static_cast<NSFSBucket *>(bucket)->get_dir(),
       get_fname(/*use_version=*/true),
       /*create_dirs=*/true,
@@ -3530,10 +3530,10 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   if (!get_key().instance.empty())
     dst_key.instance = get_key().instance;
 
-  std::vector<std::unique_ptr<nsfs::Directory>> dst_chain;
-  nsfs::Directory* dst_leaf_dir;
+  std::vector<std::unique_ptr<Directory>> dst_chain;
+  Directory* dst_leaf_dir;
   std::string dst_leaf_name;
-  int ret = nsfs::resolve_path(dpp, db->get_dir(),
+  int ret = resolve_path(dpp, db->get_dir(),
       get_key_fname(dst_key, /*use_version=*/true),
       /*create_dirs=*/true, driver->ctx(),
       dst_chain, dst_leaf_dir, dst_leaf_name);
@@ -3913,8 +3913,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   attrs[RGW_NSFS_ATTR_OWNER] = std::move(owner_bl);
 
   // encode object type as FILE
-  nsfs::ObjectType file_type;
-  file_type.type = nsfs::ObjectType::FILE;
+  ObjectType file_type;
+  file_type.type = ObjectType::FILE;
   bufferlist type_bl;
   file_type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = std::move(type_bl);
@@ -3931,10 +3931,10 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   // resolve hierarchical target path
   std::string target_key = target_obj->get_name();
-  std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
-  nsfs::Directory* leaf_dir;
+  std::vector<std::unique_ptr<Directory>> dir_chain;
+  Directory* leaf_dir;
   std::string leaf_name;
-  ret = nsfs::resolve_path(dpp, pb->get_dir(), target_key,
+  ret = resolve_path(dpp, pb->get_dir(), target_key,
                            /*create_dirs=*/true, driver->ctx(),
                            dir_chain, leaf_dir, leaf_name);
   if (ret < 0) {
