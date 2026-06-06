@@ -154,6 +154,30 @@ MDBDbi MDBEnv::openDB(const string_view dbname, unsigned int flags)
     return ret;
 }
 
+MDBDbi MDBEnv::openDB(const string_view dbname, unsigned int flags, MDB_cmp_func *cmp)
+{
+    unsigned int envflags;
+    mdb_env_get_flags(d_env, &envflags);
+    std::lock_guard<std::mutex> l(d_openmut);
+
+    if (!(envflags & MDB_RDONLY)) {
+        auto rwt = getRWTransaction();
+        MDBDbi ret = rwt->openDB(dbname, flags);
+        if (cmp) {
+            ret.set_compare(*rwt, cmp);
+        }
+        rwt->commit();
+        return ret;
+    }
+
+    MDBDbi ret;
+    {
+        auto rot = getROTransaction();
+        ret = rot->openDB(dbname, flags);
+    }
+    return ret;
+}
+
 MDBRWTransactionImpl::MDBRWTransactionImpl(MDBEnv *parent, MDB_txn *txn)
     : MDBROTransactionImpl(parent, txn)
 

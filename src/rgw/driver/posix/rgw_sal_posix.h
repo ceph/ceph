@@ -989,6 +989,8 @@ public:
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
 
+  static MDB_cmp_func* lmdb_cmp() { return nullptr; }
+
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
