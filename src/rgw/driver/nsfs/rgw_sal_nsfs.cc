@@ -215,6 +215,17 @@ static bool nsfs_verify_version_id(const struct statx& stx,
   return info.mtime_ns == statx_mtime_ns(stx) && info.ino == stx.stx_ino;
 }
 
+static bool is_null_version_fd(int fd)
+{
+  char buf[256];
+  std::string vid_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+  ssize_t len = ::fgetxattr(fd, vid_xattr.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return true;
+  }
+  return std::string_view(buf, len) == NULL_VERSION_ID;
+}
+
 static std::string nsfs_versions_dir(const std::string& parent_path)
 {
   return parent_path + "/" + HIDDEN_VERSIONS_PATH;
@@ -404,8 +415,22 @@ static void promote_version(int parent_fd, const std::string& leaf,
         }
         std::string vid = vn.substr(leaf.size() + 1);
         nsfs_version_info vi;
-        if (nsfs_parse_version_id(vid, vi) && vi.mtime_ns > max_mtime) {
-          max_mtime = vi.mtime_ns;
+        if (!nsfs_parse_version_id(vid, vi)) {
+          continue;
+        }
+        uint64_t entry_mtime;
+        if (vid == NULL_VERSION_ID) {
+          struct statx nstx;
+          if (statx(vfd, de->d_name, AT_SYMLINK_NOFOLLOW,
+                    STATX_MTIME, &nstx) < 0) {
+            continue;
+          }
+          entry_mtime = statx_mtime_ns(nstx);
+        } else {
+          entry_mtime = vi.mtime_ns;
+        }
+        if (entry_mtime > max_mtime || max_name.empty()) {
+          max_mtime = entry_mtime;
           max_name = vn;
         }
       }
@@ -1028,7 +1053,12 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   }
 
   if (flags & FLAG_LIST_VERSIONS) {
-    std::string ver_id = nsfs_version_id_from_statx(stx);
+    std::string ver_id;
+    if (is_null_version_fd(get_fd())) {
+      ver_id = NULL_VERSION_ID;
+    } else {
+      ver_id = nsfs_version_id_from_statx(stx);
+    }
     bde.key.instance = ver_id;
     bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                 rgw_bucket_dir_entry::FLAG_CURRENT;
@@ -3758,8 +3788,17 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
 
       bool cur_matches = false;
       if (ret == 0 && ent && ent->exists()) {
-        std::string cur_ver = nsfs_version_id_from_statx(ent->get_stx());
-        cur_matches = (cur_ver == req_ver);
+        if (req_ver == NULL_VERSION_ID) {
+          int chk_fd = ent->get_fd();
+          if (chk_fd < 0) {
+            ent->open(dpp);
+            chk_fd = ent->get_fd();
+          }
+          cur_matches = (chk_fd >= 0 && is_null_version_fd(chk_fd));
+        } else {
+          std::string cur_ver = nsfs_version_id_from_statx(ent->get_stx());
+          cur_matches = (cur_ver == req_ver);
+        }
       }
 
       if (!cur_matches) {
@@ -3829,9 +3868,22 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
                 }
                 std::string vid = vname.substr(leaf_name.size() + 1);
                 nsfs_version_info vinfo;
-                if (nsfs_parse_version_id(vid, vinfo) &&
-                    vinfo.mtime_ns > max_mtime) {
-                  max_mtime = vinfo.mtime_ns;
+                if (!nsfs_parse_version_id(vid, vinfo)) {
+                  continue;
+                }
+                uint64_t entry_mtime;
+                if (vid == NULL_VERSION_ID) {
+                  struct statx nstx;
+                  if (statx(vfd, de->d_name, AT_SYMLINK_NOFOLLOW,
+                            STATX_MTIME, &nstx) < 0) {
+                    continue;
+                  }
+                  entry_mtime = statx_mtime_ns(nstx);
+                } else {
+                  entry_mtime = vinfo.mtime_ns;
+                }
+                if (entry_mtime > max_mtime || max_name.empty()) {
+                  max_mtime = entry_mtime;
                   max_name = vname;
                 }
               }
@@ -4404,8 +4456,19 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
     /* check if the requested version is the current */
     if (ret == 0 && ent) {
-      std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
-      if (req_version_id == cur_ver_id) {
+      bool cur_match;
+      if (req_version_id == NULL_VERSION_ID) {
+        int chk_fd = ent->get_fd();
+        if (chk_fd < 0) {
+          ent->open(dpp);
+          chk_fd = ent->get_fd();
+        }
+        cur_match = (chk_fd >= 0 && is_null_version_fd(chk_fd));
+      } else {
+        std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
+        cur_match = (req_version_id == cur_ver_id);
+      }
+      if (cur_match) {
         result.version_id = req_version_id;
         /* capture parent fd and leaf name before delete_object
          * invalidates the ent/dir_chain */
@@ -4497,9 +4560,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* versioned delete without versionId — create delete marker */
   {
-  /* clear instance so stat() doesn't enter the version-specific path
-   * (instance may have been set by load_obj_state's dm detection) */
+  /* clear instance and ent so stat() re-resolves from scratch
+   * (instance may have been set by load_obj_state's dm detection,
+   * and ent may point to a .versions/ entry from a prior stat) */
   source->clear_instance();
+  source->ent.reset();
   int ret = source->stat(dpp);
 
   nsfs::FSEnt* ent = source->get_fsent();
@@ -4542,23 +4607,40 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return vfd;
   }
 
-  /* demote current to .versions/ with retry on CAS mismatch */
+  /* determine if current is a null version */
+  bool cur_is_null = false;
   if (ret == 0 && ent && ent->exists()) {
+    int chk_fd = ent->get_fd();
+    if (chk_fd < 0) {
+      ent->open(dpp);
+      chk_fd = ent->get_fd();
+    }
+    if (chk_fd >= 0) {
+      cur_is_null = is_null_version_fd(chk_fd);
+    }
+  }
+
+  /* in suspended mode, remove any existing _null from .versions/ */
+  if (!ver_enabled) {
+    std::string null_name = dm_leaf + "_" + NULL_VERSION_ID;
+    ::unlinkat(vfd, null_name.c_str(), 0);
+  }
+
+  /* demote current to .versions/ with retry on CAS mismatch;
+   * skip when suspended and current is null (S3: replace null version) */
+  if (ret == 0 && ent && ent->exists() &&
+      !(!ver_enabled && cur_is_null)) {
+    std::string cur_ver_id = cur_is_null
+      ? NULL_VERSION_ID
+      : nsfs_version_id_from_statx(ent->get_stx());
+    std::string ver_name = dm_leaf + "_" + cur_ver_id;
+
     for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
       struct statx cur_stx;
       if (statx(parent_fd, dm_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
                 STATX_ALL, &cur_stx) < 0) {
         break;
       }
-      std::string cur_ver_id = ver_enabled
-        ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
-      std::string ver_name = dm_leaf + "_" + cur_ver_id;
-
-      if (!ver_enabled) {
-        std::string null_name = dm_leaf + "_" + NULL_VERSION_ID;
-        ::unlinkat(vfd, null_name.c_str(), 0);
-      }
-
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
@@ -4587,6 +4669,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       struct timespec ts = {0, 100000 + (rand() % 500000)};
       nanosleep(&ts, nullptr);
     }
+  } else if (!ver_enabled && ret == 0 && ent && ent->exists() && cur_is_null) {
+    /* suspended + null current: just unlink (rename will fail if no current) */
+    ::unlinkat(parent_fd, dm_leaf.c_str(), 0);
   }
 
   /* create delete marker as zero-byte file in .versions/ */
@@ -5062,41 +5147,66 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   /* versioned: demote current version before publishing, with retry */
   if (versioned && leaf_fd >= 0) {
+    bool cur_exists = false;
+    bool cur_is_null = false;
+    {
+      int chk_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+      if (chk_fd >= 0) {
+        cur_exists = true;
+        cur_is_null = is_null_version_fd(chk_fd);
+        ::close(chk_fd);
+      }
+    }
+
     int vfd = open_versions_dir(leaf_fd);
     if (vfd >= 0) {
-      for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
-        struct statx cur_stx;
-        if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                  STATX_ALL, &cur_stx) < 0) {
-          break;
-        }
-        std::string cur_ver_id = ver_enabled
-          ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
-        std::string ver_name = leaf_name + "_" + cur_ver_id;
-        if (!ver_enabled) {
-          std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
-          ::unlinkat(vfd, null_name.c_str(), 0);
-        }
-        SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
-                                  statx_mtime_ns(cur_stx), cur_stx.stx_ino);
-        if (sr == SafeResult::OK) {
-          int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-          if (demoted_fd >= 0) {
-            auto now_ms = std::to_string(
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count());
-            std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-            ::fsetxattr(demoted_fd, ts_x.c_str(),
-                        now_ms.c_str(), now_ms.size(), 0);
-            ::close(demoted_fd);
+      if (!ver_enabled) {
+        std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
+        ::unlinkat(vfd, null_name.c_str(), 0);
+      }
+
+      if (cur_exists && !(!ver_enabled && cur_is_null)) {
+        std::string cur_ver_id;
+        {
+          struct statx id_stx;
+          if (cur_is_null) {
+            cur_ver_id = NULL_VERSION_ID;
+          } else if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                           STATX_ALL, &id_stx) == 0) {
+            cur_ver_id = nsfs_version_id_from_statx(id_stx);
           }
-          break;
         }
-        if (sr == SafeResult::ERROR) {
-          break;
+
+        if (!cur_ver_id.empty()) {
+          std::string ver_name = leaf_name + "_" + cur_ver_id;
+          for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+            struct statx cur_stx;
+            if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                      STATX_ALL, &cur_stx) < 0) {
+              break;
+            }
+            SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
+                                      statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+            if (sr == SafeResult::OK) {
+              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+              if (demoted_fd >= 0) {
+                auto now_ms = std::to_string(
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+                std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+                ::fsetxattr(demoted_fd, ts_x.c_str(),
+                            now_ms.c_str(), now_ms.size(), 0);
+                ::close(demoted_fd);
+              }
+              break;
+            }
+            if (sr == SafeResult::ERROR) {
+              break;
+            }
+            struct timespec ts = {0, 100000 + (rand() % 500000)};
+            nanosleep(&ts, nullptr);
+          }
         }
-        struct timespec ts = {0, 100000 + (rand() % 500000)};
-        nanosleep(&ts, nullptr);
       }
       ::close(vfd);
     }
@@ -5407,56 +5517,80 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   bool ver_enabled = binfo.versioning_enabled();
 
   /* versioned PUT: demote current version to .versions/ before publishing */
-  if (versioned && exists && obj->get_fsent() &&
-      obj->get_fsent()->get_parent()) {
-    nsfs::Directory* parent = obj->get_fsent()->get_parent();
-    int parent_fd = parent->get_fd();
-    if (parent_fd < 0) {
-      parent->open(dpp);
+  if (versioned) {
+    nsfs::Directory* parent = obj->get_fsent()
+      ? obj->get_fsent()->get_parent() : nullptr;
+    int parent_fd = -1;
+    std::string cur_leaf;
+
+    if (parent) {
       parent_fd = parent->get_fd();
+      if (parent_fd < 0) {
+        parent->open(dpp);
+        parent_fd = parent->get_fd();
+      }
+      cur_leaf = obj->get_fsent()->get_name();
     }
 
     if (parent_fd >= 0) {
-      std::string cur_leaf = obj->get_fsent()->get_name();
+      bool cur_is_null = false;
+      if (exists) {
+        int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
+        if (chk_fd >= 0) {
+          cur_is_null = is_null_version_fd(chk_fd);
+          ::close(chk_fd);
+        }
+      }
+
       int vfd = open_versions_dir(parent_fd);
       if (vfd >= 0) {
-        for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
-          struct statx cur_stx;
-          if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
-                    STATX_ALL, &cur_stx) < 0) {
-            break;
+        /* in suspended mode, remove any existing _null from .versions/ */
+        if (!ver_enabled) {
+          std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
+          ::unlinkat(vfd, null_name.c_str(), 0);
+        }
+
+        /* demote current unless suspended+null (S3: replace null version) */
+        if (exists && !(!ver_enabled && cur_is_null)) {
+          struct statx id_stx;
+          std::string cur_ver_id;
+          if (cur_is_null) {
+            cur_ver_id = NULL_VERSION_ID;
+          } else if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+                           STATX_ALL, &id_stx) == 0) {
+            cur_ver_id = nsfs_version_id_from_statx(id_stx);
           }
-          std::string cur_ver_id = ver_enabled
-            ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
           std::string ver_name = cur_leaf + "_" + cur_ver_id;
 
-          if (!ver_enabled) {
-            std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
-            ::unlinkat(vfd, null_name.c_str(), 0);
-          }
-
-          SafeResult sr = safe_link(parent_fd, cur_leaf,
-                                    vfd, ver_name,
-                                    statx_mtime_ns(cur_stx),
-                                    cur_stx.stx_ino);
-          if (sr == SafeResult::OK) {
-            int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-            if (demoted_fd >= 0) {
-              auto now_ms = std::to_string(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch()).count());
-              std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-              ::fsetxattr(demoted_fd, ts_x.c_str(),
-                          now_ms.c_str(), now_ms.size(), 0);
-              ::close(demoted_fd);
+          for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+            struct statx cur_stx;
+            if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+                      STATX_ALL, &cur_stx) < 0) {
+              break;
             }
-            break;
+            SafeResult sr = safe_link(parent_fd, cur_leaf,
+                                      vfd, ver_name,
+                                      statx_mtime_ns(cur_stx),
+                                      cur_stx.stx_ino);
+            if (sr == SafeResult::OK) {
+              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+              if (demoted_fd >= 0) {
+                auto now_ms = std::to_string(
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+                std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+                ::fsetxattr(demoted_fd, ts_x.c_str(),
+                            now_ms.c_str(), now_ms.size(), 0);
+                ::close(demoted_fd);
+              }
+              break;
+            }
+            if (sr == SafeResult::ERROR) {
+              break;
+            }
+            struct timespec ts = {0, 100000 + (rand() % 500000)};
+            nanosleep(&ts, nullptr);
           }
-          if (sr == SafeResult::ERROR) {
-            break;
-          }
-          struct timespec ts = {0, 100000 + (rand() % 500000)};
-          nanosleep(&ts, nullptr);
         }
         ::close(vfd);
       }
