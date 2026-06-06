@@ -2389,7 +2389,10 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-
+  if (_head_obj->get_bucket()->get_info().versioning_enabled() &&
+      !_head_obj->have_instance()) {
+    _head_obj->gen_rand_obj_instance_name();
+  }
   return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
