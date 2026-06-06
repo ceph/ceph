@@ -75,6 +75,20 @@ s3() {
   s3cmd -c "$S3CFG" "$@"
 }
 
+export AWS_ACCESS_KEY_ID="$ACCESS_KEY"
+export AWS_SECRET_ACCESS_KEY="$SECRET_KEY"
+export AWS_DEFAULT_REGION="us-east-1"
+AWS_ENDPOINT="http://$HOST:$PORT"
+
+awsapi() {
+  [ "$VERBOSE" -eq 1 ] && echo "  + aws $*" >&2
+  if [ "$VERBOSE" -eq 1 ]; then
+    aws --endpoint-url "$AWS_ENDPOINT" "$@"
+  else
+    aws --endpoint-url "$AWS_ENDPOINT" "$@" 2>/dev/null
+  fi
+}
+
 log() {
   echo "=== $*"
 }
@@ -104,11 +118,13 @@ if [ "$DO_START" -eq 1 ]; then
   if [ "$VERBOSE" -eq 1 ]; then
     MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
       "$SRC_DIR/vstart.sh" -n -d --rgw_store nsfs \
-      -o rgw_nsfs_cache_max_buckets=500
+      -o 'rgw_nsfs_cache_max_buckets=500' \
+      -o 'rgw_multipart_min_part_size=32'
   else
     MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
       "$SRC_DIR/vstart.sh" -n -d --rgw_store nsfs \
-      -o rgw_nsfs_cache_max_buckets=500 \
+      -o 'rgw_nsfs_cache_max_buckets=500' \
+      -o 'rgw_multipart_min_part_size=32' \
       > /dev/null 2>&1
   fi
   sleep 2
@@ -202,6 +218,55 @@ s3 del "s3://$BUCKET/shared/a.txt" > /dev/null 2>&1
 check "a.txt removed" '[ ! -f "$NSFS_ROOT/$BUCKET/shared/a.txt" ]'
 check "shared/ preserved (b.txt remains)" '[ -d "$NSFS_ROOT/$BUCKET/shared" ]'
 check "b.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/shared/b.txt" ]'
+
+# --- test multipart upload via aws s3api ---
+
+log "multipart upload (aws s3api)"
+
+MP_KEY="mp/large.bin"
+UPLOAD_ID=$(awsapi s3api create-multipart-upload \
+  --bucket "$BUCKET" --key "$MP_KEY" \
+  --query 'UploadId' --output text || true)
+check "create-multipart-upload returns upload_id" '[ -n "$UPLOAD_ID" ] && [ "$UPLOAD_ID" != "None" ]'
+
+# create 3 x 1MB parts
+PARTS_JSON="["
+for i in 1 2 3; do
+  dd if=/dev/urandom of="/tmp/nsfs-part-$$-$i.bin" bs=1M count=1 2>/dev/null
+  ETAG=$(awsapi s3api upload-part \
+    --bucket "$BUCKET" --key "$MP_KEY" \
+    --upload-id "$UPLOAD_ID" --part-number "$i" \
+    --body "/tmp/nsfs-part-$$-$i.bin" \
+    --query 'ETag' --output text || true)
+  check "upload-part $i returns etag" '[ -n "$ETAG" ] && [ "$ETAG" != "None" ]'
+  [ "$i" -gt 1 ] && PARTS_JSON="$PARTS_JSON,"
+  PARTS_JSON="$PARTS_JSON{\"ETag\":$ETAG,\"PartNumber\":$i}"
+done
+PARTS_JSON="$PARTS_JSON]"
+
+COMPLETE_OUT=$(awsapi s3api complete-multipart-upload \
+  --bucket "$BUCKET" --key "$MP_KEY" \
+  --upload-id "$UPLOAD_ID" \
+  --multipart-upload "{\"Parts\":$PARTS_JSON}" || true)
+check "complete-multipart-upload succeeds" '[ -n "$COMPLETE_OUT" ]'
+
+check "multipart object is regular file" '[ -f "$NSFS_ROOT/$BUCKET/mp/large.bin" ]'
+check "multipart object is NOT a directory" '[ ! -d "$NSFS_ROOT/$BUCKET/mp/large.bin" ]'
+check "mp/ dir exists" '[ -d "$NSFS_ROOT/$BUCKET/mp" ]'
+
+# verify content: concatenate parts and compare
+cat /tmp/nsfs-part-$$-1.bin /tmp/nsfs-part-$$-2.bin /tmp/nsfs-part-$$-3.bin \
+  > /tmp/nsfs-mp-expected-$$.bin
+awsapi s3api get-object --bucket "$BUCKET" --key "$MP_KEY" \
+  /tmp/nsfs-mp-got-$$.bin > /dev/null || true
+check "multipart GET content matches" \
+  'diff -q /tmp/nsfs-mp-expected-$$.bin /tmp/nsfs-mp-got-$$.bin > /dev/null'
+
+# no staging dirs left
+STAGING=$(find "$NSFS_ROOT/$BUCKET" -maxdepth 1 -name '.multipart_*' 2>/dev/null)
+check "no leftover staging dirs" '[ -z "$STAGING" ]'
+
+rm -f /tmp/nsfs-part-$$-*.bin /tmp/nsfs-mp-expected-$$.bin /tmp/nsfs-mp-got-$$.bin
 
 # --- verify xattr naming on disk ---
 
