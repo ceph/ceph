@@ -268,6 +268,9 @@ cargo nextest run --no-default-features --features fails_on_aws
 # Running against dbstore
 cargo nextest run --no-default-features --features fails_on_dbstore
 
+# Running against nsfs (hierarchical filesystem namespace)
+cargo nextest run --no-default-features --features fails_on_nsfs
+
 # No filtering — run everything regardless of backend
 cargo nextest run --no-default-features
 ```
@@ -277,6 +280,25 @@ cargo nextest run --no-default-features
 | `fails_on_rgw` | **yes** | ~8 | RGW-specific failures |
 | `fails_on_aws` | no | ~130 | Behaviors that differ from AWS (includes bucket logging) |
 | `fails_on_dbstore` | no | ~178 | Features not supported by dbstore |
+| `fails_on_nsfs` | no | 2 | Hierarchical namespace: file-as-prefix conflict (see below) |
+
+#### nsfs file-as-prefix limitation
+
+The nsfs driver maps S3 object keys to real filesystem directory
+hierarchies — the `/` delimiter in a key creates actual directories.
+This exposes the POSIX directory namespace constraint: a name in a
+directory is either a file or a subdirectory, not both.  `PUT foo/bar`
+creates file `bar` inside directory `foo`, but a subsequent
+`PUT foo/bar/xyzzy` requires `bar` to be a directory, which fails
+with `ENOTDIR`.
+
+Other filesystem-backed drivers (e.g. posixdriver) avoid this by
+flattening key paths.  Filesystems with richer namespace semantics
+(resource forks, alternate data streams) could also sidestep this, but
+the standard POSIX API does not expose such mechanisms.  The noobaa
+nsfs implementation, which uses the same hierarchical mapping, has the
+same limitation.  Tests tagged `fails_on_nsfs` exercise key patterns
+that trigger this conflict.
 
 ## Test counts by module
 

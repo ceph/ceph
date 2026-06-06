@@ -22,6 +22,21 @@ O_NOFOLLOW per component.
 The dir_chain vector owns intermediate Directory objects. On DELETE,
 reverse-walk removes empty parents.
 
+### File-as-prefix limitation
+
+Because `/` in an object key maps to real directory boundaries, the
+POSIX directory namespace constraint applies: a name in a directory is
+either a file or a subdirectory, not both.  If key `foo/bar` exists as
+a regular file, a subsequent PUT of `foo/bar/xyzzy` fails with
+`ENOTDIR` — `resolve_path` cannot open `bar` as a directory.
+
+Other filesystem-backed drivers (e.g. posixdriver) avoid this by
+flattening key paths.  Filesystems with richer namespace semantics
+(resource forks, alternate data streams) could also sidestep this, but
+the standard POSIX API does not expose such mechanisms.  The noobaa
+nsfs implementation has the same constraint.  S3 tests that exercise
+overlapping key prefixes are tagged `fails_on_nsfs`.
+
 ## xattr Scheme
 
 Two-tier prefix swap via `make_xattr_name()` / `parse_xattr_name()`:

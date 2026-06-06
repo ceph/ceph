@@ -172,6 +172,7 @@ async fn test_basic_key_count() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: file-as-prefix conflict (ENOTDIR)")]
 async fn test_bucket_list_delimiter_basic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let bucket_name =
@@ -195,6 +196,7 @@ async fn test_bucket_list_delimiter_basic() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: file-as-prefix conflict (ENOTDIR)")]
 async fn test_bucket_listv2_delimiter_basic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let bucket_name =
