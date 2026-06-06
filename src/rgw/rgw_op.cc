@@ -7683,9 +7683,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
       s->object->set_instance(version_id);
-    } else {
-      s->object->gen_rand_obj_instance_name();
-      version_id = s->object->get_instance();
     }
   }
 
@@ -7776,6 +7773,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
+  }
+
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
   }
 
   // size is logged in stadared mode

@@ -4270,6 +4270,10 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_match,
            const char *if_nomatch)
 {
+  if (bucket->get_info().versioning_enabled() &&
+      !target_obj->have_instance()) {
+    target_obj->gen_rand_obj_instance_name();
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes

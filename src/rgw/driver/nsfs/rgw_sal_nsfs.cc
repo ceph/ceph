@@ -4885,14 +4885,67 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
+  bool versioned = pb->get_info().versioned();
+  bool ver_enabled = pb->get_info().versioning_enabled();
+  int leaf_fd = leaf_dir->get_fd();
+
+  /* versioned: demote current version before publishing */
+  if (versioned && leaf_fd >= 0) {
+    struct statx cur_stx;
+    if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+              STATX_ALL, &cur_stx) == 0) {
+      std::string cur_ver_id = ver_enabled
+        ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
+      int vfd = open_versions_dir(leaf_fd);
+      if (vfd >= 0) {
+        std::string ver_name = leaf_name + "_" + cur_ver_id;
+        if (!ver_enabled) {
+          std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
+          ::unlinkat(vfd, null_name.c_str(), 0);
+        }
+        safe_link(leaf_fd, leaf_name, vfd, ver_name,
+                  statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+        int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+        if (demoted_fd >= 0) {
+          auto now_ms = std::to_string(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::system_clock::now().time_since_epoch()).count());
+          std::string ts_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+          ::fsetxattr(demoted_fd, ts_xattr.c_str(),
+                      now_ms.c_str(), now_ms.size(), 0);
+          ::close(demoted_fd);
+        }
+        ::close(vfd);
+      }
+    }
+  }
+
   // atomic rename assembled file to final location
   ret = renameat(staging_fd, assembled_name.c_str(),
-                 leaf_dir->get_fd(), leaf_name.c_str());
+                 leaf_fd, leaf_name.c_str());
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: failed to rename assembled file to "
                       << target_key << ": " << cpp_strerror(ret) << dendl;
     return -ret;
+  }
+
+  /* versioned: compute version ID from published file's stat */
+  if (versioned && leaf_fd >= 0) {
+    struct statx new_stx;
+    if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+              STATX_ALL, &new_stx) == 0) {
+      std::string new_ver_id = ver_enabled
+        ? nsfs_version_id_from_statx(new_stx) : NULL_VERSION_ID;
+      target_obj->set_instance(new_ver_id);
+      int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+      if (obj_fd >= 0) {
+        std::string vid_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+        ::fsetxattr(obj_fd, vid_xattr.c_str(),
+                    new_ver_id.c_str(), new_ver_id.size(), 0);
+        ::close(obj_fd);
+      }
+    }
   }
 
   // remove staging directory
