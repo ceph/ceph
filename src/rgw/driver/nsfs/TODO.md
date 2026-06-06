@@ -102,10 +102,28 @@ Relevant test modules and coverage:
 | `acl.rs` | 60 | 7 |
 | `object_lock.rs` | 39 | 8 |
 
+## Branch housekeeping
+
+The branch has several `fixup!` commits that need squashing before merge:
+
+```
+git rebase -i --autosquash <base>
+```
+
+The fixup commits target:
+- `rgw/posix: replace POSIXManifest with per-part size xattrs` — encode_attr/decode_raw_attr + uint16_t
+- `rgw/nsfs: replace NSFSManifest with per-part size xattrs` — same
+- `rgw/posix: fix use-after-free in get_meta_obj` — pin_bucket + write_attrs stale removal
+- `rgw/nsfs: fix use-after-free in get_meta_obj` — same
+
+Posix-only commits (get_ent, conditional PUT/DELETE, per-part xattrs,
+get_meta_obj, write_attrs) are structured for cherry-picking to Ali's
+posixdriver development baseline if needed.
+
 ## Future milestones (out of scope for now)
 
 - Versioning (`.versions/` directory scheme)
 - GPFS integration (`gpfs_linkat`, `O_TMPFILE`, conditional link/unlink)
 - Handle cache (LRU for Directory objects)
 - `force_md5_etag` config option
-- Bucket lifecycle management
+- Bucket lifecycle management (deferred until posixdriver lifecycle baseline is folded in)
