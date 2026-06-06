@@ -3477,6 +3477,9 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 {
   int ret = stat(dpp);
   if (ret < 0) {
+    if (state.is_dm && !dm_version_id.empty()) {
+      state.obj.key.instance = dm_version_id;
+    }
     return ret;
   }
 
@@ -3843,9 +3846,8 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
                   if (xlen > 0) {
                     state.is_dm = true;
                     state.exists = false;
-                    std::string vid =
+                    dm_version_id =
                       max_name.substr(leaf_name.size() + 1);
-                    state.obj.key.instance = vid;
                   }
                   ::close(dm_fd);
                 }
@@ -4384,7 +4386,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * set instance, matching rados behavior).
    */
   std::string req_version_id = params.marker_version_id;
-  if (req_version_id.empty()) {
+  if (req_version_id.empty() && !source->is_delete_marker()) {
     req_version_id = source->get_instance();
   }
 
