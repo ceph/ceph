@@ -1595,3 +1595,6 @@ async fn test_versioning_bucket_multipart_upload_return_version_id() {
         .unwrap();
     assert!(resp3.version_id().is_none());
 }
+
+// Stress tests for bucket cache and versioning concurrency have been
+// moved to tests/test_s3/stress.rs — see that module for details.

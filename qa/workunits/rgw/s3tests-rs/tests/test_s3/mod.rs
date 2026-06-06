@@ -13,5 +13,6 @@ mod multipart;
 mod object_lock;
 mod post_object;
 mod object_ops;
+mod stress;
 mod tagging;
 mod versioning;

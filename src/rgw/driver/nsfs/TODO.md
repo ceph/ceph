@@ -149,31 +149,66 @@ is an implementation detail, not a layout spec. No convergence planned.
 ### BucketCache LRU race under concurrent load
 
 Reproduced by `stress::test_versioned_bucket_cache_stress` in s3tests-rs.
-Creating many buckets and concurrently listing across them triggers an
-assertion failure in `cohort::lru::LRU::evict_block` →
-`boost::intrusive::list_impl::s_iterator_to`.
+Creating many buckets and concurrently listing across them triggers
+crashes in the bucket cache LRU.  **Affects both nsfs and posix drivers**
+(same `cohort_lru` + `BucketCache` template instantiation).
 
-Backtrace signature:
+Two distinct crash signatures observed:
+
+**Signature 1 — SIGABRT in evict_block** (most common):
 ```
 cohort::lru::LRU<std::mutex>::evict_block
-  → boost::intrusive::list_impl::s_iterator_to  (assertion)
+  → boost::intrusive::list_impl::s_iterator_to  (assertion failure)
   → BucketCache::get_bucket → LRU::insert
 ```
+The LRU list node is not linked to the list when `s_iterator_to` is
+called.  Suggests a node was unlinked by one thread while another
+thread still holds a reference to it.
 
-This is the same `cohort_lru` infrastructure used by `RGWFileHandle` cache,
-where similar races were found and fixed in earlier work.  The BucketCache
-instantiation may not have received all those fixes.  Prior symptoms also
-included exceeding the maximum number of open LMDB instances after sustained
-recycling.
+**Signature 2 — SIGSEGV in AVL tree traversal**:
+```
+boost::intrusive::bstree_algorithms_base::next_node  (SIGSEGV)
+  → tree_iterator::operator++
+  → TreeX::insert_latched
+  → BucketCache::get_bucket → list_bucket
+```
+The AVL tree node has a corrupt pointer (use-after-free).  The node
+was likely recycled or freed while still reachable from the tree.
+
+**Signature 3 — SIGSEGV in string comparison** (posix):
+```
+std::string::size  (SIGSEGV on this pointer)
+  → BucketCacheEntryLT::operator()
+  → TreeX::insert_latched
+  → BucketCache::get_bucket
+```
+The BucketCacheEntry's `name` string is a dangling reference.  The
+entry was freed/recycled while its AVL tree node was still linked.
+
+**Reproduction:** The stress tests reproduce reliably within 1-3 runs
+of 20+ buckets with concurrent listing.  Also triggers during the
+s3tests-rs multipart module (which creates many buckets rapidly).
+On posix, observed during `multipart::*` tests with ~36 buckets.
+
+This is the same `cohort_lru` infrastructure used by `RGWFileHandle`
+cache, where similar races were found and fixed in earlier work.  The
+`BucketCache` instantiation may not have received all those fixes.
+Prior symptoms also included exceeding the maximum number of open LMDB
+instances after sustained recycling.
 
 **Impact:** crash under concurrent multi-bucket workloads.  Single-bucket
-operations and sequential test suites are unaffected.
+operations and sequential test suites are typically unaffected.
 
 **Next steps:**
-1. Audit `BucketCache::get_bucket` → `insert_latched` / `evict_block`
-   locking against the fixes applied to `RGWFileHandle` LRU
-2. Check whether the LMDB handle limit issue is also still present
-3. The stress tests in `qa/workunits/rgw/s3tests-rs/tests/test_s3/stress.rs`
+1. Audit `BucketCache::get_bucket` locking: the AVL tree lookup
+   (`cache.find_latch`) and the LRU insert/evict cycle must be atomic
+   with respect to concurrent callers — check whether the latch is
+   held across the entire insert-or-recycle path
+2. Compare `BucketCache` locking against `RGWFileHandle` LRU fixes,
+   especially the `evict_block` → `insert` → `recycle` sequence
+3. Check whether LMDB handle exhaustion (previously observed) shares
+   the same root cause (entry freed but LMDB handle not closed)
+4. The stress tests in `qa/workunits/rgw/s3tests-rs/tests/test_s3/stress.rs`
    are marked `#[ignore]` and reproduce reliably — run with
    `cargo nextest run -E 'test(/^stress::/)' --run-ignored=all --test-threads=1`
 
