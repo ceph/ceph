@@ -3384,6 +3384,10 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 10) << "destination If-Match/If-None-Match not supported on the POSIX driver" << dendl;
     return -ERR_NOT_IMPLEMENTED;
   }
+  if (db->get_info().versioning_enabled() &&
+      !dest_object->have_instance()) {
+    dest_object->gen_rand_obj_instance_name();
+  }
   bool has_instance = !get_key().instance.empty();
 
   // Source must exist, and we need to know if it's a shadow obj
