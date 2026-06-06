@@ -18,6 +18,7 @@
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
+#include "include/encoding.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
@@ -483,7 +484,7 @@ public:
 };
 
 class POSIXDriver : public StoreDriver {
-protected:	
+protected:
   CephContext *cct;
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
@@ -504,7 +505,7 @@ public:
     const auto& db_path = g_conf().get_val<std::string>("rgw_posix_userdb_dir");
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
-    
+
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
     accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
   }
@@ -788,7 +789,7 @@ public:
 				const std::string& unique_tag) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
-  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
+  virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
 
   virtual void finalize(void) override;
 
@@ -986,27 +987,11 @@ public:
 
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
-  
+
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
 
-struct POSIXManifest {
-  int64_t  multipart_part_count{-1};
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(multipart_part_count, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(multipart_part_count, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(POSIXManifest);
 
 class POSIXObject : public StoreObject {
 public:
@@ -1020,6 +1005,7 @@ private:
 public:
   struct POSIXReadOp : ReadOp {
     POSIXObject* source;
+    int64_t part_ofs{0};
 
     POSIXReadOp(POSIXObject* _source) :
       source(_source) {}
