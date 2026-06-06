@@ -209,6 +209,7 @@ bool RGWCORSRule::matches_preflight_headers(const char *req_hdrs)
   get_str_vec(req_hdrs, hdrs);
   for (const auto& hdr : hdrs) {
     if (!is_header_allowed(hdr.c_str(), hdr.length())) {
+      dout(5) << "Header " << hdr << " is not registered in this rule" << dendl;
       return false;
     }
   }
