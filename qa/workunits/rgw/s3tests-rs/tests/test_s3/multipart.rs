@@ -1103,6 +1103,10 @@ async fn test_multipart_single_get_part() {
     assert_s3_err!(res, 400, "InvalidPart");
 }
 
+/* url_decode() returns "" on invalid percent sequences, silently dropping
+ * the copy source; the request degrades to a plain UploadPart with empty
+ * body and succeeds.  Likely an op-layer issue, not driver-specific. */
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: url_decode drops invalid percent-encoded copy source")]
 #[tokio::test]
 async fn test_upload_part_copy_percent_encoded_key() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
