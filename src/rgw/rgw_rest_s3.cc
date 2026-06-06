@@ -3862,6 +3862,9 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
       ldpp_dout(this, 10) << "failed to parse time: " << if_last_mod_match_decoded << dendl;
       return r;
     }
+    auto ns = last_mod_time_match.time_since_epoch() %
+              std::chrono::seconds(1);
+    last_mod_time_match_precise = (ns != decltype(ns)::zero());
   }
 
   if(if_size_match) {

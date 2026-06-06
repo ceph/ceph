@@ -6004,6 +6004,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
       del_op->params.last_mod_time_match = last_mod_time_match;
+      del_op->params.last_mod_time_match_precise = last_mod_time_match_precise;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
@@ -8256,6 +8257,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
   del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.last_mod_time_match_precise = object.get_last_mod_time_precise();
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
