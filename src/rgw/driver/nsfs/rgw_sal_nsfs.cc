@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <atomic>
 #include <cstdint>
 #include "rgw_mime.h"
 #include "rgw_multi.h"
@@ -87,6 +88,17 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
 #define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
+
+#define RGW_NSFS_ATTR_VERSION_ID "version_id"
+#define RGW_NSFS_ATTR_DELETE_MARKER "delete_marker"
+#define RGW_NSFS_ATTR_NON_CURRENT_TS "non_current_timestamp"
+
+static const std::string HIDDEN_VERSIONS_PATH = ".versions";
+static const std::string NULL_VERSION_ID = "null";
+
+static constexpr int NSFS_VERSION_RETRIES = 5;
+static constexpr int NSFS_VERSION_DELAY_BASE_MS = 50;
+
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -124,24 +136,255 @@ struct NSFSOwner {
 };
 WRITE_CLASS_ENCODER(NSFSOwner);
 
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
+
+static bool from_base36(const std::string& s, uint64_t& out)
+{
+  out = 0;
+  for (char c : s) {
+    uint64_t d;
+    if (c >= '0' && c <= '9') {
+      d = c - '0';
+    } else if (c >= 'a' && c <= 'z') {
+      d = 10 + (c - 'a');
+    } else {
+      return false;
+    }
+    out = out * 36 + d;
+  }
+  return true;
+}
+
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+static std::string nsfs_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
+
+struct nsfs_version_info {
+  uint64_t mtime_ns{0};
+  uint64_t ino{0};
+};
+
+static bool nsfs_parse_version_id(const std::string& version_id,
+                                  nsfs_version_info& info)
+{
+  if (version_id == NULL_VERSION_ID) {
+    info = {};
+    return true;
+  }
+  static const std::string mtime_pfx = "mtime-";
+  static const std::string ino_pfx = "-ino-";
+  if (version_id.compare(0, mtime_pfx.size(), mtime_pfx) != 0) {
+    return false;
+  }
+  auto ino_pos = version_id.find(ino_pfx, mtime_pfx.size());
+  if (ino_pos == std::string::npos) {
+    return false;
+  }
+  std::string mtime_str = version_id.substr(mtime_pfx.size(),
+                                            ino_pos - mtime_pfx.size());
+  std::string ino_str = version_id.substr(ino_pos + ino_pfx.size());
+  return from_base36(mtime_str, info.mtime_ns) &&
+         from_base36(ino_str, info.ino);
+}
+
+static bool nsfs_verify_version_id(const struct statx& stx,
+                                   const std::string& version_id)
+{
+  nsfs_version_info info;
+  if (!nsfs_parse_version_id(version_id, info)) {
+    return false;
+  }
+  return info.mtime_ns == statx_mtime_ns(stx) && info.ino == stx.stx_ino;
+}
+
+static std::string nsfs_versions_dir(const std::string& parent_path)
+{
+  return parent_path + "/" + HIDDEN_VERSIONS_PATH;
+}
+
+static std::string nsfs_version_path(const std::string& parent_path,
+                                     const std::string& leaf_name,
+                                     const std::string& version_id)
+{
+  return nsfs_versions_dir(parent_path) + "/" + leaf_name + "_" + version_id;
+}
+
 static std::string synthesize_etag(const struct statx& stx)
 {
-  uint64_t mtime_ns = (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
-                    + stx.stx_mtime.tv_nsec;
-  uint64_t ino = stx.stx_ino;
-  // format matches noobaa nsfs: "mtime-<base36>-ino-<base36>"
-  // the dash prevents S3 clients from treating it as MD5
-  auto to_base36 = [](uint64_t v) -> std::string {
-    if (v == 0) return "0";
-    const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-    std::string result;
-    while (v > 0) {
-      result.insert(result.begin(), digits[v % 36]);
-      v /= 36;
+  return nsfs_version_id_from_statx(stx);
+}
+
+enum class SafeResult {
+  OK = 0,
+  MISMATCH = 1,
+  ERROR = 2,
+};
+
+static bool stat_matches(int fd, const std::string& name,
+                         uint64_t expected_mtime_ns, uint64_t expected_ino)
+{
+  struct statx stx;
+  int ret = statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
+  if (ret < 0) {
+    return false;
+  }
+  return statx_mtime_ns(stx) == expected_mtime_ns &&
+         stx.stx_ino == expected_ino;
+}
+
+/* CAS link: link src_name (under src_dir_fd) to dst_name (under dst_dir_fd),
+ * then verify that dst's inode+mtime match expected values.
+ * If mismatch, undo the link and return MISMATCH (caller retries).
+ * Follows noobaa's SafeLink pattern (fs_napi.cpp). */
+static SafeResult safe_link(int src_dir_fd, const std::string& src_name,
+                            int dst_dir_fd, const std::string& dst_name,
+                            uint64_t expected_mtime_ns,
+                            uint64_t expected_ino)
+{
+  int ret = ::linkat(src_dir_fd, src_name.c_str(),
+                     dst_dir_fd, dst_name.c_str(), 0);
+  if (ret < 0) {
+    return SafeResult::ERROR;
+  }
+  if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
+    return SafeResult::OK;
+  }
+  ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+  return SafeResult::MISMATCH;
+}
+
+/* CAS unlink: rename target to a temp name (under tmp_dir_fd), verify
+ * inode+mtime, then unlink the temp.  If mismatch, put it back.
+ * Follows noobaa's SafeUnlink pattern (fs_napi.cpp). */
+static SafeResult safe_unlink(int dir_fd, const std::string& name,
+                              int tmp_dir_fd,
+                              uint64_t expected_mtime_ns,
+                              uint64_t expected_ino)
+{
+  static std::atomic<uint64_t> counter{0};
+  std::string tmp_name = ".unlink_tmp_" +
+    std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
+
+  int ret = ::renameat(dir_fd, name.c_str(),
+                       tmp_dir_fd, tmp_name.c_str());
+  if (ret < 0) {
+    if (errno == ENOENT) {
+      return SafeResult::OK;
     }
-    return result;
+    return SafeResult::ERROR;
+  }
+  if (stat_matches(tmp_dir_fd, tmp_name, expected_mtime_ns, expected_ino)) {
+    ::unlinkat(tmp_dir_fd, tmp_name.c_str(), 0);
+    return SafeResult::OK;
+  }
+  ::renameat(tmp_dir_fd, tmp_name.c_str(), dir_fd, name.c_str());
+  return SafeResult::MISMATCH;
+}
+
+/* LMDB comparator for versioned bucket listing.
+ * Key format: name \0 instance.
+ * Sort: name ascending, then instance descending (newest version first).
+ * Instance is "mtime-{base36}-ino-{base36}" — we extract and compare
+ * the mtime numerically for correct ordering regardless of base36 width. */
+static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
+{
+  std::string_view sa(static_cast<const char*>(a->mv_data), a->mv_size);
+  std::string_view sb(static_cast<const char*>(b->mv_data), b->mv_size);
+
+  auto sep_a = sa.find('\0');
+  auto sep_b = sb.find('\0');
+  std::string_view name_a = sa.substr(0, sep_a);
+  std::string_view name_b = sb.substr(0, sep_b);
+
+  int cmp = name_a.compare(name_b);
+  if (cmp != 0) {
+    return cmp;
+  }
+
+  /* same name — compare instances in reverse (newest first) */
+  std::string_view inst_a = (sep_a != std::string_view::npos)
+    ? sa.substr(sep_a + 1) : std::string_view{};
+  std::string_view inst_b = (sep_b != std::string_view::npos)
+    ? sb.substr(sep_b + 1) : std::string_view{};
+
+  /* empty instance (non-versioned) sorts before any version */
+  if (inst_a.empty() && inst_b.empty()) { return 0; }
+  if (inst_a.empty()) { return -1; }
+  if (inst_b.empty()) { return 1; }
+
+  /* extract mtime from "mtime-{base36}-ino-{base36}" */
+  auto extract_mtime = [](std::string_view inst) -> uint64_t {
+    static constexpr std::string_view pfx = "mtime-";
+    static constexpr std::string_view sep = "-ino-";
+    if (inst.substr(0, pfx.size()) != pfx) {
+      return 0;
+    }
+    auto ino_pos = inst.find(sep, pfx.size());
+    if (ino_pos == std::string_view::npos) {
+      return 0;
+    }
+    uint64_t val = 0;
+    for (size_t i = pfx.size(); i < ino_pos; ++i) {
+      char c = inst[i];
+      uint64_t d;
+      if (c >= '0' && c <= '9') { d = c - '0'; }
+      else if (c >= 'a' && c <= 'z') { d = 10 + (c - 'a'); }
+      else { return 0; }
+      val = val * 36 + d;
+    }
+    return val;
   };
-  return "mtime-" + to_base36(mtime_ns) + "-ino-" + to_base36(ino);
+
+  uint64_t mt_a = extract_mtime(inst_a);
+  uint64_t mt_b = extract_mtime(inst_b);
+
+  /* descending: larger mtime sorts first */
+  if (mt_a > mt_b) { return -1; }
+  if (mt_a < mt_b) { return 1; }
+
+  /* same mtime — compare full instance for determinism */
+  return inst_b.compare(inst_a);
+}
+
+static int ensure_versions_dir(int parent_fd)
+{
+  int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), 0755);
+  if (ret < 0 && errno != EEXIST) {
+    return -errno;
+  }
+  return 0;
+}
+
+static int open_versions_dir(int parent_fd)
+{
+  int ret = ensure_versions_dir(parent_fd);
+  if (ret < 0) {
+    return ret;
+  }
+  int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+                     O_RDONLY | O_DIRECTORY);
+  if (vfd < 0) {
+    return -errno;
+  }
+  return vfd;
 }
 
 namespace nsfs {
@@ -678,6 +921,13 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     bde.meta.etag = etag_bl.to_str();
   } else {
     bde.meta.etag = synthesize_etag(stx);
+  }
+
+  if (flags & FLAG_LIST_VERSIONS) {
+    std::string ver_id = nsfs_version_id_from_statx(stx);
+    bde.key.instance = ver_id;
+    bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                rgw_bucket_dir_entry::FLAG_CURRENT;
   }
 
   return cb(dpp, bde);
@@ -1280,7 +1530,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                           fill_cache_cb_t &cb, uint32_t flags,
                           const std::string& path_prefix)
 {
-  int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix](const char *name) {
+  int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (name[0] == '.' && name != NSFS_FOLDER_OBJECT_NAME) {
@@ -1341,11 +1591,11 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       ret = subdir->open(dpp);
       if (ret < 0)
         return ret;
-      return subdir->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE,
+      return subdir->fill_cache(dpp, y, cb, flags,
                                 path_prefix + name + "/");
     }
 
-    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
+    ret = ent->fill_cache(dpp, y, cb, flags, path_prefix);
     if (ret < 0)
       return ret;
     return 0;
@@ -1355,6 +1605,102 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     ldpp_dout(dpp, 0) << "ERROR: could not list directory " << get_name() << ": "
       << cpp_strerror(ret) << dendl;
     return ret;
+  }
+
+  /* enumerate .versions/ for versioned buckets */
+  if (flags & FSEnt::FLAG_LIST_VERSIONS) {
+    int vfd = ::openat(get_fd(), HIDDEN_VERSIONS_PATH.c_str(),
+                       O_RDONLY | O_DIRECTORY);
+    if (vfd >= 0) {
+      DIR* vdir = fdopendir(vfd);
+      if (vdir) {
+        struct dirent* de;
+        while ((de = readdir(vdir)) != nullptr) {
+          if (de->d_name[0] == '.') {
+            continue;
+          }
+
+          std::string vname(de->d_name);
+          /* parse "key_version_id" — find the last '_mtime-' or '_null' */
+          std::string obj_name;
+          std::string ver_id;
+          auto null_pos = vname.rfind("_null");
+          if (null_pos != std::string::npos &&
+              null_pos + 5 == vname.size()) {
+            obj_name = vname.substr(0, null_pos);
+            ver_id = NULL_VERSION_ID;
+          } else {
+            auto mtime_pos = vname.rfind("_mtime-");
+            if (mtime_pos != std::string::npos) {
+              obj_name = vname.substr(0, mtime_pos);
+              ver_id = vname.substr(mtime_pos + 1);
+            } else {
+              continue;
+            }
+          }
+
+          struct statx vstx;
+          if (statx(vfd, de->d_name, AT_SYMLINK_NOFOLLOW,
+                    STATX_ALL, &vstx) < 0) {
+            continue;
+          }
+
+          rgw_bucket_dir_entry bde{};
+          std::string full_key = path_prefix + obj_name;
+          rgw_obj_key key(full_key, ver_id);
+          key.get_index_key(&bde.key);
+          bde.ver.pool = 1;
+          bde.ver.epoch = 1;
+          bde.exists = true;
+          bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+
+          /* check delete marker */
+          int tfd = ::openat(vfd, de->d_name, O_RDONLY);
+          if (tfd >= 0) {
+            char buf[8];
+            std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+            ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
+            if (xlen > 0) {
+              bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+            }
+
+            Attrs attrs;
+            ret = get_x_attrs(y, dpp, tfd, attrs, vname);
+
+            NSFSOwner o;
+            if (decode_owner(attrs, o) >= 0) {
+              bde.meta.owner = o.user.to_str();
+              bde.meta.owner_display_name = o.display_name;
+            }
+
+            bufferlist etag_bl;
+            if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
+              bde.meta.etag = etag_bl.to_str();
+            }
+
+            ::close(tfd);
+          }
+
+          bde.meta.category = RGWObjCategory::Main;
+          bde.meta.size = vstx.stx_size;
+          bde.meta.accounted_size = vstx.stx_size;
+          bde.meta.mtime = from_statx_timestamp(vstx.stx_mtime);
+          bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+          if (bde.meta.etag.empty()) {
+            bde.meta.etag = synthesize_etag(vstx);
+          }
+
+          ret = cb(dpp, bde);
+          if (ret < 0) {
+            break;
+          }
+        }
+        closedir(vdir);
+      } else {
+        ::close(vfd);
+      }
+    }
   }
 
   return 0;
@@ -2277,10 +2623,19 @@ void NSFSDriver::meta_list_keys_complete(void* handle)
   return;
 }
 
+MDB_cmp_func* NSFSBucket::lmdb_cmp()
+{
+  return nsfs_lmdb_cmp;
+}
+
 int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
                             fill_cache_cb_t& cb)
 {
-  return dir->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  uint32_t flags = nsfs::FSEnt::FLAG_NONE;
+  if (get_info().versioned()) {
+    flags |= nsfs::FSEnt::FLAG_LIST_VERSIONS;
+  }
+  return dir->fill_cache(dpp, y, cb, flags);
 }
 
 int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
@@ -3256,31 +3611,114 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
       state.exists = false;
       return ret;
     }
-    ret = leaf_dir->get_ent(dpp, null_yield, leaf_name,
-        state.obj.key.instance, ent);
+
+    const std::string& req_ver = state.obj.key.instance;
+    NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
+    bool versioned = b && b->get_info().versioned();
+
+    if (versioned && !req_ver.empty()) {
+      /* version-aware stat: check current first, fall back to .versions/ */
+      ret = leaf_dir->get_ent(dpp, null_yield, leaf_name, req_ver, ent);
+      if (ret == 0) {
+        ret = ent->stat(dpp);
+      }
+
+      bool cur_matches = false;
+      if (ret == 0 && ent && ent->exists()) {
+        std::string cur_ver = nsfs_version_id_from_statx(ent->get_stx());
+        cur_matches = (cur_ver == req_ver);
+      }
+
+      if (!cur_matches) {
+        /* look in .versions/ */
+        int parent_fd = leaf_dir->get_fd();
+        if (parent_fd < 0) {
+          leaf_dir->open(dpp);
+          parent_fd = leaf_dir->get_fd();
+        }
+        if (parent_fd >= 0) {
+          std::string ver_name = leaf_name + "_" + req_ver;
+          int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+                             O_RDONLY | O_DIRECTORY);
+          if (vfd >= 0) {
+            /* create a .versions/ Directory and get the versioned File */
+            auto ver_dir = std::make_unique<Directory>(
+              HIDDEN_VERSIONS_PATH, leaf_dir, driver->ctx());
+            ver_dir->open(dpp);
+            ent = std::make_unique<File>(ver_name, ver_dir.get(), driver->ctx());
+            dir_chain.push_back(std::move(ver_dir));
+            ::close(vfd);
+
+            ret = ent->stat(dpp);
+            if (ret < 0) {
+              state.exists = false;
+              return ret;
+            }
+          } else {
+            state.exists = false;
+            return -ENOENT;
+          }
+        } else {
+          state.exists = false;
+          return -ENOENT;
+        }
+      }
+    } else {
+      /* non-versioned or no specific version requested */
+      ret = leaf_dir->get_ent(dpp, null_yield, leaf_name,
+          state.obj.key.instance, ent);
+      if (ret < 0) {
+        state.exists = false;
+        return ret;
+      }
+
+      ret = ent->stat(dpp);
+      if (ret < 0) {
+        state.exists = false;
+        return ret;
+      }
+    }
+  } else {
+    ret = ent->stat(dpp);
     if (ret < 0) {
       state.exists = false;
       return ret;
     }
   }
 
-  ret = ent->stat(dpp);
-  if (ret < 0) {
-    state.exists = false;
-    return ret;
+  if (state.obj.key.instance.empty() && ent && ent->exists()) {
+    /* for versioned buckets, set instance to computed version ID */
+    NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
+    if (b && b->get_info().versioned()) {
+      state.obj.key.instance = nsfs_version_id_from_statx(ent->get_stx());
+    } else {
+      state.obj.key.instance = ent->get_cur_version();
+    }
   }
 
-  if (state.obj.key.instance.empty()) {
-    state.obj.key.instance = ent->get_cur_version();
-  }
-
-  state.exists = ent->exists();
+  state.exists = ent ? ent->exists() : false;
   if (!state.exists) {
     return 0;
   }
 
   state.accounted_size = state.size = ent->get_stx().stx_size;
   state.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+
+  /* check for delete marker xattr */
+  NSFSBucket* bk = static_cast<NSFSBucket*>(bucket);
+  if (bk && bk->get_info().versioned() && ent->get_parent()) {
+    int pfd = ent->get_parent()->get_fd();
+    if (pfd >= 0) {
+      int tfd = ::openat(pfd, ent->get_name().c_str(), O_RDONLY);
+      if (tfd >= 0) {
+        char buf[8];
+        std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+        ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
+        state.is_dm = (xlen > 0);
+        ::close(tfd);
+      }
+    }
+  }
 
   return 0;
 }
@@ -3734,7 +4172,216 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
 
-  return source->delete_object(dpp, y, flags, nullptr, nullptr);
+  NSFSBucket *b = static_cast<NSFSBucket*>(source->get_bucket());
+  if (!b) {
+    return -EINVAL;
+  }
+
+  const auto& binfo = b->get_info();
+  bool versioned = binfo.versioned();
+  bool ver_enabled = binfo.versioning_enabled();
+  std::string req_version_id = source->get_instance();
+
+  if (!versioned) {
+    return source->delete_object(dpp, y, flags, nullptr, nullptr);
+  }
+
+  /* versioned delete with specific versionId */
+  if (!req_version_id.empty()) {
+    int ret = source->stat(dpp);
+    nsfs::FSEnt* ent = source->get_fsent();
+
+    /* check if the requested version is the current */
+    if (ret == 0 && ent) {
+      std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
+      if (req_version_id == cur_ver_id) {
+        result.version_id = req_version_id;
+        return source->delete_object(dpp, y, flags, nullptr, nullptr);
+      }
+    }
+
+    /* look in .versions/ — need parent dir even if current is gone */
+    int parent_fd = -1;
+    std::string leaf_name;
+    if (ent && ent->get_parent()) {
+      nsfs::Directory* parent = ent->get_parent();
+      parent_fd = parent->get_fd();
+      if (parent_fd < 0) {
+        parent->open(dpp);
+        parent_fd = parent->get_fd();
+      }
+      leaf_name = ent->get_name();
+    } else {
+      /* current doesn't exist, resolve path to get parent dir */
+      std::vector<std::unique_ptr<nsfs::Directory>> chain;
+      nsfs::Directory* leaf_dir = nullptr;
+      ret = nsfs::resolve_path(dpp, b->get_dir(),
+          source->get_fname(/*use_version=*/false),
+          /*create_dirs=*/false, source->driver->ctx(),
+          chain, leaf_dir, leaf_name);
+      if (ret == 0 && leaf_dir) {
+        parent_fd = leaf_dir->get_fd();
+        if (parent_fd < 0) {
+          leaf_dir->open(dpp);
+          parent_fd = leaf_dir->get_fd();
+        }
+      }
+    }
+
+    if (parent_fd >= 0) {
+      int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+                         O_RDONLY | O_DIRECTORY);
+      if (vfd >= 0) {
+        std::string ver_name = leaf_name + "_" + req_version_id;
+        /* check if it's a delete marker */
+        bool is_dm = false;
+        int ver_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+        if (ver_fd >= 0) {
+          char buf[8];
+          std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+          ssize_t xlen = ::fgetxattr(ver_fd, dm_xattr.c_str(), buf, sizeof(buf));
+          if (xlen > 0) {
+            is_dm = true;
+          }
+          ::close(ver_fd);
+        }
+        ::unlinkat(vfd, ver_name.c_str(), 0);
+        ::close(vfd);
+        result.version_id = req_version_id;
+        result.delete_marker = is_dm;
+        source->driver->get_bucket_cache()->invalidate_bucket(dpp, b->get_name());
+        return 0;
+      }
+    }
+    result.version_id = req_version_id;
+    return 0;
+  }
+
+  /* versioned delete without versionId — create delete marker */
+  {
+  int ret = source->stat(dpp);
+
+  nsfs::FSEnt* ent = source->get_fsent();
+  int parent_fd = -1;
+  std::string dm_leaf;
+
+  if (ent && ent->get_parent()) {
+    nsfs::Directory* parent = ent->get_parent();
+    parent_fd = parent->get_fd();
+    if (parent_fd < 0) {
+      parent->open(dpp);
+      parent_fd = parent->get_fd();
+    }
+    dm_leaf = ent->get_name();
+  }
+
+  if (parent_fd < 0) {
+    /* current doesn't exist — resolve path just to get the parent dir */
+    std::vector<std::unique_ptr<nsfs::Directory>> chain;
+    nsfs::Directory* leaf_dir = nullptr;
+    int r = nsfs::resolve_path(dpp, b->get_dir(),
+        source->get_fname(/*use_version=*/false),
+        /*create_dirs=*/true, source->driver->ctx(),
+        chain, leaf_dir, dm_leaf);
+    if (r == 0 && leaf_dir) {
+      parent_fd = leaf_dir->get_fd();
+      if (parent_fd < 0) {
+        leaf_dir->open(dpp);
+        parent_fd = leaf_dir->get_fd();
+      }
+    }
+  }
+
+  if (parent_fd < 0) {
+    return -EINVAL;
+  }
+
+  int vfd = open_versions_dir(parent_fd);
+  if (vfd < 0) {
+    return vfd;
+  }
+
+  /* demote current to .versions/ if it exists */
+  if (ret == 0 && ent && ent->exists()) {
+    const struct statx& cur_stx = ent->get_stx();
+    std::string cur_ver_id = ver_enabled
+      ? nsfs_version_id_from_statx(cur_stx)
+      : NULL_VERSION_ID;
+    std::string cur_leaf = ent->get_name();
+    std::string ver_name = cur_leaf + "_" + cur_ver_id;
+
+    if (!ver_enabled) {
+      std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
+      ::unlinkat(vfd, null_name.c_str(), 0);
+    }
+
+    uint64_t cur_mtime = statx_mtime_ns(cur_stx);
+    uint64_t cur_ino = cur_stx.stx_ino;
+
+    SafeResult sr = safe_link(parent_fd, cur_leaf,
+                              vfd, ver_name,
+                              cur_mtime, cur_ino);
+    if (sr == SafeResult::OK) {
+      int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+      if (demoted_fd >= 0) {
+        auto now_ms = std::to_string(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+        ::fsetxattr(demoted_fd, xattr.c_str(),
+                    now_ms.c_str(), now_ms.size(), 0);
+        ::close(demoted_fd);
+      }
+      /* unlink the current after demoting */
+      ::unlinkat(parent_fd, cur_leaf.c_str(), 0);
+    }
+  }
+
+  /* create delete marker as zero-byte file in .versions/ */
+  static std::atomic<uint64_t> dm_counter{0};
+  std::string dm_tmp = ".dm_tmp_" +
+    std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
+
+  int dm_fd = ::openat(vfd, dm_tmp.c_str(),
+                       O_WRONLY | O_CREAT | O_EXCL, 0600);
+  if (dm_fd >= 0) {
+    /* set delete_marker xattr */
+    std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+    std::string dm_val = "true";
+    ::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(), dm_val.size(), 0);
+
+    /* stat for version ID */
+    struct statx dm_stx;
+    std::string dm_ver_id;
+    if (statx(dm_fd, "", AT_EMPTY_PATH, STATX_ALL, &dm_stx) == 0) {
+      dm_ver_id = ver_enabled
+        ? nsfs_version_id_from_statx(dm_stx)
+        : NULL_VERSION_ID;
+    } else {
+      dm_ver_id = NULL_VERSION_ID;
+    }
+
+    /* set version_id xattr */
+    std::string vid_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+    ::fsetxattr(dm_fd, vid_xattr.c_str(),
+                dm_ver_id.c_str(), dm_ver_id.size(), 0);
+    ::close(dm_fd);
+
+    /* rename to final name */
+    std::string dm_name = dm_leaf + "_" + dm_ver_id;
+    ::renameat(vfd, dm_tmp.c_str(), vfd, dm_name.c_str());
+
+    result.delete_marker = true;
+    result.version_id = dm_ver_id;
+  }
+
+  ::close(vfd);
+
+  /* invalidate bucket cache — version state changed */
+  source->driver->get_bucket_cache()->invalidate_bucket(dpp, b->get_name());
+
+  return 0;
+  } /* versioned delete without versionId */
 }
 
 int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -4435,17 +5082,95 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return ret;
   }
 
+  NSFSBucket *b = static_cast<NSFSBucket*>(obj->get_bucket());
+  if (!b) {
+    ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << obj->get_name() << dendl;
+    return -EINVAL;
+  }
+
+  const auto& binfo = b->get_info();
+  bool versioned = binfo.versioned();
+  bool ver_enabled = binfo.versioning_enabled();
+
+  /* versioned PUT: demote current version to .versions/ before publishing */
+  if (versioned && exists && obj->get_fsent() &&
+      obj->get_fsent()->get_parent()) {
+    nsfs::Directory* parent = obj->get_fsent()->get_parent();
+    int parent_fd = parent->get_fd();
+    if (parent_fd < 0) {
+      parent->open(dpp);
+      parent_fd = parent->get_fd();
+    }
+
+    if (parent_fd >= 0) {
+      const struct statx& cur_stx = obj->get_fsent()->get_stx();
+      std::string cur_ver_id = ver_enabled
+        ? nsfs_version_id_from_statx(cur_stx)
+        : NULL_VERSION_ID;
+
+      int vfd = open_versions_dir(parent_fd);
+      if (vfd >= 0) {
+        std::string cur_leaf = obj->get_fsent()->get_name();
+        std::string ver_name = cur_leaf + "_" + cur_ver_id;
+
+        if (!ver_enabled) {
+          /* suspended: remove any existing _null version first */
+          std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
+          ::unlinkat(vfd, null_name.c_str(), 0);
+        }
+
+        uint64_t cur_mtime = statx_mtime_ns(cur_stx);
+        uint64_t cur_ino = cur_stx.stx_ino;
+
+        SafeResult sr = safe_link(parent_fd, cur_leaf,
+                                  vfd, ver_name,
+                                  cur_mtime, cur_ino);
+        if (sr == SafeResult::OK) {
+          /* set non_current_timestamp on the demoted version */
+          int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+          if (demoted_fd >= 0) {
+            auto now_ms = std::to_string(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+            std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+            ::fsetxattr(demoted_fd, xattr.c_str(),
+                        now_ms.c_str(), now_ms.size(), 0);
+            ::close(demoted_fd);
+          }
+        } else if (sr == SafeResult::MISMATCH) {
+          ldpp_dout(dpp, 5) << "WARNING: version demote CAS mismatch for "
+                            << obj->get_name()
+                            << ", concurrent writer won" << dendl;
+        }
+        ::close(vfd);
+      }
+    }
+  }
+
   ret = obj->link_temp_file(rctx.dpp, rctx.y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed writing temp file" << dendl;
     return ret;
   }
 
-  NSFSBucket *b = static_cast<NSFSBucket*>(obj->get_bucket());
-  if (!b) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << obj->get_name() << dendl;
-      return -EINVAL;
+  /* versioned PUT: compute version ID from the published file's stat
+   * and persist as xattr on the new current version */
+  if (versioned && obj->get_fsent()) {
+    obj->get_fsent()->stat(dpp, /*force=*/true);
+    const struct statx& new_stx = obj->get_fsent()->get_stx();
+    std::string new_ver_id = ver_enabled
+      ? nsfs_version_id_from_statx(new_stx)
+      : NULL_VERSION_ID;
+    obj->set_instance(new_ver_id);
+
+    int obj_fd = obj->get_fsent()->get_fd();
+    if (obj_fd >= 0) {
+      std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+      ::fsetxattr(obj_fd, xattr.c_str(),
+                  new_ver_id.c_str(), new_ver_id.size(), 0);
+    }
   }
+
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             (exists ? 0 : 1), orig_size, accounted_size);
 
