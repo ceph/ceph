@@ -5177,6 +5177,36 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     }
   }
 
+  if (params.part_num) {
+    int pn = *params.part_num;
+    buffer::list ps_bl;
+    if (!source->get_attr(RGW_NSFS_ATTR_MULTIPART_PART_SIZES, ps_bl)) {
+      if (pn == 1) {
+        // non-multipart object: part 1 returns the whole object
+        params.parts_count = 1;
+      } else {
+        return -ERR_INVALID_PART;
+      }
+    } else {
+      std::vector<uint64_t> part_sizes;
+      try {
+        auto iter = ps_bl.cbegin();
+        ceph::decode(part_sizes, iter);
+      } catch (buffer::error& err) {
+        return -ERR_INVALID_PART;
+      }
+      if (pn < 1 || pn > (int)part_sizes.size()) {
+        return -ERR_INVALID_PART;
+      }
+      int64_t ofs = 0;
+      for (int i = 0; i < pn - 1; ++i) {
+        ofs += part_sizes[i];
+      }
+      part_ofs = ofs;
+      source->set_obj_size(part_sizes[pn - 1]);
+    }
+  }
+
 #if 0 // WIP
   if (params.mod_ptr || params.unmod_ptr) {
     obj_time_weight src_weight;
