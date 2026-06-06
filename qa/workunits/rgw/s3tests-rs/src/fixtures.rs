@@ -1,6 +1,6 @@
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use crate::cleanup::nuke_bucket;
@@ -11,6 +11,8 @@ use crate::random::{generate_random, DEFAULT_PART_SIZE};
 static BUCKET_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 static CREATED_BUCKETS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+static SERVER_DEAD: AtomicBool = AtomicBool::new(false);
 
 fn track_bucket(_client: &S3Client, name: &str) {
     CREATED_BUCKETS
@@ -55,6 +57,23 @@ pub struct TestGuard;
 
 impl TestGuard {
     pub fn setup() -> Self {
+        if std::env::var("S3TEST_FAST_FAIL").is_ok() {
+            if SERVER_DEAD.load(Ordering::Relaxed) {
+                panic!("s3tests: server unreachable (fast-fail)");
+            }
+            let cfg = get_config();
+            let addr_str = format!("{}:{}", cfg.default_host, cfg.default_port);
+            let timeout = std::time::Duration::from_millis(500);
+            let reachable = std::net::ToSocketAddrs::to_socket_addrs(&addr_str)
+                .ok()
+                .and_then(|mut addrs| addrs.next())
+                .map(|sa| std::net::TcpStream::connect_timeout(&sa, timeout).is_ok())
+                .unwrap_or(false);
+            if !reachable {
+                SERVER_DEAD.store(true, Ordering::Relaxed);
+                panic!("s3tests: server at {addr_str} unreachable — fast-fail engaged");
+            }
+        }
         Self
     }
 }

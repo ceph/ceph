@@ -230,6 +230,21 @@ r
 Replace `HASH` with the actual hash suffix printed by `--no-run`, and
 substitute the test name you want to debug.
 
+### Fast-fail on server crash
+
+When testing against a local RGW that may crash (e.g., an in-development SAL
+backend), set `S3TEST_FAST_FAIL=1` to abort the run immediately when the
+server becomes unreachable:
+
+```bash
+S3TEST_FAST_FAIL=1 cargo nextest run --no-fail-fast
+```
+
+Each test does a TCP connect check before running. On the first unreachable
+test, a global flag is set and all subsequent tests panic instantly without
+attempting a connection. This avoids wasting minutes sending requests at a
+dead server.
+
 ### Manual cleanup
 
 If tests are interrupted or you want to purge leftover buckets manually:
