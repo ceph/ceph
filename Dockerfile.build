@@ -37,7 +37,9 @@ RUN DISTRO=$DISTRO \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
     if [ $(uname -m) != ppc64le ]; then \
-    SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl.tar.gz"; \
+    SCCACHE_ARCH="$(uname -m)"; \
+    if [ "$SCCACHE_ARCH" = riscv64 ]; then SCCACHE_ARCH=riscv64gc; fi; \
+    SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl.tar.gz"; \
     echo "${SCCACHE_URL}"; \
     curl -sS -L $SCCACHE_URL | tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache; \
     fi
