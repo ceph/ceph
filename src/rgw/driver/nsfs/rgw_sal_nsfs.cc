@@ -4534,39 +4534,50 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return vfd;
   }
 
-  /* demote current to .versions/ if it exists */
+  /* demote current to .versions/ with retry on CAS mismatch */
   if (ret == 0 && ent && ent->exists()) {
-    const struct statx& cur_stx = ent->get_stx();
-    std::string cur_ver_id = ver_enabled
-      ? nsfs_version_id_from_statx(cur_stx)
-      : NULL_VERSION_ID;
-    std::string cur_leaf = ent->get_name();
-    std::string ver_name = cur_leaf + "_" + cur_ver_id;
-
-    if (!ver_enabled) {
-      std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
-      ::unlinkat(vfd, null_name.c_str(), 0);
-    }
-
-    uint64_t cur_mtime = statx_mtime_ns(cur_stx);
-    uint64_t cur_ino = cur_stx.stx_ino;
-
-    SafeResult sr = safe_link(parent_fd, cur_leaf,
-                              vfd, ver_name,
-                              cur_mtime, cur_ino);
-    if (sr == SafeResult::OK) {
-      int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-      if (demoted_fd >= 0) {
-        auto now_ms = std::to_string(
-          std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
-        std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-        ::fsetxattr(demoted_fd, xattr.c_str(),
-                    now_ms.c_str(), now_ms.size(), 0);
-        ::close(demoted_fd);
+    for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+      struct statx cur_stx;
+      if (statx(parent_fd, dm_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+                STATX_ALL, &cur_stx) < 0) {
+        break;
       }
-      /* unlink the current after demoting */
-      ::unlinkat(parent_fd, cur_leaf.c_str(), 0);
+      std::string cur_ver_id = ver_enabled
+        ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
+      std::string ver_name = dm_leaf + "_" + cur_ver_id;
+
+      if (!ver_enabled) {
+        std::string null_name = dm_leaf + "_" + NULL_VERSION_ID;
+        ::unlinkat(vfd, null_name.c_str(), 0);
+      }
+
+      uint64_t cur_mtime = statx_mtime_ns(cur_stx);
+      uint64_t cur_ino = cur_stx.stx_ino;
+
+      SafeResult sr = safe_link(parent_fd, dm_leaf,
+                                vfd, ver_name,
+                                cur_mtime, cur_ino);
+      if (sr == SafeResult::OK) {
+        int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+        if (demoted_fd >= 0) {
+          auto now_ms = std::to_string(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::system_clock::now().time_since_epoch()).count());
+          std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+          ::fsetxattr(demoted_fd, ts_x.c_str(),
+                      now_ms.c_str(), now_ms.size(), 0);
+          ::close(demoted_fd);
+        }
+        /* CAS unlink: remove current only if it still matches */
+        safe_unlink(parent_fd, dm_leaf, vfd,
+                    cur_mtime, cur_ino);
+        break;
+      }
+      if (sr == SafeResult::ERROR) {
+        break;
+      }
+      struct timespec ts = {0, 100000 + (rand() % 500000)};
+      nanosleep(&ts, nullptr);
     }
   }
 
@@ -5041,34 +5052,45 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   bool ver_enabled = pb->get_info().versioning_enabled();
   int leaf_fd = leaf_dir->get_fd();
 
-  /* versioned: demote current version before publishing */
+  /* versioned: demote current version before publishing, with retry */
   if (versioned && leaf_fd >= 0) {
-    struct statx cur_stx;
-    if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-              STATX_ALL, &cur_stx) == 0) {
-      std::string cur_ver_id = ver_enabled
-        ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
-      int vfd = open_versions_dir(leaf_fd);
-      if (vfd >= 0) {
+    int vfd = open_versions_dir(leaf_fd);
+    if (vfd >= 0) {
+      for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+        struct statx cur_stx;
+        if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                  STATX_ALL, &cur_stx) < 0) {
+          break;
+        }
+        std::string cur_ver_id = ver_enabled
+          ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
         std::string ver_name = leaf_name + "_" + cur_ver_id;
         if (!ver_enabled) {
           std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
           ::unlinkat(vfd, null_name.c_str(), 0);
         }
-        safe_link(leaf_fd, leaf_name, vfd, ver_name,
-                  statx_mtime_ns(cur_stx), cur_stx.stx_ino);
-        int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-        if (demoted_fd >= 0) {
-          auto now_ms = std::to_string(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::system_clock::now().time_since_epoch()).count());
-          std::string ts_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-          ::fsetxattr(demoted_fd, ts_xattr.c_str(),
-                      now_ms.c_str(), now_ms.size(), 0);
-          ::close(demoted_fd);
+        SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
+                                  statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+        if (sr == SafeResult::OK) {
+          int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+          if (demoted_fd >= 0) {
+            auto now_ms = std::to_string(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+            std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+            ::fsetxattr(demoted_fd, ts_x.c_str(),
+                        now_ms.c_str(), now_ms.size(), 0);
+            ::close(demoted_fd);
+          }
+          break;
         }
-        ::close(vfd);
+        if (sr == SafeResult::ERROR) {
+          break;
+        }
+        struct timespec ts = {0, 100000 + (rand() % 500000)};
+        nanosleep(&ts, nullptr);
       }
+      ::close(vfd);
     }
   }
 
@@ -5387,44 +5409,46 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
 
     if (parent_fd >= 0) {
-      const struct statx& cur_stx = obj->get_fsent()->get_stx();
-      std::string cur_ver_id = ver_enabled
-        ? nsfs_version_id_from_statx(cur_stx)
-        : NULL_VERSION_ID;
-
+      std::string cur_leaf = obj->get_fsent()->get_name();
       int vfd = open_versions_dir(parent_fd);
       if (vfd >= 0) {
-        std::string cur_leaf = obj->get_fsent()->get_name();
-        std::string ver_name = cur_leaf + "_" + cur_ver_id;
-
-        if (!ver_enabled) {
-          /* suspended: remove any existing _null version first */
-          std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
-          ::unlinkat(vfd, null_name.c_str(), 0);
-        }
-
-        uint64_t cur_mtime = statx_mtime_ns(cur_stx);
-        uint64_t cur_ino = cur_stx.stx_ino;
-
-        SafeResult sr = safe_link(parent_fd, cur_leaf,
-                                  vfd, ver_name,
-                                  cur_mtime, cur_ino);
-        if (sr == SafeResult::OK) {
-          /* set non_current_timestamp on the demoted version */
-          int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-          if (demoted_fd >= 0) {
-            auto now_ms = std::to_string(
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count());
-            std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-            ::fsetxattr(demoted_fd, xattr.c_str(),
-                        now_ms.c_str(), now_ms.size(), 0);
-            ::close(demoted_fd);
+        for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+          struct statx cur_stx;
+          if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+                    STATX_ALL, &cur_stx) < 0) {
+            break;
           }
-        } else if (sr == SafeResult::MISMATCH) {
-          ldpp_dout(dpp, 5) << "WARNING: version demote CAS mismatch for "
-                            << obj->get_name()
-                            << ", concurrent writer won" << dendl;
+          std::string cur_ver_id = ver_enabled
+            ? nsfs_version_id_from_statx(cur_stx) : NULL_VERSION_ID;
+          std::string ver_name = cur_leaf + "_" + cur_ver_id;
+
+          if (!ver_enabled) {
+            std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
+            ::unlinkat(vfd, null_name.c_str(), 0);
+          }
+
+          SafeResult sr = safe_link(parent_fd, cur_leaf,
+                                    vfd, ver_name,
+                                    statx_mtime_ns(cur_stx),
+                                    cur_stx.stx_ino);
+          if (sr == SafeResult::OK) {
+            int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+            if (demoted_fd >= 0) {
+              auto now_ms = std::to_string(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count());
+              std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+              ::fsetxattr(demoted_fd, ts_x.c_str(),
+                          now_ms.c_str(), now_ms.size(), 0);
+              ::close(demoted_fd);
+            }
+            break;
+          }
+          if (sr == SafeResult::ERROR) {
+            break;
+          }
+          struct timespec ts = {0, 100000 + (rand() % 500000)};
+          nanosleep(&ts, nullptr);
         }
         ::close(vfd);
       }
