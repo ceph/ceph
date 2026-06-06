@@ -219,6 +219,20 @@ check "a.txt removed" '[ ! -f "$NSFS_ROOT/$BUCKET/shared/a.txt" ]'
 check "shared/ preserved (b.txt remains)" '[ -d "$NSFS_ROOT/$BUCKET/shared" ]'
 check "b.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/shared/b.txt" ]'
 
+# --- test hierarchical copy ---
+
+log "hierarchical copy"
+s3 cp "s3://$BUCKET/flat.txt" "s3://$BUCKET/cp/nested/copy.txt" > /dev/null 2>&1
+check "cp/nested/copy.txt on disk" '[ -f "$NSFS_ROOT/$BUCKET/cp/nested/copy.txt" ]'
+check "cp/ dir exists" '[ -d "$NSFS_ROOT/$BUCKET/cp" ]'
+check "cp/nested/ dir exists" '[ -d "$NSFS_ROOT/$BUCKET/cp/nested" ]'
+
+s3 get "s3://$BUCKET/cp/nested/copy.txt" /tmp/nsfs-copy-get-$$.txt > /dev/null 2>&1
+check "copy GET content matches original" 'diff -q /tmp/nsfs-flat-$$.txt /tmp/nsfs-copy-get-$$.txt > /dev/null'
+rm -f /tmp/nsfs-copy-get-$$.txt
+
+check "original flat.txt still exists" '[ -f "$NSFS_ROOT/$BUCKET/flat.txt" ]'
+
 # --- test multipart upload via aws s3api ---
 
 log "multipart upload (aws s3api)"
