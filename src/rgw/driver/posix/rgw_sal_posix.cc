@@ -4105,6 +4105,26 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
+  if (params.if_match) {
+    int ret = source->stat(dpp);
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    if (strcmp(params.if_match, "*") != 0) {
+      auto it = source->get_attrs().find(RGW_ATTR_ETAG);
+      if (it == source->get_attrs().end()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+      bufferlist& bl = it->second;
+      std::string if_match_str = rgw_string_unquote(params.if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
   int ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
   if (ret < 0) {
     return ret;
