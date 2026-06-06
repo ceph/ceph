@@ -4336,12 +4336,11 @@ std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
   load(nullptr);
 
   if (!shadow) {
-    // This upload doesn't exist, but the API doesn't check this until it calls
-    // on the *serializer*. So make a fake object in the parent bucket that
-    // doesn't exist.  Put it in the MP namespace just in case.
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+  } else {
+    std::string meta_path = get_fname() + "/.meta";
+    meta_obj = bucket->get_object(rgw_obj_key(meta_path, std::string()));
   }
-  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 
   auto posix_meta_obj = static_cast<POSIXObject*>(meta_obj.get());
   rgw::sal::Attrs attrs;
