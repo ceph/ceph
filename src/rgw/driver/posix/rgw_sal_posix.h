@@ -986,6 +986,7 @@ private:
   RGWAccessControlPolicy acls;
   std::unique_ptr<posix::FSEnt> ent;
   std::map<std::string, int64_t> parts;
+  std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
 
 public:
   struct POSIXReadOp : ReadOp {
@@ -1033,6 +1034,11 @@ public:
   {}
 
   virtual ~POSIXObject() { close(); }
+
+  void pin_bucket(std::unique_ptr<rgw::sal::Bucket> b) {
+    pinned_bucket = std::move(b);
+    set_bucket(pinned_bucket.get());
+  }
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
