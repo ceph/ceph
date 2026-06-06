@@ -907,6 +907,7 @@ private:
   std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
   std::map<std::string, int64_t> parts;
   std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
+  std::string dm_version_id;
 
 public:
   struct NSFSReadOp : ReadOp {
