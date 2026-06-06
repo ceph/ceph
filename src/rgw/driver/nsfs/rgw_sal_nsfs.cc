@@ -364,6 +364,110 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
   return inst_b.compare(inst_a);
 }
 
+/*
+ * Promote the newest non-delete-marker version from .versions/ to the
+ * current path.  Uses CAS (safe_link) to avoid races with concurrent
+ * PUT or DELETE: if a new current appears between our scan and link
+ * (a concurrent writer won), the link fails with EEXIST and we skip.
+ * Retries on CAS mismatch (the candidate was moved by another thread).
+ */
+static void promote_version(int parent_fd, const std::string& leaf,
+                            const DoutPrefixProvider* dpp)
+{
+  for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
+    /* bail if a current version already exists */
+    struct statx cur_stx;
+    if (statx(parent_fd, leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+              STATX_INO, &cur_stx) == 0) {
+      return;
+    }
+
+    int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+                       O_RDONLY | O_DIRECTORY);
+    if (vfd < 0) {
+      return;
+    }
+
+    /* find newest version entry for this key */
+    uint64_t max_mtime = 0;
+    std::string max_name;
+    DIR* vdir = fdopendir(dup(vfd));
+    if (vdir) {
+      struct dirent* de;
+      while ((de = readdir(vdir)) != nullptr) {
+        if (de->d_name[0] == '.') { continue; }
+        std::string vn(de->d_name);
+        if (vn.size() <= leaf.size() + 1 ||
+            vn.compare(0, leaf.size(), leaf) != 0 ||
+            vn[leaf.size()] != '_') {
+          continue;
+        }
+        std::string vid = vn.substr(leaf.size() + 1);
+        nsfs_version_info vi;
+        if (nsfs_parse_version_id(vid, vi) && vi.mtime_ns > max_mtime) {
+          max_mtime = vi.mtime_ns;
+          max_name = vn;
+        }
+      }
+      closedir(vdir);
+    }
+
+    if (max_name.empty()) {
+      ::close(vfd);
+      return;
+    }
+
+    /* stat the candidate and check if it's a delete marker */
+    struct statx cand_stx;
+    if (statx(vfd, max_name.c_str(), AT_SYMLINK_NOFOLLOW,
+              STATX_ALL, &cand_stx) < 0) {
+      ::close(vfd);
+      return;
+    }
+    {
+      int chk_fd = ::openat(vfd, max_name.c_str(), O_RDONLY);
+      if (chk_fd >= 0) {
+        char buf[8];
+        std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+        if (::fgetxattr(chk_fd, dm_x.c_str(), buf, sizeof(buf)) > 0) {
+          ::close(chk_fd);
+          ::close(vfd);
+          return;
+        }
+        ::close(chk_fd);
+      }
+    }
+
+    /* CAS link: .versions/candidate → current path */
+    SafeResult sr = safe_link(vfd, max_name,
+                              parent_fd, leaf,
+                              statx_mtime_ns(cand_stx),
+                              cand_stx.stx_ino);
+    if (sr == SafeResult::OK) {
+      /* unlink the .versions/ entry */
+      ::unlinkat(vfd, max_name.c_str(), 0);
+      /* remove non_current_timestamp on the promoted file */
+      int pfd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+      if (pfd >= 0) {
+        std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+        ::fremovexattr(pfd, ts_x.c_str());
+        ::close(pfd);
+      }
+      ::close(vfd);
+      return;
+    }
+
+    ::close(vfd);
+    if (sr == SafeResult::ERROR) {
+      /* EEXIST on the link means a concurrent PUT won — skip */
+      return;
+    }
+    /* MISMATCH — candidate changed, retry */
+    struct timespec ts = {0, 100000 + (rand() % 500000)};
+    nanosleep(&ts, nullptr);
+  }
+}
+
 static int ensure_versions_dir(int parent_fd)
 {
   int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), 0755);
@@ -4298,7 +4402,34 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
       if (req_version_id == cur_ver_id) {
         result.version_id = req_version_id;
-        return source->delete_object(dpp, y, flags, nullptr, nullptr);
+        /* capture parent fd and leaf name before delete_object
+         * invalidates the ent/dir_chain */
+        int promote_fd = -1;
+        std::string promote_leaf;
+        nsfs::Directory* parent = ent->get_parent();
+        if (parent) {
+          int pfd = parent->get_fd();
+          if (pfd < 0) {
+            parent->open(dpp);
+            pfd = parent->get_fd();
+          }
+          if (pfd >= 0) {
+            promote_fd = ::dup(pfd);
+          }
+          promote_leaf = ent->get_name();
+        }
+        ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
+        if (ret < 0) {
+          if (promote_fd >= 0) { ::close(promote_fd); }
+          return ret;
+        }
+        if (promote_fd >= 0) {
+          promote_version(promote_fd, promote_leaf, dpp);
+          ::close(promote_fd);
+        }
+        source->driver->get_bucket_cache()->invalidate_bucket(
+          dpp, b->get_name());
+        return 0;
       }
     }
 
