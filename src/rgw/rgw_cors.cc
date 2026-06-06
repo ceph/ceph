@@ -245,6 +245,10 @@ bool RGWCORSRule::matches_method(const char *req_meth)
     dout(5) << "matches_method: req_meth is null or empty" << dendl;
     return false;
   }
+  if (allowed_methods == RGW_CORS_ALL) {
+    dout(10) << "matches_method: AllowedMethod * allows " << req_meth << dendl;
+    return true;
+  }
   const uint8_t flags = get_multi_cors_method_flags(req_meth);
   return flags != 0 && (allowed_methods & flags);
 }
@@ -252,6 +256,8 @@ bool RGWCORSRule::matches_method(const char *req_meth)
 bool RGWCORSRule::matches_preflight_headers(const char *req_hdrs)
 {
   if (!req_hdrs || !*req_hdrs) {
+    dout(20) << "matches_preflight_headers: no Access-Control-Request-Headers, "
+             << "passing per CORS spec 6.2.4" << dendl;
     return true;
   }
   vector<string> hdrs;
