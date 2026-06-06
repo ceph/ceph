@@ -585,6 +585,18 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
 
+  /* Remove xattrs that are on disk but no longer in the attrs map */
+  Attrs old_attrs;
+  ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
+  if (ret >= 0) {
+    for (auto& it : old_attrs) {
+      if (attrs.find(it.first) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, it.first, get_name());
+      }
+    }
+  }
+
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
@@ -3814,14 +3826,17 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
+  static const std::string meta_name{".meta"};
   if (!shadow) {
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   } else {
-    std::string meta_path = get_fname() + "/.meta";
-    meta_obj = bucket->get_object(rgw_obj_key(meta_path, std::string()));
+    meta_obj = shadow->get_object(rgw_obj_key(meta_name, std::string()));
   }
 
   auto nsfs_meta_obj = static_cast<NSFSObject*>(meta_obj.get());
+  if (shadow) {
+    nsfs_meta_obj->pin_bucket(shadow->clone());
+  }
   rgw::sal::Attrs attrs;
   if (obj_retention) {
     buffer::list obj_retention_bl;
