@@ -1558,6 +1558,97 @@ TEST_F(NSFSBucketTest, ListWithPrefix)
 }
 
 
+TEST_F(NSFSBucketTest, HierarchicalCopy)
+{
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("src.txt");
+
+  sf::path src_path{bp / "root" / testname / "src.txt"};
+  ASSERT_TRUE(sf::is_regular_file(src_path));
+
+  auto src_obj = bucket->get_object(rgw_obj_key("src.txt"));
+  auto dst_obj = bucket->get_object(rgw_obj_key("dir1/dir2/dst.txt"));
+
+  Attrs attrs;
+  add_attr(attrs, RGW_ATTR_ACL, "");
+  std::string etag, tag;
+  int ret = src_obj->copy_object(
+      acl_owner, rgw_user(), nullptr, rgw_zone_id(),
+      dst_obj.get(), bucket.get(), bucket.get(),
+      rgw_placement_rule(), nullptr, nullptr,
+      nullptr, nullptr, false,
+      nullptr, nullptr,
+      ATTRSMOD_NONE, false, attrs,
+      RGWObjCategory::Main, 0,
+      boost::none, nullptr, &tag, &etag,
+      nullptr, nullptr, nullptr,
+      env->dpp, null_yield);
+  EXPECT_EQ(ret, 0);
+
+  sf::path dst_path{bp / "root" / testname / "dir1" / "dir2" / "dst.txt"};
+  EXPECT_TRUE(sf::is_regular_file(dst_path));
+  EXPECT_TRUE(sf::is_regular_file(src_path));
+}
+
+TEST_F(NSFSBucketTest, HierarchicalChown)
+{
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("dir1/file.txt");
+
+  sf::path file_path{bp / "root" / testname / "dir1" / "file.txt"};
+  ASSERT_TRUE(sf::is_regular_file(file_path));
+
+  auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
+  TestUser user(driver.get());
+  int ret = obj->chown(user, env->dpp, null_yield);
+  // chown to uid/gid 0 requires root; EPERM is expected for non-root
+  EXPECT_TRUE(ret == 0 || ret == -EPERM);
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
