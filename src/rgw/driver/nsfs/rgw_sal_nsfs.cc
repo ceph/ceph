@@ -3061,22 +3061,22 @@ int NSFSObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::st
 
 int NSFSObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
 {
-  NSFSBucket *b = static_cast<NSFSBucket*>(get_bucket());
-  if (!b) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
-      return -EINVAL;
-  }
   /* TODO Get UID from user */
   int uid = 0;
   int gid = 0;
 
-  int ret = fchownat(b->get_dir_fd(dpp), get_fname(/*use_version=*/true).c_str(), uid, gid, AT_SYMLINK_NOFOLLOW);
+  int ret = open(dpp, false);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = fchown(ent->get_fd(), uid, gid);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name() << ": "
+    ldpp_dout(dpp, 0) << "ERROR: could not chown object " << get_name() << ": "
       << cpp_strerror(ret) << dendl;
     return -ret;
-    }
+  }
 
   return 0;
 }
@@ -3530,7 +3530,17 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   if (!get_key().instance.empty())
     dst_key.instance = get_key().instance;
 
-  return ent->copy(dpp, y, db->get_dir(), get_key_fname(dst_key, /*use_version=*/true));
+  std::vector<std::unique_ptr<nsfs::Directory>> dst_chain;
+  nsfs::Directory* dst_leaf_dir;
+  std::string dst_leaf_name;
+  int ret = nsfs::resolve_path(dpp, db->get_dir(),
+      get_key_fname(dst_key, /*use_version=*/true),
+      /*create_dirs=*/true, driver->ctx(),
+      dst_chain, dst_leaf_dir, dst_leaf_name);
+  if (ret < 0)
+    return ret;
+
+  return ent->copy(dpp, y, dst_leaf_dir, dst_leaf_name);
 }
 
 void NSFSMPObj::init_gen(NSFSDriver* driver, const std::string& _oid, ACLOwner& _owner)
