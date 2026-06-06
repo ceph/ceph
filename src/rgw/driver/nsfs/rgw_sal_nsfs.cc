@@ -65,6 +65,7 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
+const std::string NSFS_FOLDER_OBJECT_NAME = ".folder";
 
 struct NSFSOwner {
   rgw_user user;
@@ -131,6 +132,10 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
 
   if (!key.get_ns().empty()) {
     fname.insert(0, 1, '.');
+  }
+
+  if (!fname.empty() && fname.back() == '/') {
+    fname += NSFS_FOLDER_OBJECT_NAME;
   }
 
   return fname;
@@ -1240,7 +1245,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
-    if (name[0] == '.') {
+    if (name[0] == '.' && name != NSFS_FOLDER_OBJECT_NAME) {
       return 0;
     }
 
@@ -1249,6 +1254,49 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       return ret;
 
     ent->stat(dpp);
+
+    if (name == NSFS_FOLDER_OBJECT_NAME) {
+      // directory object sentinel: emit with key = path_prefix
+      // path_prefix is already "photos/" when inside photos/
+      rgw_bucket_dir_entry bde{};
+      rgw_obj_key key = decode_obj_key(path_prefix);
+      key.get_index_key(&bde.key);
+      bde.ver.pool = 1;
+      bde.ver.epoch = 1;
+      bde.exists = true;
+
+      ret = ent->open(dpp);
+      if (ret < 0)
+        return ret;
+
+      Attrs attrs;
+      ret = get_x_attrs(y, dpp, ent->get_fd(), attrs, ent->get_name());
+      if (ret < 0)
+        return ret;
+
+      NSFSOwner o;
+      if (decode_owner(attrs, o) >= 0) {
+        bde.meta.owner = o.user.to_str();
+        bde.meta.owner_display_name = o.display_name;
+      } else {
+        bde.meta.owner = "unknown";
+        bde.meta.owner_display_name = "unknown";
+      }
+      bde.meta.category = RGWObjCategory::Main;
+      bde.meta.size = ent->get_stx().stx_size;
+      bde.meta.accounted_size = ent->get_stx().stx_size;
+      bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+      bufferlist etag_bl;
+      if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
+        bde.meta.etag = etag_bl.to_str();
+      } else {
+        bde.meta.etag = synthesize_etag(ent->get_stx());
+      }
+
+      return cb(dpp, bde);
+    }
 
     if (ent->get_type() == ObjectType::DIRECTORY) {
       Directory* subdir = static_cast<Directory*>(ent.get());

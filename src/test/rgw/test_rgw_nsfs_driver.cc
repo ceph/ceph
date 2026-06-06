@@ -1657,6 +1657,166 @@ TEST_F(NSFSBucketTest, SideloadedList)
   }
 }
 
+TEST_F(NSFSBucketTest, DirectoryObjectPut)
+{
+  auto obj = bucket->get_object(rgw_obj_key("photos/"));
+  auto writer = driver->get_atomic_writer(
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+  int ret = writer->prepare(null_yield);
+  ASSERT_EQ(ret, 0);
+
+  bufferlist bl;
+  bl.append("folder body");
+  ret = writer->process(std::move(bl), 0);
+  ASSERT_EQ(ret, 0);
+  ret = writer->process({}, 11);
+  ASSERT_EQ(ret, 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ret = writer->complete(11, etag, &mtime, real_time(), attrs, std::nullopt,
+                         real_time(), nullptr, nullptr, nullptr, nullptr,
+                         nullptr, rctx, 0);
+  ASSERT_EQ(ret, 0);
+
+  // directory exists on disk, .folder sentinel inside
+  sf::path dir_path{bp / "root" / testname / "photos"};
+  sf::path folder_path{bp / "root" / testname / "photos" / ".folder"};
+  EXPECT_TRUE(sf::is_directory(dir_path));
+  EXPECT_TRUE(sf::is_regular_file(folder_path));
+}
+
+TEST_F(NSFSBucketTest, DirectoryObjectGet)
+{
+  // PUT
+  auto obj = bucket->get_object(rgw_obj_key("docs/"));
+  auto writer = driver->get_atomic_writer(
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+  int ret = writer->prepare(null_yield);
+  ASSERT_EQ(ret, 0);
+
+  std::string body = "directory object content";
+  bufferlist wbl;
+  wbl.append(body);
+  ret = writer->process(std::move(wbl), 0);
+  ASSERT_EQ(ret, 0);
+  ret = writer->process({}, body.size());
+  ASSERT_EQ(ret, 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ret = writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+                         std::nullopt, real_time(), nullptr, nullptr, nullptr,
+                         nullptr, nullptr, rctx, 0);
+  ASSERT_EQ(ret, 0);
+
+  // GET
+  auto robj = bucket->get_object(rgw_obj_key("docs/"));
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
+  ret = read_op->prepare(null_yield, env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(robj->get_size(), body.size());
+
+  bufferlist rbl;
+  Read_CB cb(&rbl);
+  ret = read_op->iterate(env->dpp, 0, body.size(), &cb, null_yield);
+  EXPECT_EQ(ret, 0);
+
+  std::string got(rbl.c_str(), rbl.length());
+  EXPECT_EQ(got, body);
+}
+
+TEST_F(NSFSBucketTest, DirectoryObjectList)
+{
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    int ret = writer->prepare(null_yield);
+    ASSERT_EQ(ret, 0);
+    bufferlist bl;
+    encode(name, bl);
+    int len = bl.length();
+    ret = writer->process(std::move(bl), 0);
+    ASSERT_EQ(ret, 0);
+    ret = writer->process({}, len);
+    ASSERT_EQ(ret, 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ret = writer->complete(len, etag, &mtime, real_time(), attrs, std::nullopt,
+                           real_time(), nullptr, nullptr, nullptr, nullptr,
+                           nullptr, rctx, 0);
+    ASSERT_EQ(ret, 0);
+  };
+
+  write("photos/");
+  write("photos/img.jpg");
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  int ret = bucket->list(env->dpp, params, 100, results, null_yield);
+  EXPECT_EQ(ret, 0);
+
+  std::set<std::string> names;
+  for (auto& e : results.objs) {
+    names.insert(e.key.name);
+  }
+
+  if (verbose) {
+    std::cout << "  directory object listing:" << std::endl;
+    for (auto& n : names) {
+      std::cout << "    " << n << std::endl;
+    }
+  }
+
+  EXPECT_TRUE(names.contains("photos/"));
+  EXPECT_TRUE(names.contains("photos/img.jpg"));
+}
+
+TEST_F(NSFSBucketTest, DirectoryObjectDelete)
+{
+  // PUT directory object
+  auto obj = bucket->get_object(rgw_obj_key("todelete/"));
+  auto writer = driver->get_atomic_writer(
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+  int ret = writer->prepare(null_yield);
+  ASSERT_EQ(ret, 0);
+  bufferlist bl;
+  bl.append("x");
+  ret = writer->process(std::move(bl), 0);
+  ASSERT_EQ(ret, 0);
+  ret = writer->process({}, 1);
+  ASSERT_EQ(ret, 0);
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ret = writer->complete(1, etag, &mtime, real_time(), attrs, std::nullopt,
+                         real_time(), nullptr, nullptr, nullptr, nullptr,
+                         nullptr, rctx, 0);
+  ASSERT_EQ(ret, 0);
+
+  sf::path folder_path{bp / "root" / testname / "todelete" / ".folder"};
+  sf::path dir_path{bp / "root" / testname / "todelete"};
+  ASSERT_TRUE(sf::is_regular_file(folder_path));
+  ASSERT_TRUE(sf::is_directory(dir_path));
+
+  // DELETE
+  auto dobj = bucket->get_object(rgw_obj_key("todelete/"));
+  auto del_op = dobj->get_delete_op();
+  ret = del_op->delete_obj(env->dpp, null_yield, 0);
+  EXPECT_EQ(ret, 0);
+
+  EXPECT_FALSE(sf::exists(folder_path));
+  EXPECT_FALSE(sf::exists(dir_path));
+}
+
 TEST_F(NSFSBucketTest, HierarchicalCopy)
 {
   auto write = [&](const std::string& name) {
