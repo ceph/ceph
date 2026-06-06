@@ -7084,12 +7084,14 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
-                                                  s->bucket_attrs, &new_config);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  op_ret = lc->set_bucket_config(this, y, s->bucket.get(),
+                                 s->bucket_attrs, &new_config);
 }
 
 void RGWDeleteLC::execute(optional_yield y)
@@ -7101,14 +7103,15 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
-  constexpr bool update_attrs = true;
-  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
-                                                     update_attrs);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  constexpr bool update_attrs = true;
+  op_ret = lc->remove_bucket_config(this, y, s->bucket.get(),
+                                    update_attrs);
 }
 
 int RGWGetCORS::verify_permission(optional_yield y)
