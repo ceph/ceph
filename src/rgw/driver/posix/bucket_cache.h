@@ -355,7 +355,10 @@ public:
 
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
 	  auto& env = lmdbs.get_sp_env(b);
-	  auto dbi = env->openDB(b->name, MDB_CREATE);
+	  auto cmp = B::lmdb_cmp();
+	  auto dbi = cmp
+	    ? env->openDB(b->name, MDB_CREATE, cmp)
+	    : env->openDB(b->name, MDB_CREATE);
 	  b->set_env(env, dbi);
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
@@ -384,8 +387,9 @@ public:
 
   static inline std::string concat_key(const rgw_obj_index_key& k) {
     std::string k_str;
-    k_str.reserve(k.name.size() + k.instance.size());
+    k_str.reserve(k.name.size() + 1 + k.instance.size());
     k_str += k.name;
+    k_str += '\0';
     k_str += k.instance;
     return k_str;
   }
