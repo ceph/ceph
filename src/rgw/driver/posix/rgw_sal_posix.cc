@@ -3974,7 +3974,11 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  if (params.if_match) {
+  bool has_cond = params.if_match ||
+    !real_clock::is_zero(params.last_mod_time_match) ||
+    params.size_match.has_value();
+
+  if (has_cond) {
     int ret = source->stat(dpp);
     if (ret == -ENOENT) {
       return 0;
@@ -3982,7 +3986,8 @@ int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
-    if (strcmp(params.if_match, "*") != 0) {
+
+    if (params.if_match && strcmp(params.if_match, "*") != 0) {
       auto it = source->get_attrs().find(RGW_ATTR_ETAG);
       if (it == source->get_attrs().end()) {
         return -ERR_PRECONDITION_FAILED;
@@ -3993,7 +3998,27 @@ int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         return -ERR_PRECONDITION_FAILED;
       }
     }
+
+    if (!real_clock::is_zero(params.last_mod_time_match)) {
+      if (params.last_mod_time_match_precise) {
+        if (params.last_mod_time_match != source->get_mtime()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        if (real_clock::to_time_t(params.last_mod_time_match) !=
+            real_clock::to_time_t(source->get_mtime())) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+
+    if (params.size_match.has_value()) {
+      if (*params.size_match != source->get_size()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
   }
+
   return source->delete_object(dpp, y, flags, nullptr, nullptr);
 }
 
