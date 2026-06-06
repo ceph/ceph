@@ -1751,8 +1751,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
           rgw_bucket_dir_entry bde{};
           std::string full_key = path_prefix + obj_name;
-          rgw_obj_key key(full_key, ver_id);
-          key.get_index_key(&bde.key);
+          bde.key.name = full_key;
+          bde.key.instance = ver_id;
           bde.ver.pool = 1;
           bde.ver.epoch = 1;
           bde.exists = true;
