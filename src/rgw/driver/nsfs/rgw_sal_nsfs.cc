@@ -1213,13 +1213,13 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     Attrs attrs;
 
     tmpfd = openat(get_fd(), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    if (tmpfd > 0) {
+    if (tmpfd >= 0) {
       ret = get_x_attrs(y, dpp, tmpfd, attrs, name);
       if (ret >= 0) {
         decode_attr(attrs, RGW_NSFS_ATTR_OBJECT_TYPE, type);
       }
+      ::close(tmpfd);
     }
-    ::close(tmpfd);
     switch (type.type) {
     case ObjectType::MULTIPART:
       nent = std::make_unique<MPDirectory>(name, this, nstx, ctx);
