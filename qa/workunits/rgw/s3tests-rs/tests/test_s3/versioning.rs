@@ -1598,3 +1598,90 @@ async fn test_versioning_bucket_multipart_upload_return_version_id() {
 
 // Stress tests for bucket cache and versioning concurrency have been
 // moved to tests/test_s3/stress.rs — see that module for details.
+
+/*
+ * Diagnostic test for special-character keys in versioned buckets.
+ * Isolates each key to identify which ones break the version suffix
+ * parser in .versions/ filename handling.
+ */
+#[tokio::test]
+async fn test_versioning_special_key_diagnostics() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let keys = ["_testobj", "_", ":", "key_with_underscores", "mtime-fake"];
+
+    for key in &keys {
+        let body1 = format!("{key}-v1");
+        let body2 = format!("{key}-v2");
+
+        let r1 = client
+            .put_object()
+            .bucket(&bucket_name)
+            .key(*key)
+            .body(ByteStream::from(body1.clone().into_bytes()))
+            .send()
+            .await
+            .unwrap();
+        let vid1 = r1.version_id().unwrap_or("").to_string();
+        assert!(!vid1.is_empty(), "key {key:?}: PUT v1 missing version_id");
+
+        let r2 = client
+            .put_object()
+            .bucket(&bucket_name)
+            .key(*key)
+            .body(ByteStream::from(body2.clone().into_bytes()))
+            .send()
+            .await
+            .unwrap();
+        let vid2 = r2.version_id().unwrap_or("").to_string();
+        assert!(!vid2.is_empty(), "key {key:?}: PUT v2 missing version_id");
+        assert_ne!(vid1, vid2, "key {key:?}: v1 and v2 have same version_id");
+
+        let versions = client
+            .list_object_versions()
+            .bucket(&bucket_name)
+            .send()
+            .await
+            .unwrap();
+        let vers: Vec<_> = versions.versions().iter()
+            .filter(|v| v.key().unwrap_or("") == *key)
+            .collect();
+        assert_eq!(
+            vers.len(), 2,
+            "key {key:?}: expected 2 versions, got {} (versions: {:?})",
+            vers.len(),
+            vers.iter().map(|v| v.version_id().unwrap_or("?")).collect::<Vec<_>>()
+        );
+
+        let get1 = client
+            .get_object()
+            .bucket(&bucket_name)
+            .key(*key)
+            .version_id(&vid1)
+            .send()
+            .await
+            .unwrap();
+        let got1 = get_body(get1).await;
+        assert_eq!(got1, body1, "key {key:?}: GET v1 content mismatch");
+
+        client
+            .delete_object()
+            .bucket(&bucket_name)
+            .key(*key)
+            .version_id(&vid1)
+            .send()
+            .await
+            .unwrap();
+        client
+            .delete_object()
+            .bucket(&bucket_name)
+            .key(*key)
+            .version_id(&vid2)
+            .send()
+            .await
+            .unwrap();
+    }
+}
