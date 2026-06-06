@@ -113,6 +113,7 @@ set(librgw_common_srcs
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
+  rgw_mime.cc
   rgw_tools.cc
   rgw_user.cc
   rgw_website.cc
