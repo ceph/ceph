@@ -76,6 +76,48 @@ then `renameat()` to the final hierarchical path.
 `assemble_parts()` is the single integration point for future GPFS
 `gpfs_linkat` splice substitution.
 
+### Per-part metadata on the assembled object
+
+Two xattrs are stored on the final file at completion time:
+
+| Attr name                 | Encoding              | Purpose                               |
+|---------------------------|-----------------------|---------------------------------------|
+| `multipart_part_count`    | encoded uint16\_t     | `x-amz-mp-parts-count` header        |
+| `multipart_part_sizes`    | encoded vector\<u64\> | GET/HEAD `?partNumber=N` byte slicing |
+
+`ReadOp::prepare()` uses `part_sizes` to compute the byte offset and
+length within the assembled file for a requested part number, then
+adjusts `obj_size` and applies the offset in `read()`/`iterate()`.
+For non-multipart objects, `partNumber=1` returns the whole body
+(matching rados behavior for Java SDK compatibility).
+
+### Differences from noobaa nsfs
+
+The assembly strategy matches noobaa: concatenate parts into one file,
+delete the staging directory.  However:
+
+- **noobaa does not store per-part sizes on the assembled object.**
+  Part metadata (size, offset, etag) lives on temporary part files
+  during upload and is deleted after completion.
+- **noobaa does not support GET `?partNumber=N`.**  Our per-part size
+  xattrs are an extension that enables this S3 feature.
+- **xattr naming** follows the same `user.nsfs.*` prefix-swap scheme.
+
+### GPFS xattr sizing consideration
+
+The encoded `vector<uint64_t>` grows linearly with part count (~8
+bytes per part plus encoding framing).  For the S3 maximum of 10,000
+parts this is ~80 KB — well within GPFS's standard POSIX xattr limit
+(256 KB per attr) but exceeds the 216-byte buffer that noobaa's native
+`gpfs_fcntl` batch API allocates (`GPFS_XATTR_BUFFER_SIZE` in
+`fs_napi.cpp`).
+
+Our GPFS integration surface (see table below) currently targets
+standard POSIX `fgetxattr`/`fsetxattr`, which handles the full range.
+If we later adopt noobaa's `gpfs_fcntl` batch path for performance,
+this xattr will need either a larger buffer or a packed representation
+(e.g. raw little-endian u64 array without DENC framing).
+
 ## Bucket Cache
 
 Uses `BucketCache<NSFSDriver, NSFSBucket>` (lmdb) from the posix driver
