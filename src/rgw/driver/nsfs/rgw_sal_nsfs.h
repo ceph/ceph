@@ -1079,33 +1079,17 @@ struct NSFSMPObj {
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
-    } else {
+    } else if (!_oid.empty()) {
       init_gen(driver, _oid, _owner);
     }
   }
   void init(const std::string& _oid, const std::string& _upload_id, ACLOwner& _owner) {
-    if (_oid.empty()) {
-      clear();
-      return;
-    }
     oid = _oid;
     upload_id = _upload_id;
     owner = _owner;
-    meta = oid;
-    if (!upload_id.empty())
-      meta += "." + upload_id;
+    meta = oid + "." + upload_id;
   }
   void init_gen(NSFSDriver* driver, const std::string& _oid, ACLOwner& _owner);
-  bool from_meta(const std::string& meta, ACLOwner& _owner) {
-    int end_pos = meta.length();
-    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
-    if (mid_pos < 0)
-      return false;
-    oid = meta.substr(0, mid_pos);
-    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
-    init(oid, upload_id, _owner);
-    return true;
-  }
   void clear() {
     oid = "";
     meta = "";

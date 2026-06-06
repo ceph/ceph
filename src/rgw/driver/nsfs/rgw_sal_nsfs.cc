@@ -146,6 +146,10 @@ int resolve_path(const DoutPrefixProvider* dpp,
       if (ret < 0) {
         return ret;
       }
+      ret = dir->open(dpp);
+      if (ret < 0) {
+        return ret;
+      }
     }
 
     leaf_dir = dir.get();
@@ -177,14 +181,77 @@ static inline std::string gen_rand_instance_name()
 
 static inline std::string bucket_fname(std::string name, std::optional<std::string>& ns)
 {
-  std::string bname;
-
   if (ns)
-    bname = "." + *ns + "_" + url_encode(name, true);
-  else
-    bname = url_encode(name, true);
+    return "." + *ns + "_" + name;
+  return name;
+}
 
-  return bname;
+static int assemble_parts(const DoutPrefixProvider* dpp,
+                          int dir_fd,
+                          int num_parts,
+                          const std::string& output_name)
+{
+  int out_fd = openat(dir_fd, output_name.c_str(),
+                      O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+  if (out_fd < 0) {
+    int ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
+                      << output_name << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+
+  off_t out_offset = 0;
+  for (int i = 1; i <= num_parts; ++i) {
+    std::string part_name = MP_OBJ_PART_PFX + fmt::format("{:0>5}", i);
+    int part_fd = openat(dir_fd, part_name.c_str(), O_RDONLY);
+    if (part_fd < 0) {
+      int ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not open part " << part_name
+                        << ": " << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
+
+    struct statx stx;
+    int ret = statx(part_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
+    if (ret < 0) {
+      ret = errno;
+      return -ret;
+    }
+    off_t remaining = stx.stx_size;
+    off_t part_offset = 0;
+
+    while (remaining > 0) {
+      ssize_t copied = copy_file_range(part_fd, &part_offset,
+                                       out_fd, &out_offset,
+                                       remaining, 0);
+      if (copied < 0) {
+        if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
+          char buf[65536];
+          lseek(part_fd, part_offset, SEEK_SET);
+          while (remaining > 0) {
+            ssize_t nr = ::read(part_fd, buf,
+                                std::min(remaining, (off_t)sizeof(buf)));
+            if (nr <= 0) break;
+            ssize_t nw = ::write(out_fd, buf, nr);
+            if (nw != nr) return -EIO;
+            remaining -= nr;
+            out_offset += nr;
+            part_offset += nr;
+          }
+          break;
+        }
+        ret = errno;
+        ldpp_dout(dpp, 0) << "ERROR: copy_file_range failed for "
+                          << part_name << ": " << cpp_strerror(ret) << dendl;
+        return -ret;
+      }
+      remaining -= copied;
+    }
+  }
+
+  return 0;
 }
 
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
@@ -1799,7 +1866,7 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
       continue;
     }
     RGWBucketEnt ent;
-    ent.bucket.name = url_decode(entry->d_name);
+    ent.bucket.name = entry->d_name;
     ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
     // TODO: ent.size and ent.count
 
@@ -2537,9 +2604,10 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     d_name.remove_prefix(mp_pre.size());
 
     ACLOwner owner;
+    std::string upload_id{d_name};
     std::unique_ptr<MultipartUpload> upload =
         std::make_unique<NSFSMultipartUpload>(
-            driver, this, std::string(d_name), std::nullopt, owner,
+            driver, this, std::string(), upload_id, owner,
             real_clock::now());
     rgw_placement_rule* rule{nullptr};
     int ret = upload->get_info(dpp, y, &rule, nullptr);
@@ -3514,9 +3582,10 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
     NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
     std::optional<std::string> ns{mp_ns};
 
-    std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(bucket_fname(get_meta(), ns), pb->get_dir(), driver->ctx());
+    std::string staging_name = get_fname();
+    std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(staging_name, pb->get_dir(), driver->ctx());
 
-    shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), get_meta()), mp_ns);
+    shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), mp_obj.upload_id), mp_ns);
 
     ret = shadow->load_bucket(dpp, null_yield);
     if (ret == -ENOENT && create) {
@@ -3533,13 +3602,12 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
+  static const std::string meta_name{".meta"};
   if (!shadow) {
-    // This upload doesn't exist, but the API doesn't check this until it calls
-    // on the *serializer*. So make a fake object in the parent bucket that
-    // doesn't exist.  Put it in the MP namespace just in case.
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+  } else {
+    meta_obj = shadow->get_object(rgw_obj_key(meta_name, std::string()));
   }
-  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 
   auto nsfs_meta_obj = static_cast<NSFSObject*>(meta_obj.get());
   rgw::sal::Attrs attrs;
@@ -3810,20 +3878,76 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     buffer::list manifest_bl;
     manifest.encode(manifest_bl);
     attrs[RGW_NSFS_ATTR_MANIFEST] = std::move(manifest_bl);
-
-    ret = shadow->merge_and_store_attrs(dpp, attrs, y);
-    if (ret < 0) {
-      return ret;
-    }
   }
 
-  // Rename to target_obj
-  ret = shadow->rename(dpp, y, target_obj);
+  NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
+  int staging_fd = shadow->get_dir()->get_fd();
+
+  // assemble parts into a single file via copy_file_range
+  std::string assembled_name = ".assembled";
+  ret = assemble_parts(dpp, staging_fd, total_parts, assembled_name);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to rename to final name " << target_obj->get_name()
-		      << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
+
+  // write xattrs on assembled file
+  int afd = openat(staging_fd, assembled_name.c_str(), O_RDWR);
+  if (afd < 0) {
+    return -errno;
+  }
+
+  // encode owner
+  NSFSOwner nsfs_owner(std::get<rgw_user>(owner.id), owner.display_name);
+  bufferlist owner_bl;
+  encode(nsfs_owner, owner_bl);
+  attrs[RGW_NSFS_ATTR_OWNER] = std::move(owner_bl);
+
+  // encode object type as FILE
+  nsfs::ObjectType file_type;
+  file_type.type = nsfs::ObjectType::FILE;
+  bufferlist type_bl;
+  file_type.encode(type_bl);
+  attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = std::move(type_bl);
+
+  for (auto& [k, v] : attrs) {
+    std::string xattr_name = make_xattr_name(k);
+    ret = fsetxattr(afd, xattr_name.c_str(), v.c_str(), v.length(), 0);
+    if (ret < 0) {
+      ::close(afd);
+      return -errno;
+    }
+  }
+  ::close(afd);
+
+  // resolve hierarchical target path
+  std::string target_key = target_obj->get_name();
+  std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
+  nsfs::Directory* leaf_dir;
+  std::string leaf_name;
+  ret = nsfs::resolve_path(dpp, pb->get_dir(), target_key,
+                           /*create_dirs=*/true, driver->ctx(),
+                           dir_chain, leaf_dir, leaf_name);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // atomic rename assembled file to final location
+  ret = renameat(staging_fd, assembled_name.c_str(),
+                 leaf_dir->get_fd(), leaf_name.c_str());
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: failed to rename assembled file to "
+                      << target_key << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  // remove staging directory
+  shadow->get_dir()->close();
+  delete_directory(pb->get_dir()->get_fd(),
+                   get_fname().c_str(), true, dpp);
+
+  // update bucket cache
+  target_obj->set_obj_size(ofs);
 
   return 0;
 }
@@ -3895,11 +4019,7 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 
 std::string NSFSMultipartUpload::get_fname()
 {
-  std::string name;
-
-  name = "." + mp_ns + "_" + url_encode(get_meta(), true);
-
-  return name;
+  return "." + mp_ns + "_" + mp_obj.upload_id;
 }
 
 std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
