@@ -135,6 +135,7 @@ async fn test_multipart_upload_contents() {
     assert_eq!(body, result.data);
 }
 
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: vstart uses rgw_multipart_min_part_size=32, parts exceed that")]
 #[tokio::test]
 async fn test_multipart_upload_size_too_small() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -148,6 +149,33 @@ async fn test_multipart_upload_size_too_small() {
             .await;
 
     let mp = aws_sdk_s3::types::CompletedMultipartUpload::builder()
+        .set_parts(Some(result.parts))
+        .build();
+    let res = client
+        .complete_multipart_upload()
+        .bucket(&bucket_name)
+        .key(key)
+        .upload_id(&result.upload_id)
+        .multipart_upload(mp)
+        .send()
+        .await;
+    assert_s3_err!(res, 400, "EntityTooSmall");
+}
+
+// Validates EntityTooSmall with 1-byte parts, which are below any
+// reasonable rgw_multipart_min_part_size (nsfs vstart uses 32).
+#[tokio::test]
+async fn test_multipart_upload_size_too_small_1byte() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    let key = "mymultipart_tiny";
+
+    let result =
+        multipart_upload(&client, &bucket_name, key, 3, Some(1), None, None, None)
+            .await;
+
+    let mp = CompletedMultipartUpload::builder()
         .set_parts(Some(result.parts))
         .build();
     let res = client
