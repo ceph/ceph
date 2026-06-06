@@ -120,10 +120,66 @@ Posix-only commits (get_ent, conditional PUT/DELETE, per-part xattrs,
 get_meta_obj, write_attrs) are structured for cherry-picking to Ali's
 posixdriver development baseline if needed.
 
+## Milestone 3 — S3 Versioning
+
+Follows the noobaa nsfs `.versions/` layout so the on-disk structure can
+exploit GPFS `gpfs_linkatif`/`gpfs_unlinkat` primitives in a future phase.
+Version IDs are deterministic from stat (`mtime-{base36_ns}-ino-{base36}`),
+serving as the serialized CAS comparison value.
+
+Design rationale and noobaa analysis: see plan file and DESIGN.md.
+
+| Phase | Summary | Status |
+|-------|---------|--------|
+| 1 | Version ID helpers, `.versions/` path utils, safe-link/safe-unlink CAS, xattr constants | done |
+| 2 | Versioned PUT — demote current to `.versions/`, publish new, suspended null handling, retry loop | pending |
+| 3 | Versioned DELETE — delete marker creation, specific version deletion, promotion from `.versions/` | pending |
+| 4 | Version-aware GET/HEAD — `_find_version_path`, mismatch detection, delete marker handling | pending |
+| 5 | ListObjectVersions — enumerate `.versions/` in fill_cache, sort by key+mtime, is_latest, pagination | pending |
+| 6 | Bucket versioning state — set_bucket_versioning persistence, auto-create `.versions/` | pending |
+
+### Posix driver
+
+Not changed. Posixdriver uses a different versioning scheme
+(VersionedDirectory + symlinks) suited to its own goals — the filesystem
+is an implementation detail, not a layout spec. No convergence planned.
+
+## Known issues — high priority
+
+### BucketCache LRU race under concurrent load
+
+Reproduced by `stress::test_versioned_bucket_cache_stress` in s3tests-rs.
+Creating many buckets and concurrently listing across them triggers an
+assertion failure in `cohort::lru::LRU::evict_block` →
+`boost::intrusive::list_impl::s_iterator_to`.
+
+Backtrace signature:
+```
+cohort::lru::LRU<std::mutex>::evict_block
+  → boost::intrusive::list_impl::s_iterator_to  (assertion)
+  → BucketCache::get_bucket → LRU::insert
+```
+
+This is the same `cohort_lru` infrastructure used by `RGWFileHandle` cache,
+where similar races were found and fixed in earlier work.  The BucketCache
+instantiation may not have received all those fixes.  Prior symptoms also
+included exceeding the maximum number of open LMDB instances after sustained
+recycling.
+
+**Impact:** crash under concurrent multi-bucket workloads.  Single-bucket
+operations and sequential test suites are unaffected.
+
+**Next steps:**
+1. Audit `BucketCache::get_bucket` → `insert_latched` / `evict_block`
+   locking against the fixes applied to `RGWFileHandle` LRU
+2. Check whether the LMDB handle limit issue is also still present
+3. The stress tests in `qa/workunits/rgw/s3tests-rs/tests/test_s3/stress.rs`
+   are marked `#[ignore]` and reproduce reliably — run with
+   `cargo nextest run -E 'test(/^stress::/)' --run-ignored=all --test-threads=1`
+
 ## Future milestones (out of scope for now)
 
-- Versioning (`.versions/` directory scheme)
-- GPFS integration (`gpfs_linkat`, `O_TMPFILE`, conditional link/unlink)
+- GPFS integration (`gpfs_linkatif`, `gpfs_unlinkat`, `O_TMPFILE`, fd pre-staging)
 - Handle cache (LRU for Directory objects)
 - `force_md5_etag` config option
 - Bucket lifecycle management (deferred until posixdriver lifecycle baseline is folded in)
