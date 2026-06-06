@@ -17,6 +17,7 @@ class RGWMultiDelObject : public XMLObj
   std::string version_id;
   const char *if_match{nullptr};
   ceph::real_time last_mod_time;
+  bool last_mod_time_precise{false};
   std::optional<uint64_t> size_match;
 public:
   RGWMultiDelObject() {}
@@ -27,6 +28,7 @@ public:
   const std::string& get_version_id() const { return version_id; }
   const char* get_if_match() const { return if_match; }
   const ceph::real_time& get_last_mod_time() const { return last_mod_time; }
+  bool get_last_mod_time_precise() const { return last_mod_time_precise; }
   const std::optional<uint64_t> get_size_match() const { return size_match; }
 };
 
