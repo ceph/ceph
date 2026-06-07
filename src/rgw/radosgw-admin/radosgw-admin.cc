@@ -3631,12 +3631,12 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 // second command's ancestor registration is silently skipped.
 template <typename T>
 CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
-                               const std::string& desc = "") {
+                               std::string_view desc = {}) {
   const std::string primary = name.substr(0, name.find(','));
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
     if (!p->get_option_no_throw(primary))
       p->add_option(name, var)->group("")->take_last();
-  return cmd->add_option(name, var, desc)->take_last();
+  return cmd->add_option(name, var, std::string(desc))->take_last();
 }
 
 // Registers a boolean flag at every level of the command tree: hidden on all
@@ -3647,12 +3647,12 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
 // Same primary-name lookup logic as add_multilevel_option.
 template <typename T>
 CLI::Option* add_multilevel_flag(CLI::App* cmd, const std::string& name, T& var,
-                              const std::string& desc = "") {
+                              std::string_view desc = {}) {
   const std::string primary = name.substr(0, name.find(','));
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
     if (!p->get_option_no_throw(primary))
       p->add_flag(name, var)->group("");
-  return cmd->add_flag(name, var, desc);
+  return cmd->add_flag(name, var, std::string(desc));
 }
 
 // Builds a display string for warning messages, e.g. "--bucket/-b".
@@ -4033,468 +4033,473 @@ int main(int argc, const char **argv)
     // tighten behavior to reject irrelevant options too.
     app.allow_extras();
 
-    auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
-    auto* script_put = script->add_subcommand("put", "upload a Lua script to a context");
-    auto* script_get = script->add_subcommand("get", "get the Lua script of a context");
-    auto* script_rm  = script->add_subcommand("rm",  "remove the Lua scripts of a context");
-    script_rm->alias("remove");
-    // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
-    script->require_subcommand(show_cli11_help ? 0 : 1);
+    constexpr std::string_view tenant_desc = "tenant name";  // shared across command families
 
-    // Do not use ->required() while options are also accepted at parent
-    // levels for compatibility, because CLI11 checks the specific option location.
-    // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
-    // and manual checks with ->required()
-    const std::string ctx_desc    = "context in which the script runs. one of: " + LUA_CONTEXT_LIST;
-    const std::string infile_desc = "file to read in when setting data";
-    const std::string tenant_desc = "tenant name";
+    { // script command registrations
+      auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
+      auto* script_put = script->add_subcommand("put", "upload a Lua script to a context");
+      auto* script_get = script->add_subcommand("get", "get the Lua script of a context");
+      auto* script_rm  = script->add_subcommand("rm",  "remove the Lua scripts of a context");
+      script_rm->alias("remove");
+      // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
+      script->require_subcommand(show_cli11_help ? 0 : 1);
 
-    add_multilevel_option(script_put, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
-    add_multilevel_option(script_put, "--infile",  infile,         infile_desc)->option_text("<file> REQUIRED");
-    add_multilevel_option(script_put, "--tenant",  tenant,         tenant_desc);
+      // Do not use ->required() while options are also accepted at parent
+      // levels for compatibility, because CLI11 checks the specific option location.
+      // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
+      // and manual checks with ->required()
+      const std::string ctx_desc    = "context in which the script runs. one of: " + LUA_CONTEXT_LIST;
+      constexpr std::string_view infile_desc = "file to read in when setting data";
 
-    add_multilevel_option(script_get, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
-    add_multilevel_option(script_get, "--tenant",  tenant,         tenant_desc);
+      add_multilevel_option(script_put, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+      add_multilevel_option(script_put, "--infile",  infile,         infile_desc)->option_text("<file> REQUIRED");
+      add_multilevel_option(script_put, "--tenant",  tenant,         tenant_desc);
 
-    add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
-    add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
+      add_multilevel_option(script_get, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+      add_multilevel_option(script_get, "--tenant",  tenant,         tenant_desc);
 
-    script_put->callback(
-        [script_put, &str_script_ctx, &infile, &tenant,
-         &cli11_op, &cli11_action] {
-      warn_wrong_position(script_put);
-      warn_duplicates(script_put);
-      // Enforce required options by value, because options may have been
-      // parsed before the subcommand.
-      // TODO: once flags-before-subcommand support is removed, replace with ->required()
-      if (!str_script_ctx) {
-        cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      if (infile.empty()) {
-        cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      bufferlist bl;
-      const auto rc = read_input(infile, bl);
-      if (rc < 0) {
-        cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
-        throw CLI::RuntimeError(-rc);
-      }
-      const std::string script = bl.to_str();
-      std::string err_msg;
-      if (!rgw::lua::verify(script, err_msg)) {
-        cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-      if (script_ctx == rgw::lua::context::none) {
-        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
-        cerr << "ERROR: cannot specify tenant in background context" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      cli11_op = Cli11Op::ScriptPut;
-      cli11_action = [&tenant, script_ctx, script]() -> int {
-        auto lua_manager = driver->get_lua_manager("");
-        const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+      add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+      add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
+
+      script_put->callback(
+          [script_put, &str_script_ctx, &infile, &tenant,
+           &cli11_op, &cli11_action] {
+        warn_wrong_position(script_put);
+        warn_duplicates(script_put);
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        if (infile.empty()) {
+          cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        bufferlist bl;
+        const auto rc = read_input(infile, bl);
         if (rc < 0) {
-          cerr << "ERROR: failed to put script. error: " << rc << std::endl;
-          return -rc;
+          cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
+          throw CLI::RuntimeError(-rc);
         }
-        return 0;
-      };
-    });
+        const std::string script = bl.to_str();
+        std::string err_msg;
+        if (!rgw::lua::verify(script, err_msg)) {
+          cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
+          cerr << "ERROR: cannot specify tenant in background context" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_op = Cli11Op::ScriptPut;
+        cli11_action = [&tenant, script_ctx, script]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+          if (rc < 0) {
+            cerr << "ERROR: failed to put script. error: " << rc << std::endl;
+            return -rc;
+          }
+          return 0;
+        };
+      });
 
-    script_get->callback(
-        [script_get, &str_script_ctx, &tenant,
-         &cli11_op, &cli11_readonly, &cli11_action] {
-      warn_wrong_position(script_get);
-      warn_duplicates(script_get);
-      // Enforce required options by value, because options may have been
-      // parsed before the subcommand.
-      // TODO: once flags-before-subcommand support is removed, replace with ->required()
-      if (!str_script_ctx) {
-        cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-      if (script_ctx == rgw::lua::context::none) {
-        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      cli11_readonly = true;
-      cli11_op = Cli11Op::ScriptGet;
-      cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
-        auto lua_manager = driver->get_lua_manager("");
-        std::string script;
-        const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-        if (rc == -ENOENT) {
-          std::cout << "no script exists for context: " << ctx <<
-            (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
-        } else if (rc < 0) {
-          cerr << "ERROR: failed to read script. error: " << rc << std::endl;
-          return -rc;
-        } else {
-          std::cout << script << std::endl;
+      script_get->callback(
+          [script_get, &str_script_ctx, &tenant,
+           &cli11_op, &cli11_readonly, &cli11_action] {
+        warn_wrong_position(script_get);
+        warn_duplicates(script_get);
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
         }
-        return 0;
-      };
-    });
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_readonly = true;
+        cli11_op = Cli11Op::ScriptGet;
+        cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          std::string script;
+          const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+          if (rc == -ENOENT) {
+            std::cout << "no script exists for context: " << ctx <<
+              (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+          } else if (rc < 0) {
+            cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+            return -rc;
+          } else {
+            std::cout << script << std::endl;
+          }
+          return 0;
+        };
+      });
 
-    script_rm->callback(
-        [script_rm, &str_script_ctx, &tenant,
-         &cli11_op, &cli11_action] {
-      warn_wrong_position(script_rm);
-      warn_duplicates(script_rm);
-      // Enforce required options by value, because options may have been
-      // parsed before the subcommand.
-      // TODO: once flags-before-subcommand support is removed, replace with ->required()
-      if (!str_script_ctx) {
-        cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-      if (script_ctx == rgw::lua::context::none) {
-        cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      cli11_op = Cli11Op::ScriptRm;
-      cli11_action = [&tenant, script_ctx]() -> int {
-        auto lua_manager = driver->get_lua_manager("");
-        const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
-        if (rc < 0) {
-          cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
-          return -rc;
+      script_rm->callback(
+          [script_rm, &str_script_ctx, &tenant,
+           &cli11_op, &cli11_action] {
+        warn_wrong_position(script_rm);
+        warn_duplicates(script_rm);
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
         }
-        return 0;
-      };
-    });
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_op = Cli11Op::ScriptRm;
+        cli11_action = [&tenant, script_ctx]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+          if (rc < 0) {
+            cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
+            return -rc;
+          }
+          return 0;
+        };
+      });
+    } // script command registrations
 
     // --- bucket commands ---
     std::string uid_str;  // CLI11 binding for --uid; rgw_user has no operator>>
 
-    const std::string bucket_desc      = "bucket name";
-    const std::string bucket_id_desc   = "bucket id";
-    const std::string uid_desc         = "user ID";
-    const std::string format_desc      = "output format (json, xml)";
-    const std::string max_entries_desc = "maximum number of entries";
-    const std::string marker_desc      = "start enumeration at this marker";
-    const std::string new_name_desc    = "new bucket name";
-    const std::string obj_ver_desc     = "object version marker for versioned bucket pagination";
+    { // bucket command registrations
+      constexpr std::string_view bucket_desc      = "bucket name";
+      constexpr std::string_view bucket_id_desc   = "bucket id";
+      constexpr std::string_view uid_desc         = "user ID";
+      constexpr std::string_view format_desc      = "output format (json, xml)";
+      constexpr std::string_view max_entries_desc = "maximum number of entries";
+      constexpr std::string_view marker_desc      = "start enumeration at this marker";
+      constexpr std::string_view new_name_desc    = "new bucket name";
+      constexpr std::string_view obj_ver_desc     = "object version marker for versioned bucket pagination";
 
-    auto* bucket_cmd    = app.add_subcommand("bucket", "Manage buckets");
-    bucket_cmd->alias("buckets");
-    auto* bucket_list   = bucket_cmd->add_subcommand("list",   "List buckets or objects in a bucket");
-    auto* bucket_stats  = bucket_cmd->add_subcommand("stats",  "Return bucket statistics");
-    auto* bucket_link   = bucket_cmd->add_subcommand("link",   "Link a bucket to a user");
-    auto* bucket_unlink = bucket_cmd->add_subcommand("unlink", "Unlink a bucket from a user");
-    auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "Remove a bucket");
-    bucket_rm->alias("remove");
-    auto* bucket_check  = bucket_cmd->add_subcommand("check",  "Check bucket index");
-    auto* bucket_check_olh      = bucket_check->add_subcommand("olh",      "Check OLH index entries");
-    auto* bucket_check_unlinked = bucket_check->add_subcommand("unlinked", "Check for unlinked objects");
-    bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_cmd    = app.add_subcommand("bucket", "Manage buckets");
+      bucket_cmd->alias("buckets");
+      auto* bucket_list   = bucket_cmd->add_subcommand("list",   "List buckets or objects in a bucket");
+      auto* bucket_stats  = bucket_cmd->add_subcommand("stats",  "Return bucket statistics");
+      auto* bucket_link   = bucket_cmd->add_subcommand("link",   "Link a bucket to a user");
+      auto* bucket_unlink = bucket_cmd->add_subcommand("unlink", "Unlink a bucket from a user");
+      auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "Remove a bucket");
+      bucket_rm->alias("remove");
+      auto* bucket_check  = bucket_cmd->add_subcommand("check",  "Check bucket index");
+      auto* bucket_check_olh      = bucket_check->add_subcommand("olh",      "Check OLH index entries");
+      auto* bucket_check_unlinked = bucket_check->add_subcommand("unlinked", "Check for unlinked objects");
+      bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
-    // bucket list options
-    add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc)->ignore_underscore();
-    add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
-    add_multilevel_option(bucket_list, "--tenant",          tenant,         tenant_desc);
-    add_multilevel_option(bucket_list, "--format",          format,         format_desc);
-    add_multilevel_option(bucket_list, "--max-entries",     max_entries,    max_entries_desc)->ignore_underscore();
-    add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
-    add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc)->ignore_underscore();
-    add_multilevel_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing")->ignore_underscore();
+      // bucket list options
+      add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc)->ignore_underscore();
+      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_list, "--tenant",          tenant,         tenant_desc);
+      add_multilevel_option(bucket_list, "--format",          format,         format_desc);
+      add_multilevel_option(bucket_list, "--max-entries",     max_entries,    max_entries_desc)->ignore_underscore();
+      add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
+      add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc)->ignore_underscore();
+      add_multilevel_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing")->ignore_underscore();
 
-    // bucket stats options
-    add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc)->ignore_underscore();
-    add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc)->ignore_underscore();
-    add_multilevel_option(bucket_stats, "--tenant",             tenant,             tenant_desc);
-    add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
-    add_multilevel_option(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)->ignore_underscore();
-    add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
-    add_multilevel_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "show restore statistics")->ignore_underscore();
+      // bucket stats options
+      add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc)->ignore_underscore();
+      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_stats, "--tenant",             tenant,             tenant_desc);
+      add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
+      add_multilevel_option(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)->ignore_underscore();
+      add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
+      add_multilevel_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "show restore statistics")->ignore_underscore();
 
-    // bucket link options
-    add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
-    add_multilevel_option(bucket_link, "--uid,-i",          uid_str,         uid_desc)->option_text("<uid> REQUIRED");
-    add_multilevel_option(bucket_link, "--tenant",          tenant,          tenant_desc);
-    add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
-    add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
+      // bucket link options
+      add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
+      add_multilevel_option(bucket_link, "--uid,-i",          uid_str,         uid_desc)->option_text("<uid> REQUIRED");
+      add_multilevel_option(bucket_link, "--tenant",          tenant,          tenant_desc);
+      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
-    // bucket unlink options
-    add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
-    add_multilevel_option(bucket_unlink, "--uid,-i",    uid_str,     uid_desc)->option_text("<uid> REQUIRED");
-    add_multilevel_option(bucket_unlink, "--tenant",    tenant,      tenant_desc);
+      // bucket unlink options
+      add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
+      add_multilevel_option(bucket_unlink, "--uid,-i",    uid_str,     uid_desc)->option_text("<uid> REQUIRED");
+      add_multilevel_option(bucket_unlink, "--tenant",    tenant,      tenant_desc);
 
-    // bucket rm options
-    add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
-    add_multilevel_option(bucket_rm, "--tenant",    tenant,      tenant_desc);
-    add_multilevel_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove all objects before bucket removal")->ignore_underscore();
-    add_multilevel_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "remove bucket without triggering garbage collection")->ignore_underscore();
-    add_multilevel_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "allow removal even with inconsistent bucket index")->ignore_underscore();
-    add_multilevel_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for potentially dangerous operations")->ignore_underscore();
+      // bucket rm options
+      add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED")->ignore_underscore();
+      add_multilevel_option(bucket_rm, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove all objects before bucket removal")->ignore_underscore();
+      add_multilevel_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "remove bucket without triggering garbage collection")->ignore_underscore();
+      add_multilevel_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "allow removal even with inconsistent bucket index")->ignore_underscore();
+      add_multilevel_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for potentially dangerous operations")->ignore_underscore();
 
-    // bucket check options
-    add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
-    add_multilevel_option(bucket_check, "--tenant",    tenant,      tenant_desc);
-    add_multilevel_flag(bucket_check, "--fix",                    fix,                    "fix any errors found");
-    add_multilevel_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
-    add_multilevel_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
+      // bucket check options
+      add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
+      add_multilevel_option(bucket_check, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_flag(bucket_check, "--fix",                    fix,                    "fix any errors found");
+      add_multilevel_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
+      add_multilevel_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
 
-    // bucket check olh / unlinked — add visible options at leaf level; ancestor
-    // registrations are already in place from bucket_check above
-    add_multilevel_option(bucket_check_olh,      "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
-    add_multilevel_option(bucket_check_olh,      "--tenant",    tenant,      tenant_desc);
-    add_multilevel_option(bucket_check_unlinked, "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
-    add_multilevel_option(bucket_check_unlinked, "--tenant",    tenant,      tenant_desc);
+      // bucket check olh / unlinked — add visible options at leaf level; ancestor
+      // registrations are already in place from bucket_check above
+      add_multilevel_option(bucket_check_olh,      "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
+      add_multilevel_option(bucket_check_olh,      "--tenant",    tenant,      tenant_desc);
+      add_multilevel_option(bucket_check_unlinked, "--bucket,-b", bucket_name, bucket_desc)->ignore_underscore();
+      add_multilevel_option(bucket_check_unlinked, "--tenant",    tenant,      tenant_desc);
 
-    bucket_list->callback(
-        [bucket_list, &cli11_op, &cli11_readonly, &cli11_action,
-         &bucket_name, &bucket_id, &tenant, &marker, &max_entries,
-         &max_entries_specified, &object_version, &allow_unordered,
-         &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
-         &formatter, &bucket] {
-      warn_wrong_position(bucket_list);
-      warn_duplicates(bucket_list);
-      cli11_readonly = true;
-      cli11_op = Cli11Op::BucketList;
-      cli11_action = [&bucket_name, &bucket_id, &tenant, &marker, &max_entries,
-                      &max_entries_specified, &object_version, &allow_unordered,
-                      &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
-                      &formatter, &bucket]() -> int {
-        if (bucket_name.empty()) {
-          if (!rgw::sal::User::empty(user)) {
-            if (!user_op_ptr->has_existing_user()) {
-              cerr << "ERROR: could not find user: " << user << std::endl;
-              return ENOENT;
+      bucket_list->callback(
+          [bucket_list, &cli11_op, &cli11_readonly, &cli11_action,
+           &bucket_name, &bucket_id, &tenant, &marker, &max_entries,
+           &max_entries_specified, &object_version, &allow_unordered,
+           &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
+           &formatter, &bucket] {
+        warn_wrong_position(bucket_list);
+        warn_duplicates(bucket_list);
+        cli11_readonly = true;
+        cli11_op = Cli11Op::BucketList;
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &marker, &max_entries,
+                        &max_entries_specified, &object_version, &allow_unordered,
+                        &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
+                        &formatter, &bucket]() -> int {
+          if (bucket_name.empty()) {
+            if (!rgw::sal::User::empty(user)) {
+              if (!user_op_ptr->has_existing_user()) {
+                cerr << "ERROR: could not find user: " << user << std::endl;
+                return ENOENT;
+              }
             }
-          }
-          bucket_op.marker = marker;
-          bucket_op.max_entries = max_entries_specified ? max_entries : 0;
-          RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr, null_yield, dpp());
-        } else {
-          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-          if (ret < 0) {
-            cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          formatter->open_array_section("entries");
-          int count = 0;
-          static constexpr int MAX_PAGINATE_SIZE = 10000;
-          static constexpr int DEFAULT_MAX_ENTRIES = 1000;
-          if (max_entries < 0)
-            max_entries = DEFAULT_MAX_ENTRIES;
-          const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
-          string prefix, delim, ns;
-          rgw::sal::Bucket::ListParams params;
-          rgw::sal::Bucket::ListResults results;
-          params.prefix = prefix;
-          params.delim = delim;
-          if (!object_version.empty())
-            params.marker = rgw_obj_key(marker, object_version);
-          else
-            params.marker = rgw_obj_key(marker);
-          params.ns = ns;
-          params.enforce_ns = false;
-          params.list_versions = true;
-          params.allow_unordered = bool(allow_unordered);
-          do {
-            const int remaining = max_entries - count;
-            ret = bucket->list(dpp(), params, std::min(remaining, paginate_size),
-                               results, null_yield);
+            bucket_op.marker = marker;
+            bucket_op.max_entries = max_entries_specified ? max_entries : 0;
+            RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr, null_yield, dpp());
+          } else {
+            int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
             if (ret < 0) {
-              cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
+              cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
               return -ret;
             }
-            count += results.objs.size();
-            for (const auto& entry : results.objs)
-              encode_json("entry", entry, formatter.get());
+            formatter->open_array_section("entries");
+            int count = 0;
+            static constexpr int MAX_PAGINATE_SIZE = 10000;
+            static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+            if (max_entries < 0)
+              max_entries = DEFAULT_MAX_ENTRIES;
+            const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
+            string prefix, delim, ns;
+            rgw::sal::Bucket::ListParams params;
+            rgw::sal::Bucket::ListResults results;
+            params.prefix = prefix;
+            params.delim = delim;
+            if (!object_version.empty())
+              params.marker = rgw_obj_key(marker, object_version);
+            else
+              params.marker = rgw_obj_key(marker);
+            params.ns = ns;
+            params.enforce_ns = false;
+            params.list_versions = true;
+            params.allow_unordered = bool(allow_unordered);
+            do {
+              const int remaining = max_entries - count;
+              ret = bucket->list(dpp(), params, std::min(remaining, paginate_size),
+                                 results, null_yield);
+              if (ret < 0) {
+                cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
+                return -ret;
+              }
+              count += results.objs.size();
+              for (const auto& entry : results.objs)
+                encode_json("entry", entry, formatter.get());
+              formatter->flush(cout);
+            } while (results.is_truncated && count < max_entries);
+            formatter->close_section();
             formatter->flush(cout);
-          } while (results.is_truncated && count < max_entries);
-          formatter->close_section();
-          formatter->flush(cout);
-        }
-        return 0;
-      };
-    });
-
-    bucket_stats->callback(
-        [bucket_stats, &cli11_op, &cli11_readonly, &cli11_action,
-         &bucket_name, &bucket_id, &marker, &max_entries, &max_entries_specified,
-         &show_restore_stats, &bucket_op, &site, &stream_flusher_ptr, &err] {
-      warn_wrong_position(bucket_stats);
-      warn_duplicates(bucket_stats);
-      cli11_readonly = true;
-      cli11_op = Cli11Op::BucketStats;
-      cli11_action = [&bucket_name, &bucket_id, &marker, &max_entries,
-                      &max_entries_specified, &show_restore_stats, &bucket_op,
-                      &site, &stream_flusher_ptr, &err]() -> int {
-        if (bucket_name.empty() && !bucket_id.empty()) {
-          rgw_bucket bkt;
-          if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bkt)) {
-            cerr << "failure: no such bucket id" << std::endl;
-            return ENOENT;
           }
-          bucket_op.set_tenant(bkt.tenant);
-          bucket_op.set_bucket_name(bkt.name);
-        }
-        bucket_op.set_fetch_stats(true);
-        bucket_op.max_entries = max_entries_specified ? max_entries : 0;
-        bucket_op.set_restore_stats(bool(show_restore_stats));
-        int r = RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr,
-                                       null_yield, dpp());
-        if (r < 0) {
-          cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
-          return posix_errortrans(-r);
-        }
-        return 0;
-      };
-    });
-
-    bucket_link->callback(
-        [bucket_link, &uid_str, &user_id_arg, &bucket_name,
-         &cli11_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
-      warn_wrong_position(bucket_link);
-      warn_duplicates(bucket_link);
-      // Enforce required options by value, because options may have been
-      // parsed before the subcommand.
-      // TODO: once flags-before-subcommand support is removed, replace with ->required()
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      if (uid_str.empty()) {
-        cerr << "ERROR: user ID was not provided (via --uid)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      user_id_arg.from_str(uid_str);
-      cli11_op = Cli11Op::BucketLink;
-      cli11_action = [&bucket_op, &bucket_id, &new_bucket_name]() -> int {
-        bucket_op.set_bucket_id(bucket_id);
-        bucket_op.set_new_bucket_name(new_bucket_name);
-        string link_err;
-        int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), null_yield, &link_err);
-        if (r < 0) {
-          cerr << "failure: " << cpp_strerror(-r) << ": " << link_err << std::endl;
-          return -r;
-        }
-        return 0;
-      };
-    });
-
-    bucket_unlink->callback(
-        [bucket_unlink, &uid_str, &user_id_arg, &bucket_name,
-         &cli11_op, &cli11_action, &bucket_op] {
-      warn_wrong_position(bucket_unlink);
-      warn_duplicates(bucket_unlink);
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      if (uid_str.empty()) {
-        cerr << "ERROR: user ID was not provided (via --uid)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      user_id_arg.from_str(uid_str);
-      cli11_op = Cli11Op::BucketUnlink;
-      cli11_action = [&bucket_op]() -> int {
-        int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
-        if (r < 0) {
-          cerr << "failure: " << cpp_strerror(-r) << std::endl;
-          return -r;
-        }
-        return 0;
-      };
-    });
-
-    bucket_rm->callback(
-        [bucket_rm, &bucket_name, &cli11_op, &cli11_action,
-         &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
-      warn_wrong_position(bucket_rm);
-      warn_duplicates(bucket_rm);
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-        throw CLI::RuntimeError(EINVAL);
-      }
-      cli11_op = Cli11Op::BucketRm;
-      cli11_action = [&bucket_op, &site, &bypass_gc, &inconsistent_index,
-                      &yes_i_really_mean_it]() -> int {
-        if (!inconsistent_index) {
-          RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
-                                          bypass_gc, true, false);
-        } else {
-          if (!yes_i_really_mean_it) {
-            cerr << "using --inconsistent-index can corrupt the bucket index\n"
-                 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-            return 1;
-          }
-          RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
-                                          bypass_gc, false, false);
-        }
-        return 0;
-      };
-    });
-
-    bucket_check->callback(
-        [bucket_check, &bucket_name, &cli11_op, &cli11_action,
-         &tenant, &fix, &remove_bad, &check_head_obj_locator,
-         &bucket_op, &stream_flusher_ptr, &formatter] {
-      warn_wrong_position(bucket_check);
-      warn_duplicates(bucket_check);
-      cli11_op = Cli11Op::BucketCheck;
-      cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
-                      &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
-        if (check_head_obj_locator) {
-          if (bucket_name.empty()) {
-            cerr << "ERROR: need to specify bucket name" << std::endl;
-            return EINVAL;
-          }
-          do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
-        } else {
-          RGWBucketAdminOp::check_index(driver, bucket_op, *stream_flusher_ptr, null_yield, dpp());
-        }
-        return 0;
-      };
-    });
-
-    bucket_check_olh->callback(
-        [bucket_check_olh, &cli11_op, &cli11_action,
-         &bucket_op, &stream_flusher_ptr] {
-      warn_wrong_position(bucket_check_olh);
-      warn_duplicates(bucket_check_olh);
-      cli11_op = Cli11Op::BucketCheckOlh;
-      cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
-        rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-        if (!store) {
-          cerr << "WARNING: this command is only relevant when the cluster has a "
-               << "RADOS backing store." << std::endl;
           return 0;
-        }
-        RGWBucketAdminOp::check_index_olh(store, bucket_op, *stream_flusher_ptr, dpp());
-        return 0;
-      };
-    });
+        };
+      });
 
-    bucket_check_unlinked->callback(
-        [bucket_check_unlinked, &cli11_op, &cli11_action,
-         &bucket_op, &stream_flusher_ptr] {
-      warn_wrong_position(bucket_check_unlinked);
-      warn_duplicates(bucket_check_unlinked);
-      cli11_op = Cli11Op::BucketCheckUnlinked;
-      cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
-        rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-        if (!store) {
-          cerr << "WARNING: this command is only relevant when the cluster has a "
-               << "RADOS backing store." << std::endl;
+      bucket_stats->callback(
+          [bucket_stats, &cli11_op, &cli11_readonly, &cli11_action,
+           &bucket_name, &bucket_id, &marker, &max_entries, &max_entries_specified,
+           &show_restore_stats, &bucket_op, &site, &stream_flusher_ptr, &err] {
+        warn_wrong_position(bucket_stats);
+        warn_duplicates(bucket_stats);
+        cli11_readonly = true;
+        cli11_op = Cli11Op::BucketStats;
+        cli11_action = [&bucket_name, &bucket_id, &marker, &max_entries,
+                        &max_entries_specified, &show_restore_stats, &bucket_op,
+                        &site, &stream_flusher_ptr, &err]() -> int {
+          if (bucket_name.empty() && !bucket_id.empty()) {
+            rgw_bucket bkt;
+            if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bkt)) {
+              cerr << "failure: no such bucket id" << std::endl;
+              return ENOENT;
+            }
+            bucket_op.set_tenant(bkt.tenant);
+            bucket_op.set_bucket_name(bkt.name);
+          }
+          bucket_op.set_fetch_stats(true);
+          bucket_op.max_entries = max_entries_specified ? max_entries : 0;
+          bucket_op.set_restore_stats(bool(show_restore_stats));
+          int r = RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr,
+                                         null_yield, dpp());
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return posix_errortrans(-r);
+          }
           return 0;
+        };
+      });
+
+      bucket_link->callback(
+          [bucket_link, &uid_str, &user_id_arg, &bucket_name,
+           &cli11_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
+        warn_wrong_position(bucket_link);
+        warn_duplicates(bucket_link);
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (bucket_name.empty()) {
+          cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
         }
-        RGWBucketAdminOp::check_index_unlinked(store, bucket_op, *stream_flusher_ptr, dpp());
-        return 0;
-      };
-    });
+        if (uid_str.empty()) {
+          cerr << "ERROR: user ID was not provided (via --uid)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        user_id_arg.from_str(uid_str);
+        cli11_op = Cli11Op::BucketLink;
+        cli11_action = [&bucket_op, &bucket_id, &new_bucket_name]() -> int {
+          bucket_op.set_bucket_id(bucket_id);
+          bucket_op.set_new_bucket_name(new_bucket_name);
+          string link_err;
+          int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), null_yield, &link_err);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << link_err << std::endl;
+            return -r;
+          }
+          return 0;
+        };
+      });
+
+      bucket_unlink->callback(
+          [bucket_unlink, &uid_str, &user_id_arg, &bucket_name,
+           &cli11_op, &cli11_action, &bucket_op] {
+        warn_wrong_position(bucket_unlink);
+        warn_duplicates(bucket_unlink);
+        if (bucket_name.empty()) {
+          cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        if (uid_str.empty()) {
+          cerr << "ERROR: user ID was not provided (via --uid)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        user_id_arg.from_str(uid_str);
+        cli11_op = Cli11Op::BucketUnlink;
+        cli11_action = [&bucket_op]() -> int {
+          int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << std::endl;
+            return -r;
+          }
+          return 0;
+        };
+      });
+
+      bucket_rm->callback(
+          [bucket_rm, &bucket_name, &cli11_op, &cli11_action,
+           &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
+        warn_wrong_position(bucket_rm);
+        warn_duplicates(bucket_rm);
+        if (bucket_name.empty()) {
+          cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_op = Cli11Op::BucketRm;
+        cli11_action = [&bucket_op, &site, &bypass_gc, &inconsistent_index,
+                        &yes_i_really_mean_it]() -> int {
+          if (!inconsistent_index) {
+            RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
+                                            bypass_gc, true, false);
+          } else {
+            if (!yes_i_really_mean_it) {
+              cerr << "using --inconsistent-index can corrupt the bucket index\n"
+                   << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+              return 1;
+            }
+            RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
+                                            bypass_gc, false, false);
+          }
+          return 0;
+        };
+      });
+
+      bucket_check->callback(
+          [bucket_check, &bucket_name, &cli11_op, &cli11_action,
+           &tenant, &fix, &remove_bad, &check_head_obj_locator,
+           &bucket_op, &stream_flusher_ptr, &formatter] {
+        warn_wrong_position(bucket_check);
+        warn_duplicates(bucket_check);
+        cli11_op = Cli11Op::BucketCheck;
+        cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
+                        &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
+          if (check_head_obj_locator) {
+            if (bucket_name.empty()) {
+              cerr << "ERROR: need to specify bucket name" << std::endl;
+              return EINVAL;
+            }
+            do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
+          } else {
+            RGWBucketAdminOp::check_index(driver, bucket_op, *stream_flusher_ptr, null_yield, dpp());
+          }
+          return 0;
+        };
+      });
+
+      bucket_check_olh->callback(
+          [bucket_check_olh, &cli11_op, &cli11_action,
+           &bucket_op, &stream_flusher_ptr] {
+        warn_wrong_position(bucket_check_olh);
+        warn_duplicates(bucket_check_olh);
+        cli11_op = Cli11Op::BucketCheckOlh;
+        cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
+          rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!store) {
+            cerr << "WARNING: this command is only relevant when the cluster has a "
+                 << "RADOS backing store." << std::endl;
+            return 0;
+          }
+          RGWBucketAdminOp::check_index_olh(store, bucket_op, *stream_flusher_ptr, dpp());
+          return 0;
+        };
+      });
+
+      bucket_check_unlinked->callback(
+          [bucket_check_unlinked, &cli11_op, &cli11_action,
+           &bucket_op, &stream_flusher_ptr] {
+        warn_wrong_position(bucket_check_unlinked);
+        warn_duplicates(bucket_check_unlinked);
+        cli11_op = Cli11Op::BucketCheckUnlinked;
+        cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
+          rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!store) {
+            cerr << "WARNING: this command is only relevant when the cluster has a "
+                 << "RADOS backing store." << std::endl;
+            return 0;
+          }
+          RGWBucketAdminOp::check_index_unlinked(store, bucket_op, *stream_flusher_ptr, dpp());
+          return 0;
+        };
+      });
+    } // bucket command registrations
 
     // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
     try {
