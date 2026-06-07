@@ -2579,8 +2579,37 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._rados
 
         ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
+
+        # The monitors may be briefly unreachable when a module first opens
+        # its librados handle, e.g. right after a mgr failover while the mons
+        # are still (re)forming quorum. A single transient connect() failure
+        # here would otherwise propagate out of the module's __init__ and
+        # permanently fail the module (the mgr does not retry construction),
+        # leaving the cluster in HEALTH_ERR until a manual `ceph mgr fail`.
+        # Retry a few times with backoff before giving up. Each attempt uses a
+        # fresh handle: librados does not support calling connect() again on a
+        # handle whose previous connect() failed, so the failed one is shut
+        # down and discarded.
+        attempts = 5
+        rados_inst = None
+        for attempt in range(1, attempts + 1):
+            rados_inst = rados.Rados(context=ctx_capsule)
+            try:
+                rados_inst.connect()
+                break
+            except rados.Error as e:
+                rados_inst.shutdown()
+                if attempt == attempts:
+                    self.log.error('could not connect to cluster after %d '
+                                   'attempts: %s', attempts, e)
+                    raise
+                self.log.warning('rados connect attempt %d/%d failed (%s), '
+                                 'retrying', attempt, attempts, e)
+                time.sleep(min(2 ** (attempt - 1), 5))
+
+        # Only cache the handle once it is actually connected, so a failed
+        # connect does not leave a poisoned, unconnected instance behind.
+        self._rados = rados_inst
         self._ceph_register_client(None, self._rados.get_addrs(), False)
         return self._rados
 
