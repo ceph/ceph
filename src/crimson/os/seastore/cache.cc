@@ -1240,6 +1240,9 @@ CachedExtentRef Cache::alloc_remapped_extent_by_type(
   case extent_types_t::TEST_BLOCK:
     return alloc_remapped_extent<TestBlock>(
       t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::LOG_NODE:
+    return alloc_remapped_extent<log_manager::LogNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
   default:
     ceph_abort("invalid extent type");
     return CachedExtentRef();
