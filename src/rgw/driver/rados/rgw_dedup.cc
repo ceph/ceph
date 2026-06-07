@@ -87,34 +87,25 @@ namespace rgw::dedup {
 
   // Derive accounted_size from object-head attributes the same way the
   // write-path computes it (see RGWRados::Object::Write::_do_write_meta):
-  //   compressed   -> RGWCompressionInfo::orig_size  (stable, not patched)
-  //   uncompressed -> physical object size
   // We cannot use p_obj->get_accounted_size() because the stat path patches
   // it via the manifest (set_head / get_obj_size).
-  static int64_t derive_head_accounted_size(const DoutPrefixProvider *dpp,
-                                             const bufferlist &compression_bl,
-                                             uint64_t obj_size,
-                                             std::string *p_compression_type = nullptr)
+  static int64_t derive_accounted_size(const DoutPrefixProvider *dpp,
+                                       const bufferlist &compression_bl,
+                                       std::string *p_compression_type = nullptr)
   {
-    if (compression_bl.length() > 0) {
-      RGWCompressionInfo cs_info;
-      auto bl_iter = compression_bl.cbegin();
-      try {
-        decode(cs_info, bl_iter);
-      } catch (buffer::error&) {
-        ldpp_dout(dpp, 5) << __func__
-                          << "::ERR: failed to decode compression info" << dendl;
-        return -EINVAL;
-      }
-      if (p_compression_type) {
-        *p_compression_type = cs_info.compression_type;
-      }
-      return cs_info.orig_size;
+    RGWCompressionInfo cs_info;
+    auto bl_iter = compression_bl.cbegin();
+    try {
+      decode(cs_info, bl_iter);
+    } catch (buffer::error&) {
+      ldpp_dout(dpp, 5) << __func__
+                        << "::ERR: failed to decode compression info" << dendl;
+      return -EINVAL;
     }
     if (p_compression_type) {
-      *p_compression_type = "none";
+      *p_compression_type = cs_info.compression_type;
     }
-    return obj_size;
+    return cs_info.orig_size;
   }
 
   //---------------------------------------------------------------------------
@@ -420,11 +411,16 @@ namespace rgw::dedup {
   const std::string& Background::get_placement_compression_type(const rgw_placement_rule &rule)
   {
     const std::string key = rule.to_str();
+    // check if we have a cache compression_type for this rule
     auto it = d_placement_compression_type.find(key);
     if (it != d_placement_compression_type.end()) {
       return it->second;
     }
+
+    // no local cache, check zoneparams
     const std::string& comp_type = store->svc()->zone->get_zone_params().get_compression_type(rule);
+
+    // store in local cache to speedup next access
     auto result = d_placement_compression_type.emplace(key, comp_type);
     return result.first->second;
   }
@@ -1071,14 +1067,8 @@ namespace rgw::dedup {
       {
         bufferlist src_hash_bl;
         init_cmp_pairs(dpp, p_src_rec, etag_bl, src_hash_bl, &src_op);
-        // CAS on compression only when SRC is uncompressed (cheap empty-bl compare).
-        // A compressed object's compression state is assumed immutable: RGW never
-        // strips or rewrites RGW_ATTR_COMPRESSION on an existing object, so there
-        // is no need to CAS on a potentially large compression attribute.
-        if (p_src_rec->compression_bl.length() == 0) {
-          src_op.cmpxattr(RGW_ATTR_COMPRESSION, CEPH_OSD_CMPXATTR_OP_EQ,
-                          p_src_rec->compression_bl);
-        }
+        // SRC compression attr is fixed at object creation;
+        // Any real rewrite rotates ref_tag, caught by init_cmp_pairs() above.
         src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
         if (p_src_rec->s.flags.hash_calculated() && !p_src_val->has_valid_hash()){
           src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
@@ -1107,11 +1097,6 @@ namespace rgw::dedup {
       }
     }
 
-    // Set RGW_ATTR_COMPRESSION on TGT unconditionally from SRC state.
-    // TGT now shares SRC's tail objects so its compression state must match.
-    bool src_compressed = (p_src_rec->compression_bl.length() > 0);
-    bool tgt_compressed = (p_tgt_rec->compression_bl.length() > 0);
-
     librados::ObjectWriteOperation tgt_op;
     {
       bufferlist tgt_hash_bl;
@@ -1126,14 +1111,17 @@ namespace rgw::dedup {
         p_stats->set_hash_attrs++;
       }
 
-      if (src_compressed) {
+      // Mirror SRC compression state on TGT.
+      // TGT now shares SRC's tail objects so its compression state must match.
+      if (p_src_rec->compression_bl.length() > 0) {
         tgt_op.setxattr(RGW_ATTR_COMPRESSION, p_src_rec->compression_bl);
-        if (!tgt_compressed) {
+        if (p_tgt_rec->compression_bl.length() == 0) {
           p_stats->set_compression_on_tgt++;
         }
-      } else {
-        tgt_op.rmxattr(RGW_ATTR_COMPRESSION);
-        if (tgt_compressed) {
+      }
+      else {
+        if (p_tgt_rec->compression_bl.length() > 0) {
+          tgt_op.rmxattr(RGW_ATTR_COMPRESSION);
           p_stats->clear_compression_on_tgt++;
         }
       }
@@ -1173,7 +1161,7 @@ namespace rgw::dedup {
     blake3_hasher *hmac;
     const DoutPrefixProvider *dpp;
 
-    bufferlist pending;         // partial compressed block accumulated so far
+    bufferlist pending;        // partial compressed block accumulated so far
     uint64_t   raw_ofs  = 0;   // running offset in compressed stream
     size_t     blk_idx  = 0;   // next compression block to process
 
@@ -1186,7 +1174,8 @@ namespace rgw::dedup {
         hmac(_hmac), dpp(_dpp) {}
 
     //---------------------------------------------------------------------------
-    int feed_compressed_data(bufferlist &bl) {
+    int feed_compressed_data(bufferlist &bl)
+    {
       uint64_t len = bl.length();
       pending.claim_append(bl);
       raw_ofs += len;
@@ -1194,33 +1183,42 @@ namespace rgw::dedup {
     }
 
     //---------------------------------------------------------------------------
-    int drain_ready_blocks() {
+    int drain_ready_blocks()
+    {
+      // A global offset of pending[0] before trim
+      uint64_t pending_start = raw_ofs - pending.length();
+
       while (blk_idx < cs_info.blocks.size()) {
         const auto &block = cs_info.blocks[blk_idx];
         uint64_t block_end = block.new_ofs + block.len;
         if (raw_ofs < block_end) {
           break; // not enough data yet for this block
         }
-        bufferlist compressed_bl, decompressed_bl;
-        uint64_t local_ofs = block.new_ofs - (raw_ofs - pending.length());
-        pending.begin(local_ofs).copy(block.len, compressed_bl);
-        int ret = compressor->decompress(compressed_bl, decompressed_bl,
+
+        // short lived bl holding a single decompressed block
+        bufferlist decompressed_bl;
+        // offset inside pending bl where this block starts
+        uint64_t local_ofs = block.new_ofs - pending_start;
+        auto block_itr = pending.cbegin(local_ofs);
+        int ret = compressor->decompress(block_itr, block.len, decompressed_bl,
                                          cs_info.compressor_message);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "streaming_decompressor_t::ERR: decompression"
             " failed, ret=" << ret << dendl;
           return ret;
         }
+
+        // push decompressed block to blake3 and release bl
         for (const auto& bptr : decompressed_bl.buffers()) {
           blake3_hasher_update(hmac, (const uint8_t *)bptr.c_str(), bptr.length());
         }
         blk_idx++;
       }
+
       // discard data that has been fully consumed by all processed blocks
       if (blk_idx > 0) {
-        auto & entry = cs_info.blocks[blk_idx - 1];
-        uint64_t consumed_end = entry.new_ofs + entry.len;
-        uint64_t pending_start = raw_ofs - pending.length();
+        auto & prev_block = cs_info.blocks[blk_idx - 1];
+        uint64_t consumed_end = prev_block.new_ofs + prev_block.len;
         if (consumed_end > pending_start) {
           uint64_t trim = consumed_end - pending_start;
           if (trim <= pending.length()) {
@@ -1232,11 +1230,13 @@ namespace rgw::dedup {
     }
 
     //---------------------------------------------------------------------------
-    int finish() {
+    int finish()
+    {
       int ret = drain_ready_blocks();
       if (ret < 0) {
         return ret;
       }
+
       if (blk_idx != cs_info.blocks.size()) {
         ldpp_dout(dpp, 1) << "streaming_decompressor_t::ERR: not all blocks"
           " decompressed, processed=" << blk_idx
@@ -1680,9 +1680,14 @@ namespace rgw::dedup {
       return 0;
     }
 
+    std::string obj_compression_type = "none";
+    int64_t accounted_size = p_obj->get_size();
     {
+      p_rec->compression_bl.clear();
+      p_rec->s.compression_len = 0;
+
       auto comp_itr = attrs.find(RGW_ATTR_COMPRESSION);
-      if (comp_itr != attrs.end()) {
+      if (comp_itr != attrs.end() && comp_itr->second.length() > 0) {
         if (d_skip_compressed) {
           p_stats->ingress_skip_compressed++;
           p_stats->ingress_skip_compressed_bytes += ondisk_byte_size;
@@ -1691,26 +1696,21 @@ namespace rgw::dedup {
           return 0;
         }
         p_rec->compression_bl = comp_itr->second;
-        p_rec->s.compression_bl_len = p_rec->compression_bl.length();
+        p_rec->s.compression_len = p_rec->compression_bl.length();
         p_stats->ingress_compressed++;
         p_stats->ingress_compressed_bytes += ondisk_byte_size;
         ldpp_dout(dpp, 20) <<__func__ << "::compressed object "
                            << p_rec->obj_name << dendl;
-      } else {
-        p_rec->compression_bl.clear();
-        p_rec->s.compression_bl_len = 0;
-      }
-    }
 
-    std::string obj_compression_type;
-    int64_t head_accounted_size = derive_head_accounted_size(dpp, p_rec->compression_bl,
-                                                             p_obj->get_size(),
-                                                             &obj_compression_type);
-    if (unlikely(head_accounted_size < 0)) {
-      ldpp_dout(dpp, 5) << __func__
-                        << "::ERR: derive_head_accounted_size failed for "
-                        << p_rec->obj_name << dendl;
-      return head_accounted_size;
+        accounted_size = derive_accounted_size(dpp, p_rec->compression_bl,
+                                               &obj_compression_type);
+        if (unlikely(accounted_size < 0)) {
+          ldpp_dout(dpp, 5) << __func__
+                            << "::ERR: derive_accounted_size failed for "
+                            << p_rec->obj_name << dendl;
+          return accounted_size;
+        }
+      }
     }
 
     // extract ETAG and compare with values taken from the bucket-index
@@ -1750,11 +1750,11 @@ namespace rgw::dedup {
     // no need to check for remap success as we compare keys bellow
     sc_idx = remapper->remap(storage_class, dpp, &p_stats->failed_map_overflow);
     // Cross-check etag, num_parts, storage_class and size from object-head
-    // against bucket-index.  head_accounted_size was derived above from the
+    // against bucket-index.  accounted_size was derived above from the
     // compression attr (orig_size) or physical size - matching the write-path
     // logic, so it is safe to compare against the bucket-index value.
     key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low,
-                       byte_size_to_disk_blocks(head_accounted_size),
+                       byte_size_to_disk_blocks(accounted_size),
                        parsed_etag.num_parts, sc_idx);
     if (unlikely(key_from_obj != key_from_bucket_index)) {
       ldpp_dout(dpp, 15) <<__func__ << "::Skipping changed object "
@@ -1876,9 +1876,8 @@ namespace rgw::dedup {
   // Always fetched:
   //   RGW_ATTR_MANIFEST  -- required; returns -ENOENT if missing.
   //   RGW_ATTR_BLAKE3    -- if present, populates p_rec->s.hash and sets
-  //                         has_valid_hash().  Missing BLAKE3 is an error
-  //                         unless has_remote_attrs() is set (the hash may
-  //                         not have been written to the object head yet).
+  //                         has_valid_hash().  Missing BLAKE3 returns -ENOENT
+  //                         when blake3_expected is true (caller decides).
   //
   // Conditionally fetched (when has_remote_attrs()):
   //   RGW_ATTR_COMPRESSION -- restores compression_bl that was dropped from
@@ -1895,9 +1894,10 @@ namespace rgw::dedup {
   // Uses a single ioctx.getxattrs() call (all attrs returned in one round
   // trip), so fetching compression adds zero extra RADOS cost.
   static int fetch_head_obj_attrs(const DoutPrefixProvider *const dpp,
-                                    rgw::sal::Driver *driver,
-                                    rgw::sal::RadosStore *store,
-                                    disk_record_t *p_rec)
+                                  rgw::sal::Driver *driver,
+                                  rgw::sal::RadosStore *store,
+                                  disk_record_t *p_rec,
+                                  bool blake3_expected)
   {
     librados::IoCtx ioctx;
     std::string oid;
@@ -1937,9 +1937,7 @@ namespace rgw::dedup {
         return -EINVAL;
       }
     }
-    else if (!p_rec->s.flags.has_remote_attrs()) {
-      // BLAKE3 is mandatory unless fetching for remote_attrs (hash may not
-      // have been written to the object head yet)
+    else if (blake3_expected) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: No HASH attribute" << dendl;
       return -ENOENT;
     }
@@ -1959,7 +1957,7 @@ namespace rgw::dedup {
       itr = attrset.find(RGW_ATTR_COMPRESSION);
       if (itr != attrset.end()) {
         p_rec->compression_bl = itr->second;
-        p_rec->s.compression_bl_len = p_rec->compression_bl.length();
+        p_rec->s.compression_len = p_rec->compression_bl.length();
       }
     }
 
@@ -2117,7 +2115,7 @@ namespace rgw::dedup {
       // read the manifest and strong hash from the head-object attributes
       ldpp_dout(dpp, 20) << __func__ << "::Fetch SRC strong hash from head-object::"
                          << p_src_rec->obj_name << dendl;
-      if (unlikely(fetch_head_obj_attrs(dpp, driver, store, p_src_rec) != 0)) {
+      if (unlikely(fetch_head_obj_attrs(dpp, driver, store, p_src_rec, true) != 0)) {
         return false;
       }
       try {
@@ -2326,7 +2324,7 @@ namespace rgw::dedup {
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec, *p_src_rec = &src_rec;
     ret = load_record(d_dedup_cluster_ioctx, p_tgt_rec, p_src_rec, src_block_id,
-                      src_rec_id, md5_shard, dpp);
+                      src_rec_id, md5_shard, dpp, p_stats);
     if (unlikely(ret != 0)) {
       p_stats->failed_src_load++;
       // we can withstand most errors moving to the next object
@@ -2336,7 +2334,8 @@ namespace rgw::dedup {
     }
 
     if (p_src_rec->s.flags.has_remote_attrs()) {
-      ret = fetch_head_obj_attrs(dpp, driver, store, p_src_rec);
+      const bool blake3_expected = p_src_rec->s.flags.has_valid_hash() || src_val.has_valid_hash();
+      ret = fetch_head_obj_attrs(dpp, driver, store, p_src_rec, blake3_expected);
       if (unlikely(ret != 0)) {
         p_stats->failed_remote_attrs_fetch++;
         ldpp_dout(dpp, 1) << __func__
@@ -2371,7 +2370,8 @@ namespace rgw::dedup {
     }
 
     if (p_tgt_rec->s.flags.has_remote_attrs()) {
-      ret = fetch_head_obj_attrs(dpp, driver, store, p_tgt_rec);
+      ret = fetch_head_obj_attrs(dpp, driver, store, p_tgt_rec,
+                                 p_tgt_rec->s.flags.has_valid_hash());
       if (unlikely(ret != 0)) {
         p_stats->failed_remote_attrs_fetch++;
         ldpp_dout(dpp, 1) << __func__
@@ -2418,7 +2418,9 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::dedup success " << p_src_rec->obj_name << dendl;
       p_stats->deduped_objects++;
       p_stats->deduped_objects_bytes += dedupable_objects_bytes;
-      if (p_src_rec->compression_bl.length() > 0 && p_tgt_rec->compression_bl.length() > 0) {
+      if (p_src_rec->compression_bl.length() > 0 &&
+          p_tgt_rec->compression_bl.length() > 0) {
+        // count dedup ops between compressed SRC and compressed TGT
         p_stats->deduped_compressed_objects++;
       }
       if (p_tgt_rec->s.flags.is_split_head()) {
@@ -2539,7 +2541,7 @@ namespace rgw::dedup {
           unsigned offset = p_header->rec_offsets[rec_id];
           // We deserialize the record inside the CTOR
           disk_record_t rec(p + offset);
-          ret = rec.validate(__func__, dpp, disk_block_id, rec_id);
+          ret = rec.validate(__func__, dpp, disk_block_id, rec_id, nullptr, p_stats);
           if (unlikely(ret != 0)) {
             p_stats->failed_rec_load++;
             return ret;
@@ -3650,6 +3652,10 @@ namespace rgw::dedup {
       throw std::runtime_error("Failed init_rados_access_handles()");
     }
     display_ioctx_state(dpp, d_dedup_cluster_ioctx, "dedup_bg->resume() done");
+
+    // pause()/resume() can modify placement compression state
+    d_placement_compression_type.clear();
+
     // create new watch request using the new pool handle
     watch_reload(dpp);
     d_ctl.local_pause_req = false;
@@ -3716,12 +3722,14 @@ namespace rgw::dedup {
 
       ldpp_dout(dpp, 10) << __func__ << "::Wait for object ingress completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
-        // must release lock before calling handle_pause_req()
-        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
@@ -3760,12 +3768,14 @@ namespace rgw::dedup {
     while (!all_md5_shards_completed(&d_cluster, store, num_md5_shards)) {
       ldpp_dout(dpp, 10) << __func__ << "::Wait for md5 completion, ttl="
                          << ttl << " seconds" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
-      d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
-                      [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      {
+        // limit the scope of cond_lock
+        std::unique_lock cond_lock(d_cond_mutex);
+        d_cond.wait_for(cond_lock, std::chrono::seconds(ttl),
+                        [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
+      }
+
       if (unlikely(d_ctl.should_pause())) {
-        // must release lock before calling handle_pause_req()
-        cond_lock.unlock();
         handle_pause_req(__func__);
       }
       if (unlikely(d_ctl.should_stop())) {
@@ -3805,6 +3815,7 @@ namespace rgw::dedup {
           ldpp_dout(dpp, 1) << __func__ << "::failed setup()" << dendl;
           return;
         }
+
         d_placement_compression_type.clear();
         const rgw_pool& dedup_pool = store->svc()->zone->get_zone_params().dedup_pool;
         int64_t pool_id = rados_handle->pool_lookup(dedup_pool.name.c_str());

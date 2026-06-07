@@ -390,6 +390,8 @@ namespace rgw::dedup {
     if (other.max_bidx_record_length > this->max_bidx_record_length) {
       this->max_bidx_record_length = other.max_bidx_record_length;
     }
+
+    this->failed_rec_overflow += other.failed_rec_overflow;
     this->failed_wrong_ver += other.failed_wrong_ver;
 
     return *this;
@@ -478,6 +480,9 @@ namespace rgw::dedup {
       if (this->ingress_corrupted_etag) {
         f->dump_unsigned("Corrupted ETAG", this->ingress_corrupted_etag);
       }
+      if (this->failed_rec_overflow) {
+        f->dump_unsigned("Failed Record Overflow", this->failed_rec_overflow);
+      }
       if (this->failed_wrong_ver) {
         f->dump_unsigned("Failed Wrong Version", this->failed_wrong_ver);
       }
@@ -526,6 +531,7 @@ namespace rgw::dedup {
 
     encode(w.max_bidx_record_length, bl);
     encode(w.total_bidx_record_length, bl);
+    encode(w.failed_rec_overflow, bl);
     encode(w.failed_wrong_ver, bl);
 
     encode(w.duration, bl);
@@ -559,6 +565,7 @@ namespace rgw::dedup {
 
     decode(w.max_bidx_record_length, bl);
     decode(w.total_bidx_record_length, bl);
+    decode(w.failed_rec_overflow, bl);
     decode(w.failed_wrong_ver, bl);
 
     decode(w.duration, bl);
