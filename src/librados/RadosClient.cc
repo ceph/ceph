@@ -17,9 +17,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <thread>
 #include <pthread.h>
 #include <errno.h>
 
@@ -230,12 +232,41 @@ int librados::RadosClient::connect()
     cct->_log->start();
   }
 
-  {
+  // Connecting can fail transiently while the monitors are (re)forming quorum,
+  // e.g. a cephx EPERM returned by a monitor that is mid-election. Both the
+  // initial monmap/config bootstrap and authentication can hit this. Optionally
+  // retry those steps a bounded number of times with a linear backoff before
+  // giving up, so a caller started during an election window (a mgr module
+  // opening its librados handle right after a failover is the motivating case)
+  // does not fail permanently. This is opt-in: rados_connect_retries defaults to
+  // 0, which preserves the historical fail-immediately behaviour. Each step is
+  // safe to reattempt: get_monmap_and_config() runs on a throwaway MonClient,
+  // and authenticate() reopens a session and re-hunts the mons when none is
+  // active.
+  const uint64_t connect_retries =
+    conf.get_val<uint64_t>("rados_connect_retries");
+  const double connect_retry_interval =
+    conf.get_val<double>("rados_connect_retry_interval");
+  auto with_retries = [&](const char *what, auto step) {
+    int r;
+    for (uint64_t attempt = 0; ; ++attempt) {
+      r = step();
+      if (r >= 0 || attempt >= connect_retries)
+        return r;
+      ldout(cct, 1) << conf->name << " " << what << " attempt " << (attempt + 1)
+                    << " failed (" << cpp_strerror(-r) << "), retrying in "
+                    << connect_retry_interval * (attempt + 1) << "s" << dendl;
+      std::this_thread::sleep_for(std::chrono::duration<double>(
+        connect_retry_interval * (attempt + 1)));
+    }
+  };
+
+  err = with_retries("monmap/config bootstrap", [&] {
     MonClient mc_bootstrap(cct, poolctx);
-    err = mc_bootstrap.get_monmap_and_config();
-    if (err < 0)
-      return err;
-  }
+    return mc_bootstrap.get_monmap_and_config();
+  });
+  if (err < 0)
+    return err;
 
   common_init_finish(cct);
 
@@ -286,9 +317,13 @@ int librados::RadosClient::connect()
     goto out;
   }
 
-  err = monclient.authenticate(std::chrono::duration<double>(conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
+  err = with_retries("authentication", [&] {
+    return monclient.authenticate(std::chrono::duration<double>(
+      conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
+  });
   if (err) {
-    ldout(cct, 0) << conf->name << " authentication error " << cpp_strerror(-err) << dendl;
+    ldout(cct, 0) << conf->name << " authentication error "
+                  << cpp_strerror(-err) << dendl;
     shutdown();
     goto out;
   }

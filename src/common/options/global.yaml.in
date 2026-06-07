@@ -6682,6 +6682,35 @@ options:
   min: 0
   flags:
   - runtime
+- name: rados_connect_retries
+  type: uint
+  level: advanced
+  desc: Number of times to retry the mon handshake when librados connect() fails
+  long_desc: The monmap/config bootstrap and authentication steps of connect() can
+    fail transiently while the monitors are (re)forming quorum, for example a cephx
+    EPERM returned by a monitor that is mid-election. A client that opens its librados
+    handle during such a window would otherwise fail permanently. When set above 0,
+    connect() retries each of those steps this many times (with a linear backoff of
+    rados_connect_retry_interval) before giving up. Note that if the monitors are
+    unreachable rather than actively rejecting, each attempt can block up to
+    client_mount_timeout, so raising this also raises the worst-case connect time.
+    The default of 0 preserves the historical fail-immediately behaviour.
+  default: 0
+  min: 0
+  flags:
+  - runtime
+- name: rados_connect_retry_interval
+  type: float
+  level: advanced
+  desc: Base backoff in seconds between librados connect() authentication retries
+  long_desc: When rados_connect_retries is above 0, connect() waits this many seconds
+    before the first retry and scales the wait linearly with each further attempt
+    (attempt N waits N times this value). Has no effect when rados_connect_retries
+    is 0.
+  default: 1.0
+  min: 0
+  flags:
+  - runtime
 - name: rados_replica_read_policy
   type: str
   level: advanced

@@ -4,6 +4,14 @@
   developers must update their method calls to use these new structs, which ensure
   read/write semantics are correctly applied.
 
+* librados: Added ``rados_connect_retries`` (and ``rados_connect_retry_interval``)
+  to optionally retry the monmap/config bootstrap and authentication steps when
+  ``connect()`` fails transiently, for example a cephx EPERM returned by a monitor
+  that is mid-election. The default of 0 preserves the previous fail-immediately
+  behaviour. mgr modules now enable this so a transient connect failure during a
+  mgr failover no longer leaves an always-on module stuck in HEALTH_ERR until a
+  manual ``ceph mgr fail``.
+
 * RGW: S3 ListObjects and ListObjectVersions now support the
   ``x-amz-optional-object-attributes: RestoreStatus`` request header to include
   restore status in listing responses. Restore status is stored in the bucket
