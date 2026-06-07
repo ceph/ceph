@@ -464,6 +464,12 @@ public:
     return conflicted;
   }
 
+  // Number of times this transaction was conflicted and replayed before
+  // finally committing. do_transaction_no_callbacks() (user MUTATE writes)
+  std::size_t get_num_replays() const {
+    return num_replays;
+  }
+
   auto &get_handle() {
     return handle;
   }
@@ -881,6 +887,8 @@ private:
   rewrite_stats_t rewrite_stats;
 
   bool conflicted = false;
+
+  std::size_t num_replays = 0;
 
   bool has_reset = false;
 

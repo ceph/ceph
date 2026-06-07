@@ -203,6 +203,28 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     );
   }
 
+  stats.conflict_replays.buckets.resize(REPLAY_BUCKETS);
+  for (std::size_t i = 0; i < REPLAY_BUCKETS; ++i) {
+    stats.conflict_replays.buckets[i].upper_bound = i;
+    stats.conflict_replays.buckets[i].count = 0;
+  }
+  metrics.add_group(
+    "seastore",
+    {
+      sm::make_histogram(
+        "conflict_replay_distribution",
+        [this]() -> seastar::metrics::histogram& {
+          return stats.conflict_replays;
+        },
+        sm::description("distribution of per-transaction conflict/replay counts "
+                        "before commit, for user transactions submitted via "
+                        "do_transaction (the reused-transaction / "
+                        "with_repeat_trans_intr path); not all MUTATE transactions"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      )
+    }
+  );
+
   metrics.add_group(
     "seastore",
     {
@@ -1711,6 +1733,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   );
 
   DEBUGT("done", *ctx.transaction);
+  add_conflict_replay_sample(ctx.transaction->get_num_replays());
   add_latency_sample(
     op_type_t::DO_TRANSACTION,
     std::chrono::steady_clock::now() - ctx.begin_timestamp);
