@@ -1053,7 +1053,8 @@ private:
     }
 
     rewrite_gen_t adjust_generation(rewrite_gen_t gen) {
-      if (has_cold_tier()) {
+      if (has_cold_tier() &&
+          get_main_backend_type() == backend_type_t::SEGMENTED) {
         return eviction_state.adjust_generation_with_eviction(gen);
       } else {
         return gen;
