@@ -567,6 +567,10 @@ public:
     return cleaner ? cleaner->is_storage_full() : false;
   }
 
+  void account_conflict_pending_free(std::size_t bytes) {
+    background_process.account_conflict_pending_free(bytes);
+  }
+
   backend_type_t get_main_backend_type() const {
     if (!background_process.is_no_background()) {
       return background_process.get_main_backend_type();
@@ -834,6 +838,12 @@ private:
         auto cleaner = cleaners_by_device_id[id];
         assert(cleaner);
         cleaner->mark_space_free(addr, len);
+      }
+    }
+
+    void account_conflict_pending_free(std::size_t bytes) {
+      if (main_cleaner) {
+        main_cleaner->account_conflict_pending_free(bytes);
       }
     }
 

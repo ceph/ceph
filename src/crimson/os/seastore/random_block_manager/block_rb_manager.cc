@@ -140,7 +140,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   }
   co_return co_await device->write(
     addr,
-    bptr);
+    std::move(bptr));
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
