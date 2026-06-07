@@ -2010,10 +2010,37 @@ void RBMCleaner::mark_space_free(
 	ceph_assert(stats.used_bytes >= len);
 	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
+	background_callback->maybe_wake_blocked_io();
       }
       return;
     }
   }
+}
+
+void RBMCleaner::account_conflict_pending_free(std::size_t bytes)
+{
+  conflict_pending_free_bytes += bytes;
+}
+
+void RBMCleaner::deaccount_conflict_pending_free(std::size_t bytes)
+{
+  ceph_assert(conflict_pending_free_bytes >= bytes);
+  conflict_pending_free_bytes -= bytes;
+  conflict_drained.broadcast();
+  // Draining frees are a release source for try_reserve_projected_usage.
+  background_callback->maybe_wake_blocked_io();
+}
+
+seastar::future<> RBMCleaner::wait_for_conflict_drain()
+{
+  auto data_capacity = get_total_bytes() - get_journal_bytes();
+  if (data_capacity == 0) {
+    return seastar::now();
+  }
+  auto threshold = data_capacity / 20; // 5% of data capacity
+  return conflict_drained.wait([this, threshold] {
+    return conflict_pending_free_bytes <= threshold;
+  });
 }
 
 void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len) 
@@ -2047,7 +2074,8 @@ bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
     // with no in-flight usage a blocked IO would never wake. Otherwise admit
     // and let the allocator fail a genuinely full device with ENOSPC.
     // Zero-usage reservations cannot overcommit (deletes are metadata-only).
-    bool has_release_source = stats.projected_used_bytes > 0;
+    bool has_release_source = stats.projected_used_bytes > 0 ||
+                              conflict_pending_free_bytes > 0;
     if (projected_usage != 0 && has_release_source) {
       return false;
     }
