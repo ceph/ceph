@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
@@ -470,6 +471,19 @@ public:
     return num_replays;
   }
 
+  // Time spent in each sub-phase of submit_transaction, accumulated across retries
+  struct phase_durations_t {
+    std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
+    std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+    std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
+    std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
+    std::chrono::steady_clock::duration prepare_record{0};  // prepare_record
+    std::chrono::steady_clock::duration journal{0};         // journal->submit_record (post-lock)
+  };
+  phase_durations_t &get_phase_durations() {
+    return phase_durations;
+  }
+
   auto &get_handle() {
     return handle;
   }
@@ -889,6 +903,8 @@ private:
   bool conflicted = false;
 
   std::size_t num_replays = 0;
+
+  phase_durations_t phase_durations;
 
   bool has_reset = false;
 

@@ -471,6 +471,7 @@ TransactionManager::submit_transaction(
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
   SUBDEBUGT(seastore_t, "start, entering reserve_projected_usage", t);
+  auto reserve_start = std::chrono::steady_clock::now();
   co_await trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
   );
@@ -483,6 +484,8 @@ TransactionManager::submit_transaction(
       projected_usage
     )
   );
+  t.get_phase_durations().reserve +=
+    std::chrono::steady_clock::now() - reserve_start;
   auto release_usage = seastar::defer([this, FNAME, projected_usage, &t] {
     SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
     epm->release_projected_usage(projected_usage);
@@ -593,21 +596,33 @@ TransactionManager::do_submit_transaction(
   );
 
   SUBTRACET(seastore_t, "write delayed ool extents", tref);
+  auto ool_start = std::chrono::steady_clock::now();
   co_await epm->write_delayed_ool_extents(
     tref, dispatch_result.alloc_map
   );
+  tref.get_phase_durations().ool_write +=
+    std::chrono::steady_clock::now() - ool_start;
 
   auto allocated_extents = tref.get_valid_pre_alloc_list();
+  auto lba_start = std::chrono::steady_clock::now();
   co_await update_lba_mappings(tref, allocated_extents);
+  tref.get_phase_durations().lba_update +=
+    std::chrono::steady_clock::now() - lba_start;
 
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
+  ool_start = std::chrono::steady_clock::now();
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
+  tref.get_phase_durations().ool_write +=
+    std::chrono::steady_clock::now() - ool_start;
 
   SUBTRACET(seastore_t, "entering prepare", tref);
+  auto prepare_enter_start = std::chrono::steady_clock::now();
   co_await trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.prepare)
   );
+  tref.get_phase_durations().prepare_enter +=
+    std::chrono::steady_clock::now() - prepare_enter_start;
 
   while (tref.need_wait_visibility) {
     co_await trans_intr::make_interruptible(seastar::yield());
@@ -617,10 +632,13 @@ TransactionManager::do_submit_transaction(
     cache->trim_backref_bufs(*trim_alloc_to);
   }
 
+  auto prepare_record_start = std::chrono::steady_clock::now();
   auto record = cache->prepare_record(
     tref,
     journal->get_trimmer().get_journal_head(),
     journal->get_trimmer().get_dirty_tail());
+  tref.get_phase_durations().prepare_record +=
+    std::chrono::steady_clock::now() - prepare_record_start;
 
   tref.get_handle().maybe_release_collection_lock();
   if (tref.get_src() == Transaction::src_t::MUTATE) {
@@ -629,6 +647,7 @@ TransactionManager::do_submit_transaction(
   }
 
   SUBTRACET(seastore_t, "submitting record", tref);
+  auto journal_start = std::chrono::steady_clock::now();
   co_await journal->submit_record(
     std::move(record),
     tref.get_handle(),
@@ -648,6 +667,8 @@ TransactionManager::do_submit_transaction(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::assert_all("Hit error submitting to journal")
     );
+  tref.get_phase_durations().journal +=
+    std::chrono::steady_clock::now() - journal_start;
 
   co_await trans_intr::make_interruptible(
     tref.get_handle().complete()
