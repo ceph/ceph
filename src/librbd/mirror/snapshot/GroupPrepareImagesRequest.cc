@@ -191,8 +191,8 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
 
     auto on_mirror_image_get = new LambdaContext(
       [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
+        cls::rbd::MirrorImage mirror_image;
         if (r == 0) {
-          cls::rbd::MirrorImage mirror_image;
           auto iter = m_out_bls[i].cbegin();
           r = cls_client::mirror_image_get_finish(&iter, &mirror_image);
         }
@@ -201,9 +201,15 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
           // image is disabled for mirroring as required
           r = 0;
         } else if (r == 0) {
-          lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
-                       << " is not disabled for mirroring" << dendl;
-          r = -EINVAL;
+          // Allow retrying OP_ENABLE for images that are already enabled.
+          // This handles the case where a previous OP_ENABLE partially
+          // completed.
+          if (!(m_operation == OP_ENABLE &&
+                mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED)) {
+            lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
+                         << " is not disabled for mirroring" << dendl;
+            r = -EINVAL;
+          }
         } else {
           lderr(m_cct) << "failed to get mirror image info for image_id="
                        << m_images[i].spec.image_id << ": "
