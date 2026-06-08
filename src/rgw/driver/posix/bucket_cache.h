@@ -215,12 +215,11 @@ struct BucketCache : public Notifiable
    * environments, selected by a hash of the bucket name; a bucket's database
    * is dropped/cleared whenever its entry is reclaimed from cache; the entire
    * complex is cleared on restart to preserve consistency */
-  static constexpr MDB_dbi lmdb_max_dbs = 4096;
-
   class Lmdbs
   {
     std::string database_root;
     uint8_t lmdb_count;
+    MDB_dbi max_dbs_per_partition;
 
     struct Partition {
       std::shared_ptr<LMDBSafe::MDBEnv> env;
@@ -231,8 +230,10 @@ struct BucketCache : public Notifiable
     sf::path dbp;
 
   public:
-    Lmdbs(std::string& database_root, uint8_t lmdb_count)
+    Lmdbs(std::string& database_root, uint8_t lmdb_count,
+	  uint32_t max_buckets)
       : database_root(database_root), lmdb_count(lmdb_count),
+        max_dbs_per_partition((max_buckets / lmdb_count) * 5 / 4 + 16),
         parts(lmdb_count), dbp(database_root) {
 
       sf::path safe_root_path{dbp / fmt::format("rgw_posix_lmdbs")};
@@ -248,7 +249,7 @@ struct BucketCache : public Notifiable
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
 	parts[ix].env = LMDBSafe::getMDBEnv(
-	  env_path.string().c_str(), 0, 0600, lmdb_max_dbs);
+	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
       }
     }
 
@@ -328,7 +329,7 @@ public:
       lru(max_lanes, max_buckets/max_lanes),
       cache(max_lanes, max_buckets/max_partitions),
       rp(bucket_root),
-      lmdbs(database_root, lmdb_count),
+      lmdbs(database_root, lmdb_count, max_buckets),
       un(Notify::factory(this, bucket_root))
     {
       if (! (sf::exists(rp) && sf::is_directory(rp))) {
