@@ -273,6 +273,9 @@ static SafeResult safe_link(int src_dir_fd, const std::string& src_name,
   int ret = ::linkat(src_dir_fd, src_name.c_str(),
                      dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
+    if (errno == EEXIST) {
+      return SafeResult::MISMATCH;
+    }
     return SafeResult::ERROR;
   }
   if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
@@ -4637,17 +4640,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * skip when suspended and current is null (S3: replace null version) */
   if (ret == 0 && ent && ent->exists() &&
       !(!ver_enabled && cur_is_null)) {
-    std::string cur_ver_id = cur_is_null
-      ? NULL_VERSION_ID
-      : nsfs_version_id_from_statx(ent->get_stx());
-    std::string ver_name = dm_leaf + "_" + cur_ver_id;
-
     for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
       struct statx cur_stx;
       if (statx(parent_fd, dm_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
                 STATX_ALL, &cur_stx) < 0) {
         break;
       }
+      std::string cur_ver_id = cur_is_null
+        ? NULL_VERSION_ID
+        : nsfs_version_id_from_statx(cur_stx);
+      std::string ver_name = dm_leaf + "_" + cur_ver_id;
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
@@ -5173,25 +5175,17 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 
       if (cur_exists && !(!ver_enabled && cur_is_null)) {
-        std::string cur_ver_id;
-        {
-          struct statx id_stx;
-          if (cur_is_null) {
-            cur_ver_id = NULL_VERSION_ID;
-          } else if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                           STATX_ALL, &id_stx) == 0) {
-            cur_ver_id = nsfs_version_id_from_statx(id_stx);
-          }
-        }
-
-        if (!cur_ver_id.empty()) {
-          std::string ver_name = leaf_name + "_" + cur_ver_id;
           for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
             struct statx cur_stx;
             if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
                       STATX_ALL, &cur_stx) < 0) {
               break;
             }
+            std::string cur_ver_id = cur_is_null
+              ? NULL_VERSION_ID
+              : nsfs_version_id_from_statx(cur_stx);
+            std::string ver_name = leaf_name + "_" + cur_ver_id;
+
             SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
                                       statx_mtime_ns(cur_stx), cur_stx.stx_ino);
             if (sr == SafeResult::OK) {
@@ -5213,7 +5207,6 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
             struct timespec ts = {0, 100000 + (rand() % 500000)};
             nanosleep(&ts, nullptr);
           }
-        }
       }
       ::close(vfd);
     }
@@ -5559,22 +5552,17 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
         /* demote current unless suspended+null (S3: replace null version) */
         if (exists && !(!ver_enabled && cur_is_null)) {
-          struct statx id_stx;
-          std::string cur_ver_id;
-          if (cur_is_null) {
-            cur_ver_id = NULL_VERSION_ID;
-          } else if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
-                           STATX_ALL, &id_stx) == 0) {
-            cur_ver_id = nsfs_version_id_from_statx(id_stx);
-          }
-          std::string ver_name = cur_leaf + "_" + cur_ver_id;
-
           for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
             struct statx cur_stx;
             if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
                       STATX_ALL, &cur_stx) < 0) {
               break;
             }
+            std::string cur_ver_id = cur_is_null
+              ? NULL_VERSION_ID
+              : nsfs_version_id_from_statx(cur_stx);
+            std::string ver_name = cur_leaf + "_" + cur_ver_id;
+
             SafeResult sr = safe_link(parent_fd, cur_leaf,
                                       vfd, ver_name,
                                       statx_mtime_ns(cur_stx),
