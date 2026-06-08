@@ -953,21 +953,6 @@ enum class OPT {
   RESTORE_LIST,
 };
 
-enum class Cli11Op {
-  None,
-  ScriptPut,
-  ScriptGet,
-  ScriptRm,
-  BucketList,
-  BucketStats,
-  BucketLink,
-  BucketUnlink,
-  BucketRm,
-  BucketCheck,
-  BucketCheckOlh,
-  BucketCheckUnlinked,
-};
-
 }
 
 using namespace rgw_admin;
@@ -3805,8 +3790,10 @@ int main(int argc, const char **argv)
   uint32_t perm_mask = 0;
   RGWUserInfo info;
   OPT opt_cmd = OPT::NO_CMD;
-  Cli11Op cli11_op = Cli11Op::None;
   std::function<int()> cli11_action;
+  bool cli11_allows_tenant_no_uid = false;
+  bool cli11_non_master_op = false;
+  bool cli11_parsed = false;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   enum generate_key_enum {
@@ -4090,7 +4077,7 @@ int main(int argc, const char **argv)
 
       script_put->callback(
           [&str_script_ctx, &infile, &tenant,
-           &cli11_op, &cli11_action] {
+           &cli11_allows_tenant_no_uid, &cli11_action] {
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4123,7 +4110,7 @@ int main(int argc, const char **argv)
           cerr << "ERROR: cannot specify tenant in background context" << std::endl;
           throw CLI::RuntimeError(EINVAL);
         }
-        cli11_op = Cli11Op::ScriptPut;
+        cli11_allows_tenant_no_uid = true;
         cli11_action = [&tenant, script_ctx, script]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
@@ -4137,7 +4124,7 @@ int main(int argc, const char **argv)
 
       script_get->callback(
           [&str_script_ctx, &tenant,
-           &cli11_op, &cli11_readonly, &cli11_action] {
+           &cli11_allows_tenant_no_uid, &cli11_readonly, &cli11_action] {
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4151,7 +4138,7 @@ int main(int argc, const char **argv)
           throw CLI::RuntimeError(EINVAL);
         }
         cli11_readonly = true;
-        cli11_op = Cli11Op::ScriptGet;
+        cli11_allows_tenant_no_uid = true;
         cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           std::string script;
@@ -4171,7 +4158,7 @@ int main(int argc, const char **argv)
 
       script_rm->callback(
           [&str_script_ctx, &tenant,
-           &cli11_op, &cli11_action] {
+           &cli11_allows_tenant_no_uid, &cli11_action] {
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4184,7 +4171,7 @@ int main(int argc, const char **argv)
           cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
           throw CLI::RuntimeError(EINVAL);
         }
-        cli11_op = Cli11Op::ScriptRm;
+        cli11_allows_tenant_no_uid = true;
         cli11_action = [&tenant, script_ctx]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
@@ -4277,13 +4264,12 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_check_unlinked, "--tenant",    tenant,      tenant_desc);
 
       bucket_list->callback(
-          [&cli11_op, &cli11_readonly, &cli11_action,
+          [&cli11_readonly, &cli11_action,
            &bucket_name, &bucket_id, &tenant, &marker, &max_entries,
            &max_entries_specified, &object_version, &allow_unordered,
            &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
            &formatter, &bucket] {
         cli11_readonly = true;
-        cli11_op = Cli11Op::BucketList;
         cli11_action = [&bucket_name, &bucket_id, &tenant, &marker, &max_entries,
                         &max_entries_specified, &object_version, &allow_unordered,
                         &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
@@ -4345,11 +4331,10 @@ int main(int argc, const char **argv)
       });
 
       bucket_stats->callback(
-          [&cli11_op, &cli11_readonly, &cli11_action,
+          [&cli11_readonly, &cli11_action,
            &bucket_name, &bucket_id, &marker, &max_entries, &max_entries_specified,
            &show_restore_stats, &bucket_op, &site, &stream_flusher_ptr, &err] {
         cli11_readonly = true;
-        cli11_op = Cli11Op::BucketStats;
         cli11_action = [&bucket_name, &bucket_id, &marker, &max_entries,
                         &max_entries_specified, &show_restore_stats, &bucket_op,
                         &site, &stream_flusher_ptr, &err]() -> int {
@@ -4377,7 +4362,7 @@ int main(int argc, const char **argv)
 
       bucket_link->callback(
           [&uid_str, &user_id_arg, &bucket_name,
-           &cli11_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
+           &cli11_non_master_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4390,7 +4375,7 @@ int main(int argc, const char **argv)
           throw CLI::RuntimeError(EINVAL);
         }
         user_id_arg.from_str(uid_str);
-        cli11_op = Cli11Op::BucketLink;
+        cli11_non_master_op = true;
         cli11_action = [&bucket_op, &bucket_id, &new_bucket_name]() -> int {
           bucket_op.set_bucket_id(bucket_id);
           bucket_op.set_new_bucket_name(new_bucket_name);
@@ -4406,7 +4391,7 @@ int main(int argc, const char **argv)
 
       bucket_unlink->callback(
           [&uid_str, &user_id_arg, &bucket_name,
-           &cli11_op, &cli11_action, &bucket_op] {
+           &cli11_non_master_op, &cli11_action, &bucket_op] {
         if (bucket_name.empty()) {
           cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
           throw CLI::RuntimeError(EINVAL);
@@ -4416,7 +4401,7 @@ int main(int argc, const char **argv)
           throw CLI::RuntimeError(EINVAL);
         }
         user_id_arg.from_str(uid_str);
-        cli11_op = Cli11Op::BucketUnlink;
+        cli11_non_master_op = true;
         cli11_action = [&bucket_op]() -> int {
           int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
           if (r < 0) {
@@ -4428,13 +4413,12 @@ int main(int argc, const char **argv)
       });
 
       bucket_rm->callback(
-          [&bucket_name, &cli11_op, &cli11_action,
+          [&bucket_name, &cli11_action,
            &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
         if (bucket_name.empty()) {
           cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
           throw CLI::RuntimeError(EINVAL);
         }
-        cli11_op = Cli11Op::BucketRm;
         cli11_action = [&bucket_op, &site, &bypass_gc, &inconsistent_index,
                         &yes_i_really_mean_it]() -> int {
           if (!inconsistent_index) {
@@ -4454,10 +4438,9 @@ int main(int argc, const char **argv)
       });
 
       bucket_check->callback(
-          [&bucket_name, &cli11_op, &cli11_action,
+          [&bucket_name, &cli11_action,
            &tenant, &fix, &remove_bad, &check_head_obj_locator,
            &bucket_op, &stream_flusher_ptr, &formatter] {
-        cli11_op = Cli11Op::BucketCheck;
         cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
                         &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
           if (check_head_obj_locator) {
@@ -4474,9 +4457,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_check_olh->callback(
-          [&cli11_op, &cli11_action,
+          [&cli11_action,
            &bucket_op, &stream_flusher_ptr] {
-        cli11_op = Cli11Op::BucketCheckOlh;
         cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
           rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
           if (!store) {
@@ -4490,9 +4472,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_check_unlinked->callback(
-          [&cli11_op, &cli11_action,
+          [&cli11_action,
            &bucket_op, &stream_flusher_ptr] {
-        cli11_op = Cli11Op::BucketCheckUnlinked;
         cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
           rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
           if (!store) {
@@ -4529,7 +4510,9 @@ int main(int argc, const char **argv)
       return 0;
     }
 
-    if (cli11_op != Cli11Op::None) {
+    // Any parsed CLI11 command will appear as a subcommand of app.
+    cli11_parsed = !app.get_subcommands().empty();
+    if (cli11_parsed) {
       warn_wrong_position(&app);
       warn_duplicates(&app);
 
@@ -5173,7 +5156,7 @@ int main(int argc, const char **argv)
 
     std::any _opt_cmd;
 
-    if (opt_cmd == OPT::NO_CMD && cli11_op == Cli11Op::None) {
+    if (opt_cmd == OPT::NO_CMD && !cli11_parsed) {
       if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
         if (!expected.empty()) {
           cerr << err << std::endl;
@@ -5438,9 +5421,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
-                          && cli11_op != Cli11Op::ScriptPut
-                          && cli11_op != Cli11Op::ScriptGet
-                          && cli11_op != Cli11Op::ScriptRm
+                          && !cli11_allows_tenant_no_uid
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
                           && opt_cmd != OPT::ACCOUNT_GET
@@ -7479,8 +7460,6 @@ int main(int argc, const char **argv)
                                         OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
                                         OPT::RATELIMIT_SET, OPT::RATELIMIT_ENABLE, OPT::RATELIMIT_DISABLE};
 
-  bool cli11_non_master_op = (cli11_op == Cli11Op::BucketLink ||
-                              cli11_op == Cli11Op::BucketUnlink);
   bool print_warning_message = ((non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() ||
                                  cli11_non_master_op) &&
                                 non_master_cmd);
