@@ -393,6 +393,9 @@ static void promote_version(int parent_fd, const std::string& leaf,
     struct statx cur_stx;
     if (statx(parent_fd, leaf.c_str(), AT_SYMLINK_NOFOLLOW,
               STATX_INO, &cur_stx) == 0) {
+      ldpp_dout(dpp, 10) << "promote_version: " << leaf
+        << " current already exists (ino=" << cur_stx.stx_ino
+        << "), bail" << dendl;
       return;
     }
 
@@ -441,9 +444,13 @@ static void promote_version(int parent_fd, const std::string& leaf,
     }
 
     if (max_name.empty()) {
+      ldpp_dout(dpp, 10) << "promote_version: " << leaf
+        << " no versions to promote" << dendl;
       ::close(vfd);
       return;
     }
+    ldpp_dout(dpp, 10) << "promote_version: " << leaf
+      << " candidate=" << max_name << dendl;
 
     /* stat the candidate and check if it's a delete marker */
     struct statx cand_stx;
@@ -471,6 +478,8 @@ static void promote_version(int parent_fd, const std::string& leaf,
                               parent_fd, leaf,
                               statx_mtime_ns(cand_stx),
                               cand_stx.stx_ino);
+    ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
+      << " → " << leaf << " result=" << (int)sr << dendl;
     if (sr == SafeResult::OK) {
       /* unlink the .versions/ entry */
       ::unlinkat(vfd, max_name.c_str(), 0);
@@ -4486,6 +4495,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* versioned delete with specific versionId */
   if (!req_version_id.empty()) {
+    ldpp_dout(dpp, 10) << "delete_obj: version-specific vid="
+      << req_version_id << " key=" << source->get_name() << dendl;
     int ret = source->stat(dpp);
     nsfs::FSEnt* ent = source->get_fsent();
 
@@ -4502,6 +4513,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       } else {
         std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
         cur_match = (req_version_id == cur_ver_id);
+        ldpp_dout(dpp, 10) << "delete_obj: cur_ver_id=" << cur_ver_id
+          << " cur_match=" << cur_match << dendl;
       }
       if (cur_match) {
         if (has_cond) {
@@ -4512,6 +4525,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             return r;
           }
         }
+        ldpp_dout(dpp, 10) << "delete_obj: deleting current version "
+          << req_version_id << dendl;
         result.version_id = req_version_id;
         /* capture parent fd and leaf name before delete_object
          * invalidates the ent/dir_chain */
@@ -4531,10 +4546,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         }
         ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
         if (ret < 0) {
+          ldpp_dout(dpp, 10) << "delete_obj: delete_object failed ret="
+            << ret << dendl;
           if (promote_fd >= 0) { ::close(promote_fd); }
           return ret;
         }
         if (promote_fd >= 0) {
+          ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
+            << promote_leaf << dendl;
           promote_version(promote_fd, promote_leaf, dpp);
           ::close(promote_fd);
         }
@@ -4580,11 +4599,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         bool is_dm = false;
         int ver_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
         if (ver_fd < 0) {
-          /* version not found — treat as already deleted */
+          ldpp_dout(dpp, 10) << "delete_obj: " << ver_name
+            << " not found in .versions/ (already deleted?)" << dendl;
           ::close(vfd);
           result.version_id = req_version_id;
           return 0;
         }
+        ldpp_dout(dpp, 10) << "delete_obj: unlinking " << ver_name
+          << " from .versions/" << dendl;
 
         /* read delete-marker flag */
         {
@@ -4780,6 +4802,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       }
       if (sr == SafeResult::ERROR) {
         break;
+      }
+      if (sr == SafeResult::MISMATCH && cur_is_null) {
+        struct statx chk;
+        if (statx(vfd, ver_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                  STATX_INO, &chk) == 0) {
+          break;
+        }
       }
       struct timespec ts = {0, 100000 + (rand() % 500000)};
       nanosleep(&ts, nullptr);
@@ -5326,6 +5355,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 
       if (cur_exists && !(!ver_enabled && cur_is_null)) {
+          bool demoted = false;
           for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
             struct statx cur_stx;
             if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
@@ -5350,13 +5380,29 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
                             now_ms.c_str(), now_ms.size(), 0);
                 ::close(demoted_fd);
               }
+              demoted = true;
               break;
             }
             if (sr == SafeResult::ERROR) {
               break;
             }
+            if (sr == SafeResult::MISMATCH && cur_is_null) {
+              struct statx chk;
+              if (statx(vfd, ver_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                        STATX_INO, &chk) == 0) {
+                demoted = true;
+                break;
+              }
+            }
             struct timespec ts = {0, 100000 + (rand() % 500000)};
             nanosleep(&ts, nullptr);
+          }
+          if (!demoted) {
+            ldpp_dout(dpp, 0) << "ERROR: versioned MPU demote failed "
+              << "after " << NSFS_VERSION_RETRIES << " retries for "
+              << leaf_name << dendl;
+            ::close(vfd);
+            return -ERR_INTERNAL_ERROR;
           }
       }
       ::close(vfd);
@@ -5703,6 +5749,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
         /* demote current unless suspended+null (S3: replace null version) */
         if (exists && !(!ver_enabled && cur_is_null)) {
+          bool demoted = false;
           for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
             struct statx cur_stx;
             if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
@@ -5729,13 +5776,31 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                             now_ms.c_str(), now_ms.size(), 0);
                 ::close(demoted_fd);
               }
+              demoted = true;
               break;
             }
             if (sr == SafeResult::ERROR) {
               break;
             }
+            if (sr == SafeResult::MISMATCH && cur_is_null) {
+              /* null version name is fixed — MISMATCH means a
+               * concurrent PUT already demoted it; nothing to do */
+              struct statx chk;
+              if (statx(vfd, ver_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                        STATX_INO, &chk) == 0) {
+                demoted = true;
+                break;
+              }
+            }
             struct timespec ts = {0, 100000 + (rand() % 500000)};
             nanosleep(&ts, nullptr);
+          }
+          if (!demoted) {
+            ldpp_dout(dpp, 0) << "ERROR: versioned PUT demote failed "
+              << "after " << NSFS_VERSION_RETRIES << " retries for "
+              << cur_leaf << dendl;
+            ::close(vfd);
+            return -ERR_INTERNAL_ERROR;
           }
         }
         ::close(vfd);
