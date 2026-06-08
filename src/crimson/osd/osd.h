@@ -91,8 +91,6 @@ class OSD final : public crimson::net::Dispatcher,
   //< since when there is no more pending pg creates from mon
   epoch_t last_pg_create_epoch = 0;
 
-  ceph::mono_time startup_time;
-
   seastar::shared_mutex handle_osd_map_lock;
 
   OSDSuperblock superblock;

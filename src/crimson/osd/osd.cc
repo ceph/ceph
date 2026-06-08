@@ -491,7 +491,7 @@ seastar::future<> OSD::start()
       cpu_cores.empty()) {
     clog->info() << "for optimal performance please set crimson_cpu_set";
   }
-  startup_time = ceph::mono_clock::now();
+
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
   uint32_t store_shards_num = co_await store.start();
