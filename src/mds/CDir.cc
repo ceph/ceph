@@ -2528,8 +2528,14 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     }
 
     unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
-    if (write_size > 0 && write_size + size > max_write_size)
-      commit_one();
+    if (write_size > 0 && write_size + size > max_write_size) {
+      if (!_set.empty() || !_rm.empty()) {
+        commit_one();
+      } else {
+        dout(1) << "skipping empty commit, inode size exceeded max_dir_commit_size ("
+                << size << " vs. " << max_write_size << ")" << dendl;
+      }
+    }
 
     write_size += size;
     _set[std::move(item.key)] = std::move(bl);
