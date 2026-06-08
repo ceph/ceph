@@ -6865,7 +6865,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
         ceph_assert(ssc);
 	dout(20) << " snapset " << ssc->snapset << dendl;
-
+        dout(20) << " listsnaps contents:";
+        Formatter *f = Formatter::create("json");
+        ssc->snapset.dump(f);
+        f->flush(*_dout);
+        delete f;
+        *_dout << dendl;
         int clonecount = ssc->snapset.clones.size();
 	clonecount++;  // for head
         resp.clones.reserve(clonecount);
@@ -10511,6 +10516,16 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
 
   if (cb->results->mirror_snapset) {
     ceph_assert(ctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
+    dout(20) << __func__ << " cb->results->snapset details:" << dendl;
+    dout(20) << __func__ << "   seq: " << cb->results->snapset.seq << dendl;
+    dout(20) << __func__ << "   clones.size(): " << cb->results->snapset.clones.size() << dendl;
+    for (size_t i = 0; i < cb->results->snapset.clones.size(); ++i) {
+      dout(20) << __func__ << "    clones[" << i << "]: " << dendl;
+      dout(20) << __func__ << "      cloneid: " << cb->results->snapset.clones[i].cloneid << dendl;
+      dout(20) << __func__ << "      snaps: " << cb->results->snapset.clones[i].snaps << dendl;
+      dout(20) << __func__ << "      overlap: " << cb->results->snapset.clones[i].overlap << dendl;
+      dout(20) << __func__ << "      size: " << cb->results->snapset.clones[i].size << dendl;
+    }
     ctx->new_snapset.from_snap_set(cb->results->snapset, false);
   }
 
