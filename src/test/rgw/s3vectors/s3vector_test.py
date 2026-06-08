@@ -2253,6 +2253,9 @@ def test_query_vectors_filter_errors():
     # object value in $eq (JSON field)
     expect_error({'color': {'$eq': {'nested': 'value'}}})
 
+    # implicit $eq with an array value (JSON field)
+    expect_error({'color': ['red', 'blue']})
+
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 

@@ -263,10 +263,7 @@ namespace rgw::s3vector {
     const bool is_column = (fk != nullptr);
 
     LanceDBExpr* combined = nullptr;
-    if (!value_obj->is_object()) {
-      // implicit equality if value is not an object. e.g. {"color": "red"} is treated as {"color": {"$eq": "red"}}
-      combined = build_op_expr(field_name, "$eq", value_obj, fk, dpp, errors);
-    } else {
+    if (value_obj->is_object()) {
       for (auto it = value_obj->find_first(); !it.end(); ++it) {
         auto* op_obj = *it;
         auto* cmp_expr = build_op_expr(field_name, op_obj->get_name(), op_obj, fk, dpp, errors);
@@ -274,10 +271,18 @@ namespace rgw::s3vector {
           lancedb_expr_free(combined);
           return std::nullopt;
         }
-         // implicit AND between multiple operators on the same field. e.g. {"age": {"$gt": 18, "$lt": 65}} is treated as
-         // {"$and": [{"age": {"$gt": 18}}, {"age": {"$lt": 65}}]}
+        // implicit AND between multiple operators on the same field. e.g. {"age": {"$gt": 18, "$lt": 65}} is treated as
+        // {"$and": [{"age": {"$gt": 18}}, {"age": {"$lt": 65}}]}
         combined = combined ? lancedb_expr_and(combined, cmp_expr) : cmp_expr;
       }
+    } else if (value_obj->is_array()) {
+      // implicit eqality with an array is not permitted
+      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: cannot use implicit equality with an array value for field '" << field_name << "'" << dendl;
+      errors.push_back({"filter", fmt::format("cannot use implicit equality with an array value for field '{}'", field_name)});
+      return std::nullopt;
+    } else {
+      // implicit equality if value is not an object. e.g. {"color": "red"} is treated as {"color": {"$eq": "red"}}
+      combined = build_op_expr(field_name, "$eq", value_obj, fk, dpp, errors);
     }
     if (!combined) return std::nullopt;
 
