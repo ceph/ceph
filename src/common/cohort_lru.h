@@ -167,9 +167,12 @@ namespace cohort {
 	    if (o->reclaim(newobj_fac)) {
 	      lane_lock.lock();
 	      --(o->lru_refcnt);
-	      /* assertions that o state has not changed across
-	       * relock */
-	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
+	      if (o->lru_refcnt != SENTINEL_REFCNT) {
+		/* concurrent ref while we were unlocked -- put it back */
+		lane.q.push_front(*o);
+		o->evicting.clear();
+		continue;
+	      }
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
@@ -196,6 +199,9 @@ namespace cohort {
       ~LRU() { delete[] qlane; }
 
       bool ref(Object* o, uint32_t flags) {
+	if (o->evicting.test()) {
+	  return false;
+	}
 	++(o->lru_refcnt);
         if (flags & FLAG_INITIAL) {
           Lane& lane = lane_of(o);
@@ -248,19 +254,22 @@ namespace cohort {
                 lane.q.erase(it);
               }
               lane.q.push_front(*o);
-              /* hiwat check */
+              /* hiwat check -- evict LRU entry if lane is over capacity;
+               * LMDB cleanup is deferred to the next get_bucket() */
               if (lane.q.size() > lane_hiwat) {
-                /* discard the actual lane LRU immediately */
                 Object *o2 = &(lane.q.back());
-                Object::Queue::iterator it = Object::Queue::s_iterator_to(*o2);
-                lane.q.erase(it);
-                tdo = o2;
+                if (can_reclaim(o2)) {
+                  Object::Queue::iterator it2 =
+                    Object::Queue::s_iterator_to(*o2);
+                  lane.q.erase(it2);
+                  tdo = o2;
+                }
               }
             } /* is-linked */
           } /* sentinel-refcnt */
 	  lane.lock.unlock();
 	}
-	/* unref out-of-line && !LOCKED */
+	/* delete out-of-line && !LOCKED */
 	if (tdo)
 	  delete tdo;
       } /* unref */
