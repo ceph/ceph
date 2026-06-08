@@ -1971,15 +1971,16 @@ class Module(MgrModule, OrchestratorClientMixin):
             try:
                 smb_data = json.loads(out)
 
+                self.log.info("Processing SMB share resource")
                 for resource in smb_data.get('resources', []):
                     if resource.get('resource_type') == 'ceph.smb.share':
-                        self.log.info("Processing SMB share resource")
                         cluster_id = resource.get('cluster_id')
                         if not cluster_id:
                             self.log.debug("Skipping share with missing cluster_id")
                             continue
 
                         share_id = resource.get('share_id', '')
+                        self.log.debug(f"Processing SMB share resource: {share_id} in cluster {cluster_id}")
                         cephfs = resource.get('cephfs', {})
                         cephfs_volume = cephfs.get('volume', '')
                         cephfs_subvolumegroup = cephfs.get('subvolumegroup', '_nogroup')
