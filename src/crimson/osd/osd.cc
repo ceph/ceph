@@ -600,7 +600,8 @@ seastar::future<> OSD::start()
       local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
     });
   } else {
-    throw std::runtime_error("No device class is set");
+    WARN("no device class set, defaulting is_rotational to false");
+    is_rotational = false;
   }
   monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
   monc->sub_want("mgrmap", 0, 0);

@@ -20,7 +20,6 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Connection.h"
-#include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"

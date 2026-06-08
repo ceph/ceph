@@ -179,7 +179,7 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
     }
   }).safe_then([this]{
-    return write_meta("type", "memstore");
+    return write_meta("type", "cyanstore");
   }).safe_then([this] {
     return shard_stores.invoke_on_all([](auto &local_store) {
       return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
