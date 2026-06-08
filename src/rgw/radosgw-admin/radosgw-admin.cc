@@ -7067,11 +7067,20 @@ int main(int argc, const char **argv)
     rgw_placement_rule target_rule;
     target_rule.name = placement_id;
     target_rule.storage_class = opt_storage_class.value_or("");
-    if (!driver->valid_placement(target_rule)) {
-      cerr << "NOTICE: invalid dest placement: " << target_rule.to_str() << std::endl;
+
+    // Skip placement validation for quota commands , as the SC quota is just a string identifier and not a live placement target
+    const bool is_quota_cmd = (opt_cmd == OPT::QUOTA_SET   ||
+                               opt_cmd == OPT::QUOTA_ENABLE ||
+                               opt_cmd == OPT::QUOTA_DISABLE);
+    if (!is_quota_cmd && !driver->valid_placement(target_rule)) {
+      cerr << "NOTICE: invalid dest placement: "
+           << target_rule.to_str() << std::endl;
       return EINVAL;
     }
-    user_op.set_default_placement(target_rule);
+    if (!is_quota_cmd) {
+      user_op.set_default_placement(target_rule);
+    }
+
   }
 
   if (!tags.empty()) {
