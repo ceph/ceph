@@ -1264,22 +1264,41 @@ async fn test_versioned_concurrent_object_create_and_remove() {
 
     while all_tasks.join_next().await.is_some() {}
 
-    // Final cleanup
-    let resp = client
-        .list_object_versions()
-        .bucket(&bucket_name)
-        .send()
-        .await
-        .unwrap();
-    for v in resp.versions() {
-        client
-            .delete_object()
+    /*
+     * Final cleanup — loop because deleting the current version promotes
+     * the next one from .versions/, creating a new current that wasn't
+     * in the listing.
+     */
+    for _ in 0..10 {
+        let resp = client
+            .list_object_versions()
             .bucket(&bucket_name)
-            .key(v.key().unwrap_or_default())
-            .version_id(v.version_id().unwrap_or_default())
             .send()
             .await
-            .ok();
+            .unwrap();
+        if resp.versions().is_empty() && resp.delete_markers().is_empty() {
+            break;
+        }
+        for v in resp.versions() {
+            client
+                .delete_object()
+                .bucket(&bucket_name)
+                .key(v.key().unwrap_or_default())
+                .version_id(v.version_id().unwrap_or_default())
+                .send()
+                .await
+                .ok();
+        }
+        for dm in resp.delete_markers() {
+            client
+                .delete_object()
+                .bucket(&bucket_name)
+                .key(dm.key().unwrap_or_default())
+                .version_id(dm.version_id().unwrap_or_default())
+                .send()
+                .await
+                .ok();
+        }
     }
 
     let resp = client
@@ -1288,7 +1307,8 @@ async fn test_versioned_concurrent_object_create_and_remove() {
         .send()
         .await
         .unwrap();
-    assert!(resp.versions().is_empty());
+    assert!(resp.versions().is_empty(), "versions remain after cleanup");
+    assert!(resp.delete_markers().is_empty(), "delete markers remain after cleanup");
 }
 
 // --- Suspended versioning helpers ---
