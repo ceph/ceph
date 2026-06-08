@@ -3548,7 +3548,34 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    bool* truncated, list_parts_each_t&& each_func,
 			    optional_yield y)
 {
-  return -EOPNOTSUPP;
+  *truncated = false;
+
+  std::vector<uint64_t> part_sizes;
+  if (!decode_raw_attr(state.attrset, RGW_NSFS_ATTR_MULTIPART_PART_SIZES, part_sizes)) {
+    return 0;
+  }
+
+  int nparts = part_sizes.size();
+  int start = marker;
+  int emitted = 0;
+
+  for (int i = start; i < nparts; ++i) {
+    if (emitted >= max_parts) {
+      *truncated = true;
+      break;
+    }
+    Part part;
+    part.part_number = i + 1;
+    part.part_size = part_sizes[i];
+    int ret = each_func(part);
+    if (ret < 0) {
+      return ret;
+    }
+    *next_marker = i + 1;
+    ++emitted;
+  }
+
+  return 0;
 }
 
 bool NSFSObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
