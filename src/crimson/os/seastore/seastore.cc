@@ -229,6 +229,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
+    {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
     {txn_stage_t::SUBMIT_RESERVE,        sm::label_instance("stage", "submit_reserve")},
     {txn_stage_t::SUBMIT_OOL_WRITE,      sm::label_instance("stage", "submit_ool_write")},
@@ -1780,6 +1781,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   add_stage_latency_sample(txn_stage_t::COLLOCK_WAIT, collock_wait);
   add_stage_latency_sample(txn_stage_t::THROTTLER_WAIT, throttler_wait);
   add_stage_latency_sample(txn_stage_t::BUILD, ctx.build_time);
+  add_stage_latency_sample(txn_stage_t::BUILD_GET_ONODE, ctx.get_onode_time);
   add_stage_latency_sample(txn_stage_t::SUBMIT_TOTAL, ctx.submit_time);
   {
     auto& pd = ctx.transaction->get_phase_durations();
@@ -1893,6 +1895,7 @@ SeaStore::Shard::_do_transaction_step(
   }
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
+    auto t0 = std::chrono::steady_clock::now();
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
@@ -1902,6 +1905,10 @@ SeaStore::Shard::_do_transaction_step(
              *ctx.transaction, (uint32_t)op->op, oid);
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
+    fut = std::move(fut).si_then([&ctx, t0](auto onode) {
+      ctx.get_onode_time += std::chrono::steady_clock::now() - t0;
+      return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
+    });
   }
   return fut.si_then([&, op, this, FNAME](auto get_onode)
                       -> OnodeManager::get_or_create_onode_iertr::future<> {

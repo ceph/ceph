@@ -51,6 +51,7 @@ enum class txn_stage_t : uint8_t {
     COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
     THROTTLER_WAIT,    // waiting for a throttler slot
     BUILD,             // building the transaction (_do_transaction_step loop)
+    BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
     SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
     // Sub-phases of submit_transaction:
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
@@ -268,6 +269,7 @@ public:
       std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
 
       std::chrono::steady_clock::duration build_time{0};
+      std::chrono::steady_clock::duration get_onode_time{0};
       std::chrono::steady_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
