@@ -151,6 +151,10 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << version << dendl;
   bufferlist bl;
   encode(pending_digest, bl, mon.get_quorum_con_features());
+  {
+    auto& m = get_health_checks_pending_writeable();
+    m = pending_health_checks;
+  }
   ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   encode(pending_progress_events, bl);
@@ -225,7 +229,6 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   bufferlist bl = m->get_data();
   auto p = bl.cbegin();
   decode(pending_digest, p);
-  auto& pending_health_checks = get_health_checks_pending_writeable();
   pending_health_checks = m->health_checks;
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);
