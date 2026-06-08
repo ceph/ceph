@@ -15,6 +15,7 @@
 
 #include "rgw_sal_nsfs.h"
 #include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -98,6 +99,35 @@ static const std::string NULL_VERSION_ID = "null";
 
 static constexpr int NSFS_VERSION_RETRIES = 5;
 static constexpr int NSFS_VERSION_DELAY_BASE_MS = 50;
+static const std::string VERSIONS_LOCKFILE = ".versions/.lock";
+
+/* RAII wrapper for Linux OFD (open file description) write lock.
+ * OFD locks are per-fd (not per-process like traditional POSIX fcntl
+ * locks), so they serialize correctly across threads.  They also work
+ * across processes sharing a filesystem mount. */
+class VersionLock {
+  int fd;
+public:
+  explicit VersionLock(int fd) : fd(fd) {
+    if (fd >= 0) {
+      struct flock fl{};
+      fl.l_type = F_WRLCK;
+      fl.l_whence = SEEK_SET;
+      ::fcntl(fd, F_OFD_SETLKW, &fl);
+    }
+  }
+  ~VersionLock() {
+    if (fd >= 0) {
+      struct flock fl{};
+      fl.l_type = F_UNLCK;
+      fl.l_whence = SEEK_SET;
+      ::fcntl(fd, F_OFD_SETLK, &fl);
+      ::close(fd);
+    }
+  }
+  VersionLock(const VersionLock&) = delete;
+  VersionLock& operator=(const VersionLock&) = delete;
+};
 
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
@@ -526,6 +556,17 @@ static int open_versions_dir(int parent_fd)
     return -errno;
   }
   return vfd;
+}
+
+static int open_versions_lockfile(int parent_fd)
+{
+  int ret = ensure_versions_dir(parent_fd);
+  if (ret < 0) {
+    return ret;
+  }
+  int fd = ::openat(parent_fd, VERSIONS_LOCKFILE.c_str(),
+                    O_RDWR | O_CREAT, 0600);
+  return fd < 0 ? -errno : fd;
 }
 
 namespace nsfs {
@@ -3496,6 +3537,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       ::fsetxattr(obj_fd, vid_xattr.c_str(),
                   new_ver_id.c_str(), new_ver_id.size(), 0);
     }
+    driver->get_bucket_cache()->invalidate_bucket(dpp, db->get_name());
   }
 
   return 0;
@@ -5334,84 +5376,71 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  /* versioned: demote current version before publishing, with retry */
+  /* versioned: demote current version before publishing, with lock */
   if (versioned && leaf_fd >= 0) {
-    bool cur_exists = false;
-    bool cur_is_null = false;
-    {
-      int chk_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
-      if (chk_fd >= 0) {
-        cur_exists = true;
-        cur_is_null = is_null_version_fd(chk_fd);
-        ::close(chk_fd);
-      }
-    }
-
     int vfd = open_versions_dir(leaf_fd);
     if (vfd >= 0) {
+      VersionLock vlock(open_versions_lockfile(leaf_fd));
+
       if (!ver_enabled) {
         std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
         ::unlinkat(vfd, null_name.c_str(), 0);
       }
 
-      if (cur_exists && !(!ver_enabled && cur_is_null)) {
-          bool demoted = false;
-          for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
-            struct statx cur_stx;
-            if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                      STATX_ALL, &cur_stx) < 0) {
-              break;
-            }
-            std::string cur_ver_id = cur_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(cur_stx);
-            std::string ver_name = leaf_name + "_" + cur_ver_id;
-
-            SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
-                                      statx_mtime_ns(cur_stx), cur_stx.stx_ino);
-            if (sr == SafeResult::OK) {
-              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-              if (demoted_fd >= 0) {
-                auto now_ms = std::to_string(
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count());
-                std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
-                ::fsetxattr(demoted_fd, ts_x.c_str(),
-                            now_ms.c_str(), now_ms.size(), 0);
-                ::close(demoted_fd);
-              }
-              demoted = true;
-              break;
-            }
-            if (sr == SafeResult::ERROR) {
-              break;
-            }
-            if (sr == SafeResult::MISMATCH && cur_is_null) {
-              struct statx chk;
-              if (statx(vfd, ver_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                        STATX_INO, &chk) == 0) {
-                demoted = true;
-                break;
-              }
-            }
-            struct timespec ts = {0, 100000 + (rand() % 500000)};
-            nanosleep(&ts, nullptr);
+      struct statx cur_stx;
+      if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+                STATX_ALL, &cur_stx) == 0) {
+        bool cur_is_null = false;
+        {
+          int chk_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+          if (chk_fd >= 0) {
+            cur_is_null = is_null_version_fd(chk_fd);
+            ::close(chk_fd);
           }
-          if (!demoted) {
-            ldpp_dout(dpp, 0) << "ERROR: versioned MPU demote failed "
-              << "after " << NSFS_VERSION_RETRIES << " retries for "
-              << leaf_name << dendl;
+        }
+        if (!(!ver_enabled && cur_is_null)) {
+          std::string cur_ver_id = cur_is_null
+            ? NULL_VERSION_ID
+            : nsfs_version_id_from_statx(cur_stx);
+          std::string ver_name = leaf_name + "_" + cur_ver_id;
+
+          SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
+                                    statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+          if (sr == SafeResult::OK) {
+            int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+            if (demoted_fd >= 0) {
+              auto now_ms = std::to_string(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count());
+              std::string ts_x =
+                NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+              ::fsetxattr(demoted_fd, ts_x.c_str(),
+                          now_ms.c_str(), now_ms.size(), 0);
+              ::close(demoted_fd);
+            }
+          } else if (sr == SafeResult::MISMATCH && cur_is_null) {
+            /* null version already demoted */
+          } else if (sr != SafeResult::OK) {
+            ldpp_dout(dpp, 0) << "ERROR: versioned MPU demote failed for "
+              << leaf_name << " sr=" << (int)sr << dendl;
             ::close(vfd);
             return -ERR_INTERNAL_ERROR;
           }
+        }
       }
+
+      ret = renameat(staging_fd, assembled_name.c_str(),
+                     leaf_fd, leaf_name.c_str());
       ::close(vfd);
+    } else {
+      ret = renameat(staging_fd, assembled_name.c_str(),
+                     leaf_fd, leaf_name.c_str());
     }
+  } else {
+    ret = renameat(staging_fd, assembled_name.c_str(),
+                   leaf_fd, leaf_name.c_str());
   }
 
-  // atomic rename assembled file to final location
-  ret = renameat(staging_fd, assembled_name.c_str(),
-                 leaf_fd, leaf_name.c_str());
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: failed to rename assembled file to "
@@ -5435,6 +5464,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         ::close(obj_fd);
       }
     }
+    driver->get_bucket_cache()->invalidate_bucket(dpp, pb->get_name());
   }
 
   // remove staging directory
@@ -5730,32 +5760,29 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
 
     if (parent_fd >= 0) {
-      bool cur_is_null = false;
-      if (exists) {
-        int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
-        if (chk_fd >= 0) {
-          cur_is_null = is_null_version_fd(chk_fd);
-          ::close(chk_fd);
-        }
-      }
-
       int vfd = open_versions_dir(parent_fd);
       if (vfd >= 0) {
+        VersionLock vlock(open_versions_lockfile(parent_fd));
+
         /* in suspended mode, remove any existing _null from .versions/ */
         if (!ver_enabled) {
           std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
           ::unlinkat(vfd, null_name.c_str(), 0);
         }
 
-        /* demote current unless suspended+null (S3: replace null version) */
-        if (exists && !(!ver_enabled && cur_is_null)) {
-          bool demoted = false;
-          for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
-            struct statx cur_stx;
-            if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
-                      STATX_ALL, &cur_stx) < 0) {
-              break;
+        /* demote current under lock — fresh stat for accurate state */
+        struct statx cur_stx;
+        if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+                  STATX_ALL, &cur_stx) == 0) {
+          bool cur_is_null = false;
+          {
+            int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
+            if (chk_fd >= 0) {
+              cur_is_null = is_null_version_fd(chk_fd);
+              ::close(chk_fd);
             }
+          }
+          if (!(!ver_enabled && cur_is_null)) {
             std::string cur_ver_id = cur_is_null
               ? NULL_VERSION_ID
               : nsfs_version_id_from_statx(cur_stx);
@@ -5771,46 +5798,38 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                 auto now_ms = std::to_string(
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count());
-                std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+                std::string ts_x =
+                  NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
                 ::fsetxattr(demoted_fd, ts_x.c_str(),
                             now_ms.c_str(), now_ms.size(), 0);
                 ::close(demoted_fd);
               }
-              demoted = true;
-              break;
+            } else if (sr == SafeResult::MISMATCH && cur_is_null) {
+              /* null version already demoted by a prior writer */
+            } else if (sr != SafeResult::OK) {
+              ldpp_dout(dpp, 0) << "ERROR: versioned PUT demote failed for "
+                << cur_leaf << " sr=" << (int)sr << dendl;
+              ::close(vfd);
+              return -ERR_INTERNAL_ERROR;
             }
-            if (sr == SafeResult::ERROR) {
-              break;
-            }
-            if (sr == SafeResult::MISMATCH && cur_is_null) {
-              /* null version name is fixed — MISMATCH means a
-               * concurrent PUT already demoted it; nothing to do */
-              struct statx chk;
-              if (statx(vfd, ver_name.c_str(), AT_SYMLINK_NOFOLLOW,
-                        STATX_INO, &chk) == 0) {
-                demoted = true;
-                break;
-              }
-            }
-            struct timespec ts = {0, 100000 + (rand() % 500000)};
-            nanosleep(&ts, nullptr);
-          }
-          if (!demoted) {
-            ldpp_dout(dpp, 0) << "ERROR: versioned PUT demote failed "
-              << "after " << NSFS_VERSION_RETRIES << " retries for "
-              << cur_leaf << dendl;
-            ::close(vfd);
-            return -ERR_INTERNAL_ERROR;
           }
         }
+
+        ret = obj->link_temp_file(rctx.dpp, rctx.y);
         ::close(vfd);
+      } else {
+        ret = obj->link_temp_file(rctx.dpp, rctx.y);
       }
+    } else {
+      ret = obj->link_temp_file(rctx.dpp, rctx.y);
     }
+  } else {
+    ret = obj->link_temp_file(rctx.dpp, rctx.y);
   }
 
-  ret = obj->link_temp_file(rctx.dpp, rctx.y);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed writing temp file" << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed writing temp file"
+                       << dendl;
     return ret;
   }
 
@@ -5830,6 +5849,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
       ::fsetxattr(obj_fd, xattr.c_str(),
                   new_ver_id.c_str(), new_ver_id.size(), 0);
     }
+    driver->get_bucket_cache()->invalidate_bucket(rctx.dpp, b->get_name());
   }
 
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
