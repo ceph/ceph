@@ -217,7 +217,6 @@ class PerShardState {
 public:
   PerShardState(
     int whoami,
-    ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
     crimson::os::FuturizedStore &store,

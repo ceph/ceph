@@ -500,13 +500,11 @@ seastar::future<> OSD::start()
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
   co_await osd_states.start();
-  ceph::mono_time startup_time = ceph::mono_clock::now();
   co_await shard_services.start(
         std::ref(osd_singleton_state),
         std::ref(pg_to_shard_mappings),
         store_shards_num,
         whoami,
-        startup_time,
         osd_singleton_state.local().perf,
         osd_singleton_state.local().recoverystate_perf,
         std::ref(store),
