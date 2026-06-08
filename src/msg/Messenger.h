@@ -374,6 +374,13 @@ public:
    */
   virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
+   * set the maximum size of the dispatch queue throttle
+   *
+   * This is an init-time function and must be called *before* calling
+   * start().
+   */
+  virtual void set_dispatch_throttle_size(uint64_t size) {}
+  /**
    * set the default send priority
    *
    * This is an init-time function and must be called *before* calling

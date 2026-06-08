@@ -176,6 +176,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   entity_name_t::MGR(gid),
 			   "mgr",
 			   Messenger::get_random_nonce());
+  msgr->set_dispatch_throttle_size(
+      g_conf().get_val<Option::size_t>("mgr_dispatch_throttle_bytes"));
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   // throttle policy
   msgr->set_policy(entity_name_t::TYPE_OSD,
