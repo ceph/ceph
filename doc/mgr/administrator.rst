@@ -161,9 +161,9 @@ The Manager automatically adjusts :confval:`mgr_stats_period` based on message q
 depth to prevent overload during high cluster activity. This feature is enabled by
 default and can be controlled with the following settings:
 
-- :confval:`mgr_stats_period_autotune` (boolean, default: true): Enable or disable
+- :confval:`mgr_stats_period_autotune` : Enable or disable
   automatic tuning of the stats period.
-- :confval:`mgr_stats_period_autotune_queue_threshold` (integer, default: 100):
+- :confval:`mgr_stats_period_autotune_queue_threshold` :
   The message queue depth threshold that triggers an increase in the stats period.
 
 When the queue depth exceeds this threshold, the stats period is increased to
