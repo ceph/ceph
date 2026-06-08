@@ -85,15 +85,15 @@ class CephFS(RESTController):
         data_pool: Optional[str] = None,
         metadata_pool: Optional[str] = None
     ):
-        service_spec_str = '1 '
-        if 'labels' in service_spec['placement']:
-            for label in service_spec['placement']['labels']:
-                service_spec_str += f'label:{label},'
-            service_spec_str = service_spec_str[:-1]
-        if 'hosts' in service_spec['placement']:
-            for host in service_spec['placement']['hosts']:
-                service_spec_str += f'{host} '
-            service_spec_str = service_spec_str[:-1]
+        placement = service_spec['placement']
+        parts = []
+        if 'count' in placement:
+            parts.append(str(placement['count']))
+        if 'labels' in placement:
+            parts.append(','.join(f'label:{label}' for label in placement['labels']))
+        if 'hosts' in placement:
+            parts.append(' '.join(placement['hosts']))
+        service_spec_str = ' '.join(parts)
 
         error_code, _, err = mgr.remote(
             'volumes',
