@@ -120,66 +120,86 @@ Posix-only commits (get_ent, conditional PUT/DELETE, per-part xattrs,
 get_meta_obj, write_attrs) are structured for cherry-picking to Ali's
 posixdriver development baseline if needed.
 
-## Milestone 3 — S3 Versioning
+## Completed — Milestone 3 (S3 Versioning)
 
 Follows the noobaa nsfs `.versions/` layout so the on-disk structure can
 exploit GPFS `gpfs_linkatif`/`gpfs_unlinkat` primitives in a future phase.
 Version IDs are deterministic from stat (`mtime-{base36_ns}-ino-{base36}`),
 serving as the serialized CAS comparison value.
 
-Design rationale and noobaa analysis: see plan file and DESIGN.md.
+Design rationale and noobaa analysis: see DESIGN.md.
 
 | Phase | Summary | Status |
 |-------|---------|--------|
 | 1 | Version ID helpers, `.versions/` path utils, safe-link/safe-unlink CAS, xattr constants | done |
-| 2 | Versioned PUT — demote current to `.versions/`, publish new, suspended null handling, retry loop | pending |
-| 3 | Versioned DELETE — delete marker creation, specific version deletion, promotion from `.versions/` | pending |
-| 4 | Version-aware GET/HEAD — `_find_version_path`, mismatch detection, delete marker handling | pending |
-| 5 | ListObjectVersions — enumerate `.versions/` in fill_cache, sort by key+mtime, is_latest, pagination | pending |
-| 6 | Bucket versioning state — set_bucket_versioning persistence, auto-create `.versions/` | pending |
+| 2 | Versioned PUT — demote current to `.versions/`, OFD-locked demote+rename | done |
+| 3 | Versioned DELETE — delete marker creation, specific version deletion, promotion | done |
+| 4 | Version-aware GET/HEAD — `_find_version_path`, delete marker detection | done |
+| 5 | ListObjectVersions — enumerate `.versions/` in fill_cache, LMDB custom comparator | done |
+| 6 | Bucket versioning state — set_bucket_versioning persistence, auto-create `.versions/` | done |
 
-### Posix driver
+Additional fixes applied during milestone 3:
+- Conditional checks for versioned delete (DM targets, version-specific targets)
+- OFD file locking for demote+rename atomicity (replaces CAS retry loop)
+- Cache invalidation after versioned PUT/MPU/copy
+- LMDB dbi handle exhaustion fix (persistent dbi map, mdb_drop eviction)
+- max_dbs derived from cache max_buckets
 
-Not changed. Posixdriver uses a different versioning scheme
-(VersionedDirectory + symlinks) suited to its own goals — the filesystem
-is an implementation detail, not a layout spec. No convergence planned.
+## Resolved issues
 
-## Known issues — high priority
+### BucketCache LRU crashes (fixed)
 
-### BucketCache LRU race under concurrent load
+Three crash signatures in cohort_lru under concurrent multi-bucket
+workloads — SIGABRT in evict_block, SIGSEGV in AVL traversal, SIGSEGV
+in string comparison. Fixed in commit `26fb45c`.
 
-Reproduced by `stress::test_versioned_bucket_cache_stress` in s3tests-rs.
-Creating many buckets and concurrently listing across them triggers an
-assertion failure in `cohort::lru::LRU::evict_block` →
-`boost::intrusive::list_impl::s_iterator_to`.
 
-Backtrace signature:
-```
-cohort::lru::LRU<std::mutex>::evict_block
-  → boost::intrusive::list_impl::s_iterator_to  (assertion)
-  → BucketCache::get_bucket → LRU::insert
-```
+### LMDB dbi handle exhaustion (fixed)
 
-This is the same `cohort_lru` infrastructure used by `RGWFileHandle` cache,
-where similar races were found and fixed in earlier work.  The BucketCache
-instantiation may not have received all those fixes.  Prior symptoms also
-included exceeding the maximum number of open LMDB instances after sustained
-recycling.
+`mdb_dbi_close()` does not reclaim slots. Fixed with persistent
+per-partition `flat_map<string, MDBDbi>` and `mdb_drop(del=1)`
+eviction. max_dbs derived from `rgw_nsfs_cache_max_buckets`.
+Commits `24554c6`, `fab6ed1`.
 
-**Impact:** crash under concurrent multi-bucket workloads.  Single-bucket
-operations and sequential test suites are unaffected.
+## Open work
 
-**Next steps:**
-1. Audit `BucketCache::get_bucket` → `insert_latched` / `evict_block`
-   locking against the fixes applied to `RGWFileHandle` LRU
-2. Check whether the LMDB handle limit issue is also still present
-3. The stress tests in `qa/workunits/rgw/s3tests-rs/tests/test_s3/stress.rs`
-   are marked `#[ignore]` and reproduce reliably — run with
-   `cargo nextest run -E 'test(/^stress::/)' --run-ignored=all --test-threads=1`
+See STATUS.md for the current s3tests-rs scorecard and feature
+completeness assessment.
+
+### Lifecycle
+
+Not implemented. `get_lifecycle()`/`get_rgwlc()` return nullptr.
+Requires a timer/worker framework. Accounts for 74 lifecycle test
+failures plus 2 versioning and 2 bucket_policy failures that depend
+on lifecycle execution.
+
+### Bucket logging
+
+Not implemented. Requires log object assembly and flush
+infrastructure. 188 test failures.
+
+### SNS / notifications
+
+`NSFSNotification` is a stub. Topic management returns -ENOTSUP.
+8 test failures.
+
+### SSE-C multipart
+
+4 test failures. Encryption attributes are stored but no actual
+SSE-C crypto is performed during multipart upload assembly.
+
+### Atomicity / locking design review
+
+OFD locks on `.versions/.lock` serialize versioned PUT/MPU demote+rename.
+This is correct but coarse. A broader review of locking granularity and
+its interaction with the BucketCache inotify invalidation path is
+warranted. See DESIGN.md cache invalidation section.
 
 ## Future milestones (out of scope for now)
 
 - GPFS integration (`gpfs_linkatif`, `gpfs_unlinkat`, `O_TMPFILE`, fd pre-staging)
 - Handle cache (LRU for Directory objects)
 - `force_md5_etag` config option
-- Bucket lifecycle management (deferred until posixdriver lifecycle baseline is folded in)
+- Bucket lifecycle management
+- Bucket logging
+- SNS / notifications
