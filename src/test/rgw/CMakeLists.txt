@@ -103,7 +103,9 @@ add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
 # unittest_rgw_cors
-add_executable(unittest_rgw_cors test_rgw_cors.cc)
+add_executable(unittest_rgw_cors
+  test_rgw_cors.cc
+  $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
