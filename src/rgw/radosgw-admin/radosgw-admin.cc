@@ -3664,39 +3664,66 @@ static std::string option_display_name(const CLI::Option* opt) {
 }
 
 // After parsing: warns if any option was placed before the subcommand.
-// Compatibility options are registered hidden on ancestor commands via
-// add_multilevel_option(). If a hidden ancestor registration has count() > 0,
-// the option was specified before the leaf subcommand.
-void warn_wrong_position(CLI::App* cmd) {
-  std::set<std::string> warned;
-  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
-    for (const auto* opt : p->get_options())
-      if (opt->get_group().empty() && opt->count() > 0) {
-        std::string key = "--" + opt->get_single_name();
-        if (warned.insert(key).second)
-          cerr << "Warning: " << option_display_name(opt)
-               << " should appear after the subcommand\n";
+// Traverses the parsed tree root-downward (via get_subcommands(), which returns
+// only parsed nodes). At each non-leaf node, a hidden option (registered by
+// add_multilevel_option for backward compat) with count() > 0 means the user
+// typed it before the next subcommand — warn. The child lookup confirms the
+// option is a multilevel registration and not some other hidden option.
+static void warn_wrong_position_impl(CLI::App* node, std::set<std::string>& warned) {
+  for (const auto* opt : node->get_options()) {
+    if (!opt->get_group().empty() || opt->count() == 0)
+      continue;
+    const std::string primary = "--" + opt->get_single_name();
+    bool on_child = false;
+    for (auto* child : node->get_subcommands())
+      if (child->get_option_no_throw(primary)) {
+        on_child = true;
+        break;
       }
+    if (!on_child)
+      continue;
+    if (warned.insert(primary).second)
+      cerr << "Warning: " << option_display_name(opt)
+           << " should appear after the subcommand\n";
+  }
+  for (auto* child : node->get_subcommands())
+    warn_wrong_position_impl(child, warned);
 }
 
-// After parsing: checks all options registered at the command and each ancestor
-// level, and warn if the same option was specified more than once. This also
-// catches duplicates introduced by backward-compatibility registrations.
+void warn_wrong_position(CLI::App* root) {
+  std::set<std::string> warned;
+  warn_wrong_position_impl(root, warned);
+}
+
+static void collect_parsed_path(CLI::App* node, std::vector<CLI::App*>& path) {
+  path.push_back(node);
+  for (auto* child : node->get_subcommands())
+    collect_parsed_path(child, path);
+}
+
+// After parsing: warns if the same option was specified more than once
+// across the parsed command path. This catches both duplicates at the
+// same command level and duplicates introduced by backward-compatibility
+// registrations at ancestor levels.
 // The last value wins.
-void warn_duplicates(CLI::App* cmd) {
+void warn_duplicates(CLI::App* root) {
+  std::vector<CLI::App*> path;
+  collect_parsed_path(root, path);
   std::set<std::string> checked;
-  for (CLI::App* p = cmd; p; p = p->get_parent())
-    for (const auto* opt : p->get_options())
-      if (checked.insert("--" + opt->get_single_name()).second) {
-        std::string primary = "--" + opt->get_single_name();
-        std::size_t total = 0;
-        for (CLI::App* q = cmd; q; q = q->get_parent())
-          if (auto* o = q->get_option_no_throw(primary))
-            total += o->count();
-        if (total > 1)
-          cerr << "Warning: " << option_display_name(opt)
-               << " specified multiple times, using last value\n";
-      }
+  for (auto* path_node : path) {
+    for (const auto* opt : path_node->get_options()) {
+      const std::string primary = "--" + opt->get_single_name();
+      if (!checked.insert(primary).second)
+        continue;
+      std::size_t total = 0;
+      for (auto* node : path)
+        if (auto* option = node->get_option_no_throw(primary))
+          total += option->count();
+      if (total > 1)
+        cerr << "Warning: " << option_display_name(opt)
+             << " specified multiple times, using last value\n";
+    }
+  }
 }
 
 // This has an uncaught exception. Even if the exception is caught, the program
@@ -4062,10 +4089,8 @@ int main(int argc, const char **argv)
       add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
 
       script_put->callback(
-          [script_put, &str_script_ctx, &infile, &tenant,
+          [&str_script_ctx, &infile, &tenant,
            &cli11_op, &cli11_action] {
-        warn_wrong_position(script_put);
-        warn_duplicates(script_put);
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4111,10 +4136,8 @@ int main(int argc, const char **argv)
       });
 
       script_get->callback(
-          [script_get, &str_script_ctx, &tenant,
+          [&str_script_ctx, &tenant,
            &cli11_op, &cli11_readonly, &cli11_action] {
-        warn_wrong_position(script_get);
-        warn_duplicates(script_get);
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4147,10 +4170,8 @@ int main(int argc, const char **argv)
       });
 
       script_rm->callback(
-          [script_rm, &str_script_ctx, &tenant,
+          [&str_script_ctx, &tenant,
            &cli11_op, &cli11_action] {
-        warn_wrong_position(script_rm);
-        warn_duplicates(script_rm);
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4256,13 +4277,11 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_check_unlinked, "--tenant",    tenant,      tenant_desc);
 
       bucket_list->callback(
-          [bucket_list, &cli11_op, &cli11_readonly, &cli11_action,
+          [&cli11_op, &cli11_readonly, &cli11_action,
            &bucket_name, &bucket_id, &tenant, &marker, &max_entries,
            &max_entries_specified, &object_version, &allow_unordered,
            &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
            &formatter, &bucket] {
-        warn_wrong_position(bucket_list);
-        warn_duplicates(bucket_list);
         cli11_readonly = true;
         cli11_op = Cli11Op::BucketList;
         cli11_action = [&bucket_name, &bucket_id, &tenant, &marker, &max_entries,
@@ -4326,11 +4345,9 @@ int main(int argc, const char **argv)
       });
 
       bucket_stats->callback(
-          [bucket_stats, &cli11_op, &cli11_readonly, &cli11_action,
+          [&cli11_op, &cli11_readonly, &cli11_action,
            &bucket_name, &bucket_id, &marker, &max_entries, &max_entries_specified,
            &show_restore_stats, &bucket_op, &site, &stream_flusher_ptr, &err] {
-        warn_wrong_position(bucket_stats);
-        warn_duplicates(bucket_stats);
         cli11_readonly = true;
         cli11_op = Cli11Op::BucketStats;
         cli11_action = [&bucket_name, &bucket_id, &marker, &max_entries,
@@ -4359,10 +4376,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_link->callback(
-          [bucket_link, &uid_str, &user_id_arg, &bucket_name,
+          [&uid_str, &user_id_arg, &bucket_name,
            &cli11_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
-        warn_wrong_position(bucket_link);
-        warn_duplicates(bucket_link);
         // Enforce required options by value, because options may have been
         // parsed before the subcommand.
         // TODO: once flags-before-subcommand support is removed, replace with ->required()
@@ -4390,10 +4405,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_unlink->callback(
-          [bucket_unlink, &uid_str, &user_id_arg, &bucket_name,
+          [&uid_str, &user_id_arg, &bucket_name,
            &cli11_op, &cli11_action, &bucket_op] {
-        warn_wrong_position(bucket_unlink);
-        warn_duplicates(bucket_unlink);
         if (bucket_name.empty()) {
           cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
           throw CLI::RuntimeError(EINVAL);
@@ -4415,10 +4428,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_rm->callback(
-          [bucket_rm, &bucket_name, &cli11_op, &cli11_action,
+          [&bucket_name, &cli11_op, &cli11_action,
            &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
-        warn_wrong_position(bucket_rm);
-        warn_duplicates(bucket_rm);
         if (bucket_name.empty()) {
           cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
           throw CLI::RuntimeError(EINVAL);
@@ -4443,11 +4454,9 @@ int main(int argc, const char **argv)
       });
 
       bucket_check->callback(
-          [bucket_check, &bucket_name, &cli11_op, &cli11_action,
+          [&bucket_name, &cli11_op, &cli11_action,
            &tenant, &fix, &remove_bad, &check_head_obj_locator,
            &bucket_op, &stream_flusher_ptr, &formatter] {
-        warn_wrong_position(bucket_check);
-        warn_duplicates(bucket_check);
         cli11_op = Cli11Op::BucketCheck;
         cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
                         &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
@@ -4465,10 +4474,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_check_olh->callback(
-          [bucket_check_olh, &cli11_op, &cli11_action,
+          [&cli11_op, &cli11_action,
            &bucket_op, &stream_flusher_ptr] {
-        warn_wrong_position(bucket_check_olh);
-        warn_duplicates(bucket_check_olh);
         cli11_op = Cli11Op::BucketCheckOlh;
         cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
           rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -4483,10 +4490,8 @@ int main(int argc, const char **argv)
       });
 
       bucket_check_unlinked->callback(
-          [bucket_check_unlinked, &cli11_op, &cli11_action,
+          [&cli11_op, &cli11_action,
            &bucket_op, &stream_flusher_ptr] {
-        warn_wrong_position(bucket_check_unlinked);
-        warn_duplicates(bucket_check_unlinked);
         cli11_op = Cli11Op::BucketCheckUnlinked;
         cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
           rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -4511,6 +4516,8 @@ int main(int argc, const char **argv)
         cout << app.help();
         return 0;
       }
+      warn_wrong_position(&app);  // RuntimeError exits before reaching the success-path calls below
+      warn_duplicates(&app);
       return e.get_exit_code();
     } catch (const CLI::ParseError& e) {
       return app.exit(e);
@@ -4522,11 +4529,14 @@ int main(int argc, const char **argv)
       return 0;
     }
 
-    // Reject stray positional args for any CLI11-parsed command.
-    // With allow_extras() on root, CLI11 ignores unknown args — this check
-    // catches them manually. TODO: remove once allow_extras() is gone (at
-    // that point CLI11 itself rejects unknown arguments).
     if (cli11_op != Cli11Op::None) {
+      warn_wrong_position(&app);
+      warn_duplicates(&app);
+
+      // Reject stray positional args for any CLI11-parsed command.
+      // With allow_extras() on root, CLI11 ignores unknown args — this check
+      // catches them manually. TODO: remove once allow_extras() is gone (at
+      // that point CLI11 itself rejects unknown arguments).
       for (const auto& arg : app.remaining(true)) {
         if (!arg.empty() && arg[0] != '-') {
           cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
