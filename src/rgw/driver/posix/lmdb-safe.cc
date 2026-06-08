@@ -327,6 +327,13 @@ void MDBRWTransactionImpl::clear(MDB_dbi dbi)
     }
 }
 
+void MDBRWTransactionImpl::drop(MDB_dbi dbi)
+{
+    if (const auto rc = mdb_drop(d_txn, dbi, 1)) {
+        throw LMDBError("Error dropping database: ", rc);
+    }
+}
+
 MDBRWCursor MDBRWTransactionImpl::getRWCursor(const MDBDbi &dbi)
 {
     MDB_cursor *cursor;
