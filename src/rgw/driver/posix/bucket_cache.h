@@ -80,9 +80,11 @@ public:
     /* XXX depends on safe_link -- but I think on balance, built-in safe_link
      * is preferable to a custom mechanism with likely the same cost */
     if (name_hook.is_linked()) {
-      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
     }
-    mdb_dbi_close(*env, dbi); // return db handle
+    if (env) {
+      mdb_dbi_close(*env, dbi);
+    }
   }
 
   inline bool deleted() const {
@@ -170,14 +172,18 @@ public:
 	  abort();
 	}
 
-	/* discard lmdb data associated with this bucket */
-	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0);
-	txn->commit();
-	/* LMDB applications don't "normally" close database handles,
-	 * but doing so (atomically) is supported, and we must as
-	 * we continually recycle them */
-	mdb_dbi_close(*env, dbi); // return db handle
+	/* remove from AVL tree; if the evicted entry is in the same
+	 * partition as the incoming insert, the latch is already held */
+	if (bc->cache.is_same_partition(hk, factory->hk)) {
+	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+	} else {
+	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+	}
+
+	/* close the database handle; stale data (if any) is dropped
+	 * by fill() when the bucket name is next accessed */
+	mdb_dbi_close(*env, dbi);
+	env.reset();
       } /* ! deleted */
     }
     return true;
@@ -356,10 +362,16 @@ public:
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
 	  auto& env = lmdbs.get_sp_env(b);
 	  auto cmp = B::lmdb_cmp();
-	  auto dbi = cmp
-	    ? env->openDB(b->name, MDB_CREATE, cmp)
-	    : env->openDB(b->name, MDB_CREATE);
-	  b->set_env(env, dbi);
+	  try {
+	    auto dbi = cmp
+	      ? env->openDB(b->name, MDB_CREATE, cmp)
+	      : env->openDB(b->name, MDB_CREATE);
+	    b->set_env(env, dbi);
+	  } catch (const LMDBSafe::LMDBError& e) {
+	    b->mtx.unlock();
+	    lat.lock->unlock();
+	    return result;
+	  }
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
 	    /* inserts at cached insert iterator, releasing latch */
@@ -398,6 +410,9 @@ public:
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
       auto txn = bucket->env->getRWTransaction();
+
+      /* clear stale data from a prior hiwat eviction before repopulating */
+      mdb_drop(*txn, bucket->dbi, 0);
 
       /* instruct the bucket provider to enumerate all entries,
        * in any order */
