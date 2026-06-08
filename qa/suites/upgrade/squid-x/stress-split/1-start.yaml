@@ -28,6 +28,7 @@ overrides:
       - filesystem is offline
       - with fewer MDS than max_mds
       - CEPHADM_FAILED_DAEMON
+      - osd.* is in unknown state
       - pg .* is stuck undersized
       - HEALTH_WARN .* osds down
       - MDS_INSUFFICIENT_STANDBY
