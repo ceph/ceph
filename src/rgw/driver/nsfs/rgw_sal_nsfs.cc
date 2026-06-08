@@ -4437,12 +4437,19 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   /*
    * Single DELETE with ?versionId= → params.marker_version_id.
    * Multi-object DeleteObjects → object key instance.
-   * Plain DELETE without versionId → both empty (stat() does not
-   * set instance, matching rados behavior).
+   * Plain DELETE without versionId → both empty.
+   *
+   * When load_obj_state detects a delete marker, it copies dm_version_id
+   * into instance.  Skip that case so plain DELETE stacks new DMs rather
+   * than deleting the existing one.  Multi-delete sets instance from
+   * the request (dm_version_id stays empty), so it is not skipped.
    */
   std::string req_version_id = params.marker_version_id;
-  if (req_version_id.empty() && !source->is_delete_marker()) {
-    req_version_id = source->get_instance();
+  if (req_version_id.empty()) {
+    std::string inst = source->get_instance();
+    if (!inst.empty() && inst != source->dm_version_id) {
+      req_version_id = inst;
+    }
   }
 
   if (!versioned) {
