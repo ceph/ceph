@@ -88,6 +88,19 @@ Starting the Upgrade
    #. Bring CephFS filesystems back up, bringing the state of active
       MDS daemon(s) from ``up:standby`` to ``up:active``.
 
+   When a cluster has more than one CephFS filesystem, cephadm upgrades the
+   MDS daemons one filesystem at a time by default: it prepares (fails, or
+   scales down to ``max_mds 1``) a single filesystem, upgrades its MDS
+   daemons, restores that filesystem, and only then proceeds to the next one.
+   Because MDS daemons are upgraded serially in any case, this does not slow
+   the upgrade down; it only narrows the disruption to one filesystem at a
+   time instead of taking every filesystem offline simultaneously. To restore
+   the previous behavior of preparing all filesystems at once, set:
+
+   .. prompt:: bash #
+
+      ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false
+
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently
 online and that your cluster is healthy by running the following command:
 
