@@ -54,7 +54,7 @@ inline std::string create_pool_by_type(
       if (result != "") {
         return result;
       }
-      // Crimson natively supports overwrites, we do not need to set the flag 
+      // Crimson natively supports overwrites, we do not need to set the flag
       if (!is_crimson_cluster()) {
         result = set_allow_ec_overwrites_pp(pool_name, cluster, true);
         if (result != "") {
