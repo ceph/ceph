@@ -129,7 +129,9 @@ class CephService(object):
     @classmethod
     def get_pool_list_with_stats(cls, application=None):
         # pylint: disable=too-many-locals
-        pools = cls.get_pool_list(application)
+        # copy each pool: get_pool_list returns mgr's cached osd_map dicts, and
+        # stamping pg_status/stats below would otherwise leak into stats=False callers
+        pools = [dict(pool) for pool in cls.get_pool_list(application)]
 
         pools_w_stats = []
 
@@ -166,8 +168,10 @@ class CephService(object):
             return ecp
 
         ret = []
+        # copy each ecp: mgr.get('osd_map') returns cached dicts, and _serialize_ecp
+        # mutates name/k/m in place, which would pollute the shared cache otherwise
         for name, ecp in mgr.get('osd_map').get('erasure_code_profiles', {}).items():
-            ret.append(_serialize_ecp(name, ecp))
+            ret.append(_serialize_ecp(name, dict(ecp)))
         return ret
 
     @classmethod
