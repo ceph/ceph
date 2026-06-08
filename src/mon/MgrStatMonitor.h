@@ -22,6 +22,7 @@ struct Subscription;
 
   // pending commit
   PGMapDigest pending_digest;
+  health_check_map_t pending_health_checks;
   std::map<std::string,ProgressEvent> pending_progress_events;
   ceph::buffer::list pending_service_map_bl;
   std::map<uint64_t, PoolAvailability> pending_pool_availability;
