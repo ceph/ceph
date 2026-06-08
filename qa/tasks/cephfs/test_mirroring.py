@@ -36,7 +36,9 @@ def retry_assert(timeout=60, interval=1):
             last_exc = None
             attempt = 1
 
-            with safe_while(sleep=interval, tries=tries, action=f"retry {func.__name__}") as proceed:
+            with safe_while(sleep=interval, tries=tries,
+                            action=f"retry {func.__name__}",
+                            _raise=False) as proceed:
                 while proceed():
                     try:
                         return func(*args, **kwargs)
@@ -44,18 +46,24 @@ def retry_assert(timeout=60, interval=1):
                         last_exc = e
                         log.debug(
                             f"[retry_assert] {func.__name__}: "
-                            f"attempt {attempt} failed ({type(e).__name__}), retrying..."
+                            f"attempt {attempt} failed ({type(e).__name__}): {e}, "
+                            f"retrying..."
                         )
                         attempt += 1
             # Final failure
+            last_reason = str(last_exc) if last_exc else ''
             if last_exc is not None and hasattr(last_exc, "res"):
                 log.error("\n--- Last peer status (res) ---")
                 log.error(last_exc.res)
+            if last_reason:
+                log.error(
+                    f"[retry_assert] {func.__name__}: last failure: {last_reason}")
 
-            raise AssertionError(
-                f"{func.__name__} did not succeed within {timeout}s "
-                f"after {attempt - 1} attempts"
-            ) from last_exc
+            msg = (f"{func.__name__} did not succeed within {timeout}s "
+                   f"after {attempt - 1} attempts")
+            if last_reason:
+                msg = f"{msg}: {last_reason}"
+            raise AssertionError(msg) from last_exc
 
         return wrapper
     return decorator
