@@ -547,6 +547,7 @@ public:
     void abort() override;
 
     void clear(MDB_dbi dbi);
+    void drop(MDB_dbi dbi);
 
     void put(MDB_dbi dbi, const MDBInVal &key, const MDBInVal &val, unsigned int flags = 0)
     {
