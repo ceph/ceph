@@ -117,6 +117,11 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
     cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {"uuid"}, "", CEPH_NOSNAP};
   snap_create(mock_image_ctx, pns, "PS1");
 
+  // previous primary snapshot is demoted, can create another primary demoted
+  // snapshot without force
+  ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, true, false,
+                                                nullptr, nullptr));
+
   // previous primary snapshot is demoted, no force
   ASSERT_FALSE(util::can_create_primary_snapshot(&mock_image_ctx, false, false,
                                                  nullptr, nullptr));

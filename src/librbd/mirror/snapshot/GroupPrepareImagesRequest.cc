@@ -428,20 +428,8 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
             new_sub_ctx->complete(-EINVAL);
             return;
           }
-        } else if (m_operation == OP_DEMOTE) {
-          if (m_images_promotion_states[i] != PROMOTION_STATE_PRIMARY) {
-            lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
-                             << " image is not primary" << dendl;
-            new_sub_ctx->complete(-EINVAL);
-            return;
-          }
         } else if (m_operation == OP_PROMOTE) {
-          if (m_images_promotion_states[i] == PROMOTION_STATE_PRIMARY) {
-            lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
-                             << " image is already primary" << dendl;
-            new_sub_ctx->complete(-EINVAL);
-            return;
-          } else if (m_images_promotion_states[i] == PROMOTION_STATE_NON_PRIMARY && !m_force) {
+          if (m_images_promotion_states[i] == PROMOTION_STATE_NON_PRIMARY && !m_force) {
             lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
                              << " image is primary within a remote cluster or demotion is not propagated yet"
                              << dendl;
