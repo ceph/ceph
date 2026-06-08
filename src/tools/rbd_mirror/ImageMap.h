@@ -132,7 +132,6 @@ private:
   }
 
   void handle_peer_ack(const image_map::GlobalId &global_id, int r);
-  void handle_peer_ack_remove(const image_map::GlobalId &global_id, int r);
 
   void handle_load(const std::map<image_map::GlobalId,
                                   cls::rbd::MirrorImageMap> &image_mapping);
@@ -157,10 +156,10 @@ private:
   void rebalance();
   void schedule_rebalance_task();
 
-  void notify_listener_acquire_release_images(const Updates &acquire,
+  void notify_listener_acquire_release_entities(const Updates &acquire,
                                               const Updates &release);
-  void notify_listener_remove_images(const std::string &mirror_uuid,
-                                     const Updates &remove);
+  void notify_listener_remove_entities(const std::string &mirror_uuid,
+                                       const Updates &remove);
 
   void update_images_added(const std::string &mirror_uuid,
                            const MirrorEntities &entities);
