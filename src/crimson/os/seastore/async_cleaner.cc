@@ -2031,6 +2031,27 @@ void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len)
 bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
+
+  // Capacity check. Without this, concurrent transactions over-commit the
+  // RBM device: each reserves but the cleaner has no clean_space() yet, so
+  // a write that physically can't be served reaches the allocator and
+  // surfaces as `unexpected enospc` asserts in the data path (object_data
+  // _handler.cc et al.). Return false so the EPM BackgroundProcess blocks
+  // the IO until committed transactions release space.
+  //
+  // Headroom carves out room for metadata writes (LBA btree, backref) and
+  // for fragmentation slack the allocator can't pack into. 5% is a starting
+  // point; until RBMCleaner::clean_space() exists we cannot reclaim from
+  // fragmented free space, so headroom doubles as a fragmentation guard.
+  assert(get_total_bytes() > get_journal_bytes());
+  auto data_capacity = get_total_bytes() - get_journal_bytes();
+  auto headroom = data_capacity / 20;
+  auto committed_and_projected = stats.used_bytes
+                               + stats.projected_used_bytes
+                               + projected_usage;
+  if (committed_and_projected + headroom > data_capacity) {
+    return false;
+  }
   stats.projected_used_bytes += projected_usage;
   return true;
 }
