@@ -458,6 +458,30 @@ private:
     sync_stat.last_failed_reason = boost::none;
   }
 
+  void _reset_last_synced_snap_stat(const std::string &dir_root) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.last_synced = clock::zero();
+    sync_stat.last_sync_duration.reset();
+    sync_stat.last_sync_crawl_duration.reset();
+    sync_stat.last_sync_datasync_queue_wait_duration.reset();
+    sync_stat.last_sync_bytes.reset();
+    sync_stat.last_sync_files.reset();
+  }
+
+  bool reconcile_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
+                                  const std::string &snap_name) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    if (sync_stat.last_synced_snap &&
+        sync_stat.last_synced_snap->first == snap_id &&
+        sync_stat.last_synced_snap->second == snap_name) {
+      return false;
+    }
+    _reset_last_synced_snap_stat(dir_root);
+    _set_last_synced_snap(dir_root, snap_id, snap_name);
+    return true;
+  }
+
   void _reset_sync_stat(const std::string &dir_root) {
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes = 0;
@@ -689,6 +713,9 @@ private:
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
   int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  void load_persisted_dir_sync_stats();
+  void load_persisted_dir_sync_stat(const std::string &dir_root);
+  void apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat, const bufferlist &bl);
   void persist_dir_sync_stat(const std::string &dir_root);
   void add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
                                         SnapSyncStat &sync_stat);
