@@ -3906,6 +3906,12 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
                     state.exists = false;
                     dm_version_id =
                       max_name.substr(leaf_name.size() + 1);
+                    struct statx dm_stx;
+                    if (statx(dm_fd, "", AT_EMPTY_PATH,
+                              STATX_MTIME, &dm_stx) == 0) {
+                      state.mtime =
+                        from_statx_timestamp(dm_stx.stx_mtime);
+                    }
                   }
                   ::close(dm_fd);
                 }
@@ -4381,53 +4387,57 @@ int NSFSObject::NSFSReadOp::get_attr(const DoutPrefixProvider* dpp, const char* 
   return 0;
 }
 
+/*
+ * Check delete preconditions (if_match, last_mod_time_match, size_match)
+ * against the given target metadata.  Returns 0 if all pass, or
+ * -ERR_PRECONDITION_FAILED on mismatch.
+ */
+static int check_delete_preconditions(
+    const rgw::sal::Object::DeleteOp::Params& params,
+    const rgw::sal::Attrs& attrs,
+    ceph::real_time mtime,
+    uint64_t size)
+{
+  if (params.if_match && strcmp(params.if_match, "*") != 0) {
+    auto it = attrs.find(RGW_ATTR_ETAG);
+    if (it == attrs.end()) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    std::string etag = it->second.to_str();
+    std::string if_match_str = rgw_string_unquote(params.if_match);
+    if (if_match_str != etag) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (!real_clock::is_zero(params.last_mod_time_match)) {
+    if (params.last_mod_time_match_precise) {
+      if (params.last_mod_time_match != mtime) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    } else {
+      if (real_clock::to_time_t(params.last_mod_time_match) !=
+          real_clock::to_time_t(mtime)) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
+  if (params.size_match.has_value()) {
+    if (*params.size_match != size) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  return 0;
+}
+
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
     params.size_match.has_value();
-
-  if (has_cond) {
-    int ret = source->stat(dpp);
-    if (ret == -ENOENT) {
-      return 0;
-    }
-    if (ret < 0) {
-      return ret;
-    }
-
-    if (params.if_match && strcmp(params.if_match, "*") != 0) {
-      auto it = source->get_attrs().find(RGW_ATTR_ETAG);
-      if (it == source->get_attrs().end()) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      bufferlist& bl = it->second;
-      std::string if_match_str = rgw_string_unquote(params.if_match);
-      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    }
-
-    if (!real_clock::is_zero(params.last_mod_time_match)) {
-      if (params.last_mod_time_match_precise) {
-        if (params.last_mod_time_match != source->get_mtime()) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      } else {
-        if (real_clock::to_time_t(params.last_mod_time_match) !=
-            real_clock::to_time_t(source->get_mtime())) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-    }
-
-    if (params.size_match.has_value()) {
-      if (*params.size_match != source->get_size()) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    }
-  }
 
   NSFSBucket *b = static_cast<NSFSBucket*>(source->get_bucket());
   if (!b) {
@@ -4456,6 +4466,21 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   }
 
   if (!versioned) {
+    if (has_cond) {
+      int ret = source->stat(dpp);
+      if (ret == -ENOENT) {
+        return 0;
+      }
+      if (ret < 0) {
+        return ret;
+      }
+      ret = check_delete_preconditions(params, source->get_attrs(),
+                                       source->get_mtime(),
+                                       source->get_size());
+      if (ret < 0) {
+        return ret;
+      }
+    }
     return source->delete_object(dpp, y, flags, nullptr, nullptr);
   }
 
@@ -4479,6 +4504,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         cur_match = (req_version_id == cur_ver_id);
       }
       if (cur_match) {
+        if (has_cond) {
+          int r = check_delete_preconditions(
+            params, source->get_attrs(),
+            source->get_mtime(), source->get_size());
+          if (r < 0) {
+            return r;
+          }
+        }
         result.version_id = req_version_id;
         /* capture parent fd and leaf name before delete_object
          * invalidates the ent/dir_chain */
@@ -4544,18 +4577,63 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                          O_RDONLY | O_DIRECTORY);
       if (vfd >= 0) {
         std::string ver_name = leaf_name + "_" + req_version_id;
-        /* check if it's a delete marker */
         bool is_dm = false;
         int ver_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
-        if (ver_fd >= 0) {
+        if (ver_fd < 0) {
+          /* version not found — treat as already deleted */
+          ::close(vfd);
+          result.version_id = req_version_id;
+          return 0;
+        }
+
+        /* read delete-marker flag */
+        {
           char buf[8];
-          std::string dm_xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-          ssize_t xlen = ::fgetxattr(ver_fd, dm_xattr.c_str(), buf, sizeof(buf));
+          std::string dm_xattr =
+            NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
+          ssize_t xlen = ::fgetxattr(ver_fd, dm_xattr.c_str(),
+                                     buf, sizeof(buf));
           if (xlen > 0) {
             is_dm = true;
           }
-          ::close(ver_fd);
         }
+
+        /* conditional check against version's metadata */
+        if (has_cond) {
+          rgw::sal::Attrs ver_attrs;
+          struct statx ver_stx;
+          ceph::real_time ver_mtime;
+          uint64_t ver_size = 0;
+
+          if (statx(ver_fd, "", AT_EMPTY_PATH,
+                    STATX_MTIME | STATX_SIZE, &ver_stx) == 0) {
+            ver_mtime = from_statx_timestamp(ver_stx.stx_mtime);
+            ver_size = ver_stx.stx_size;
+          }
+
+          /* read etag xattr if not a delete marker */
+          if (!is_dm) {
+            char ebuf[256];
+            std::string etag_x = make_xattr_name(RGW_ATTR_ETAG);
+            ssize_t elen = ::fgetxattr(ver_fd, etag_x.c_str(),
+                                       ebuf, sizeof(ebuf));
+            if (elen > 0) {
+              bufferlist bl;
+              bl.append(ebuf, elen);
+              ver_attrs[RGW_ATTR_ETAG] = std::move(bl);
+            }
+          }
+
+          int r = check_delete_preconditions(
+            params, ver_attrs, ver_mtime, ver_size);
+          if (r < 0) {
+            ::close(ver_fd);
+            ::close(vfd);
+            return r;
+          }
+        }
+        ::close(ver_fd);
+
         ::unlinkat(vfd, ver_name.c_str(), 0);
         ::close(vfd);
         result.version_id = req_version_id;
@@ -4576,6 +4654,34 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   source->clear_instance();
   source->ent.reset();
   int ret = source->stat(dpp);
+
+  if (has_cond) {
+    if (ret == -ENOENT && source->dm_version_id.empty()) {
+      return 0;
+    }
+    if (ret == -ENOENT) {
+      /*
+       * DM is current.  stat() set state.mtime and state.size = 0.
+       * DMs have no etag, so any specific if_match fails; "*" passes
+       * via the helper (no RGW_ATTR_ETAG in empty attrs → skip).
+       */
+      rgw::sal::Attrs dm_attrs;
+      int r = check_delete_preconditions(
+        params, dm_attrs, source->get_mtime(), 0);
+      if (r < 0) {
+        return r;
+      }
+    } else if (ret < 0) {
+      return ret;
+    } else {
+      int r = check_delete_preconditions(
+        params, source->get_attrs(),
+        source->get_mtime(), source->get_size());
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
 
   nsfs::FSEnt* ent = source->get_fsent();
   int parent_fd = -1;
@@ -5153,6 +5259,51 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   bool versioned = pb->get_info().versioned();
   bool ver_enabled = pb->get_info().versioning_enabled();
   int leaf_fd = leaf_dir->get_fd();
+
+  /* conditional write checks against existing target object */
+  if (if_match || if_nomatch) {
+    int existing_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+    bool target_exists = (existing_fd >= 0);
+    std::string existing_etag;
+    if (target_exists) {
+      char buf[256];
+      std::string xattr_name = make_xattr_name(RGW_ATTR_ETAG);
+      ssize_t len = ::fgetxattr(existing_fd, xattr_name.c_str(),
+                                buf, sizeof(buf));
+      if (len > 0) {
+        existing_etag.assign(buf, len);
+      }
+      ::close(existing_fd);
+    }
+
+    if (if_match) {
+      if (strcmp(if_match, "*") == 0) {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+      } else {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+        std::string if_match_str = rgw_string_unquote(if_match);
+        if (if_match_str != existing_etag) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        if (target_exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else if (target_exists && !existing_etag.empty()) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        if (if_nomatch_str == existing_etag) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+  }
 
   /* versioned: demote current version before publishing, with retry */
   if (versioned && leaf_fd >= 0) {
