@@ -573,6 +573,41 @@ public:
     }
   }
 
+  CachedExtentRef get_extent_viewable_by_trans_sync(
+    Transaction &t,
+    CachedExtentRef extent) final {
+    assert(extent->is_valid());
+
+    CachedExtent* p_extent = nullptr;
+    if (extent->is_stable()) {
+      p_extent = extent->maybe_get_transactional_view(t);
+      ceph_assert(p_extent);
+      if (p_extent != extent.get()) {
+        assert(p_extent->is_pending_in_trans(t.get_trans_id()));
+        assert(!p_extent->is_pending_io());
+        if (p_extent->is_mutable()) {
+          assert(p_extent->is_fully_loaded());
+          assert(!p_extent->is_pending_io());
+        } else {
+          assert(p_extent->is_exist_clean());
+        }
+      } else {
+        // stable from trans-view
+        assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
+      }
+    } else {
+      assert(!extent->is_pending_io() || extent->is_exist_clean());
+      assert(extent->is_pending_in_trans(t.get_trans_id()));
+      if (extent->is_mutable()) {
+        assert(extent->is_fully_loaded());
+      } else {
+        assert(extent->is_exist_clean());
+      }
+      p_extent = extent.get();
+    }
+    return p_extent;
+  }
+
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,

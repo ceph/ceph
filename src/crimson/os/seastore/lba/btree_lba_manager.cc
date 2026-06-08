@@ -1132,12 +1132,14 @@ void BtreeLBAManager::update_paddr_sync(
   laddr_t laddr,
   paddr_t paddr)
 {
-  LOG_PREFIX(BtreeLBAManager::update_mapping);
+  LOG_PREFIX(BtreeLBAManager::update_paddr_sync);
   DEBUGT("laddr={}, paddr={}", t, laddr, paddr);
   auto c = get_context(t);
   auto btree = get_btree_sync<LBABtree>(c);
   auto iter = btree.lower_bound_sync(c, laddr);
+  assert(iter.get_leaf_node()->is_pending());
   auto cursor = iter.get_cursor(c);
+  assert(cursor->get_laddr() == laddr);
   btree.update(
     c,
     std::move(iter),
@@ -1166,7 +1168,7 @@ BtreeLBAManager::_copy_mapping(
   assert(!src->is_end());
   assert(src->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
   assert(!src->is_indirect() == (bool)extent);
-  DEBUGT("src={} dest={}", c.trans, *src, *dest);
+  DEBUGT("src={} dest={} dest_laddr={}", c.trans, *src, *dest, dest_laddr);
   move_mapping_ret_t ret{std::move(src), std::move(dest)};
   auto &cursor = *ret.dest;
   auto iter = btree.make_partial_iter(c, cursor);

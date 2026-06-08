@@ -260,6 +260,9 @@ public:
       return ext->template cast<T>();
     });
   }
+  virtual CachedExtentRef get_extent_viewable_by_trans_sync(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
   virtual get_child_iertr::future<> maybe_wait_accessible(
     Transaction &, CachedExtent&) = 0;
   virtual CachedExtentRef peek_extent_viewable_by_trans(
@@ -333,12 +336,25 @@ public:
     btreenode_pos_t pos,
     node_key_t key)
   {
+    auto &me = down_cast();
     assert(children.capacity());
     assert(key == down_cast().iter_idx(pos).get_key());
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
-    assert(is_valid_child_ptr(child));
-    return static_cast<ChildT*>(child);
+    if (is_valid_child_ptr(child)) {
+      auto ret = etvr.get_extent_viewable_by_trans_sync(
+        t, static_cast<ChildT*>(child));
+      return ret->template cast<ChildT>();
+    } else {
+      assert(me.is_pending());
+      auto &sparent = me.get_stable_for_key(key);
+      auto spos = sparent.lower_bound(key).get_offset();
+      child = sparent.children[spos];
+      assert(is_valid_child_ptr(child));
+      auto ret = etvr.get_extent_viewable_by_trans_sync(
+        t, static_cast<ChildT*>(child));
+      return ret->template cast<ChildT>();
+    }
   }
 
   template <typename ChildT>
