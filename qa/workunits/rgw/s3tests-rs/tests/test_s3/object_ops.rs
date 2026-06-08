@@ -1949,7 +1949,6 @@ async fn test_object_checksum_crc64nvme() {
     assert_s3_err!(result, 400, "BadDigest");
 }
 
-#[ignore = "VERIFY: RGW returns 403 on GetObjectAttributes via Rust SDK (passes in Python)"]
 #[tokio::test]
 async fn test_get_object_attributes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1968,15 +1967,16 @@ async fn test_get_object_attributes() {
     let etag = put_resp.e_tag().unwrap().trim_matches('"').to_string();
     assert!(!etag.is_empty());
 
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
     let response = client
         .get_object_attributes()
         .bucket(&bucket_name)
         .key(key)
         .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::Checksum)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectParts)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::StorageClass)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectSize)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
         .send()
         .await
         .unwrap();
@@ -2379,7 +2379,6 @@ async fn test_atomic_dual_write_8mb() {
 
 // --- Object attributes tests ---
 
-#[ignore = "RGW returns 403 AccessDenied on GetObjectAttributes with checksum — likely SDK signing issue"]
 #[tokio::test]
 async fn test_get_checksum_object_attributes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2404,15 +2403,16 @@ async fn test_get_checksum_object_attributes() {
     let etag = put_resp.e_tag().unwrap().trim_matches('"').to_string();
     assert!(!etag.is_empty());
 
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
     let resp = client
         .get_object_attributes()
         .bucket(&bucket)
         .key(key)
         .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::Checksum)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectParts)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::StorageClass)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectSize)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
         .send()
         .await
         .unwrap();
@@ -2424,7 +2424,6 @@ async fn test_get_checksum_object_attributes() {
     assert!(resp.object_parts().is_none());
 }
 
-#[ignore = "RGW returns 403 AccessDenied on GetObjectAttributes — likely SDK signing issue"]
 #[tokio::test]
 async fn test_get_versioned_object_attributes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2445,15 +2444,16 @@ async fn test_get_versioned_object_attributes() {
     let version = put_resp.version_id().unwrap().to_string();
     assert!(!version.is_empty());
 
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
     let resp = client
         .get_object_attributes()
         .bucket(&bucket)
         .key(key)
         .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::Checksum)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectParts)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::StorageClass)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectSize)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
         .send()
         .await
         .unwrap();
@@ -2469,14 +2469,17 @@ async fn test_get_versioned_object_attributes() {
     client.put_object().bucket(&bucket).key(key).body(ByteStream::from_static(b"foo")).send().await.unwrap();
 
     // ask for the original version
+    let attrs2 = "ETag,ObjectSize,StorageClass";
     let resp = client
         .get_object_attributes()
         .bucket(&bucket)
         .key(key)
         .version_id(&version)
         .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectSize)
-        .object_attributes(aws_sdk_s3::types::ObjectAttributes::StorageClass)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs2);
+        })
         .send()
         .await
         .unwrap();

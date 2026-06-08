@@ -1797,7 +1797,6 @@ async fn test_multipart_copy_versioned() {
     }
 }
 
-#[ignore = "RGW returns 403 AccessDenied on GetObjectAttributes — likely SDK signing issue"]
 #[tokio::test]
 async fn test_get_single_multipart_object_attributes() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1819,14 +1818,16 @@ async fn test_get_single_multipart_object_attributes() {
     let etag = complete_resp.e_tag().unwrap().trim_matches('"').to_string();
     assert!(!etag.is_empty());
 
+    let attrs = "ETag,ObjectParts,StorageClass,ObjectSize";
     let resp = client
         .get_object_attributes()
         .bucket(&bucket)
         .key(key)
         .object_attributes(ObjectAttributes::Etag)
-        .object_attributes(ObjectAttributes::ObjectParts)
-        .object_attributes(ObjectAttributes::StorageClass)
-        .object_attributes(ObjectAttributes::ObjectSize)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
         .send()
         .await
         .unwrap();
@@ -1840,4 +1841,146 @@ async fn test_get_single_multipart_object_attributes() {
     let part = &obj_parts.parts()[0];
     assert_eq!(part.part_number(), Some(1));
     assert_eq!(part.size(), Some(part_size as i64));
+}
+
+#[tokio::test]
+async fn test_get_multipart_object_attributes() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "multipart";
+    let part_size = 5 * 1024 * 1024;
+    let objlen = 30 * 1024 * 1024;
+    let nparts = objlen / part_size;
+
+    let result = multipart_upload(&client, &bucket, key, objlen, Some(part_size), None, None, None).await;
+    let complete_resp = client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&result.upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(result.parts)).build())
+        .send()
+        .await
+        .unwrap();
+    let etag = complete_resp.e_tag().unwrap().trim_matches('"').to_string();
+    assert!(!etag.is_empty());
+
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+    let resp = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(ObjectAttributes::Etag)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.object_size(), Some(objlen as i64));
+    assert_eq!(resp.e_tag().unwrap(), &etag);
+    assert_eq!(*resp.storage_class().unwrap(), aws_sdk_s3::types::StorageClass::Standard);
+
+    let obj_parts = resp.object_parts().unwrap();
+    assert_eq!(obj_parts.total_parts_count(), Some(nparts as i32));
+    assert_eq!(obj_parts.is_truncated(), Some(false));
+    assert_eq!(obj_parts.parts().len(), nparts);
+
+    for (i, part) in obj_parts.parts().iter().enumerate() {
+        assert_eq!(part.part_number(), Some((i + 1) as i32));
+        assert_eq!(part.size(), Some(part_size as i64));
+        assert!(part.checksum_sha256().is_none());
+    }
+}
+
+#[tokio::test]
+async fn test_get_paginated_multipart_object_attributes() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "multipart";
+    let part_size = 5 * 1024 * 1024;
+    let objlen = 30 * 1024 * 1024;
+    let nparts = objlen / part_size;
+
+    let result = multipart_upload(&client, &bucket, key, objlen, Some(part_size), None, None, None).await;
+    let complete_resp = client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&result.upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(result.parts)).build())
+        .send()
+        .await
+        .unwrap();
+    let etag = complete_resp.e_tag().unwrap().trim_matches('"').to_string();
+    assert!(!etag.is_empty());
+
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+    let resp = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(ObjectAttributes::Etag)
+        .max_parts(1)
+        .part_number_marker("3")
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.object_size(), Some(objlen as i64));
+    assert_eq!(resp.e_tag().unwrap(), &etag);
+    assert_eq!(*resp.storage_class().unwrap(), aws_sdk_s3::types::StorageClass::Standard);
+
+    let obj_parts = resp.object_parts().unwrap();
+    assert_eq!(obj_parts.total_parts_count(), Some(nparts as i32));
+    assert_eq!(obj_parts.max_parts(), Some(1));
+    assert_eq!(obj_parts.part_number_marker(), Some("3"));
+    assert_eq!(obj_parts.is_truncated(), Some(true));
+    assert_eq!(obj_parts.next_part_number_marker(), Some("4"));
+    assert_eq!(obj_parts.parts().len(), 1);
+    let part = &obj_parts.parts()[0];
+    assert_eq!(part.part_number(), Some(4));
+    assert_eq!(part.size(), Some(part_size as i64));
+    assert!(part.checksum_sha256().is_none());
+
+    let attrs2 = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+    let resp2 = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(ObjectAttributes::Etag)
+        .max_parts(10)
+        .part_number_marker("4")
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs2);
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp2.object_size(), Some(objlen as i64));
+    assert_eq!(resp2.e_tag().unwrap(), &etag);
+    assert_eq!(*resp2.storage_class().unwrap(), aws_sdk_s3::types::StorageClass::Standard);
+
+    let obj_parts2 = resp2.object_parts().unwrap();
+    assert_eq!(obj_parts2.total_parts_count(), Some(nparts as i32));
+    assert_eq!(obj_parts2.max_parts(), Some(10));
+    assert_eq!(obj_parts2.is_truncated(), Some(false));
+    assert_eq!(obj_parts2.part_number_marker(), Some("4"));
+    assert_eq!(obj_parts2.parts().len(), 2);
+
+    for (i, part) in obj_parts2.parts().iter().enumerate() {
+        assert_eq!(part.part_number(), Some((5 + i) as i32));
+        assert_eq!(part.size(), Some(part_size as i64));
+        assert!(part.checksum_sha256().is_none());
+    }
 }
