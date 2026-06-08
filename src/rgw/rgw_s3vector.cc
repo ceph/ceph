@@ -70,6 +70,7 @@ namespace rgw::s3vector {
       case LANCEDB_LANCE:
       case LANCEDB_HTTP:
       case LANCEDB_OTHER:
+      case LANCEDB_NAMESPACE:
       case LANCEDB_UNKNOWN:
         return -EIO;
     }
@@ -1961,19 +1962,37 @@ namespace rgw::s3vector {
     }
     LanceDBTable* table = table_handle.table;
     LanceDBConnection* conn = table_handle.conn_handle.conn;
-    // build where filter for keys
-    std::ostringstream oss;
-    const auto keys_size = configuration.keys.size();
-    for (size_t i = 0; i < keys_size; ++i) {
-      oss << "key = \"" << configuration.keys[i] << "\"";
-      if (i < keys_size - 1) {
-        oss << " OR ";
+    // build datafusion expression: key IN ("k1", "k2", ...)
+    std::vector<LanceDBExpr*> key_exprs(configuration.keys.size());
+    for (size_t i = 0; i < configuration.keys.size(); ++i) {
+      key_exprs[i] = lancedb_expr_literal_string(configuration.keys[i].c_str());
+      if (!key_exprs[i]) {
+        for (size_t j = 0; j < i; ++j) {
+          lancedb_expr_free(key_exprs[j]);
+        }
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create literal expression for key: " << configuration.keys[i] << dendl;
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+        return -EINVAL;
       }
     }
-    char* error_message;
-    LanceDBError result = lancedb_table_delete(table, oss.str().c_str(), &error_message);
+    char* error_message = nullptr;
+    LanceDBExpr* in_expr = lancedb_expr_in_list(
+        lancedb_expr_column(key_field),
+        key_exprs.data(),
+        key_exprs.size(),
+        false,
+        &error_message);
+    if (!in_expr) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to build delete expression for index: " << configuration.index_name << ". error: " << error_message << dendl;
+      lancedb_free_string(error_message);
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return -EINVAL;
+    }
+    LanceDBError result = lancedb_table_df_delete(table, in_expr, &error_message);
     if (result != LANCEDB_SUCCESS) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set select columns for query on index: " << configuration.index_name << ". error: " << error_message << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to delete vectors from index: " << configuration.index_name << ". error: " << error_message << dendl;
       lancedb_free_string(error_message);
     }
     lancedb_table_free(table);
