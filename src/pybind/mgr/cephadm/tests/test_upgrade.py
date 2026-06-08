@@ -982,6 +982,32 @@ def test_complete_mds_upgrade_rejoins_nothing_when_upgrade_failed_no_fs(
     assert rejoined == []
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_scales_up_only_finished_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=false, filesystems are scaled down to max_mds 1 during the
+    # upgrade (recorded in fs_original_max_mds by fscid). When completion is
+    # invoked for a single finished filesystem (fs_names given), only that
+    # filesystem must be scaled back up; the other entries must be retained
+    # for later restoration.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=False,
+        fs_original_max_mds={1: 2, 2: 2})
+
+    cephadm_module.upgrade._complete_mds_upgrade(fs_names=['cephfs'])
+
+    scaled = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs set'
+              and c.args[0].get('var') == 'max_mds']
+    assert scaled == ['cephfs']
+    # cephfs2 (fscid 2) is still being upgraded: its entry must remain
+    assert cephadm_module.upgrade.upgrade_state.fs_original_max_mds == {2: 2}
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
@@ -1363,3 +1389,67 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+def _mds_need_upgrade_entries(*service_names):
+    # Build (DaemonDescription, bool) entries like _detect_need_upgrade returns,
+    # one MDS per given service name (service_name is 'mds.<fs>').
+    entries = []
+    for i, svc in enumerate(service_names):
+        fs = svc[len('mds.'):]
+        entries.append(
+            (DaemonDescription(daemon_type='mds',
+                               daemon_id=f'{fs}.host{i}.aaaaa',
+                               service_name=svc), False))
+    return entries
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_picks_single_fs(
+        cephadm_module: CephadmOrchestrator):
+    # MDS from three filesystems -> only one filesystem's MDS are kept.
+    need_upgrade = _mds_need_upgrade_entries(
+        'mds.cephfs2', 'mds.cephfs', 'mds.cephfs', 'mds.cephfs3')
+    restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
+    fs_names = {d.service_name() for d, _ in restricted}
+    assert fs_names == {'mds.cephfs'}, fs_names
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_is_deterministic(
+        cephadm_module: CephadmOrchestrator):
+    # Selection is the lowest (sorted) service name, regardless of input order.
+    a = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(
+        _mds_need_upgrade_entries('mds.b', 'mds.a', 'mds.c'))
+    b = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(
+        _mds_need_upgrade_entries('mds.c', 'mds.b', 'mds.a'))
+    assert {d.service_name() for d, _ in a} == {'mds.a'}
+    assert {d.service_name() for d, _ in b} == {'mds.a'}
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_sequences_across_passes(
+        cephadm_module: CephadmOrchestrator):
+    # Simulate successive serve() passes: once a filesystem's MDS are upgraded
+    # they drop out of need_upgrade and the next filesystem is selected.
+    selected = []
+    remaining = ['mds.cephfs', 'mds.cephfs2', 'mds.cephfs3']
+    # one MDS per fs for simplicity
+    while remaining:
+        entries = _mds_need_upgrade_entries(*remaining)
+        restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(entries)
+        fs_names = {d.service_name() for d, _ in restricted}
+        assert len(fs_names) == 1
+        picked = fs_names.pop()
+        selected.append(picked)
+        remaining.remove(picked)
+    assert selected == ['mds.cephfs', 'mds.cephfs2', 'mds.cephfs3']
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_handles_multi_part_fs_names(
+        cephadm_module: CephadmOrchestrator):
+    # Filesystem names may themselves contain dots (service 'mds.my.fs');
+    # everything after the 'mds.' prefix is the filesystem grouping key.
+    need_upgrade = _mds_need_upgrade_entries('mds.my.fs', 'mds.my.fs', 'mds.other')
+    restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
+    fs_names = {d.service_name() for d, _ in restricted}
+    # 'mds.my.fs' sorts before 'mds.other'
+    assert fs_names == {'mds.my.fs'}, fs_names
+    assert len(restricted) == 2
