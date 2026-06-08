@@ -54,6 +54,9 @@ void ClientRequest::Orderer::clear_and_cancel(PG &pg)
 
 void ClientRequest::complete_request(PG &pg)
 {
+  if (completed)
+    return;
+  completed = true;
   track_event<CompletionEvent>();
   pg.client_request_orderer.remove_request(*this);
   on_complete.set_value();

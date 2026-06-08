@@ -40,6 +40,7 @@ class ClientRequest final
   seastar::promise<> on_complete;
   unsigned instance_id = 0;
   std::chrono::time_point<std::chrono::steady_clock> begin_time;
+  bool completed = false;
 
 public:
   epoch_t get_epoch_sent_at() const {
