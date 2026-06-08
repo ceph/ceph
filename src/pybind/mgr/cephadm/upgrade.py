@@ -1155,6 +1155,28 @@ class CephadmUpgrade:
                 image_settings[opt['section']] = opt['value']
         return image_settings
 
+    def _restrict_mds_need_upgrade_to_one_fs(
+        self,
+        need_upgrade: List[Tuple[DaemonDescription, bool]]
+    ) -> List[Tuple[DaemonDescription, bool]]:
+        # Keep only the MDS daemons of a single filesystem (lowest service name)
+        # so we disrupt one filesystem at a time. _do_upgrade is re-entered each
+        # serve() cycle, so later filesystems are handled on subsequent passes.
+        by_fs: Dict[str, List[Tuple[DaemonDescription, bool]]] = {}
+        passthrough: List[Tuple[DaemonDescription, bool]] = []
+        for d_entry in need_upgrade:
+            svc = d_entry[0].service_name()
+            if svc and svc.startswith('mds.'):
+                by_fs.setdefault(svc.removeprefix('mds.'), []).append(d_entry)
+            else:
+                passthrough.append(d_entry)
+        if not by_fs:
+            return need_upgrade
+        first_fs = sorted(by_fs.keys())[0]
+        logger.info('Upgrade: handling MDS of filesystem %s this pass '
+                    '(one filesystem at a time)' % first_fs)
+        return by_fs[first_fs] + passthrough
+
     def _prepare_for_mds_upgrade(
         self,
         target_major: str,
@@ -1665,18 +1687,24 @@ class CephadmUpgrade:
                 else:
                     raise
 
-    def _complete_mds_upgrade(self) -> None:
+    def _complete_mds_upgrade(self, fs_names: Optional[List[str]] = None) -> None:
         assert self.upgrade_state is not None
         if self.upgrade_state.fail_fs:
             # Only re-join filesystems that THIS upgrade failed, leaving any
             # filesystem an admin set NOT_JOINABLE for other reasons untouched.
             # When the list is empty (e.g. _complete_mds_upgrade re-invoked
             # during final cleanup) there is nothing to do and nothing to save.
+            # If fs_names is given, restore only those filesystems (used to
+            # re-join one filesystem at a time); if None, restore all of them.
             failed = self.upgrade_state.fs_failed_for_upgrade or []
-            if failed:
+            if fs_names is None:
+                to_rejoin = list(failed)
+            else:
+                to_rejoin = [fs for fs in failed if fs in fs_names]
+            if to_rejoin:
                 for fs in self.mgr.get("fs_map")['filesystems']:
                     fs_name = fs['mdsmap']['fs_name']
-                    if fs_name not in failed:
+                    if fs_name not in to_rejoin:
                         continue
                     self.mgr.log.info('Upgrade: Setting filesystem '
                                       f'{fs_name} Joinable')
@@ -1693,7 +1721,8 @@ class CephadmUpgrade:
                         raise OrchestratorError("Failed to set"
                                                 "fs joinable true"
                                                 f"due to {e}")
-                self.upgrade_state.fs_failed_for_upgrade = []
+                self.upgrade_state.fs_failed_for_upgrade = [
+                    fs for fs in failed if fs not in to_rejoin]
                 self._save_upgrade_state()
         elif self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
@@ -1911,6 +1940,27 @@ class CephadmUpgrade:
                 # only after the mgr itself is upgraded can we expect daemons to have
                 # deployed_by == target_digests
                 need_upgrade += need_upgrade_deployer
+
+            # Disrupt one filesystem at a time.
+            if daemon_type == 'mds' and need_upgrade and \
+                    self.mgr.upgrade_fs_one_at_a_time:
+                # Re-join any filesystem we already finished upgrading before
+                # failing the next one, so at most one filesystem is disrupted
+                # at a time. A filesystem is finished when this upgrade failed it
+                # but it no longer has an MDS in need_upgrade.
+                still_upgrading = {
+                    d_entry[0].service_name().removeprefix('mds.')
+                    for d_entry in need_upgrade
+                    if d_entry[0].service_name()
+                    and d_entry[0].service_name().startswith('mds.')
+                }
+                finished_fs = [
+                    fs for fs in (self.upgrade_state.fs_failed_for_upgrade or [])
+                    if fs not in still_upgrading
+                ]
+                if finished_fs:
+                    self._complete_mds_upgrade(fs_names=finished_fs)
+                need_upgrade = self._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
 
             # prepare filesystems for daemon upgrades?
             if (
