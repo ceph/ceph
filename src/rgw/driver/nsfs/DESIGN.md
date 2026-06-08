@@ -33,9 +33,19 @@ a regular file, a subsequent PUT of `foo/bar/xyzzy` fails with
 Other filesystem-backed drivers (e.g. posixdriver) avoid this by
 flattening key paths.  Filesystems with richer namespace semantics
 (resource forks, alternate data streams) could also sidestep this, but
-the standard POSIX API does not expose such mechanisms.  The noobaa
-nsfs implementation has the same constraint.  S3 tests that exercise
-overlapping key prefixes are tagged `fails_on_nsfs`.
+the standard POSIX API does not expose such mechanisms.
+
+The noobaa nsfs implementation has the same constraint.  Their
+`_create_path()` (native_fs_utils.js) does `mkdir` on each path
+component and catches `EEXIST`/`EISDIR`, but lets `ENOTDIR`
+propagate.  `translate_error_codes` maps `ENOTDIR` to
+`NO_SUCH_OBJECT` (S3 404) — misleading, since the conflict is
+structural, not a missing object.  Noobaa's `.folder` sentinel
+mechanism is unrelated: it handles directory objects (keys ending
+in `/`), not file-as-prefix conflicts.
+
+S3 tests that exercise overlapping key prefixes are tagged
+`fails_on_nsfs` and skipped via `--features fails_on_nsfs`.
 
 ## xattr Scheme
 
