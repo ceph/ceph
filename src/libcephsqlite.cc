@@ -73,6 +73,7 @@ enum {
   P_OP_ACCESS,
   P_OP_FULLPATHNAME,
   P_OP_CURRENTTIME,
+  P_OP_SLEEP,
   P_OPF_CLOSE,
   P_OPF_READ,
   P_OPF_WRITE,
@@ -114,6 +115,7 @@ struct cephsqlite_appdata {
     plb.add_time_avg(P_OP_ACCESS, "op_access", "Time average of Access operations");
     plb.add_time_avg(P_OP_FULLPATHNAME, "op_fullpathname", "Time average of FullPathname operations");
     plb.add_time_avg(P_OP_CURRENTTIME, "op_currenttime", "Time average of Currenttime operations");
+    plb.add_time_avg(P_OP_SLEEP, "op_sleep", "Time average of Sleep operations");
     plb.add_time_avg(P_OPF_CLOSE, "opf_close", "Time average of Close file operations");
     plb.add_time_avg(P_OPF_READ, "opf_read", "Time average of Read file operations");
     plb.add_time_avg(P_OPF_WRITE, "opf_write", "Time average of Write file operations");
@@ -832,6 +834,19 @@ static int CurrentTime(sqlite3_vfs* vfs, sqlite3_int64* time)
   return SQLITE_OK;
 }
 
+static int Sleep(sqlite3_vfs* vfs, int microseconds)
+{
+  auto start = ceph::coarse_mono_clock::now();
+  auto [cct, cluster] = getdata(vfs).get_cluster();
+  dv(5) << microseconds << dendl;
+
+  std::this_thread::sleep_for(std::chrono::microseconds(microseconds));
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_SLEEP, end-start);
+  return SQLITE_OK;
+}
+
 LIBCEPHSQLITE_API int cephsqlite_setcct(CephContext* _cct, char** ident)
 {
   ldout(_cct, 1) << "cct: " << _cct << dendl;
@@ -972,6 +987,7 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
     vfs->xOpen = Open;
     vfs->xDelete = Delete;
     vfs->xAccess = Access;
+    vfs->xSleep = Sleep;
     vfs->xFullPathname = FullPathname;
     vfs->xCurrentTimeInt64 = CurrentTime;
     if (int rc = sqlite3_vfs_register(vfs, 0); rc) {
