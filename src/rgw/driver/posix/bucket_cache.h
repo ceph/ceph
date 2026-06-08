@@ -14,6 +14,7 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include <filesystem>
+#include <boost/container/flat_map.hpp>
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
 #include "common/cohort_lru.h"
@@ -77,13 +78,8 @@ public:
 
   virtual ~BucketCacheEntry()
   {
-    /* XXX depends on safe_link -- but I think on balance, built-in safe_link
-     * is preferable to a custom mechanism with likely the same cost */
     if (name_hook.is_linked()) {
       bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
-    }
-    if (env) {
-      mdb_dbi_close(*env, dbi);
     }
   }
 
@@ -180,9 +176,6 @@ public:
 	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
 	}
 
-	/* close the database handle; stale data (if any) is dropped
-	 * by fill() when the bucket name is next accessed */
-	mdb_dbi_close(*env, dbi);
 	env.reset();
       } /* ! deleted */
     }
@@ -222,20 +215,26 @@ struct BucketCache : public Notifiable
    * environments, selected by a hash of the bucket name; a bucket's database
    * is dropped/cleared whenever its entry is reclaimed from cache; the entire
    * complex is cleared on restart to preserve consistency */
+  static constexpr MDB_dbi lmdb_max_dbs = 4096;
+
   class Lmdbs
   {
     std::string database_root;
     uint8_t lmdb_count;
-    std::vector<std::shared_ptr<LMDBSafe::MDBEnv>> envs;
+
+    struct Partition {
+      std::shared_ptr<LMDBSafe::MDBEnv> env;
+      boost::container::flat_map<std::string, LMDBSafe::MDBDbi> dbi_map;
+      std::mutex mtx;
+    };
+    std::vector<Partition> parts;
     sf::path dbp;
 
   public:
     Lmdbs(std::string& database_root, uint8_t lmdb_count)
       : database_root(database_root), lmdb_count(lmdb_count),
-        dbp(database_root) {
+        parts(lmdb_count), dbp(database_root) {
 
-      /* create a root for lmdb directory partitions (if it doesn't
-       * exist already) */
       sf::path safe_root_path{dbp / fmt::format("rgw_posix_lmdbs")};
       sf::create_directory(safe_root_path);
 
@@ -248,17 +247,72 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
-	auto env = LMDBSafe::getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
-	envs.push_back(env);
+	parts[ix].env = LMDBSafe::getMDBEnv(
+	  env_path.string().c_str(), 0, 0600, lmdb_max_dbs);
       }
     }
 
+    uint8_t partition_ix(BucketCacheEntry<D, B>* bucket) {
+      return bucket->hk % lmdb_count;
+    }
+
     inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
-      return envs[(bucket->hk % lmdb_count)];
+      return parts[partition_ix(bucket)].env;
     }
 
     inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
       return *(get_sp_env(bucket));
+    }
+
+    /* look up or create a dbi for the given bucket name in its
+     * partition; if all dbi slots are exhausted, evict the LRU
+     * entry from the dbi map via mdb_drop(del=1) */
+    std::optional<LMDBSafe::MDBDbi> get_dbi(
+      BucketCacheEntry<D, B>* bucket,
+      std::function<LMDBSafe::MDBDbi()> open_fn)
+    {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+
+      auto it = part.dbi_map.find(bucket->name);
+      if (it != part.dbi_map.end()) {
+        return it->second;
+      }
+
+      try {
+        auto dbi = open_fn();
+        part.dbi_map.emplace(bucket->name, dbi);
+        return dbi;
+      } catch (const LMDBSafe::LMDBError&) {
+        /* MDB_DBS_FULL — evict the oldest entry to free a slot */
+        if (part.dbi_map.empty()) {
+          return std::nullopt;
+        }
+        auto victim = part.dbi_map.begin();
+        try {
+          auto txn = part.env->getRWTransaction();
+          txn->drop(victim->second);
+          txn->commit();
+        } catch (const LMDBSafe::LMDBError&) {
+          return std::nullopt;
+        }
+        part.dbi_map.erase(victim);
+
+        try {
+          auto dbi = open_fn();
+          part.dbi_map.emplace(bucket->name, dbi);
+          return dbi;
+        } catch (const LMDBSafe::LMDBError&) {
+          return std::nullopt;
+        }
+      }
+    }
+
+    /* remove a dbi from the map (called when a bucket is deleted) */
+    void remove_dbi(BucketCacheEntry<D, B>* bucket) {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+      part.dbi_map.erase(bucket->name);
     }
 
     const std::string& get_root() const { return database_root; }
@@ -362,16 +416,17 @@ public:
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
 	  auto& env = lmdbs.get_sp_env(b);
 	  auto cmp = B::lmdb_cmp();
-	  try {
-	    auto dbi = cmp
+	  auto dbi_opt = lmdbs.get_dbi(b, [&]() {
+	    return cmp
 	      ? env->openDB(b->name, MDB_CREATE, cmp)
 	      : env->openDB(b->name, MDB_CREATE);
-	    b->set_env(env, dbi);
-	  } catch (const LMDBSafe::LMDBError& e) {
+	  });
+	  if (!dbi_opt) {
 	    b->mtx.unlock();
 	    lat.lock->unlock();
 	    return result;
 	  }
+	  b->set_env(env, *dbi_opt);
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
 	    /* inserts at cached insert iterator, releasing latch */
