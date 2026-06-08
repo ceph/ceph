@@ -1811,6 +1811,11 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
 }
 
 void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {
+  // Return early if null context is provided to prevent segfault
+  if (modules_start_complete == nullptr) {
+    return;
+  }
+  
   std::lock_guard l(lock);
   if (pending_modules.empty()) {
     // Modules are already done starting, signal completion right away
