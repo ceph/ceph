@@ -211,6 +211,10 @@ struct ImageReplayer<I>::ReplayerListener
   void handle_notification() override {
     image_replayer->handle_replayer_notification();
   }
+
+  std::vector<std::string> get_peer_uuids() const override {
+    return image_replayer->get_peer_uuids();
+  }
 };
 
 template <typename I>

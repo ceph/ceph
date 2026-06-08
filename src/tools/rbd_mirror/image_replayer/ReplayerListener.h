@@ -12,6 +12,8 @@ struct ReplayerListener {
   virtual ~ReplayerListener() {}
 
   virtual void handle_notification() = 0;
+
+  virtual std::vector<std::string> get_peer_uuids() const = 0;
 };
 
 } // namespace image_replayer
