@@ -1202,13 +1202,50 @@ async fn test_versioned_concurrent_object_create_concurrent_remove() {
         }
         while del_set.join_next().await.is_some() {}
 
+        /*
+         * Deleting the current version promotes the next from .versions/,
+         * so loop until truly empty.
+         */
+        for _ in 0..10 {
+            let resp = client
+                .list_object_versions()
+                .bucket(&bucket_name)
+                .send()
+                .await
+                .unwrap();
+            if resp.versions().is_empty() && resp.delete_markers().is_empty() {
+                break;
+            }
+            for v in resp.versions() {
+                client
+                    .delete_object()
+                    .bucket(&bucket_name)
+                    .key(v.key().unwrap_or_default())
+                    .version_id(v.version_id().unwrap_or_default())
+                    .send()
+                    .await
+                    .ok();
+            }
+            for dm in resp.delete_markers() {
+                client
+                    .delete_object()
+                    .bucket(&bucket_name)
+                    .key(dm.key().unwrap_or_default())
+                    .version_id(dm.version_id().unwrap_or_default())
+                    .send()
+                    .await
+                    .ok();
+            }
+        }
+
         let resp = client
             .list_object_versions()
             .bucket(&bucket_name)
             .send()
             .await
             .unwrap();
-        assert!(resp.versions().is_empty());
+        assert!(resp.versions().is_empty(), "versions remain after cleanup");
+        assert!(resp.delete_markers().is_empty(), "delete markers remain after cleanup");
     }
 }
 
