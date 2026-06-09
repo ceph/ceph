@@ -357,6 +357,7 @@ public:
     Transaction &t,
     std::vector<CachedExtentRef> &extents,
     rewrite_gen_t target_generation,
+    placement_hint_t hint,
     sea_time_point modify_time) = 0;
 
   /**
