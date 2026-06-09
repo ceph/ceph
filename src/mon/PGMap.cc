@@ -331,13 +331,15 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
 
   ostringstream ss_rec_io;
   overall_recovery_rate_summary(f, &ss_rec_io);
+  ostringstream ss_mig_io;
+  overall_migration_rate_summary(f, &ss_mig_io);
   ostringstream ss_client_io;
   overall_client_io_rate_summary(f, &ss_client_io);
   ostringstream ss_cache_io;
   overall_cache_io_rate_summary(f, &ss_cache_io);
 
   if (!f && (ss_client_io.str().length() || ss_rec_io.str().length()
-             || ss_cache_io.str().length())) {
+             || ss_mig_io.str().length() || ss_cache_io.str().length())) {
     *out << "\n \n";
     *out << "  io:\n";
   }
@@ -346,6 +348,8 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     *out << "    client:   " << ss_client_io.str() << "\n";
   if (!f && ss_rec_io.str().length())
     *out << "    recovery: " << ss_rec_io.str() << "\n";
+  if (!f && ss_mig_io.str().length())
+    *out << "    migration: " << ss_mig_io.str() << "\n";
   if (!f && ss_cache_io.str().length())
     *out << "    cache:    " << ss_cache_io.str() << "\n";
 }
@@ -428,6 +432,11 @@ void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
   overall_recovery_rate_summary(f, &ssr);
   if (out && ssr.str().length())
     *out << "; " << ssr.str() << " recovering";
+
+  std::stringstream ssm;
+  overall_migration_rate_summary(f, &ssm);
+  if (out && ssm.str().length())
+    *out << "; " << ssm.str() << " migrating";
 }
 
 void PGMapDigest::get_recovery_stats(
@@ -574,6 +583,49 @@ void PGMapDigest::pool_recovery_summary(ceph::Formatter *f, list<string> *psl,
     return;
 
   recovery_summary(f, psl, p->second);
+}
+
+void PGMapDigest::migration_rate_summary(ceph::Formatter *f,
+                                         ostream *out,
+                                         const pool_stat_t& delta_sum,
+                                         utime_t delta_stamp) const
+{
+  // make non-negative; we can get negative values if osds send
+  // uncommitted stats and then "go backward" or if they are just
+  // buggy/wrong.
+  pool_stat_t pos_delta = delta_sum;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_objects_migrated ||
+      pos_delta.stats.sum.num_bytes_migrated) {
+    int64_t objps = pos_delta.stats.sum.num_objects_migrated / (double)delta_stamp;
+    int64_t bps = pos_delta.stats.sum.num_bytes_migrated / (double)delta_stamp;
+    if (f) {
+      f->dump_int("migrating_objects_per_sec", objps);
+      f->dump_int("migrating_bytes_per_sec", bps);
+      f->dump_int("num_objects_migrated", pos_delta.stats.sum.num_objects_migrated);
+      f->dump_int("num_bytes_migrated", pos_delta.stats.sum.num_bytes_migrated);
+    } else {
+      *out << byte_u_t(bps) << "/s";
+      *out << ", " << si_u_t(objps) << " objects/s";
+    }
+  }
+}
+
+void PGMapDigest::overall_migration_rate_summary(ceph::Formatter *f, ostream *out) const
+{
+  migration_rate_summary(f, out, pg_sum_delta, stamp_delta);
+}
+
+void PGMapDigest::pool_migration_rate_summary(ceph::Formatter *f, ostream *out,
+                                       uint64_t poolid) const
+{
+  auto p = per_pool_sum_delta.find(poolid);
+  if (p == per_pool_sum_delta.end())
+    return;
+
+  auto ts = per_pool_sum_deltas_stamps.find(p->first);
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
+  migration_rate_summary(f, out, p->second.first, ts->second);
 }
 
 void PGMapDigest::client_io_rate_summary(ceph::Formatter *f, ostream *out,
