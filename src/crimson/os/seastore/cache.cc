@@ -534,6 +534,26 @@ void Cache::register_metrics(store_index_t store_index)
 
   pinboard->register_metrics(store_index);
 
+  for (auto& [ext, ext_label] : labels_by_ext) {
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "pinboard_hit",
+          get_by_ext(pinboard->hits_by_ext, ext),
+          sm::description("extents found already in pinboard when touched, by type"),
+          {ext_label}
+        ),
+        sm::make_counter(
+          "pinboard_miss",
+          get_by_ext(pinboard->misses_by_ext, ext),
+          sm::description("extents not in pinboard when touched (newly added), by type"),
+          {ext_label}
+        ),
+      }
+    );
+  }
+
   /**
    * tree stats
    */
