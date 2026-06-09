@@ -51,8 +51,7 @@ testing, or development.
 Replacing ``ceph-disk``
 -----------------------
 The ``ceph-disk`` tool was created at a time when the project was required to
-support many different types of init systems (upstart, sysvinit, etc.) while
-being able to discover devices. This caused the tool to concentrate initially
+support multiple init systems while being able to discover devices. This caused the tool to concentrate initially
 (and exclusively afterwards) on GPT partitions. Specifically on GPT GUIDs,
 which were used to label devices in a unique way to answer questions like:
 
