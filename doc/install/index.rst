@@ -12,7 +12,6 @@ Recommended methods
 :ref:`Cephadm <cephadm_deploying_new_cluster>` is a tool that can be used to
 install and manage a Ceph cluster.
 
-* cephadm supports only Octopus and newer releases.
 * cephadm is fully integrated with the orchestration API and fully supports the
   CLI and dashboard features that are used to manage cluster deployment.
 * cephadm requires container support (in the form of Podman or Docker) and
@@ -24,7 +23,6 @@ in Kubernetes, while also enabling management of storage resources and
 provisioning via Kubernetes APIs. We recommend Rook as the way to run Ceph in
 Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 
-* Rook supports only Nautilus and newer releases of Ceph.
 * Rook is the preferred method for running Ceph on Kubernetes, or for
   connecting a Kubernetes cluster to an existing (external) Ceph
   cluster.
@@ -33,15 +31,6 @@ Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 
 Other methods
 ~~~~~~~~~~~~~
-
-`ceph-ansible <https://docs.ceph.com/ceph-ansible/>`_ deploys and manages
-Ceph clusters using Ansible.
-
-* ceph-ansible is widely deployed.
-* ceph-ansible is not integrated with the orchestrator APIs that were
-  introduced in Nautilus and Octopus, which means that the management features
-  and dashboard integration introduced in Nautilus and Octopus are not
-  available in Ceph clusters deployed by means of ceph-ansible.
 
 `ceph-salt <https://github.com/ceph/ceph-salt>`_ installs Ceph using Salt and cephadm.
 
