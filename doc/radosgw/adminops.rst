@@ -1068,8 +1068,6 @@ generated key is added to the keyring without replacing an existing key pair.
 If ``access-key`` is specified and refers to an existing key owned by the user
 then it will be modified.
 
-.. versionadded:: Luminous
-
 A ``tenant`` may either be specified as a part of uid or as an additional
 request param.
 
@@ -1162,8 +1160,6 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 :Type: Boolean
 :Example: False [False]
 :Required: No
-
-.. versionadded:: Jewel
 
 ``tenant``
 

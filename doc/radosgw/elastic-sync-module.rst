@@ -4,8 +4,6 @@
 Elasticsearch Sync Module
 =========================
 
-.. versionadded:: Kraken
-
 .. note::
      As of 31 May 2020, only Elasticsearch 6 and lower are supported. Elasticsearch 7 is not supported.
 
@@ -87,8 +85,6 @@ sync initialization.
 
 End user metadata queries
 -------------------------
-
-.. versionadded:: Luminous
 
 Since the Elasticsearch cluster now stores object metadata, it is important that
 the Elasticsearch endpoint is not exposed to the public and only accessible to

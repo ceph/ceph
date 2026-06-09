@@ -4,8 +4,6 @@
 RGW Support for Multifactor Authentication
 ==========================================
 
-.. versionadded:: Mimic
-
 The S3 multifactor authentication (MFA) feature allows
 users to require the use of one-time password when removing
 objects on certain buckets. The buckets need to be configured
