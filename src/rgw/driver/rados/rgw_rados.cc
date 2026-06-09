@@ -3631,6 +3631,9 @@ done_cancel:
    */
   if (meta.if_match == NULL && meta.if_nomatch == NULL) {
     if (r == -ECANCELED || r == -ENOENT || r == -EEXIST) {
+      if (meta.mtime) {
+        *meta.mtime = meta.set_mtime;
+      }
       r = 0;
     }
   } else {
