@@ -90,10 +90,7 @@ public:
     uint64_t range_begin,
     uint64_t range_end,
     size_t max_count,
-    free_extent_vector_t* out) override
-  {
-    ceph_abort_msg("BtreeAllocator::get_free_extents not implemented");
-  }
+    free_extent_vector_t* out) override;
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
   void shutdown() override;
