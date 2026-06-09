@@ -15342,10 +15342,10 @@ struct C_Migrate : public Context {
     }
 
     // If quiescing, treat all completions as failures to drain the queue
-    if (pg->pool_migration_quiesce_reason != PrimaryLogPG::PoolMigrationQuiesceReason::NONE && r >= 0) {
+    if (pg->pool_migration_quiesce_reason != PrimaryLogPG::PoolMigrationQuiesceReason::NONE) {
       ldpp_dout(pg, 10) << "C_Migrate::finish quiescing mode (reason="
                         << (int)pg->pool_migration_quiesce_reason
-                        << "), treating success as failure for " << oid << dendl;
+                        << "), treating as failure for " << oid << dendl;
       r = -EIO;  // Treat as failure to trigger cleanup path
     }
 
@@ -15729,7 +15729,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
   // Only do this once - the first error sets the retry point
   if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED &&
       !pool_migration_quiesce_last_started_reset) {
-    last_pool_migration_started = oid;
+    last_pool_migration_started = pool_migration_watermark;
     pool_migration_quiesce_last_started_reset = true;
     dout(20) << __func__ << " reset last_pool_migration_started to " << oid
              << " for retry after quiesce" << dendl;
