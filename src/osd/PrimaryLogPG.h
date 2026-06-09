@@ -1997,7 +1997,7 @@ private:
   // return true if we're creating a local object, false for a
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
-  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
+  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout, bool pool_migration=false);
   int _rollback_to(OpContext *ctx, OSDOp& op);
   void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 				    OSDOp& op);

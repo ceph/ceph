@@ -2069,6 +2069,8 @@ struct object_stat_sum_t {
   int64_t num_objects_recovered{0};
   int64_t num_bytes_recovered{0};
   int64_t num_keys_recovered{0};
+  int64_t num_objects_migrated{0};
+  int64_t num_bytes_migrated{0};
   int64_t num_shallow_scrub_errors{0};
   int64_t num_deep_scrub_errors{0};
   int64_t num_objects_dirty{0};
@@ -2122,6 +2124,8 @@ struct object_stat_sum_t {
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
+    FLOOR(num_objects_migrated);
+    FLOOR(num_bytes_migrated);
     FLOOR(num_objects_dirty);
     FLOOR(num_whiteouts);
     FLOOR(num_objects_omap);
@@ -2185,6 +2189,8 @@ struct object_stat_sum_t {
     SPLIT(num_objects_recovered);
     SPLIT(num_bytes_recovered);
     SPLIT(num_keys_recovered);
+    SPLIT(num_objects_migrated);
+    SPLIT(num_bytes_migrated);
     SPLIT(num_objects_dirty);
     SPLIT(num_whiteouts);
     SPLIT(num_objects_omap);
@@ -2245,6 +2251,8 @@ struct object_stat_sum_t {
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
+        sizeof(num_objects_migrated) +
+        sizeof(num_bytes_migrated) +
         sizeof(num_shallow_scrub_errors) +
         sizeof(num_deep_scrub_errors) +
         sizeof(num_objects_dirty) +

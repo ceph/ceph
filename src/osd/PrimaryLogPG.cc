@@ -8583,7 +8583,8 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
 inline int PrimaryLogPG::_delete_oid(
   OpContext *ctx,
   bool no_whiteout,     // no whiteouts, no matter what.
-  bool try_no_whiteout) // try not to whiteout
+  bool try_no_whiteout, // try not to whiteout
+  bool pool_migration)  // pool migration delete (don't count as client I/O)
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -8629,7 +8630,10 @@ inline int PrimaryLogPG::_delete_oid(
   }
 
   ctx->clean_regions.mark_omap_dirty();
-  ctx->delta_stats.num_wr++;
+  // Only count as client I/O if not a pool migration
+  if (!pool_migration) {
+    ctx->delta_stats.num_wr++;
+  }
   if (soid.is_snap()) {
     ceph_assert(ctx->obc->ssc->snapset.clone_overlap.count(soid.snap));
     ctx->delta_stats.num_bytes -= ctx->obc->ssc->snapset.get_clone_bytes(soid.snap);
@@ -10555,8 +10559,11 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     obs.oi.size = cb->get_data_size();
     ctx->delta_stats.num_bytes += obs.oi.size;
   }
-  ctx->delta_stats.num_wr++;
-  ctx->delta_stats.num_wr_kb += shift_round_up(obs.oi.size, 10);
+
+  if (!cb->pool_migration) {
+    ctx->delta_stats.num_wr++;
+    ctx->delta_stats.num_wr_kb += shift_round_up(obs.oi.size, 10);
+  }
 
   osd->logger->inc(l_osd_copyfrom);
 }
@@ -15484,9 +15491,10 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   // Lock acquired successfully - remove from pending set
   pool_migration_source_delete_pending_lock.erase(oid);
 
+  uint64_t object_size = obc->obs.oi.size;
   epoch_t last_peering_reset = get_last_peering_reset();
   ctx->register_on_finish(
-            [this, oid, last_peering_reset]() {
+            [this, oid, last_peering_reset, object_size]() {
               dout(20) << __func__ << " pool migration finished migrating " << oid << dendl;
               // Only process if PG hasn't been reset since we started this operation
               if (last_peering_reset != get_last_peering_reset()) {
@@ -15497,6 +15505,8 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
               auto i = recovering.find(oid);
               ceph_assert(i != recovering.end());
               object_stat_sum_t stat_diff;
+              stat_diff.num_objects_migrated = 1;
+              stat_diff.num_bytes_migrated = object_size;
               new_pool_migration_interval_in_flight = false;
               on_global_recover(oid, stat_diff, false);
               while (!pool_migration_source_delete_pending_lock.empty()) {
@@ -15513,7 +15523,7 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
             });
   ctx->at_version = get_next_version();
   ceph_assert(ctx->new_obs.exists);
-  int ret = _delete_oid(ctx.get(), true, false);
+  int ret = _delete_oid(ctx.get(), true, false, true);
   ceph_assert(ret == 0);
   if (obc->obs.oi.is_omap()) {
     ctx->delta_stats.num_objects_omap--;
@@ -15577,7 +15587,7 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hob
       OpContextUPtr ctx = simple_opc_create(obc);
       ctx->at_version = get_next_version();
 
-      int ret = _delete_oid(ctx.get(), true, false);
+      int ret = _delete_oid(ctx.get(), true, false, true);
       ceph_assert(ret == 0);
       if (obc->obs.oi.is_omap()) {
         ctx->delta_stats.num_objects_omap--;
