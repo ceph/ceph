@@ -296,7 +296,7 @@ class FSSnapshotMirror:
         self.pool_policy = {}
         self.fs_map = self.mgr.get('fs_map')
         self.lock = threading.Lock()
-        self.sync_stat_cache = SyncStatCache()
+        self.sync_stat_cache = SyncStatCache(mgr)
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
 

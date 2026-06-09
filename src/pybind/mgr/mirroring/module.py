@@ -8,7 +8,15 @@ from .fs.snapshot_mirror import FSSnapshotMirror
 
 class Module(MgrModule):
     CLICommand = MirroringCLICommand
-    MODULE_OPTIONS: List[Option] = []
+    MODULE_OPTIONS: List[Option] = [
+        Option(
+            'snapshot_mirror_metrics_cache_ttl',
+            type='secs',
+            default=15,
+            desc='TTL for cached fs snapshot mirror status omap metrics',
+            runtime=True,
+        ),
+    ]
     NOTIFY_TYPES = [NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):

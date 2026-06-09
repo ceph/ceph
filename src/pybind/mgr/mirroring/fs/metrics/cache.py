@@ -4,7 +4,6 @@ from typing import Any, Dict
 from ..utils import norm_path
 from .format import format_and_order_sync_stat_for_display, format_peer_status_metrics
 
-CACHE_TTL_SECS = 15
 PARTIAL_CACHE_MAX = 32
 
 
@@ -40,8 +39,12 @@ def _metrics_for_peer(metrics, peer_uuid):
 
 
 class SyncStatCache:
-    def __init__(self):
+    def __init__(self, mgr):
+        self.mgr = mgr
         self._caches = {}
+
+    def _cache_ttl_secs(self):
+        return self.mgr.get_module_option('snapshot_mirror_metrics_cache_ttl')
 
     def _prune(self, cache):
         now = time.monotonic()
@@ -92,7 +95,7 @@ class SyncStatCache:
 
     def store(self, filesystem, metrics, complete, peer_uuid, dir_path=None):
         cache = self.get_fs_cache(filesystem)
-        expires_at = time.monotonic() + CACHE_TTL_SECS
+        expires_at = time.monotonic() + self._cache_ttl_secs()
         if complete:
             cache['complete'] = {
                 'metrics': metrics,
