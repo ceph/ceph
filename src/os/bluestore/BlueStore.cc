@@ -2919,6 +2919,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
+  ceph_assert(r);
   ceph_assert(blob.can_split());
   ceph_assert(used_in_blob.can_split());
   bluestore_blob_t &lb = dirty_blob();
@@ -2929,6 +2930,9 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
     &(r->used_in_blob));
 
   lb.split(blob_offset, rb);
+  maybe_prune_tail(); // we might get tail-to-prune after splitting
+  r->maybe_prune_tail(); // likely redundant (as we tend to prune original blob beforehand)
+                         // but let it be
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
@@ -3588,9 +3592,14 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
 	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
-  for (auto& p : spanning_blob_map) {
-    dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
-	     << dendl;
+  const int span_blob_log_level = 20;
+  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, span_blob_log_level>()) {
+    for (auto& p : spanning_blob_map) {
+      dout(span_blob_log_level) << __func__
+                                << "   spanning blob " << p.first
+                                << " " << *p.second
+				<< dendl;
+    }
   }
   // determine shard index range
   unsigned shard_index_begin = 0, shard_index_end = 0;
@@ -3746,6 +3755,33 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
   return plan;
 }
 
+void check_spanning_stats_and_maybe_dump(BlueStore::Onode* onode,
+  std::function<void()> dump_fn)
+{
+  auto& dumped_onodes = onode->c->onode_space.cache->dumped_onodes;
+  decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oid_slot = nullptr;
+  decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oldest_slot = nullptr;
+
+  for (size_t i = 0; i < dumped_onodes.size(); ++i) {
+    if (dumped_onodes[i].first == onode->oid) {
+      oid_slot = &dumped_onodes[i];
+      break;
+    }
+    if (!oldest_slot || (oldest_slot &&
+      dumped_onodes[i].second < oldest_slot->second)) {
+      oldest_slot = &dumped_onodes[i];
+    }
+  }
+  auto _now = mono_clock::now();
+  if ( oid_slot && (_now - oid_slot->second >= make_timespan(5 * 60))) {
+    dump_fn();
+    oid_slot->second = _now;
+  } else if (!oid_slot && oldest_slot) {
+    dump_fn();
+    oldest_slot->first = onode->oid;
+    oldest_slot->second = _now;
+  }
+}
 
 void BlueStore::ExtentMap::reshard_action(
   ReshardPlan& plan,
@@ -3844,14 +3880,11 @@ void BlueStore::ExtentMap::reshard_action(
     } else {
       shard_end = current_shard->offset;
     }
-    
-    bool was_too_many_blobs_check = false;
-    auto too_many_blobs_threshold =
-      g_conf()->bluestore_debug_too_many_blobs_threshold;
-    auto& dumped_onodes = onode->c->onode_space.cache->dumped_onodes;
-    decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oid_slot = nullptr;
-    decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oldest_slot = nullptr;
 
+    size_t has_new_spanning = 0;
+
+    uint32_t fix_start = std::numeric_limits<uint32_t>::max();
+    uint32_t fix_end = 0;
     for (auto extent = extent_map.lower_bound(Extent(needs_reshard_begin)); extent != extent_map.end(); ++extent) {
       if (extent->logical_offset >= needs_reshard_end) {
 	break;
@@ -3885,22 +3918,7 @@ void BlueStore::ExtentMap::reshard_action(
 	    b->id = bid;
 	    spanning_blob_map[b->id] = b;
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
-	    if (!was_too_many_blobs_check &&
-	      too_many_blobs_threshold &&
-	      spanning_blob_map.size() >= size_t(too_many_blobs_threshold)) {
-
-	      was_too_many_blobs_check = true;
-	      for (size_t i = 0; i < dumped_onodes.size(); ++i) {
-		if (dumped_onodes[i].first == onode->oid) {
-		  oid_slot = &dumped_onodes[i];
-		  break;
-		}
-		if (!oldest_slot || (oldest_slot &&
-		  dumped_onodes[i].second < oldest_slot->second)) {
-		  oldest_slot = &dumped_onodes[i];
-		}
-	      }
-	    }
+            has_new_spanning++;
 	  };
 	  if (b->can_split()) {
 	    auto bstart1 = bstart;
@@ -3912,11 +3930,26 @@ void BlueStore::ExtentMap::reshard_action(
 		  dout(20) << __func__ << "    splitting blob, bstart 0x"
 			   << std::hex << bstart1 << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
-		  b = split_blob(b, blob_offset, sh.shard_info->offset);
-		  // switch b to the new right-hand side, in case it
-		  // *also* has to get split.
-		  bstart1 = sh.shard_info->offset;
-		  onode->c->store->logger->inc(l_bluestore_blob_split);
+                  bool might_need_fix = false;
+                  BlobRef b1 = split_blob(b, blob_offset, sh.shard_info->offset,
+                    might_need_fix);
+
+                  if (might_need_fix) {
+                    fix_start = std::min(fix_start, bstart);
+                    fix_end = std::max(fix_end, bend);
+                  }
+
+                  if (b1) {
+                    // switch b to the new right-hand side, in case it
+                    // *also* has to get split.
+                    b = b1;
+                    bstart1 += blob_offset;
+                    onode->c->store->logger->inc(l_bluestore_blob_split);
+                  } else {
+                    // if null - we've trimmed the blob, shouldn't escape the range now
+                    ceph_assert(!extent->blob_escapes_range(shard_start, shard_end - shard_start));
+                    break;
+                  }
 		} else {
 		  _make_spanning(b);
 		  break;
@@ -3954,25 +3987,25 @@ void BlueStore::ExtentMap::reshard_action(
 	  dout(20) << __func__ << "    un-spanning " << *extent->blob << dendl;
 	}
       }
+    } // for (auto extent = ...
+
+    maybe_normalize(fix_start, fix_end);
+
+    size_t bcount_threshold = g_conf()->bluestore_debug_too_many_blobs_threshold;
+    if (has_new_spanning &&
+          bcount_threshold &&
+          bcount_threshold < spanning_blob_map.size()) {
+      check_spanning_stats_and_maybe_dump(
+        onode,
+        [&]() {
+          dout(0) << __func__
+	          << " spanning blob count exceeds threshold, "
+	          << spanning_blob_map.size() << " spanning blobs"
+	          << dendl;
+          _dump_onode<0>(cct, *onode);
+        });
     }
-    bool do_dump = (!oid_slot && was_too_many_blobs_check) ||
-      (oid_slot &&
-	(mono_clock::now() - oid_slot->second >= make_timespan(5 * 60)));
-    if (do_dump) {
-      dout(0) << __func__
-	      << " spanning blob count exceeds threshold, "
-	      << spanning_blob_map.size() << " spanning blobs"
-	      << dendl;
-      _dump_onode<0>(cct, *onode);
-      if (oid_slot) {
-	oid_slot->second = mono_clock::now();
-      } else {
-	ceph_assert(oldest_slot);
-	oldest_slot->first = onode->oid;
-	oldest_slot->second = mono_clock::now();
-      }
-    }
-  }
+  } // if (extent_map_shards.empty()) .. else {
 
   clear_needs_reshard();
 }
@@ -4664,7 +4697,8 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
 BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   BlobRef lb,
   uint32_t blob_offset,
-  uint32_t pos)
+  uint32_t pos,
+  bool& might_need_fix)
 {
   uint32_t end_pos = pos + lb->get_blob().get_logical_length() - blob_offset;
   dout(20) << __func__ << " 0x" << std::hex << pos << " end 0x" << end_pos
@@ -4673,30 +4707,112 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   BlobRef rb = onode->c->new_blob();
   lb->split(onode->c, blob_offset, rb.get());
 
-  for (auto ep = seek_lextent(pos);
-       ep != extent_map.end() && ep->logical_offset < end_pos;
-       ++ep) {
+  auto& lblob = lb->get_blob();
+  auto& rblob = rb->get_blob();
+  bool rb_allocated = false;
+
+  might_need_fix = false;
+
+  auto ep0 = seek_lextent(pos);
+  while (ep0 != extent_map.end() && ep0->logical_offset < end_pos) {
+     auto ep = ep0;
+     ++ep0;
     if (ep->blob != lb) {
       continue;
     }
     if (ep->logical_offset < pos) {
-      // split extent
-      size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
-      extent_map.insert(*ne);
-      ep->length = left;
-      dout(30) << __func__ << "  split " << *ep << dendl;
-      dout(30) << __func__ << "     to " << *ne << dendl;
+      uint64_t lleft = pos - ep->logical_offset;
+      uint64_t lright = ep->length - lleft;
+
+      might_need_fix = might_need_fix || (rblob.get_logical_length() < lright);
+
+      // Deliberately call is_unallocated() as it's counterpart is_allocated()
+      // returns true when FULL blob is allocated only while we're fine
+      // with partial allocation.
+      if (!rblob.is_unallocated(0, lright)) {
+        rb_allocated = true;
+        // we have at least some valid extents behind
+        ceph_assert(ep->length >= lleft); // by the nature of seek_lextent
+        Extent *ne = new Extent(pos, 0, lright, rb);
+        extent_map.insert(*ne);
+        dout(30) << __func__ << "  split " << *ep << dendl;
+        dout(30) << __func__ << "     to " << *ne << dendl;
+      } else {
+        dout(30) << __func__ << "  split " << *ep << dendl;
+        dout(30) << __func__ << "     to " << "(dummy)" << dendl;
+      }
+      ep->length = lleft;
+      might_need_fix = might_need_fix || (lblob.get_logical_length() < lleft);
+
     } else {
-      // switch blob
+      //Extent references right blob only,
+      // let's switch blob
       ceph_assert(ep->blob_offset >= blob_offset);
+
+      might_need_fix = might_need_fix || (rblob.get_logical_length() < ep->length);
 
       ep->blob = rb;
       ep->blob_offset -= blob_offset;
       dout(30) << __func__ << "  adjusted " << *ep << dendl;
+      // But let's make a final check whether we have anything
+      // valid behind the extent.
+      // Deliberately use is_unallocated() as it's counterpart is_allocated()
+      // returns true when FULL blob is allocated only while we're fine
+      // with partial allocation.
+      if (rblob.is_unallocated(ep->blob_offset, ep->length)) {
+        // We get no valid pextents under the extent at all.
+        // Generally this shouldn't happen unless
+        // the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and erase the extent
+        dout(5) << __func__ << "  [warn] thrown away " << *ep << dendl;
+        extent_map.erase(ep);
+      } else {
+        rb_allocated = true;
+      }
     }
   }
+  // Make a final check whether blob is fully unallocated
+  // unless we've already discovered some allocations.
+  if (!rb_allocated &&
+       rblob.is_unallocated(0, rblob.get_logical_length())) {
+    // forget it, caller should treat that as trimming not splitting
+    rb.reset();
+  }
   return rb;
+}
+
+void BlueStore::ExtentMap::maybe_normalize(uint32_t start, uint32_t end)
+{
+  if (end > 0) {
+    ceph_assert(start < std::numeric_limits<uint32_t>::max());
+
+    auto ep0 = seek_lextent(start);
+    while (ep0 != extent_map.end() && ep0->logical_offset < end) {
+      auto ep = ep0;
+      ++ep0;
+      auto& blob = ep->blob->get_blob();
+      auto blob_len = blob.get_logical_length();
+      if (blob_len == 0 ||
+          blob.is_unallocated(0, blob.get_ondisk_length())) {
+        // We get no valid pextents under the extent at all.
+        // Generally this shouldn't happen unless
+        // the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and erase the extent
+        dout(10) << __func__ << " thrown away:" << *ep << dendl;
+        extent_map.erase(ep);
+      } else if (ep->length > blob_len) {
+        // generally we shouldn't get here,
+        // this means the extent is [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and fix the issue
+        ep->length = blob_len;
+        dout(10) << __func__ << " truncated: " << *ep
+                 <<dendl;
+      }
+    }
+  }
 }
 
 BlueStore::ExtentMap::debug_au_vector_t
