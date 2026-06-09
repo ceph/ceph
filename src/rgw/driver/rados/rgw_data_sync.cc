@@ -750,6 +750,11 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, 
 
 void RGWRemoteDataLog::finish()
 {
+  // Shut down `http_manager` here so that in-flight requests will
+  // cancel and we can join the sync thread without blocking. This
+  // stops a potential mutual deadlock between two RGWs on the same
+  // cluster on period update.
+  http_manager.stop();
   stop();
 }
 

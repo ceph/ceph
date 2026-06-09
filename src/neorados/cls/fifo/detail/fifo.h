@@ -208,6 +208,8 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
+
 	   buffer::list in;
 	   fifo::op::get_meta gm;
 	   gm.version = objv;
@@ -277,6 +279,8 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
+
 	   buffer::list in;
 	   fifo::op::get_part_info gpi;
 	   encode(gpi, in);
@@ -429,6 +433,7 @@ private:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   std::unique_lock l(f->m);
 	   auto head_part_num = f->info.head_part_num;
@@ -494,6 +499,7 @@ private:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   std::unique_lock l(f->m);
 	   auto oid = f->info.part_oid(part_num);
@@ -568,6 +574,7 @@ private:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   std::unique_lock l(f->m);
 	   auto oid = f->info.part_oid(part_num);
@@ -658,6 +665,7 @@ private:
        try {
 	 state.throw_if_cancelled(true);
 	 state.reset_cancellation_state(asio::enable_terminal_cancellation());
+         state.complete_if_cancelled(false);
 
 	 ldpp_dout_fmt(dpp, 20, "read_meta: entering");
 	 auto [info, part_header_size, part_entry_overhead] = co_await get_meta(
@@ -722,6 +730,7 @@ private:
        try {
 	 state.throw_if_cancelled(true);
 	 state.reset_cancellation_state(asio::enable_terminal_cancellation());
+         state.complete_if_cancelled(false);
 
 	 ldpp_dout_fmt(dpp, 20, "update_meta: entering");
 	 auto [ec] = co_await f->update_meta(version, update,
@@ -773,6 +782,7 @@ private:
        try {
 	 state.throw_if_cancelled(true);
 	 state.reset_cancellation_state(asio::enable_terminal_cancellation());
+         state.complete_if_cancelled(false);
 
 	 ldpp_dout_fmt(dpp, 20, "process_journal: entering", __LINE__);
 	 std::vector<fifo::journal_entry> processed;
@@ -915,7 +925,7 @@ private:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
-
+	   state.complete_if_cancelled(false);
 
 	   ldpp_dout_fmt(dpp, 20, "prepare_new_part: entering");
 	   std::unique_lock l(f->m);
@@ -1005,6 +1015,7 @@ private:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   ldpp_dout_fmt(dpp, 20, "prepare_new_head: entering");
 	   std::unique_lock l(f->m);
@@ -1105,6 +1116,8 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
+
 	   ldpp_dout_fmt(dpp, 20, "do_open: entering");
 	   std::tie(f->info, f->part_header_size, f->part_entry_overhead)
 	     = co_await get_meta(f->rados, f->obj, f->ioc, objv,
@@ -1152,6 +1165,8 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
+
 	   ldpp_dout_fmt(dpp, 20, "do_create: entering");
 	   co_await create_meta(f->rados, f->obj, f->ioc, objv, oid_prefix,
 				exclusive, max_part_size, max_entry_size,
@@ -1190,6 +1205,7 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   std::unique_lock l(f->m);
 	   auto max_entry_size = f->info.params.max_entry_size;
@@ -1339,6 +1355,7 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			      << " entering" << dendl;
@@ -1450,6 +1467,7 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			      << " entering" << dendl;
@@ -1569,6 +1587,7 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   co_await f->read_meta(dpp, asio::deferred);
 	   std::unique_lock l(f->m);

@@ -106,9 +106,11 @@ class AppMain {
     IOContextPoolHolder& operator=(const IOContextPoolHolder&) = delete;
 
     ceph::async::io_context_pool& get();
+    ceph::async::io_context_pool& operator*() { return get(); }
+    ceph::async::io_context_pool* operator->() { return std::addressof(get()); }
   };
 
-  IOContextPoolHolder context_pool_holder;
+  IOContextPoolHolder context_pool;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
