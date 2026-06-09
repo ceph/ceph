@@ -1,3 +1,4 @@
+
 >=20.0.0
 
 * RGW: Lua scripts will not run against health checks.
@@ -62,6 +63,12 @@
   `offset` and `length`. When pybind calls WriteOp.zero(), the argument passed
   does not match rados_write_op_zero, and offset and length are swapped, which
   results in an unexpected response.
+
+>=19.2.4
+
+* RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
+  to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
+  too instead of failing with ENOTEMPTY.
 
 >=19.2.2
 
