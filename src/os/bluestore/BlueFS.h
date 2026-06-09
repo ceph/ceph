@@ -549,21 +549,27 @@ public:
     }
   };
 
+  struct FileReaderOpts {
+    bool ignore_eof;
+    bool buffered;
+  };
   struct FileReader {
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
     FileReaderBuffer buf;
     bool ignore_eof;        ///< used when reading our log file
+    bool buffered;
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool ie)
+    FileReader(FileRef f, uint64_t mpf, const FileReaderOpts opts)
       : file(f),
 	buf(mpf),
-	ignore_eof(ie) {
+	ignore_eof(opts.ignore_eof),
+        buffered(opts.buffered) {
       ++file->num_readers;
     }
     ~FileReader() {
@@ -695,7 +701,7 @@ private:
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
   int _flush_range_F(FileWriter *h, uint64_t end); // flush up to offset 'end'
-  int _flush_data(FileWriter *h, uint64_t end, bool buffered);
+  uint64_t _flush_data(FileWriter *h, uint64_t end, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_envelope_F(FileWriter *h);
   int _fsync(FileWriter *h, bool force_dirty);

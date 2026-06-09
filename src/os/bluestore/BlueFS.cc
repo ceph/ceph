@@ -1429,7 +1429,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileReader *log_reader = new FileReader(
     log_file, cct->_conf->bluefs_max_prefetch,
-    true);  // ignore eof
+    {.ignore_eof = true, .buffered = false});
 
   bool seen_recs = false;
 
@@ -2576,10 +2576,10 @@ int64_t BlueFS::_read_random(
       int r;
       if (!cct->_conf->bluefs_check_for_zeros) {
 	r = _bdev_read_random(p->bdev, p->offset + x_off, l, out,
-			      cct->_conf->bluefs_buffered_io);
+			      h->buffered);
       } else {
 	r = _read_random_and_check(p->bdev, p->offset + x_off, l, out,
-			cct->_conf->bluefs_buffered_io);
+			           h->buffered);
       }
       ceph_assert(r == 0);
       off += l;
@@ -2654,7 +2654,7 @@ void BlueFS::_envmode_index_file(
   File::envelope_t flush;
   bool envelope_good;
   uint64_t file_size = file->fnode.size;
-  FileReader *h = new FileReader(file, 4096, true);
+  FileReader *h = new FileReader(file, 4096, {.ignore_eof = true, .buffered = false});
   ceph_assert(h);
   while(scan_ofs < file->fnode.allocated) {
     envelope_good = _read_envelope(h, scan_ofs, env_ofs, &flush);
@@ -2892,14 +2892,13 @@ int64_t BlueFS::_read(
 	int r;
 	// when reading BlueFS log (only happens on startup) use non-buffered io
 	// it makes it in sync with logic in _flush_range()
-	bool use_buffered_io = h->file->fnode.ino == 1 ? false : cct->_conf->bluefs_buffered_io;
 	if (!cct->_conf->bluefs_check_for_zeros) {
 	  r = _bdev_read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-			 use_buffered_io);
+			 h->buffered);
 	} else {
 	  r = _read_and_check(
 	    p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-	    use_buffered_io);
+	    h->buffered);
 	}
 	logger->inc(l_bluefs_read_disk_count, 1);
 	logger->inc(l_bluefs_read_disk_bytes, l);
@@ -4063,7 +4062,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
            << " to " << h->file->fnode
            << " hint " << h->file->vselector_hint << dendl;
 
-  bool buffered = cct->_conf->bluefs_buffered_io;
+  bool buffered = h->file->envelope_mode() ? false : cct->_conf->bluefs_buffered_io;
 
   if (end <= h->get_pos())
     return 0;
@@ -4094,23 +4093,24 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
     }
     h->file->is_dirty = true;
   }
-  if (h->file->fnode.size < end) {
-    vselector->add_usage(h->file->vselector_hint, end - h->file->fnode.size);
-    h->file->fnode.size = end;
+  dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
+  auto new_data = _flush_data(h, end, buffered);
+  if (new_data > 0) {
+    vselector->add_usage(h->file->vselector_hint, new_data);
     // Don't mark regular appends as dirty on envelope files.
     // Note that allocations are marked as dirty.
     if (!h->file->envelope_mode()) {
       h->file->is_dirty = true;
     }
   }
-  dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
-  int res = _flush_data(h, end, buffered);
   logger->tinc_with_max(l_bluefs_flush_lat, mono_clock::now() - t0);
-  return res;
+  return 0;
 }
 
-int BlueFS::_flush_data(FileWriter *h, uint64_t end, bool buffered)
+uint64_t BlueFS::_flush_data(FileWriter *h, uint64_t end, bool buffered)
 {
+  uint64_t new_data = 0;
+
   if (h->file->fnode.ino > 1) {
     ceph_assert(ceph_mutex_is_locked(h->lock));
     ceph_assert(ceph_mutex_is_locked(h->file->lock));
@@ -4124,6 +4124,11 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t end, bool buffered)
       }
     }
   }
+  if (h->file->fnode.size < end) {
+    new_data = end - h->file->fnode.size;
+    h->file->fnode.size = end;
+  }
+
   uint64_t write_offset = h->get_flush_offset();
   bufferlist bl = h->get_flush_buffer(cct, end);
   uint64_t length = bl.length();
@@ -4133,6 +4138,7 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t end, bool buffered)
   ceph_assert(p != h->file->fnode.extents.end());
   dout(20) << __func__ << " in " << *p << " x_off 0x"
            << std::hex << x_off << std::dec << dendl;
+
 
   logger->inc(l_bluefs_write_count, 1);
   logger->inc(l_bluefs_write_bytes, length);
@@ -4188,7 +4194,7 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t end, bool buffered)
 
   dout(20) << __func__ << " h " << h << " pos now 0x"
            << std::hex << h->get_pos() << std::dec << dendl;
-  return 0;
+  return new_data;
 }
 
 #ifdef HAVE_LIBAIO
@@ -4321,13 +4327,8 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
   ceph_assert(h->file->fnode.ino <= 1);
   uint64_t length = h->get_buffer_length();
   uint64_t offset = h->get_pos();
-  uint64_t new_data = 0;
   ceph_assert(length + offset <= h->file->fnode.get_allocated());
-  if (h->file->fnode.size < offset + length) {
-    new_data = offset + length - h->file->fnode.size;
-    h->file->fnode.size = offset + length;
-  }
-  _flush_data(h, offset + length, false);
+  uint64_t new_data = _flush_data(h, offset + length, false);
   return new_data;
 }
 
@@ -4933,11 +4934,13 @@ int BlueFS::open_for_read(
     return -ENOENT;
   }
   File *file = q->second.get();
-  if (file->envelope_mode() && !file->envelopes_indexed) {
+  bool envelope = file->envelope_mode();
+  if (envelope && !file->envelopes_indexed) {
     _envmode_index_file(file);
   }
   *h = new FileReader(file, random ? 4096 : cct->_conf->bluefs_max_prefetch,
-                      file->envelope_mode());
+    {.ignore_eof = envelope,
+     .buffered = envelope ? false : cct->_conf->bluefs_buffered_io});
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
