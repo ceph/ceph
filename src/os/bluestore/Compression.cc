@@ -536,7 +536,7 @@ void Scan::candidate(const Extent* e)
       bit->second.consumed_size += e->length;
       if (bit->second.consumed_size == bit->second.blob_use_size) {
         // Seen all extents of the blob, can take gain.
-        gain = h_bblob.get_ondisk_length();
+        gain = h_bblob.get_ondisk_size();
       }
       estimator->batch(e, gain);
     } else {
