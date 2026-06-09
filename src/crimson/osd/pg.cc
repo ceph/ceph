@@ -858,12 +858,12 @@ seastar::future<> PG::read_state(crimson::os::BackendStore store)
 
   return seastar::do_with(PGMeta(store, pgid), [] (auto& pg_meta) {
     return pg_meta.load();
-  }).then([this, store](auto&& ret) {
+  }).then([this, &store](auto&& ret) {
     auto [pg_info, past_intervals] = std::move(ret);
     return peering_state.init_from_disk_state(
 	std::move(pg_info),
 	std::move(past_intervals),
-	[this, store] (PGLog &pglog) {
+	[this, &store] (PGLog &pglog) mutable {
 	  return pglog.read_log_and_missing_crimson(
 	    store,
 	    coll_ref,
@@ -893,7 +893,7 @@ seastar::future<> PG::read_state(crimson::os::BackendStore store)
 	PeeringState::Initialize());
 
     return seastar::now();
-  }).then([this, store]() {
+  }).then([this, &store]() {
     logger().debug("{} setting collection options", __func__);
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::set_collection_opts>(
           store,

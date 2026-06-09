@@ -6,6 +6,7 @@
 #ifdef WITH_BLUESTORE
 #include "alienstore/alien_store.h"
 #endif
+#include "relaystore/relay_store.h"
 #include "seastore/seastore.h"
 
 namespace crimson::os {
@@ -33,4 +34,12 @@ FuturizedStore::create(const std::string& type,
   }
 }
 
+seastar::future<> with_store_do_transaction(
+  FuturizedStore::Shard& shard,
+  boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
+  ceph::os::Transaction&& txn)
+{
+  return crimson::os::_RelayStore::Shard::with_store_do_transaction(
+    static_cast<crimson::os::_RelayStore::Shard&>(shard), ch, std::move(txn));
+}
 }

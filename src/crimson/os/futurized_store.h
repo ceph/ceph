@@ -256,54 +256,21 @@ protected:
 
 
 }
-#include "crimson/os/relaystore/relay_store.h"
 
 namespace crimson::os {
-struct RelayStore {
-  FuturizedStore::Shard &shard;
-  uint32_t shard_count;
-  RelayStore(FuturizedStore::Shard &shard, uint32_t shard_count)
-    : shard(shard), shard_count(shard_count) {}
-
-  static seastar::future<> with_store_do_transaction(
-    RelayStore  store,
-    boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
-    ceph::os::Transaction&& txn)
-  {
-    crimson::os::_RelayStore::Shard _store{store.shard, store.shard_count};
-    return crimson::os::_RelayStore::Shard::with_store_do_transaction(_store, ch, std::move(txn));
-  }
-
-  template<auto MemberFunc, typename... Args>
-  static auto with_store(RelayStore store, Args&&... args);
-
-  static RelayStore get_backend_store(FuturizedStore &f_store, store_index_t store_index)
-  {
-    return RelayStore {
-      f_store.get_sharded_store(store_index),
-      f_store.get_storage_shard_count()
-    };
-  }
-};
 
 // scaffolding
-using BackendStore = RelayStore;
+using BackendStore = FuturizedStore::Shard&;
+
+extern seastar::future<> with_store_do_transaction(
+  FuturizedStore::Shard& shard,
+  boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
+  ceph::os::Transaction&& txn);
 
 template<auto MemberFunc, typename... Args>
-auto RelayStore::with_store(RelayStore self, Args&&... args)
+auto with_store(FuturizedStore::Shard& shard, Args&&... args)
 {
-  // TODO: drop this method and revert all users to interacting with
-  // object store by calling methods instead of `with_store<>()`.
-  return (self.shard.*MemberFunc)(std::forward<Args>(args)...);
-}
-
-// scaffolding routers to future RelayStore
-constexpr auto with_store_do_transaction = &RelayStore::with_store_do_transaction;
-
-template<auto MemberFunc, typename... Args>
-auto with_store(RelayStore store, Args&&... args)
-{
-  return RelayStore::with_store<MemberFunc>(store, std::forward<Args>(args)...);
+  return (shard.*MemberFunc)(std::forward<Args>(args)...);
 }
 
 }
