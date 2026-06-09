@@ -550,6 +550,30 @@ void Cache::register_metrics(store_index_t store_index)
           sm::description("extents not in pinboard when touched (newly added), by type"),
           {ext_label}
         ),
+        sm::make_counter(
+          "cache_hit",
+          [this, ext] {
+            uint64_t total = 0;
+            for (auto& per_src : stats.access_by_src_ext) {
+              total += get_by_ext(per_src, ext).get_cache_hit();
+            }
+            return total;
+          },
+          sm::description("read_extent hits in Cache::extents (no disk I/O) by extent type"),
+          {ext_label}
+        ),
+        sm::make_counter(
+          "cache_miss",
+          [this, ext] {
+            uint64_t total = 0;
+            for (auto& per_src : stats.access_by_src_ext) {
+              total += get_by_ext(per_src, ext).load_absent;
+            }
+            return total;
+          },
+          sm::description("read_extent misses requiring disk I/O by extent type"),
+          {ext_label}
+        ),
       }
     );
   }
