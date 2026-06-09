@@ -1692,26 +1692,25 @@ def command_agent(ctx: CephadmContext) -> None:
 @executes_early
 def command_version(ctx):
     # type: (CephadmContext) -> int
-    import importlib
     import zipimport
     import zipfile
     import types
+    from cephadmlib.agent import _load_version_module
 
     vmod: Optional[types.ModuleType]
     zmod: Optional[types.ModuleType]
+
+    # Use the shared helper to locate _cephadmmeta.version or _version.
+    vmod = _load_version_module()  # type: ignore[assignment]
+
+    # The zmod path is only needed for the verbose zipimport output below.
+    # Try _cephadmmeta.version first (already loaded by vmod if successful),
+    # then fall back to the outer _cephadmmeta package for the loader.
     try:
-        vmod = importlib.import_module('_cephadmmeta.version')
-        zmod = vmod
+        zmod = importlib.import_module('_cephadmmeta.version')
     except ImportError:
-        vmod = zmod = None
-    if vmod is None:
-        # fallback to earlier location
-        try:
-            vmod = importlib.import_module('_version')
-        except ImportError:
-            pass
+        zmod = None
     if zmod is None:
-        # fallback to outer package, for zip import module
         try:
             zmod = importlib.import_module('_cephadmmeta')
         except ImportError:
