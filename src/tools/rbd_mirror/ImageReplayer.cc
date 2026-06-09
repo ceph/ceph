@@ -208,8 +208,12 @@ struct ImageReplayer<I>::ReplayerListener
     : image_replayer(image_replayer) {
   }
 
-  void handle_notification() override {
-    image_replayer->handle_replayer_notification();
+  void handle_notification(bool force=false) override {
+    image_replayer->handle_replayer_notification(force);
+  }
+
+  void refresh_mirror_image_status(bool force=false) override {
+    image_replayer->refresh_mirror_image_status(force);
   }
 };
 
@@ -894,6 +898,12 @@ void ImageReplayer<I>::set_mirror_image_status_update(
 }
 
 template <typename I>
+void ImageReplayer<I>::refresh_mirror_image_status(bool force) {
+  dout(15) << "force=" << force << dendl;
+  update_mirror_image_status(force, boost::none);
+}
+
+template <typename I>
 void ImageReplayer<I>::shut_down(int r) {
   dout(10) << "r=" << r << dendl;
 
@@ -1027,7 +1037,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 }
 
 template <typename I>
-void ImageReplayer<I>::handle_replayer_notification() {
+void ImageReplayer<I>::handle_replayer_notification(bool force) {
   dout(10) << dendl;
 
   std::unique_lock locker{m_lock};
@@ -1069,7 +1079,7 @@ void ImageReplayer<I>::handle_replayer_notification() {
     return;
   }
 
-  update_mirror_image_status(false, {});
+  update_mirror_image_status(force, {});
 }
 
 template <typename I>

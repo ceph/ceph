@@ -873,6 +873,30 @@ wait_for_replay_complete()
     fi
 }
 
+wait_for_replay_state()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local state_pattern="$4"
+    local s
+    local status
+    local description
+
+    for s in 1 1 1 1 1 1 1 1 1 1 1 1 1; do
+        status=$(CEPH_ARGS='' rbd --cluster ${cluster} mirror image status \
+                     ${pool}/${image} --format xml 2>/dev/null)
+        # extract description field
+        description=$(echo "${status}" | xmlstarlet sel -t -v "//description" 2>/dev/null)
+        # Check if the pattern exists in the description
+        if echo "${description}" | grep -q "\"replay_state\":\"${state_pattern}\""; then
+            return 0
+        fi
+        sleep ${s}
+    done
+    return 1
+}
+
 test_status_in_pool_dir()
 {
     local cluster=$1
