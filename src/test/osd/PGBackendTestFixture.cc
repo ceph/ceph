@@ -606,6 +606,98 @@ int PGBackendTestFixture::write(
   return result;
 }
 
+int PGBackendTestFixture::write(
+  const std::string& obj_name,
+  uint64_t object_size,
+  std::optional<uint64_t> truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+  ObjectContextRef obc = get_or_create_obc(hoid, true, object_size);
+  pg_t->obc_map[hoid] = obc;
+
+  // Track outstanding write
+  outstanding_writes[hoid]++;
+
+  // Apply truncate if specified
+  if (truncate_size.has_value()) {
+    pg_t->truncate(hoid, truncate_size.value());
+  }
+
+  // Apply all writes
+  uint64_t new_size = truncate_size.value_or(object_size);
+  for (const auto& [offset, data] : writes) {
+    bufferlist bl;
+    bl.append(data);
+    pg_t->write(hoid, offset, bl.length(), bl);
+    new_size = std::max(new_size, offset + bl.length());
+  }
+
+  object_stat_sum_t delta_stats;
+  if (new_size > object_size) {
+    delta_stats.num_bytes = new_size - object_size;
+  } else if (new_size < object_size) {
+    delta_stats.num_bytes = -(int64_t)(object_size - new_size);
+  } else {
+    delta_stats.num_bytes = 0;
+  }
+
+  // Prior version comes from the object's current version
+  eversion_t prior_version = obc->obs.oi.version;
+  eversion_t at_version = get_next_version();
+
+  // Build the NEW OI
+  object_info_t new_oi = obc->obs.oi;
+  new_oi.version = at_version;
+  new_oi.prior_version = prior_version;
+  new_oi.size = new_size;
+
+  // Encode new OI into PGTransaction
+  {
+    bufferlist oi_bl;
+    new_oi.encode(oi_bl,
+      osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    pg_t->setattr(hoid, OI_ATTR, oi_bl);
+  }
+
+  // Update OBC obs to new state BEFORE submitting
+  obc->obs.oi = new_oi;
+
+  std::vector<pg_log_entry_t> log_entries;
+  pg_log_entry_t entry;
+  entry.op = pg_log_entry_t::MODIFY;
+  entry.soid = hoid;
+  entry.version = at_version;
+  entry.prior_version = prior_version;
+  log_entries.push_back(entry);
+
+  // Create completion lambda for write-specific cleanup
+  auto write_complete = [this, hoid, obc, prior_version, object_size](int r) {
+    // Decrement outstanding writes counter
+    if (outstanding_writes[hoid] > 0) {
+      outstanding_writes[hoid]--;
+      if (outstanding_writes[hoid] == 0) {
+        outstanding_writes.erase(hoid);
+      }
+    }
+
+    if (r != 0 && r != -EINPROGRESS) {
+      // Roll back OBC on failure
+      obc->obs.oi.version = prior_version;
+      obc->obs.oi.size = object_size;
+      obc->attr_cache.clear();
+      outstanding_writes.erase(hoid);
+    }
+  };
+
+  int result = do_transaction_and_complete(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+
+  return result;
+}
+
 int PGBackendTestFixture::read_object(
   const std::string& obj_name,
   uint64_t offset,
@@ -669,6 +761,124 @@ int PGBackendTestFixture::read_object(
   }
 }
 
+void PGBackendTestFixture::visualize_miscompare(
+  const std::string& obj_name,
+  const char* expected_buf,
+  const char* read_buf,
+  size_t size,
+  const std::string& phase)
+{
+  bool mismatch_found = false;
+  size_t first_mismatch = 0;
+  size_t last_mismatch = 0;
+  
+  // Find mismatches
+  for (size_t i = 0; i < size; i++) {
+    if (read_buf[i] != expected_buf[i]) {
+      if (!mismatch_found) {
+        first_mismatch = i;
+        mismatch_found = true;
+      }
+      last_mismatch = i;
+    }
+  }
+  
+  if (!mismatch_found) {
+    return;  // No mismatches to visualize
+  }
+  
+  std::cout << "\n=== MISCOMPARE DETECTED in " << phase << " ===" << std::endl;
+  std::cout << "Object: " << obj_name << std::endl;
+  if (pool_type == EC) {
+    std::cout << "Config: k=" << k << " m=" << m << " stripe_unit=" << stripe_unit << std::endl;
+  } else {
+    std::cout << "Config: Replicated pool, size=" << num_replicas << std::endl;
+  }
+  std::cout << "Miscompare range: [" << first_mismatch << ", " << last_mismatch << "]" << std::endl;
+  std::cout << "Total mismatches: " << (last_mismatch - first_mismatch + 1) << " bytes" << std::endl;
+  
+  // Show detailed hex+ASCII dump around first mismatch
+  size_t dump_start = (first_mismatch > 64) ? (first_mismatch - 64) : 0;
+  size_t dump_end = std::min(last_mismatch + 64, size);
+  
+  std::cout << "\nHex+ASCII dump around first mismatch [" << dump_start << ", " << dump_end << "):" << std::endl;
+  std::cout << "Offset   Hex                                              ASCII" << std::endl;
+  
+  std::string last_line_hex;
+  std::string last_line_ascii;
+  int repeat_count = 0;
+  
+  for (size_t i = dump_start; i < dump_end; i += 16) {
+    // Build hex representation
+    std::ostringstream hex_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      unsigned char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) hex_stream << "\033[1;31m";
+      hex_stream << std::setw(2) << std::setfill('0') << std::hex << (int)c;
+      if (mismatch) hex_stream << "\033[0m";
+      hex_stream << " ";
+    }
+    std::string hex_line = hex_stream.str();
+    
+    // Build ASCII representation
+    std::ostringstream ascii_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) ascii_stream << "\033[1;31m";
+      ascii_stream << (isprint(c) ? c : '.');
+      if (mismatch) ascii_stream << "\033[0m";
+    }
+    std::string ascii_line = ascii_stream.str();
+    
+    // Check if this line is identical to the last line
+    if (hex_line == last_line_hex && ascii_line == last_line_ascii && i > dump_start) {
+      repeat_count++;
+      continue;
+    }
+    
+    // Print any accumulated repeats
+    if (repeat_count > 0) {
+      std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+      repeat_count = 0;
+    }
+    
+    // Print current line
+    std::cout << std::setw(8) << std::setfill('0') << std::hex << i << " "
+              << std::setw(48) << std::left << hex_line << " " << ascii_line
+              << std::dec << std::endl;
+    
+    last_line_hex = hex_line;
+    last_line_ascii = ascii_line;
+  }
+  
+  // Print any remaining repeats
+  if (repeat_count > 0) {
+    std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+  }
+  
+  // Show expected vs read comparison
+  std::cout << "\nExpected vs Read (first 128 bytes of miscompare):" << std::endl;
+  size_t compare_len = std::min(size_t(128), last_mismatch - first_mismatch + 1);
+  
+  std::cout << "Expected: ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = expected_buf[first_mismatch + i];
+    std::cout << (isprint(c) ? c : '.');
+  }
+  std::cout << std::endl;
+  
+  std::cout << "Read:     ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = read_buf[first_mismatch + i];
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[1;31m";
+    std::cout << (isprint(c) ? c : '.');
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[0m";
+  }
+  std::cout << std::endl;
+}
+
 void PGBackendTestFixture::verify_object(
   const std::string& obj_name,
   const std::string& expected_data,
@@ -682,8 +892,22 @@ void PGBackendTestFixture::verify_object(
   EXPECT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
   
   if (read_data.length() == expected_data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    EXPECT_EQ(read_string, expected_data) << "Data should match";
+    const char* read_buf = read_data.c_str();
+    const char* expected_buf = expected_data.c_str();
+    
+    // Check for mismatches
+    bool has_mismatch = false;
+    for (size_t i = 0; i < expected_data.length(); i++) {
+      if (read_buf[i] != expected_buf[i]) {
+        has_mismatch = true;
+        break;
+      }
+    }
+    
+    if (has_mismatch) {
+      visualize_miscompare(obj_name, expected_buf, read_buf, expected_data.length(), "verify_object");
+      FAIL() << "Data mismatch detected";
+    }
   }
 }
 

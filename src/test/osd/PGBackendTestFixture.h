@@ -386,6 +386,21 @@ public:
     const std::string& data,
     uint64_t object_size);
 
+  /**
+   * Write operation with optional truncate and multiple writes in a single transaction.
+   *
+   * @param obj_name Name of the object
+   * @param object_size Current size of the object
+   * @param truncate_size Optional truncate size (nullopt means no truncate)
+   * @param writes Vector of {offset, data} pairs to write
+   * @return Result code (0 on success, negative on error)
+   */
+  int write(
+    const std::string& obj_name,
+    uint64_t object_size,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes);
+
   int read_object(
     const std::string& obj_name,
     uint64_t offset,
@@ -406,6 +421,22 @@ public:
    * @param offset Offset to read from (default: 0)
    * @param context_msg Optional context message to append to assertion messages
    */
+  /**
+   * Visualize data miscompare with hex+ASCII dump and line compression.
+   *
+   * @param obj_name Name of the object being compared
+   * @param expected_buf Expected data buffer
+   * @param read_buf Actual read data buffer
+   * @param size Size of both buffers
+   * @param phase Description of when the comparison occurred (e.g., "After shard 1 failure")
+   */
+  void visualize_miscompare(
+    const std::string& obj_name,
+    const char* expected_buf,
+    const char* read_buf,
+    size_t size,
+    const std::string& phase);
+
   void verify_object(
     const std::string& obj_name,
     const std::string& expected_data,
