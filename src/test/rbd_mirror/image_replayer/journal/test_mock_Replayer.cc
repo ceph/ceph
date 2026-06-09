@@ -118,7 +118,8 @@ struct Threads<librbd::MockTestImageCtx> {
 namespace {
 
 struct MockReplayerListener : public image_replayer::ReplayerListener {
-  MOCK_METHOD0(handle_notification, void());
+  MOCK_METHOD1(handle_notification, void(bool));
+  MOCK_METHOD1(refresh_mirror_image_status, void(bool));
 };
 
 } // anonymous namespace
@@ -447,8 +448,8 @@ public:
 
   void expect_notification(MockThreads& mock_threads,
                            MockReplayerListener& mock_replayer_listener) {
-    EXPECT_CALL(mock_replayer_listener, handle_notification())
-      .WillOnce(Invoke([this]() {
+    EXPECT_CALL(mock_replayer_listener, handle_notification(_))
+      .WillOnce(Invoke([this](bool) {
           std::unique_lock locker{m_lock};
           m_notified = true;
           m_cond.notify_all();

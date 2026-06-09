@@ -283,7 +283,8 @@ struct Threads<librbd::MockTestImageCtx> {
 namespace {
 
 struct MockReplayerListener : public image_replayer::ReplayerListener {
-  MOCK_METHOD0(handle_notification, void());
+  MOCK_METHOD1(handle_notification, void(bool));
+  MOCK_METHOD1(refresh_mirror_image_status, void(bool));
 };
 
 } // anonymous namespace
@@ -636,6 +637,11 @@ public:
       .WillOnce(Return(r));
   }
 
+  void expect_refresh_mirror_image_status(
+      MockReplayerListener& mock_replayer_listener, bool force) {
+    EXPECT_CALL(mock_replayer_listener, refresh_mirror_image_status(force));
+  }
+
   void expect_send(MockCloseImageRequest &mock_close_image_request, int r) {
     EXPECT_CALL(mock_close_image_request, send())
       .WillOnce(Invoke([this, &mock_close_image_request, r]() {
@@ -645,9 +651,25 @@ public:
   }
 
   void expect_notification(MockThreads& mock_threads,
+                                MockReplayerListener& mock_replayer_listener,
+                                bool expected_force, uint32_t count = 1) {
+    for (uint32_t idx = 0; idx < count; ++idx) {
+      EXPECT_CALL(mock_replayer_listener, handle_notification(expected_force))
+        .WillOnce(Invoke([this, expected_force](bool force) {
+            std::cerr << "[handle_notification] force=" << force
+                      << " expected=" << expected_force << "\n";
+            std::unique_lock locker{m_lock};
+            ++m_notifications;
+            m_cond.notify_all();
+          }))
+        .RetiresOnSaturation();
+    }
+  }
+
+  void expect_notification(MockThreads& mock_threads,
                            MockReplayerListener& mock_replayer_listener) {
-    EXPECT_CALL(mock_replayer_listener, handle_notification())
-      .WillRepeatedly(Invoke([this]() {
+    EXPECT_CALL(mock_replayer_listener, handle_notification(_))
+      .WillRepeatedly(Invoke([this](bool) {
           std::unique_lock locker{m_lock};
           ++m_notifications;
           m_cond.notify_all();
@@ -779,7 +801,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   expect_work_queue_repeatedly(mock_threads);
 
   MockReplayerListener mock_replayer_listener;
-  expect_notification(mock_threads, mock_replayer_listener);
+
+  // triggered after watchers registered, pre-scan
+  expect_notification(mock_threads, mock_replayer_listener, false);
+  // finish_sync snap1, finish_sync snap4, all snapshots synced → idle
+  expect_notification(mock_threads, mock_replayer_listener, true, 3);
 
   InSequence seq;
 
@@ -808,6 +834,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   expect_load_image_meta(mock_image_meta, false, 0);
   expect_is_refresh_required(mock_remote_image_ctx, false);
   expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_refresh_mirror_image_status(mock_replayer_listener, true);
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   expect_snapshot_copy(mock_snapshot_copy_request, 0, 1, 0, {{1, CEPH_NOSNAP}},
                        0);
@@ -862,6 +889,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
          1, true, 0, {{1, CEPH_NOSNAP}}},
        0, {}, 0, 0, {}}},
     }, 0);
+  expect_refresh_mirror_image_status(mock_replayer_listener, true);
   expect_snapshot_copy(mock_snapshot_copy_request, 1, 4, 11,
                        {{1, 11}, {2, 12}, {4, CEPH_NOSNAP}}, 0);
   expect_get_image_state(mock_get_image_state_request, 4, 0);
