@@ -70,8 +70,7 @@ Getting librados for Python
 ---------------------------
 
 The ``rados`` module provides ``librados`` support to Python
-applications. You may install ``python3-rados`` for Debian, Ubuntu, SLE or
-openSUSE or the ``python-rados`` package for CentOS/RHEL.
+applications. You may install the ``python3-rados`` package.
 
 To install ``librados`` development support files for Python on Debian/Ubuntu
 distributions, execute the following:
@@ -85,7 +84,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-   sudo yum install python-rados
+   sudo yum install python3-rados
 
 To install ``librados`` development support files for Python on SLE/openSUSE
 distributions, execute the following:

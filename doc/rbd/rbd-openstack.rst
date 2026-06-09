@@ -117,8 +117,8 @@ Install Ceph client packages
 
 On the ``glance-api`` node, you will need the Python bindings for ``librbd``::
 
-  sudo apt-get install python-rbd
-  sudo yum install python-rbd
+  sudo apt-get install python3-rbd
+  sudo yum install python3-rbd
 
 On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
 use both the Python bindings and the client command line tools::
