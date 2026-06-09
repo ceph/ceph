@@ -1395,7 +1395,7 @@ do_reclaim_space_ret do_reclaim_space(
 	    reclaimed += ext->get_length();
 	  }
 	  return extent_callback.rewrite_extents(
-	    t, extents, target_generation, modify_time);
+	    t, extents, target_generation, PLACEMENT_HINT_NULL, modify_time);
         });
       }).si_then([&extent_callback, &t] {
         return extent_callback.submit_transaction_direct(t);

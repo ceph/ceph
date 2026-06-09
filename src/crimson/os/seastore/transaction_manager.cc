@@ -1495,18 +1495,19 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
   Transaction &t,
   std::vector<CachedExtentRef> &extents,
   rewrite_gen_t target_generation,
+  placement_hint_t hint,
   sea_time_point modify_time)
 {
   LOG_PREFIX(TransactionManager::rewrite_extents);
   return seastar::do_with(
     P_ADDR_NULL,
     L_ADDR_NULL,
-    [this, &t, target_generation, modify_time, &extents, FNAME]
+    [this, &t, target_generation, modify_time, &extents, FNAME, hint]
     (auto &paddr_hint, auto &next_laddr) {
     return trans_intr::do_for_each(
       extents,
       [this, &t, target_generation, modify_time, FNAME,
-      &paddr_hint, &next_laddr](auto &extent) {
+      &paddr_hint, &next_laddr, hint](auto &extent) {
       {
         auto updated = cache->update_extent_from_transaction(t, extent);
         if (!updated) {
@@ -1533,7 +1534,7 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
 	}
         extent->set_target_rewrite_generation(INIT_GENERATION);
       } else {
-        extent->set_target_rewrite_generation(target_generation);
+        extent->set_target_rewrite_generation(target_generation, hint);
         ceph_assert(modify_time != NULL_TIME);
         extent->set_modify_time(modify_time);
       }
@@ -1618,6 +1619,7 @@ TransactionManager::demote_region(
 
   co_await rewrite_extents(
     t, extents, epm->get_max_hot_gen() + 1,
+    placement_hint_t::COLD,
     seastar::lowres_system_clock::now());
 
   co_return ret;

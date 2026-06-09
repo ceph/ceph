@@ -488,7 +488,9 @@ public:
   ) {
     assert(opt.hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
-    assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
+    assert(opt.gen == INIT_GENERATION ||
+           opt.hint == placement_hint_t::REWRITE ||
+           opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
     opt.gen = adjust_generation(
@@ -529,7 +531,9 @@ public:
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
     assert(opt.hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
-    assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
+    assert(opt.gen == INIT_GENERATION ||
+           opt.hint == placement_hint_t::REWRITE ||
+           opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
     opt.gen = adjust_generation(
@@ -768,7 +772,6 @@ private:
                is_lba_backref_node(type)) {
       gen = INLINE_GENERATION;
     } else if (hint == placement_hint_t::COLD) {
-      assert(gen == INIT_GENERATION);
       if (background_process.has_cold_tier()) {
         gen = hot_tier_generations;
       } else {
@@ -806,7 +809,8 @@ private:
     }
 
     if (is_tracked && gen >= hot_tier_generations &&
-        hint != placement_hint_t::REWRITE) {
+        hint != placement_hint_t::REWRITE &&
+        hint != placement_hint_t::COLD) {
       gen = hot_tier_generations - 1;
     }
 

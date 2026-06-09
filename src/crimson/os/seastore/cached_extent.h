@@ -776,8 +776,14 @@ public:
   }
 
   /// assign the target rewrite generation for the followup rewrite
-  void set_target_rewrite_generation(rewrite_gen_t gen) {
-    user_hint = placement_hint_t::REWRITE;
+  void set_target_rewrite_generation(
+    rewrite_gen_t gen,
+    placement_hint_t hint = PLACEMENT_HINT_NULL) {
+    if (hint != PLACEMENT_HINT_NULL) {
+      user_hint = hint;
+    } else {
+      user_hint = placement_hint_t::REWRITE;
+    }
     rewrite_generation = gen;
   }
 
