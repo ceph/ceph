@@ -757,17 +757,21 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
 
   extent_set clone_ranges = plan.will_write.get_extent_superset();
   uint64_t clone_max = ECUtil::align_next(plan.orig_size);
+  uint64_t truncated_size = plan.orig_size;
   ldpp_dout(dpp, 20) << __func__ << dendl;
 
   if (op.delete_first) {
-    clone_max = 0;
-  } else if (op.truncate && op.truncate->first < clone_max) {
-    clone_max = ECUtil::align_next(op.truncate->first);
+    truncated_size = clone_max = 0;
+  } else if (op.truncate) {
+    truncated_size = op.truncate->first;
+    if (op.truncate->first < clone_max) {
+      clone_max = ECUtil::align_next(op.truncate->first);
+    }
   }
   ECUtil::shard_extent_set_t cloneable_range(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(clone_max, cloneable_range);
 
-  if (plan.orig_size < plan.projected_size) {
+  if (truncated_size < plan.projected_size) {
     ECUtil::shard_extent_set_t projected_cloneable_range(sinfo.get_k_plus_m());
     sinfo.ro_size_to_read_mask(plan.projected_size,projected_cloneable_range);
 
