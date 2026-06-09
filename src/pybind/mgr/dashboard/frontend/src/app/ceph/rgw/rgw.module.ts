@@ -12,7 +12,7 @@ import {
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
@@ -37,7 +37,7 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
-import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+
 import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
 import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwSystemUserComponent } from './rgw-system-user/rgw-system-user.component';
@@ -284,47 +284,7 @@ const routes: Routes = [
       }
     ]
   },
-  {
-    path: 'roles',
-    data: {
-      breadcrumbs: 'Roles',
-      resource: 'api.rgw.roles@1.0',
-      tabs: [
-        {
-          name: 'Users',
-          url: '/rgw/user'
-        },
-        {
-          name: 'Accounts',
-          url: '/rgw/accounts'
-        },
-        {
-          name: 'Roles',
-          url: '/rgw/roles'
-        }
-      ]
-    },
-    children: [
-      {
-        path: '',
-        component: CRUDTableComponent
-      },
-      {
-        path: URLVerbs.CREATE,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.CREATE
-        }
-      },
-      {
-        path: URLVerbs.EDIT,
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: ActionLabels.EDIT
-        }
-      }
-    ]
-  },
+
   {
     path: 'bucket',
     data: { breadcrumbs: 'Buckets' },
