@@ -24,6 +24,7 @@
 #include "common/dout.h"
 #include "../posix/bucket_cache.h"
 #include "../posix/posixDB.h"
+#include "../posix/user_cache.h"
 #include "fs_strategy.h"
 
 class RGWLC;
@@ -395,6 +396,7 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
+  UserCache user_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;
   std::unique_ptr<nsfs::Directory> root_dir;
@@ -737,6 +739,7 @@ public:
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  UserCache& get_user_cache() { return user_cache; }
   nsfs::FSStrategy* get_fs_strategy() { return fs_strategy.get(); }
 
   /* called by nsfs::BucketCache layer when a new object is discovered
@@ -789,6 +792,7 @@ public:
 class NSFSUser : public StoreUser {
 private:
   NSFSDriver* driver;
+  int load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit);
 
 public:
   NSFSUser(NSFSDriver* _driver) :

@@ -2039,6 +2039,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count")));
 
+  /* user info cache */
+  user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_nsfs_cache_max_users"));
+
   root_dir = std::make_unique<Directory>(base_path, nullptr, ctx(), fs_strategy.get());
   ret = root_dir->open(dpp);
   if (ret < 0) {
@@ -2091,6 +2094,17 @@ std::unique_ptr<User> NSFSDriver::get_user(const rgw_user &u)
 
 int NSFSDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
+  {
+    UserCacheEntry ce;
+    if (user_cache.lookup_user_by_access_key(dpp, key, ce)) {
+      auto u = new NSFSUser(this, ce.info);
+      u->get_attrs() = ce.attrs;
+      u->get_version_tracker() = ce.objv_tracker;
+      user->reset(u);
+      return 0;
+    }
+  }
+
   RGWUserInfo uinfo;
   rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv_tracker;
@@ -2109,6 +2123,8 @@ int NSFSDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std:
   u->get_attrs() = std::move(attrs);
   u->get_version_tracker() = objv_tracker;
   user->reset(u);
+
+  user_cache.insert_user(dpp, {uinfo, u->get_attrs(), objv_tracker});
   return 0;
 }
 
@@ -2133,6 +2149,8 @@ int NSFSDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::stri
   u->get_attrs() = std::move(attrs);
   u->get_version_tracker() = objv_tracker;
   user->reset(u);
+
+  user_cache.insert_user(dpp, {uinfo, u->get_attrs(), objv_tracker});
   return 0;
 }
 
@@ -2502,10 +2520,34 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int NSFSUser::load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit)
+{
+  cache_hit = false;
+  UserCacheEntry ce;
+  if (driver->get_user_cache().lookup_user_by_uid(dpp, this->get_id().id, ce)) {
+    this->get_info() = std::move(ce.info);
+    this->get_attrs() = std::move(ce.attrs);
+    this->get_version_tracker() = std::move(ce.objv_tracker);
+    cache_hit = true;
+    return 0;
+  }
+
+  int ret = driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+        &(this->get_version_tracker()));
+  if (ret == 0) {
+    driver->get_user_cache().insert_user(dpp, {this->get_info(), this->get_attrs(), this->get_version_tracker()});
+  }
+  return ret;
+}
+
 int NSFSUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
-        &(this->get_version_tracker()));
+  bool cache_hit;
+  int ret = load_user_from_cache_or_db(dpp, cache_hit);
+  if (cache_hit) {
+    ldpp_dout(dpp, 21) << "UserCache: read_attrs: cache hit for uid=" << this->get_id().id << dendl;
+  }
+  return ret;
 }
 
 int NSFSUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
@@ -2515,24 +2557,40 @@ int NSFSUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   for(auto& it : new_attrs) {
 	attrs[it.first] = it.second;
   }
+  this->get_attrs() = std::move(attrs);
 
   return store_user(dpp, y, false);
 }
 
 int NSFSUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
-           &(this->get_version_tracker()));
+  bool cache_hit;
+  int ret = load_user_from_cache_or_db(dpp, cache_hit);
+  if (cache_hit) {
+    ldpp_dout(dpp, 21) << "UserCache: load_user: cache hit for uid=" << this->get_id().id << dendl;
+  }
+  return ret;
 }
 
 int NSFSUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
-  return driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
+  int ret = driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
+  if (ret == 0) {
+    driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
+    driver->get_user_cache().insert_user(dpp, {this->get_info(), this->get_attrs(), this->get_version_tracker()});
+  }
+  return ret;
 }
 
 int NSFSUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+  int ret = driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+  if (ret == 0) {
+    driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
+  } else {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove user uid=" << this->get_id().id << " ret=" << ret << dendl;
+  }
+  return ret;
 }
 
 int NSFSUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,

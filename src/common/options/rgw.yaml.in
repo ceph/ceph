@@ -4365,6 +4365,13 @@ options:
   default: 100
   services:
   - rgw
+- name: rgw_posix_cache_max_users
+  type: uint
+  level: advanced
+  desc: experimental Maximum number of users to maintain in the in-memory user info cache
+  default: 1000
+  services:
+  - rgw
 - name: rgw_posix_cache_lanes
   type: int
   level: advanced
@@ -4415,6 +4422,13 @@ options:
   level: advanced
   desc: Number of buckets to maintain in the ordered listing cache
   default: 100
+  services:
+  - rgw
+- name: rgw_nsfs_cache_max_users
+  type: uint
+  level: advanced
+  desc: Maximum number of users to maintain in the in-memory user info cache
+  default: 1000
   services:
   - rgw
 - name: rgw_nsfs_cache_lanes

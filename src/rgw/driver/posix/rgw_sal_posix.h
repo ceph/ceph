@@ -23,6 +23,7 @@
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
+#include "user_cache.h"
 #include "posixDB.h"
 
 class RGWLC;
@@ -490,6 +491,7 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   POSIXZone zone;
   std::unique_ptr<posix::BucketCache> bucket_cache;
+  UserCache user_cache;
   std::string base_path;
   std::unique_ptr<posix::Directory> root_dir;
   int root_fd;
@@ -831,6 +833,7 @@ public:
   posix::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   posix::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  UserCache& get_user_cache() { return user_cache; }
 
   /* called by posix::BucketCache layer when a new object is discovered
    * by inotify or similar */
@@ -882,6 +885,7 @@ public:
 class POSIXUser : public StoreUser {
 private:
   POSIXDriver* driver;
+  int load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit);
 
 public:
   POSIXUser(POSIXDriver* _driver) :
