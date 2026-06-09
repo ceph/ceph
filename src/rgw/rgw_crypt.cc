@@ -20,6 +20,7 @@
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
 #include "rgw_range_projection.h"
+#include "rgw/rgw_process_env.h"
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/error/error.h"
@@ -2195,7 +2196,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
         set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
         std::string actual_key;
-        res = make_actual_key_from_kms(s, attrs, y, actual_key);
+        res = make_actual_key_from_kms(s, attrs, s->penv.kms_cache.get(), y, actual_key);
         if (res != 0) {
           ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
           s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
@@ -2694,7 +2695,8 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_kms(s, attrs, y, actual_key);
+
+    res = reconstitute_actual_key_from_kms(s, attrs, s->penv.kms_cache.get(), y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
       s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
@@ -2729,7 +2731,7 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_kms(s, attrs, y, actual_key);
+    res = reconstitute_actual_key_from_kms(s, attrs, s->penv.kms_cache.get(), y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
       s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;

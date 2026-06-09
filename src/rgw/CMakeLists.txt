@@ -131,6 +131,7 @@ set(librgw_common_srcs
   rgw_rest_iam.cc
   rgw_object_lock.cc
   rgw_kms.cc
+  rgw_kms_cache.cc
   rgw_kmip_client.cc
   rgw_url.cc
   rgw_oidc_provider.cc
@@ -310,6 +311,7 @@ target_link_libraries(rgw_common
     legacy-option-headers
     global
     cls_rgw_client
+    keyring
     rt
     ICU::uc
     OATH::OATH
