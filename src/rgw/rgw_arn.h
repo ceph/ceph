@@ -31,7 +31,7 @@ enum struct Service {
   machinelearning, aws_marketplace, aws_marketplace_management,
   mobileanalytics, mobilehub, opsworks, opsworks_cm, polly,
   redshift, rds, route53, route53domains, sts, servicecatalog,
-  ses, sns, sqs, s3, swf, sdb, states, storagegateway, support,
+  ses, sns, sqs, s3, s3vectors, swf, sdb, states, storagegateway, support,
   trustedadvisor, waf, workmail, workspaces, wildcard
 };
 

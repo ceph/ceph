@@ -51,6 +51,8 @@ class RGWSI_User_RADOS : public RGWSI_User
 
   rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const override;
 
+  rgw_raw_obj get_vector_buckets_obj(const rgw_user& user_id) const override;
+
   int get_user_info_from_index(const std::string& key,
                                const rgw_pool& pool,
                                RGWUserInfo *info,

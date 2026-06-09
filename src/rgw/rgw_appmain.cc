@@ -76,6 +76,7 @@
 #endif
 #include "rgw_lua_background.h"
 #include "services/svc_zone.h"
+#include "rgw_s3vector_background.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -295,6 +296,7 @@ void rgw::AppMain::cond_init_apis()
     const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
         apis_set.contains("pubsub") || apis_set.contains("notifications");
+    const bool s3vectors_enabled = apis_set.contains("s3vectors");
     // Swift API entrypoint could placed in the root instead of S3
     const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
     if (apis_set.contains("s3") || s3website_enabled) {
@@ -302,7 +304,7 @@ void rgw::AppMain::cond_init_apis()
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
                         new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
-                                          iam_enabled, pubsub_enabled))));
+                                          iam_enabled, pubsub_enabled, s3vectors_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
              << "Swift API placed in the root of hierarchy" << dendl;
@@ -510,7 +512,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
     /* ignore error */
   }
-
 #ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
@@ -530,6 +531,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       }
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
+    }
+    if (s3vector_pauser) {
+      rgw_pauser->add_pauser(s3vector_pauser.get());
     }
       reloader = std::make_unique<RGWRealmReloader>(
           env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
@@ -598,6 +602,12 @@ void rgw::AppMain::init_dedup()
 }
 #endif
 
+void rgw::AppMain::init_s3vector()
+{
+  s3vector::init(dpp, env.driver);
+  s3vector_pauser = std::make_unique<S3VectorPauser>(dpp);
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   // stop the realm reloader
@@ -634,6 +644,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (lua_background) {
     lua_background->shutdown();
   }
+
+  s3vector::shutdown();
+  s3vector_pauser.reset();
 
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
