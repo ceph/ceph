@@ -29,11 +29,11 @@ public:
   virtual ~FilterPlacementTier() = default;
 
   virtual const std::string& get_tier_type() override { return next->get_tier_type(); }
-  virtual bool is_tier_type_s3() { return next->is_tier_type_s3(); }
+  virtual bool is_tier_type_s3() override { return next->is_tier_type_s3(); }
   virtual const std::string& get_storage_class() override { return next->get_storage_class(); }
   virtual bool retain_head_object() override { return next->retain_head_object(); }
-  virtual bool allow_read_through() { return next->allow_read_through(); }
-  virtual uint64_t get_read_through_restore_days() { return next->get_read_through_restore_days(); }
+  virtual bool allow_read_through() override { return next->allow_read_through(); }
+  virtual uint64_t get_read_through_restore_days() override { return next->get_read_through_restore_days(); }
 
   /* Internal to Filters */
   PlacementTier* get_next() { return next.get(); }
@@ -492,7 +492,11 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
-  virtual void shutdown(void) override { next->shutdown(); };
+  virtual void
+  shutdown(shutdown_vector& to_wait) override
+  {
+    next->shutdown(to_wait);
+  }
 
   virtual void finalize(void) override;
 
@@ -717,7 +721,7 @@ public:
   virtual bool operator==(const Bucket& b) const override { return next->operator==(b); }
   virtual bool operator!=(const Bucket& b) const override { return next->operator!=(b); }
 
-  friend class BucketList;
+  friend struct BucketList;
 
   /* Internal to Filters */
   Bucket* get_next() { return next.get(); }
@@ -917,8 +921,8 @@ public:
     return std::make_unique<FilterObject>(*this);
   }
 
-  virtual jspan_context& get_trace() { return next->get_trace(); }
-  virtual void set_trace (jspan_context&& _trace_ctx) { next->set_trace(std::move(_trace_ctx)); }
+  virtual jspan_context& get_trace() override { return next->get_trace(); }
+  virtual void set_trace(jspan_context&& _trace_ctx) override { next->set_trace(std::move(_trace_ctx)); }
 
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
@@ -938,7 +942,7 @@ public:
   virtual uint64_t get_size() override { return next->get_size(); }
   virtual const std::string& get_etag() override { return next->get_etag(); }
   virtual ceph::real_time& get_mtime() override { return next->get_mtime(); }
-  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() override {
     return next->get_cksum();
   }
 };
@@ -1094,13 +1098,14 @@ public:
 	       const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
 
   /** List all known entries */
-  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+  virtual void list(const DoutPrefixProvider *dpp,
 	       	   int index,
 	           const std::string& marker, std::string* out_marker,
 		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
-		   bool* truncated) override;
-  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
-		 	  int index, const std::string_view& marker) override;
+		   bool* truncated, boost::asio::yield_context yc) override;
+  virtual void trim_entries(const DoutPrefixProvider* dpp, int index,
+                            const std::string_view& marker,
+                            boost::asio::yield_context yc) override;
 
   /** Get a serializer for lifecycle */
   virtual std::unique_ptr<RestoreSerializer> get_serializer(
@@ -1135,7 +1140,7 @@ public:
     next(std::move(_next)), obj(_obj) {}
   virtual ~FilterWriter() = default;
 
-  virtual int prepare(optional_yield y) { return next->prepare(y); }
+  virtual int prepare(optional_yield y) override { return next->prepare(y); }
   virtual int process(bufferlist&& data, uint64_t offset) override;
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,

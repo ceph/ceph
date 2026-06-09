@@ -3,6 +3,7 @@
 
 #include "rgw_realm_reloader.h"
 
+#include "rgw_asio_thread.h"
 #include "rgw_auth_registry.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -32,12 +33,12 @@ RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
                                    const rgw::auth::ImplicitTenants& implicit_tenants,
                                    std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends,
-				   boost::asio::io_context& io_context)
+				   ceph::async::io_context_pool& context_pool)
   : env(env),
     implicit_tenants(implicit_tenants),
     service_map_meta(service_map_meta),
     frontends(frontends),
-    io_context(io_context),
+    context_pool(context_pool),
     timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
@@ -97,10 +98,27 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
-  env.driver->shutdown();
+  auto r = env.driver->do_shutdown(&dp, null_yield);
+
+  if (r < 0) {
+    ldpp_dout(&dp, -1)
+        << "Failed shutting down drivers in realm reloader: r = " << r
+        << " Continuing would leave radosgw in an inconsistent state." << dendl;
+    abort();
+  }
+
+  // Drain outstanding work
+  context_pool.finish();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
+
+  // Restart context_pool
+  context_pool.start(cct->_conf->rgw_thread_pool_size,
+		     [] {
+		       // request warnings on synchronous librados calls in this thread
+		       is_asio_thread = true;
+		     });
 
   ldpp_dout(&dp, 1) << "driver closed" << dendl;
   {
@@ -120,7 +138,7 @@ void RGWRealmReloader::reload()
       // recreate and initialize a new driver
       DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
       cfg.filter_name = "none";
-      env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
+      env.driver = DriverManager::get_storage(&dp, cct, cfg, context_pool,
 	  *env.site,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
@@ -172,7 +190,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = env.driver->register_to_service_map(&dp, "rgw", service_map_meta);
+  r = env.driver->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 

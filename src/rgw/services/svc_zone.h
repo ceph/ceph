@@ -11,11 +11,11 @@ class RGWSI_SyncModules;
 class RGWSI_Bucket_Sync;
 
 class RGWRealm;
-class RGWZoneGroup;
-class RGWZone;
-class RGWZoneParams;
+struct RGWZoneGroup;
+struct RGWZone;
+struct RGWZoneParams;
 class RGWPeriod;
-class RGWZonePlacementInfo;
+struct RGWZonePlacementInfo;
 
 class RGWBucketSyncPolicyHandler;
 

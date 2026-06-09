@@ -24,6 +24,8 @@
 
 #include "cls/version/cls_version_types.h"
 
+#include "common/async/yield_context.h"
+
 #include "common/strtol.h"
 
 #include "neorados/cls/fifo.h"
@@ -227,7 +229,7 @@ public:
   virtual void handle_empty_to(uint64_t new_tail) = 0;
 
   /// If you override this, call the superclass method *at the end*.
-  virtual void shutdown();
+  virtual void shutdown(optional_yield y);
 };
 
 inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {

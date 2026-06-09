@@ -13,11 +13,15 @@
  *
  */
 
+#include <cerrno>
 #include <optional>
 
-#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/use_future.hpp>
 
 #include "common/errno.h"
 //#include "common/dout.h"
@@ -56,6 +60,25 @@
 
 #define dout_subsys ceph_subsys_rgw
 //#define dout_context g_ceph_context
+
+namespace rgw::sal {
+
+int
+Driver::do_shutdown(
+    const DoutPrefixProvider* dpp,
+    optional_yield y) noexcept
+{
+  try {
+    shutdown_vector to_wait;
+    shutdown(to_wait);
+    await_shutdowns(dpp, y.get_executor(), std::move(to_wait), rgw::oyc(dpp, y));
+  } catch (const std::exception&) {
+    return ceph::from_exception(std::current_exception());
+  }
+  return 0;
+}
+
+} // namespace rgw::sal
 
 extern "C" {
 #ifdef WITH_RADOSGW_RADOS

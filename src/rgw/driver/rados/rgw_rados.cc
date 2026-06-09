@@ -1115,7 +1115,8 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
   return false;
 }
 
-void RGWRados::finalize()
+void
+RGWRados::shutdown(rgw::shutdown_vector& to_wait)
 {
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
@@ -1130,12 +1131,23 @@ void RGWRados::finalize()
     }
   }
 
-  /* Before joining any sync threads, drain outstanding requests &
-   * mark the async_processor as going_down() */
+  if (svc.async_processor) {
+    svc.async_processor->set_down_flag();
+  }
+
+  if (use_restore_thread) {
+    restore->stop_processor();
+    restore->shutdown(to_wait);
+  }
+  // TODO(Æmerson): Turn threads into Asio threads so we can cancel them.
+}
+
+void RGWRados::finalize()
+{
+  // Before joining any sync threads, drain outstanding requests.
   if (svc.async_processor) {
     svc.async_processor->stop();
   }
-
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();
@@ -1371,6 +1383,47 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();
 
+  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
+  binfo_cache->init(svc.cache);
+
+  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  topic_cache->init(svc.cache);
+
+  lc = new RGWLC();
+  lc->initialize(cct, this->driver);
+
+  restore = make_unique<rgw::restore::Restore>(driver->get_io_context());
+  ret = restore->initialize(cct, this->driver, y);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;
+    return ret;
+  }
+
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+
+  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+                             zone.bucket_index_max_shards);
+  if (bucket_index_max_shards > get_max_bucket_shards()) {
+    bucket_index_max_shards = get_max_bucket_shards();
+    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << get_max_bucket_shards() << dendl;
+  }
+  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+
+  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
+
+  reshard_wait = std::make_shared<RGWReshardWait>();
+
+  reshard = new RGWReshard(this->driver);
+
+  // disable reshard thread based on zone/zonegroup support
+  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
+
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
   if (!svc.zone->need_to_sync()) {
@@ -1449,52 +1502,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     data_notifier->start();
   }
 
-  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
-  binfo_cache->init(svc.cache);
-
-  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
-  topic_cache->init(svc.cache);
-
-  lc = new RGWLC();
-  lc->initialize(cct, this->driver);
-
   if (use_lc_thread)
     lc->start_processor();
 
-  restore = make_unique<rgw::restore::Restore>();
-  ret = restore->initialize(cct, this->driver);
-
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;
-    return ret;
-  }
-
   if (use_restore_thread)
     restore->start_processor();
-
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
-
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone.bucket_index_max_shards);
-  if (bucket_index_max_shards > get_max_bucket_shards()) {
-    bucket_index_max_shards = get_max_bucket_shards();
-    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << get_max_bucket_shards() << dendl;
-  }
-  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
-  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
-
-  if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
-  }
-
-  reshard_wait = std::make_shared<RGWReshardWait>();
-
-  reshard = new RGWReshard(this->driver);
-
-  // disable reshard thread based on zone/zonegroup support
-  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
   if (run_reshard_thread)  {
     reshard->start_processor();

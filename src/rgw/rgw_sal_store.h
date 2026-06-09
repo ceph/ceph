@@ -17,6 +17,8 @@
 
 #include "rgw_sal.h"
 
+#include "include/random.h"
+
 /**
  * @brief State for a StoreObject
  */

@@ -20,8 +20,6 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 
-#include "acconfig.h"
-
 /// optional-like wrapper for a boost::asio::yield_context. operations that take
 /// an optional_yield argument will, when passed a non-empty yield context,
 /// suspend this coroutine instead of the blocking the thread of execution
@@ -40,6 +38,21 @@ class optional_yield {
 
   /// return a reference to the yield_context. only valid if non-empty
   boost::asio::yield_context& get_yield_context() const noexcept { return *y; }
+
+  using executor_type = boost::asio::any_io_executor;
+
+  /// Return the executor associated with the `yield_context` or a
+  /// strand in the system executor.
+  ///
+  /// \note In the case of `null_yield` this creates a new strand on
+  /// every call. If it is important that two things share an
+  /// executor, copy it rather than calling twice.
+  executor_type
+  get_executor() const
+  {
+    return y ? y->get_executor()
+             : boost::asio::make_strand(boost::asio::system_executor{});
+  }
 };
 
 // type tag object to construct an empty optional_yield

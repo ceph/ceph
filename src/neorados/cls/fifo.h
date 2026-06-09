@@ -136,6 +136,8 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
+
 	   auto e = rados.get_executor();
 	   auto impl = std::make_shared<detail::FIFOImpl>(std::move(rados),
 							  std::move(obj),
@@ -195,6 +197,7 @@ public:
 	 try {
 	   state.throw_if_cancelled(true);
 	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
+	   state.complete_if_cancelled(false);
 
 	   auto impl = std::make_shared<detail::FIFOImpl>(std::move(rados),
 							  std::move(obj),

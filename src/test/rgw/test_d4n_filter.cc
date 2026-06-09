@@ -343,7 +343,7 @@ TEST_F(D4NFilterFixture, PutObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -412,7 +412,7 @@ TEST_F(D4NFilterFixture, GetObjectRead)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver)); 
   }, rethrow);
 
@@ -524,7 +524,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -612,7 +612,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -700,7 +700,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -771,7 +771,7 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -811,7 +811,7 @@ TEST_F(D4NFilterFixture, PutVersionedObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -897,7 +897,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1038,7 +1038,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1179,7 +1179,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1320,7 +1320,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1411,7 +1411,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1526,7 +1526,7 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1599,7 +1599,7 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1721,7 +1721,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1843,7 +1843,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -1965,7 +1965,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     testFile.close();
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -2048,7 +2048,7 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -2205,7 +2205,7 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
  
@@ -2356,7 +2356,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -2577,7 +2577,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -2798,7 +2798,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3019,7 +3019,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3128,7 +3128,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3213,7 +3213,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3327,7 +3327,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3380,7 +3380,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3477,7 +3477,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3520,7 +3520,7 @@ TEST_F(D4NFilterFixture, ListObjectVersions)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3620,7 +3620,7 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
 
     conn->cancel();
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3731,7 +3731,7 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
 
     conn->cancel();
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
@@ -3808,7 +3808,7 @@ TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
 
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
     conn->cancel();
-    driver->shutdown();
+    driver->do_shutdown(nullptr, yield);
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 

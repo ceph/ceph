@@ -20,6 +20,7 @@
 #include "neorados/cls/version.h"
 #include "neorados/cls/fifo.h"
 
+#include "async_utils.h"
 #include "rgw_log_backing.h"
 #include "rgw_common.h"
 
@@ -224,20 +225,24 @@ asio::awaitable<void> log_remove(
   co_return;
 }
 
-void logback_generations::shutdown() {
-  if (watchcookie > 0) {
-    auto cct = rados.cct();
-    sys::error_code ec;
-    rados.unwatch(watchcookie, loc, async::use_blocked[ec]);
-    if (ec) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed unwatching oid=" << oid
-		 << ", " << ec.message() << dendl;
-    }
-    watchcookie = 0;
-  }
-}
+void
+logback_generations::shutdown(optional_yield y)
+{
+  auto cct = rados.cct();
+  DoutPrefix dp{cct, ceph_subsys_rgw, "logback_generations::shutdown()"};
 
+  if (watchcookie > 0) {
+    try {
+      rados.unwatch(watchcookie, loc, rgw::oyc(&dp, y));
+    } catch (const std::exception& e) {
+      ldpp_dout(&dp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+                        << ": failed unwatching oid=" << oid << ", " << e.what()
+                        << dendl;
+    }
+  }
+  watchcookie = 0;
+  return;
+}
 
 logback_generations::~logback_generations() {
   auto cct = rados.cct();
