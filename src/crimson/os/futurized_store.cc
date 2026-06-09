@@ -20,8 +20,13 @@ FuturizedStore::create(const std::string& type,
     using crimson::os::CyanStore;
     return std::make_unique<CyanStore>(data);
   } else if (type == "seastore") {
-    return crimson::os::seastore::make_seastore(
-      data);
+    if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+      return crimson::os::seastore::make_seastore(data);
+    } else {
+      using crimson::os::_RelayStore;
+      return std::make_unique<_RelayStore>(
+        crimson::os::seastore::make_seastore(data));
+    }
   } else {
     using crimson::os::AlienStore;
 #ifdef WITH_BLUESTORE
