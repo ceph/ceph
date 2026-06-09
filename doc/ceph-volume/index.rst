@@ -12,8 +12,7 @@ follow a predictable and robust way of preparing, activating, and starting OSDs.
 
 **Command Line Subcommands**
 
-There is currently support for ``lvm``, and plain disks (with GPT partitions)
-that may have been deployed with ``ceph-disk``.
+There is currently support for ``lvm``, and plain disks (with GPT partitions).
 
 ``zfs`` support is available for running a FreeBSD cluster.
 
