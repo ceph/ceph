@@ -26,19 +26,16 @@ logger = logging.getLogger(__name__)
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 
-# allowed and preferred ciphers for cephx keyrings
-# Be careful updating the allowed ciphers as not to
-# disallow one that was allowed in a valid upgrade
-# origin point to this version. The keyrings will not
-# be rotated as of the time the allowed and preferred
-# ciphers are set
+# allowed ciphers for cephx keyrings in this version.
+# We do not set preferred ciphers as we may potentially
+# brake clusters on upgrade
 ALLOWED_CIPHERS = ['aes', 'aes256k']
-PREFERRED_CIPHERS = ['aes256k']
-# PREFERRED_CIPHERS may be multiple different ciphers, but when
-# we rotate keys we need to arbitrarily pick one to use just
-# to make sure the rotated key is on one from that list
-PREFERRED_CIPHER = PREFERRED_CIPHERS[0]
-# cipher mons should use by default when servicing clients
+# ROTATION_CIPHER is the cipher the new keys will be set
+# up with after we rotate them
+ROTATION_CIPHER = 'aes256k'
+# cipher mons should use by default for service requests
+# Do not set the service cipher until all core (mon/mgr/osd/mds)
+# daemons have been upgraded
 SERVICE_CIPHER = 'aes256k'
 
 # Health warnings to mute when upgrade starts and unmute
@@ -103,7 +100,7 @@ class UpgradeState:
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
-                 has_set_cephx_ciphers: Optional[bool] = False,
+                 has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -123,7 +120,7 @@ class UpgradeState:
         self.total_count = total_count
         self.remaining_count = remaining_count
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
-        self.has_set_cephx_ciphers = has_set_cephx_ciphers
+        self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.health_warnings_muted = health_warnings_muted
 
     def to_json(self) -> dict:
@@ -144,7 +141,7 @@ class UpgradeState:
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
-            'has_set_cephx_ciphers': self.has_set_cephx_ciphers,
+            'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted
         }
 
@@ -947,27 +944,17 @@ class CephadmUpgrade:
             mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
             _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
             if not mons_needing_upgrade:
-                if not self.upgrade_state.has_set_cephx_ciphers:
+                if not self.upgrade_state.has_set_cephx_allowed_ciphers:
                     # all mons have been upgraded if we get here so keyrings can be rotated
-                    # start by setting the preferred and allowed cephx key ciphers
+                    # start by setting the allowed ciphers. Preferred ciphers should be left
+                    # to the user to not potentially brake clusters and the service cipher
+                    # cannot be set until after all keyrings have been rotated
                     ret, image, err = self.mgr.check_mon_command({
                         'prefix': 'mon set',
                         'name': 'auth_allowed_ciphers',
                         'value': ','.join(ALLOWED_CIPHERS),
                     })
-                    ret, image, err = self.mgr.check_mon_command({
-                        'prefix': 'mon set',
-                        'name': 'auth_preferred_ciphers',
-                        'value': ','.join(PREFERRED_CIPHERS),
-                    })
-                    # set the default service cipher to whatever
-                    # the preference is this release
-                    ret, image, err = self.mgr.check_mon_command({
-                        'prefix': 'mon set',
-                        'name': 'auth_service_cipher',
-                        'value': SERVICE_CIPHER,
-                    })
-                    self.upgrade_state.has_set_cephx_ciphers = True
+                    self.upgrade_state.has_set_cephx_allowed_ciphers = True
                     self._save_upgrade_state()
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
@@ -1255,10 +1242,30 @@ class CephadmUpgrade:
             self.upgrade_state.fs_original_allow_standby_replay = {}
             self._save_upgrade_state()
 
-    def _mark_upgrade_complete(self) -> None:
+    def _mark_upgrade_complete(self, target_digests: Optional[List[str]], target_image: str) -> None:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+
+        logger.info('Upgrade: checking if all mon, mgr, OSD, mds daemons upgraded before changing service cipher')
+        daemons_to_check = (
+            self.mgr.cache.get_daemons_by_service('mon')
+            + self.mgr.cache.get_daemons_by_service('mgr')
+            + self.mgr.cache.get_daemons_by_type('osd')
+            + self.mgr.cache.get_daemons_by_type('mds')
+        )
+        assert target_digests is not None
+        _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(daemons_to_check, target_digests, target_image)
+        if not still_needing_upgrade:
+            # set the default service cipher to whatever
+            # the preference is this release
+            ret, image, err = self.mgr.check_mon_command({
+                'prefix': 'mon set',
+                'name': 'auth_service_cipher',
+                'value': SERVICE_CIPHER,
+            })
+        else:
+            logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
 
         if self.upgrade_state.health_warnings_muted:
             self._unmute_upgrade_related_health_warnings()
@@ -1390,7 +1397,7 @@ class CephadmUpgrade:
                     if daemon_type not in NON_CEPH_IMAGE_TYPES and daemon_type != 'mgr':
                         continue
                 else:
-                    self._mark_upgrade_complete()
+                    self._mark_upgrade_complete(target_digests, target_image)
                     return
             logger.debug('Upgrade: Checking %s daemons' % daemon_type)
             daemons_of_type = [d for d in daemons if d.daemon_type == daemon_type]
@@ -1513,5 +1520,5 @@ class CephadmUpgrade:
                 'who': name_to_config_section(daemon_type),
             })
 
-        self._mark_upgrade_complete()
+        self._mark_upgrade_complete(target_digests, target_image)
         return
