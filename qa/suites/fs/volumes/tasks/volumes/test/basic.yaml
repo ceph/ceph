@@ -9,3 +9,4 @@ tasks:
         - tasks.cephfs.test_volumes.TestCorruptedSubvolumes
         - tasks.cephfs.test_subvolume.TestSubvolume
         - tasks.cephfs.test_subvolume.TestSubvolumeReplicated
+        - tasks.cephfs.test_volumes.TestEmptyStringForCreates
