@@ -14267,41 +14267,66 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    const pg_pool_t *current_pool = osdmap.get_pg_pool(pool);
+    int64_t target_pool = pool;
+
+    // If the current pool is a current migration src or is a src in a cascade then set the target to its target pool
+    // If the current pool is a target already or not in a migration then do nothing
+    if (current_pool->is_migrating()) {
+      target_pool = current_pool->migration_target.has_value() ?
+                 current_pool->migration_target.value() : pool;
+    }
+
+    // Collect all pools in the migration cascade which point to the target pool
+    // Will remain empty if the given pool was never in a migration
+    std::vector<int64_t> cascade_pool_ids;
+    std::vector<std::string> cascade_pool_names;
+    for (const auto& [pool_id, other_pool] : osdmap.get_pools()) {
+      if (other_pool.migration_target.has_value() &&
+          other_pool.migration_target.value() == target_pool) {
+        cascade_pool_ids.push_back(pool_id);
+        cascade_pool_names.push_back(osdmap.get_pool_name(pool_id));
+      }
+    }
+
     bool force_no_fake = false;
     cmd_getval(cmdmap, "yes_i_really_really_mean_it", force_no_fake);
     bool force = false;
     cmd_getval(cmdmap, "yes_i_really_really_mean_it_not_faking", force);
     if (poolstr2 != poolstr ||
 	(!force && !force_no_fake)) {
-      ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
-	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
-	 << "followed by --yes-i-really-really-mean-it.";
+      ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr;
+      
+      if (!cascade_pool_names.empty()) {
+        ss << " and the following pools in the migration cascade: ";
+        for (size_t i = 0; i < cascade_pool_names.size(); ++i) {
+          if (cascade_pool_ids[i] == pool) continue;
+          ss << cascade_pool_names[i];
+          if (i < cascade_pool_names.size() - 1) ss << ", ";
+        }
+        if (target_pool != pool){
+          ss << ", " << osdmap.get_pool_name(target_pool);
+        }
+      }
+      
+      ss << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
+        << "followed by --yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply_no_propose;
     }
 
-    const pg_pool_t *current_pool = osdmap.get_pg_pool(pool);
-
-    // If the current pool is a current migration src or is a src in a cascade then set the target to its target pool
-    // If the current pool is a target already or not in a migration then do nothing
-    if (current_pool->is_migrating()) {
-      // even if the current pool is not in a migration still set it to the migration src so it can be checked and deleted later
-      pool = current_pool->migration_target.has_value() ?
-                 current_pool->migration_target.value() : pool;
-    }
-    // Delete all pools in cascade (pointing to target), This will inclued the current pool if it is a src pointing to this target
-    for (const auto& [pool_id, other_pool] : osdmap.get_pools()) {
-      if (other_pool.migration_target.has_value() &&
-          other_pool.migration_target.value() == pool) {
-        err = _prepare_remove_pool(pool_id, &ss, force_no_fake);
-        if (err < 0) {
-          goto reply_no_propose;
-        }
-          }
+    // Delete all pools in cascade using the pre-collected list
+    // This will delete the current pool if it is a migration source
+    for (const auto& pool_id : cascade_pool_ids) {
+      err = _prepare_remove_pool(pool_id, &ss, force_no_fake);
+      ss << ", ";
+      if (err < 0) {
+        goto reply_no_propose;
+      }
     }
 
-    //This will delete the src if one was set or will just delete the pool passed in
-    err = _prepare_remove_pool(pool, &ss, force_no_fake);
+    //This will delete the target if one was set or will just delete the pool passed in
+    err = _prepare_remove_pool(target_pool, &ss, force_no_fake);
 
     if (err == -EAGAIN) {
       goto wait;
