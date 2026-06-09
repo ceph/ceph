@@ -49,16 +49,6 @@ class CephTestRados(WatchedProcess):
             proc.stdin.close()
 
 def _validate_pool_config(config):
-    """
-    Validate pool configuration for incompatible combinations.
-    
-    Args:
-        config: Pool configuration dictionary
-        
-    Raises:
-        ValueError: If configuration contains incompatible settings
-    """
-    # Rule 1: num_zones > 1 (stretched pools) requires ec_optimizations
     num_zones = config.get('num_zones', 1)
     if num_zones > 1:
         log.info(
@@ -66,24 +56,20 @@ def _validate_pool_config(config):
             "is set to true in ceph configuration.", num_zones
         )
     
-    # Rule 2: erasure_code_profile requires ec_pool
     if 'erasure_code_profile' in config and not config.get('ec_pool', False):
         raise ValueError(
             "erasure_code_profile specified but ec_pool is not true"
         )
     
-    # Rule 3: erasure_code_use_overwrites requires ec_pool
     if config.get('erasure_code_use_overwrites', False) and not config.get('ec_pool', False):
         raise ValueError(
             "erasure_code_use_overwrites requires ec_pool to be true"
         )
     
-    # Rule 4: erasure_code_crush requires ec_pool
     if 'erasure_code_crush' in config and not config.get('ec_pool', False):
         raise ValueError(
             "erasure_code_crush specified but ec_pool is not true"
         )
-
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -116,7 +102,7 @@ def task(ctx, config):
           use-pool-config: if true, read pool configuration from overrides/ceph/pool-config
                           instead of from tasks/rados (default: false)
 
-    For example (traditional style)::
+    For example::
 
         tasks:
         - ceph:
@@ -271,7 +257,6 @@ def task(ctx, config):
         else:
             log.warning("use-pool-config is true but no pool-config found in overrides/ceph")
     
-    # Apply rados-specific overrides (for backward compatibility)
     teuthology.deep_merge(config, overrides.get('rados', {}))
     log.info("config after merge is {config}".format(config=str(config)))
     
