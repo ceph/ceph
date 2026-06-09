@@ -940,6 +940,8 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
 {
   const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
+  if (max_mds == 0)
+    return MDS_RANK_NONE;
   uint64_t hash = rjhash64(ino);
   if (fg)
     hash = rjhash64(hash + rjhash64(fg.value()));
@@ -8016,7 +8018,8 @@ bool MDCache::shutdown_pass()
           dir->is_freezing() ||
           dir->is_ambiguous_dir_auth() ||
           dir->state_test(CDir::STATE_EXPORTING) ||
-          dir->get_inode()->is_ephemerally_pinned()) {
+          (mds->mdsmap->get_max_mds() > 0 &&
+           dir->get_inode()->is_ephemerally_pinned())) {
         continue;
       }
       ls.push_back(dir);
