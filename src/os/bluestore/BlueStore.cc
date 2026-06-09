@@ -20721,6 +20721,17 @@ void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
       }
     } else {
       derr << __func__ << " shared blob not found:" << sbid << dendl;
+      /*
+       * When the shared_blob key is missing or fails to decode, it is necessary to
+       * scan the blob's pextents directly as the sole authoritative source to
+       * verify allocated blocks and prevent double-allocation.
+       */
+      for (auto& pe : blob.get_extents()) {
+        if (pe.offset == bluestore_pextent_t::INVALID_OFFSET) {
+          continue;
+        }
+        store.set_allocation_in_simple_bmap(&sbmap, pe.offset, pe.length);
+      }
     }
     if (compressed) {
       per_pool_statfs->compressed() +=

@@ -3986,6 +3986,164 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
 }
 
 #if defined(WITH_BLUESTORE)
+TEST_P(StoreTest, BlueStoreReconstructAllocationsTest)
+{
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1.0");
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  ghobject_t hoid1(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t coid1 = hoid1;
+  coid1.hobj.snap = 1;
+  ghobject_t coid2 = hoid1;
+  coid2.hobj.snap = 2;
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+
+  {
+    constexpr uint64_t FULL_BUFFER_LEN = 8192;
+    bufferlist data;
+    data.append(string(FULL_BUFFER_LEN, 'a'));
+
+    ObjectStore::Transaction t1;
+    t1.write(cid, hoid1, 0, data.length(), data);
+    cerr << "Creating object and write " << hoid1 << std::endl;
+    r = queue_transaction(store, ch, std::move(t1));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction clone_t1;
+    clone_t1.clone(cid, hoid1, coid1);
+    cerr << "Clone object " << coid1 << std::endl;
+    r = queue_transaction(store, ch, std::move(clone_t1));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction clone_t2;
+    clone_t2.clone(cid, hoid1, coid2);
+    cerr << "Clone object " << coid2 << std::endl;
+    r = queue_transaction(store, ch, std::move(clone_t2));
+    ASSERT_EQ(r, 0);
+
+    bufferlist new_data;
+    new_data.append(string(4096, 'b'));
+    ObjectStore::Transaction t2;
+    t2.write(cid, hoid1, 0, new_data.length(), new_data);
+    cerr << "Write object " << hoid1 << std::endl;
+    r = queue_transaction(store, ch, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    {
+      ch.reset();
+      // this trims hoid one out of onode cache
+      EXPECT_EQ(store->umount(), 0);
+    }
+    // Clearing shared blob causes freespace tracker miscount.
+    {
+      auto bluestore = new BlueStore(g_ceph_context, data_dir);
+      KeyValueDB* db_ptr;
+      int r = bluestore->open_db_environment(&db_ptr, false, false);
+      ASSERT_EQ(r, 0);
+
+      {
+	// to be inline with BlueStore.cc
+	const std::string PREFIX_SHARED_BLOB = "X";
+
+	size_t cnt = 0;
+	auto it = db_ptr->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
+	ASSERT_NE(it, nullptr);
+	for (it->lower_bound(std::string()); it->valid(); it->next())
+	{
+	  std::cerr << "shared blob key '" << pretty_binary_string(it->key()) << "'" << std::endl;
+	  ++cnt;
+	}
+	ASSERT_EQ(cnt, 1);
+
+	auto dbt = db_ptr->get_transaction();
+	for (it->lower_bound(std::string()); it->valid(); it->next())
+	{
+	  std::cerr << "rm shared blob key '" << pretty_binary_string(it->key()) << "'" << std::endl;
+	  dbt->rmkey(PREFIX_SHARED_BLOB, it->key());
+	}
+	r = db_ptr->submit_transaction_sync(dbt);
+	ASSERT_EQ(r, 0);
+      }
+
+      bluestore->close_db_environment();
+      delete bluestore;
+    }
+
+    {
+      ch.reset();
+      // this trims hoid one out of onode cache
+      // ASSERT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
+
+    {
+      BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+      auto* kv = bstore->get_kv();
+
+      // to be inline with BlueStore.cc
+      const string PREFIX_SHARED_BLOB = "X";
+
+      size_t cnt = 0;
+      auto it = kv->get_iterator(PREFIX_SHARED_BLOB);
+      ceph_assert(it);
+      std::cerr << "Checking shared blob key" << std::endl;
+      for (it->lower_bound(string()); it->valid(); it->next())
+      {
+	std::cerr << "shared blob key '" << pretty_binary_string(it->key()) << "'" << std::endl;
+	++cnt;
+      }
+      ASSERT_EQ(cnt, 0);
+    }
+
+    new_data.clear();
+    new_data.append(string(FULL_BUFFER_LEN, 'c'));
+
+    ObjectStore::Transaction t3;
+    t3.write(cid, hoid2, 0, data.length(), new_data);
+    cerr << "Creating object and write " << hoid2 << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+
+    {
+      ch.reset();
+      // this trims hoid one out of onode cache
+      EXPECT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->fsck(true), 4);
+      store->repair(true);
+      EXPECT_EQ(store->fsck(true), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
+  }
+
+  {
+    ObjectStore::Transaction t;
+    // clean up
+    t.remove(cid, hoid1);
+    t.remove(cid, coid1);
+    t.remove(cid, coid2);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ch.reset();
+}
 TEST_P(StoreTest, BlueStoreUnshareBlobSimple) {
   if (string(GetParam()) != "bluestore")
     return;
