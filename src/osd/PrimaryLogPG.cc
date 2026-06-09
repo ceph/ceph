@@ -13524,7 +13524,7 @@ std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std
   if (deleted.contains(pool_migration_watermark)) {
     hobject_t current(pool_migration_watermark);
     do {
-      update_range(&pool_migration_info, pool_migration_watermark, nullptr);
+      update_range(&pool_migration_info, &pool_migration_watermark, nullptr);
       dout(20) << __func__ << " deleting object " << current << dendl;
       current = next_pool_migration(current);
     } while (deleted.contains(current));
@@ -15046,24 +15046,25 @@ void PrimaryLogPG::update_range(
 
 void PrimaryLogPG::update_range(
   PoolMigrationInterval *pmi,
-  hobject_t watermark,
+  hobject_t *watermark,
   HBHandle *handle)
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
+  std::string func_name = __func__;
 
   if (pmi->version < info.log_tail) {
-    dout(10) << __func__<< ": pmi is old, rescanning local pool_migration_info" << dendl;
+    dout(10) << func_name << ": pmi is old, rescanning local pool_migration_info" << dendl;
     pmi->clear();
     pmi->version = info.last_update;
     scan_range_migration(local_min, local_max, pmi, handle);
-  } else if (watermark >= pmi->end || pmi->empty()) {
-    dout(10) << __func__ << " no migration targets in pmi, rescanning" << dendl;
+  } else if (*watermark >= pmi->end || pmi->empty()) {
+    dout(10) << func_name << " no migration targets in pmi, rescanning" << dendl;
     scan_range_migration(local_min, local_max, pmi, handle);
   }
 
   if (pmi->version >= projected_last_update) {
-    dout(10) << __func__<< ": pmi is current" << dendl;
+    dout(10) << func_name << ": pmi is current" << dendl;
     ceph_assert(pmi->version == projected_last_update);
   } else if (pmi->version >= info.log_tail) {
     if (recovery_state.get_pg_log().get_log().empty() && projected_log.empty()) {
@@ -15077,30 +15078,37 @@ void PrimaryLogPG::update_range(
       return;
     }
 
-    dout(10) << __func__<< ": pmi is old, (" << pmi->version
+    dout(10) << func_name << ": pmi is old, (" << pmi->version
              << ") can be updated with log to projected_last_update "
              << projected_last_update << dendl;
 
     auto func = [&](const pg_log_entry_t &e) {
-      dout(10) << __func__ << ": updating from version " << e.version << dendl;
-      const hobject_t &soid = e.soid;
-      if (soid >= pmi->begin && soid < pmi->end) {
+      dout(10) << func_name << ": updating from version " << e.version << dendl;
+      if (e.soid >= pmi->begin && e.soid < pmi->end) {
         if (e.is_update()) {
-          dout(10) << __func__ << ": " << e.soid << " updated to version "
+          dout(10) << func_name << ": " << e.soid << " updated to version "
                    << e.version << dendl;
           pmi->objects.erase(e.soid);
           pmi->objects.insert(make_pair(e.soid, e.version));
+          if (e.soid < *watermark) {
+            ObjectContextRef obc = get_object_context(e.soid, false);
+            if (obc && obc->obs.exists) {
+              dout(10) << func_name << ": update to " << e.soid << " lower than watermark ("
+                       << *watermark << "), updating watermark" << dendl;
+              *watermark = e.soid;
+            }
+          }
         } else if (e.is_delete()) {
-          dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
+          dout(10) << func_name << ": " << e.soid << " removed" << dendl;
           pmi->objects.erase(e.soid);
         }
       }
     };
 
-    dout(10) << "scanning pg log first" << dendl;
+    dout(10) << func_name << ": scanning pg log first" << dendl;
     recovery_state.get_pg_log().get_log().scan_log_after(pmi->version, func);
     if (is_primary()) {
-      dout(10) << "scanning projected log" << dendl;
+      dout(10) << func_name << ": scanning projected log" << dendl;
       projected_log.scan_log_after(pmi->version, func);
       pmi->version = projected_last_update;
     } else {
@@ -15901,8 +15909,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     *work_started = true;
 
     // Process log updates and ensure our interval is populated
+    update_range(&pool_migration_info, &last_pool_migration_started, &handle);
     hobject_t soid = last_pool_migration_started;
-    update_range(&pool_migration_info, soid, &handle);
 
     // TODO Jamie - we can't call get_object_context if soid is min
     if (soid.is_min()) {
