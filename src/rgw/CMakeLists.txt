@@ -281,6 +281,7 @@ if(WITH_RADOSGW_NSFS)
   list(APPEND librgw_common_srcs
 	      driver/nsfs/rgw_sal_nsfs.cc
 	      driver/nsfs/nsfsDB.cc
+	      driver/nsfs/fs_strategy.cc
 	      driver/posix/lmdb-safe.cc
 	      driver/posix/notify.cpp)
 endif()
