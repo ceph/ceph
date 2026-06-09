@@ -3,7 +3,6 @@ Task for dnsmasq configuration
 """
 import contextlib
 import logging
-import re
 
 from teuthology import misc
 from teuthology.exceptions import ConfigError
@@ -30,40 +29,6 @@ def install_dnsmasq(remote):
     finally:
         if existing is None:
             packaging.remove_package('dnsmasq', remote)
-
-@contextlib.contextmanager
-def backup_resolv(remote, path, table):
-    """
-    Store a backup of resolv.conf in the testdir and restore it after the task.
-    Reserve 'nameserver' values per remote name in lookup 'table' for future use.
-    """
-    resolv_conf = remote.sh(f"cat /etc/resolv.conf | tee {path}")
-    nameserver_re = re.compile(r'\s*nameserver\s+([^\s]*)')
-    for line in resolv_conf.split('\n'):
-        if m := nameserver_re.match(line):
-            table.setdefault(remote.name, {}).setdefault('nameserver', []).append(m[1])
-    try:
-        yield
-    finally:
-        # restore with 'cp' to avoid overwriting its security context
-        remote.run(args=['sudo', 'cp', path, '/etc/resolv.conf'])
-        remote.run(args=['rm', path])
-
-@contextlib.contextmanager
-def replace_resolv(remote, path, table):
-    """
-    Update resolv.conf to point the nameserver at localhost.
-    """
-    remote.write_file(path, "nameserver 127.0.0.1\n")
-    try:
-        # install it
-        if remote.os.package_type == "rpm":
-            # for centos ovh resolv.conf has immutable attribute set
-            remote.run(args=['sudo', 'chattr', '-i', '/etc/resolv.conf'], check_status=False)
-        remote.run(args=['sudo', 'cp', path, '/etc/resolv.conf'])
-        yield
-    finally:
-        remote.run(args=['rm', path])
 
 @contextlib.contextmanager
 def configure_dnsmasq(remote, path, cnames):
