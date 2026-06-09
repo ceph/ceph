@@ -1052,3 +1052,117 @@ def test_staggered_upgrade_validation(
     else:
         cephadm_module.upgrade._validate_upgrade_filters(
             'new_image_name', daemon_types, hosts, services)
+
+
+def _prepull_upgrade_state(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'quay.io/ceph/ceph:vtest', 0,
+        target_digests=['sha256:targetdigest'])
+
+
+def _inspect_or_pull(present_hosts, fail_pull_hosts):
+    # Return an async _run_cephadm replacement handling both inspect-image and
+    # pull commands used by _pre_pull_image_on_hosts.
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, **kwargs):
+        if command == 'inspect-image':
+            if host in present_hosts:
+                return (['{"repo_digests": ["sha256:targetdigest"]}'], [], 0)
+            return (['{"repo_digests": ["sha256:other"]}'], [], 0)
+        # command == 'pull'
+        if host in fail_pull_hosts:
+            return ([], ['no space left on device'], 1)
+        return (['{"repo_digests": ["sha256:targetdigest"]}'], [], 0)
+    return fake_run
+
+
+def test_pre_pull_success_on_all_hosts(cephadm_module: CephadmOrchestrator):
+    _prepull_upgrade_state(cephadm_module)
+    cephadm_module.upgrade_max_parallel_image_pulls = 8
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm",
+                    new=_inspect_or_pull(set(), set())):
+        ok = cephadm_module.upgrade._pre_pull_image_on_hosts(
+            'quay.io/ceph/ceph:vtest', ['h1', 'h2', 'h3'])
+    assert ok is True
+    assert not cephadm_module.upgrade.upgrade_state.paused
+    assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
+
+
+def test_pre_pull_skips_hosts_that_already_have_image(cephadm_module: CephadmOrchestrator):
+    _prepull_upgrade_state(cephadm_module)
+    cephadm_module.upgrade_max_parallel_image_pulls = 8
+    pulled = []
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, **kwargs):
+        if command == 'inspect-image':
+            # h2 already has the target image, others do not
+            digest = 'sha256:targetdigest' if host == 'h2' else 'sha256:other'
+            return ([f'{{"repo_digests": ["{digest}"]}}'], [], 0)
+        pulled.append(host)
+        return (['{"repo_digests": ["sha256:targetdigest"]}'], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        ok = cephadm_module.upgrade._pre_pull_image_on_hosts(
+            'quay.io/ceph/ceph:vtest', ['h1', 'h2', 'h3'])
+    assert ok is True
+    # h2 was skipped (already present); h1 and h3 were pulled
+    assert 'h2' not in pulled
+    assert sorted(pulled) == ['h1', 'h3']
+
+
+def test_pre_pull_failure_pauses_and_reports_host(cephadm_module: CephadmOrchestrator):
+    _prepull_upgrade_state(cephadm_module)
+    cephadm_module.upgrade_max_parallel_image_pulls = 8
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm",
+                    new=_inspect_or_pull(set(), {'h2'})):
+        ok = cephadm_module.upgrade._pre_pull_image_on_hosts(
+            'quay.io/ceph/ceph:vtest', ['h1', 'h2', 'h3'])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused
+    assert 'UPGRADE_FAILED_PULL' in cephadm_module.health_checks
+    detail = ' '.join(cephadm_module.health_checks['UPGRADE_FAILED_PULL']['detail'])
+    assert 'h2' in detail
+    assert 'no space left on device' in detail
+
+
+def test_pre_pull_respects_parallelism_limit(cephadm_module: CephadmOrchestrator):
+    _prepull_upgrade_state(cephadm_module)
+    cephadm_module.upgrade_max_parallel_image_pulls = 3
+    import asyncio as _asyncio
+    state = {'current': 0, 'max': 0}
+    lock = _asyncio.Lock()
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, **kwargs):
+        if command == 'inspect-image':
+            return (['{"repo_digests": ["sha256:other"]}'], [], 0)
+        async with lock:
+            state['current'] += 1
+            state['max'] = max(state['max'], state['current'])
+        await _asyncio.sleep(0.01)
+        async with lock:
+            state['current'] -= 1
+        return (['{"repo_digests": ["sha256:targetdigest"]}'], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        ok = cephadm_module.upgrade._pre_pull_image_on_hosts(
+            'quay.io/ceph/ceph:vtest', [f'h{i}' for i in range(10)])
+    assert ok is True
+    assert state['max'] <= 3, state['max']
+
+
+def test_pre_pull_empty_host_list_is_noop(cephadm_module: CephadmOrchestrator):
+    _prepull_upgrade_state(cephadm_module)
+    called = []
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, **kwargs):
+        called.append(host)
+        return ([], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        ok = cephadm_module.upgrade._pre_pull_image_on_hosts(
+            'quay.io/ceph/ceph:vtest', [])
+    assert ok is True
+    assert called == []
