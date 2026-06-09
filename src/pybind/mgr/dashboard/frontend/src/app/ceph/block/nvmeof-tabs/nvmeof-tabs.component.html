@@ -1,31 +1,214 @@
-<fieldset>
-  <legend>
-    <h1 class="cds--type-heading-03">NVMe over Fabrics (TCP)</h1>
-  <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</cd-help-text>
-  </legend>
-</fieldset>
-<section>
-  <cds-tabs type="contained"
-            followFocus="true"
-            isNavigation="true"
-            [cacheActive]="false">
-  <cds-tab
-    heading="Gateways"
-    i18n-heading
-    [active]="activeTab === Tabs.gateways"
-    (selected)="onSelected(Tabs.gateways)">
-  </cds-tab>
-  <cds-tab
-    heading="Subsystems"
-    i18n-heading
-    [active]="activeTab === Tabs.subsystems"
-    (selected)="onSelected(Tabs.subsystems)">
-  </cds-tab>
-  <cds-tab
-    heading="Namespaces"
-    i18n-heading
-    [active]="activeTab === Tabs.namespaces"
-    (selected)="onSelected(Tabs.namespaces)">
-  </cds-tab>
-</cds-tabs>
-</section>
+@if (showTabsShell) {
+  <fieldset>
+    <legend class="cds-mb-5">
+      <h1 class="cds--type-heading-03">NVMe over Fabrics (TCP)</h1>
+      <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-<br>performance block storage.</cd-help-text>
+    </legend>
+  </fieldset>
+
+  <ng-container *ngIf="nvmeof$ | async as stats">
+    <ng-container *ngIf="stats?.hasData && !showSetupCards">
+      <div class="nvmeof-overview-cards cds-mt-5 cds-mb-5">
+        <div class="nvmeof-overview-cards__row">
+          <div class="nvmeof-overview-cards__col">
+            <cd-productive-card class="nvmeof-resources-status-card">
+              <ng-template #header>
+                <h2 class="cds--type-heading-compact-02"
+                    i18n>Resources status</h2>
+              </ng-template>
+              <div class="nvmeof-resources-status">
+                <div class="nvmeof-resources-status__item">
+                  <span class="cds--type-label-01"
+                        i18n>Gateway groups</span>
+                  <div [cdsStack]="'horizontal'"
+                       gap="3">
+                    @if (stats.gatewayGroups - stats.gatewayGroupsDown > 0) {
+                    <span [ngClass]="stats.gatewayGroupsDown > 0 ? 'cds-mr-3' : ''">
+                      <cd-icon type="success"></cd-icon>
+                      <a cdsLink
+                         class="cds--type-body-compact-01 cds-ml-3"
+                         (click)="onSelected(Tabs.gateways)">{{ stats.gatewayGroups - stats.gatewayGroupsDown }}</a>
+                    </span>
+                    }
+                    @if (stats.gatewayGroupsDown > 0) {
+                    <span>
+                      <cd-icon type="error"></cd-icon>
+                      <a cdsLink
+                         class="cds--type-body-compact-01 cds-ml-3"
+                         (click)="onSelected(Tabs.gateways)">{{ stats.gatewayGroupsDown }}</a>
+                    </span>
+                    }
+                  </div>
+                </div>
+                <div class="nvmeof-resources-status__item">
+                  <span class="cds--type-label-01"
+                        i18n>Subsystems</span>
+                  <div [cdsStack]="'horizontal'"
+                       gap="3">
+                    <cd-icon type="success"></cd-icon>
+                    <a cdsLink
+                       class="cds--type-body-compact-01"
+                       (click)="onSelected(Tabs.subsystems)">{{ stats.subsystems }}</a>
+                  </div>
+                </div>
+                <div class="nvmeof-resources-status__item">
+                  <span class="cds--type-label-01"
+                        i18n>Namespaces</span>
+                  <div [cdsStack]="'horizontal'"
+                       gap="3">
+                    <cd-icon type="success"></cd-icon>
+                    <a cdsLink
+                       class="cds--type-body-compact-01"
+                       (click)="onSelected(Tabs.namespaces)">{{ stats.namespaces }}</a>
+                  </div>
+                </div>
+                <div class="nvmeof-resources-status__item">
+                  <span class="cds--type-label-01"
+                        i18n>Hosts</span>
+                  <div [cdsStack]="'horizontal'"
+                       gap="3">
+                    <cd-icon type="success"></cd-icon>
+                    <span class="cds--type-body-compact-01">{{ stats.hosts }}</span>
+                  </div>
+                </div>
+              </div>
+            </cd-productive-card>
+          </div>
+
+          <div class="nvmeof-overview-cards__col">
+            <cd-productive-card class="nvmeof-alerts-card">
+              <ng-template #header>
+                <h2 class="cds--type-heading-compact-02"
+                    i18n>Alert notifications</h2>
+                <a cdsLink
+                   [routerLink]="['/monitoring/active-alerts']"
+                   [queryParams]="alertQueryParams('all')"
+                   i18n>View alerts</a>
+              </ng-template>
+              <ng-container *ngIf="nvmeofAlerts$ | async as alertVM">
+                <div [cdsStack]="'horizontal'" gap="2">
+                  <span class="cds--type-heading-07">{{ alertVM.total }}</span>
+                  <cd-icon [type]="alertVM.total === 0 ? 'success' : alertVM.critical > 0 ? 'error' : 'warning'"></cd-icon>
+                </div>
+                <p class="cds--type-label-01 nvmeof-alerts-card__status cds-mb-5">
+                  {{ alertVM.total > 0 ? 'Need attention' : 'No active alerts' }}
+                </p>
+                <div *ngIf="alertVM.total > 0"
+                     [cdsStack]="'horizontal'"
+                     gap="4">
+                  <span *ngIf="alertVM.critical > 0"
+                        class="nvmeof-alerts-card__badge">
+                    <a cdsLink
+                       [routerLink]="['/monitoring/active-alerts']"
+                       [queryParams]="alertQueryParams('critical')">
+                      <cd-icon type="error"></cd-icon>
+                      <span class="cds-ml-2">{{ alertVM.critical }}</span>
+                    </a>
+                  </span>
+                  <span *ngIf="alertVM.warning > 0"
+                        class="nvmeof-alerts-card__badge">
+                    <a cdsLink
+                       [routerLink]="['/monitoring/active-alerts']"
+                       [queryParams]="alertQueryParams('warning')">
+                      <cd-icon type="warning"></cd-icon>
+                      <span class="cds-ml-2">{{ alertVM.warning }}</span>
+                    </a>
+                  </span>
+                </div>
+                <div *ngIf="alertVM.total > 0"
+                     class="nvmeof-alerts-card__categories cds-mt-4">
+                  <div *ngFor="let entry of alertVM.byCategory | keyvalue"
+                       class="nvmeof-alerts-card__category-row">
+                    <span class="cds--type-label-01 nvmeof-alerts-card__category-name">{{ entry.key | titlecase }}</span>
+                    <a cdsLink
+                       class="cds--type-body-compact-01"
+                       [routerLink]="['/monitoring/active-alerts']"
+                       [queryParams]="alertQueryParams('all', entry.key)">{{ entry.value }}</a>
+                  </div>
+                </div>
+              </ng-container>
+            </cd-productive-card>
+          </div>
+
+          <div class="nvmeof-overview-cards__col">
+            <cd-productive-card class="nvmeof-throughput-card">
+              <ng-template #header>
+                <h2 class="cds--type-heading-compact-02"
+                    i18n>Throughput</h2>
+              </ng-template>
+              <ng-container *ngIf="nvmeofThroughput$ | async as throughput">
+                <p class="cds--type-heading-05 cds-mb-1">
+                  {{ throughput.combined | number:'1.2-2' }} MB/s
+                </p>
+                <p class="cds--type-label-01 cds-mb-5"
+                   i18n>combined R/W</p>
+                <div class="nvmeof-throughput__row">
+                  <span class="cds--type-label-01"
+                        i18n>Reads</span>
+                  <a cdsLink
+                     class="cds--type-body-compact-01">{{ throughput.reads | number:'1.2-2' }} MB/s</a>
+                </div>
+                <div class="nvmeof-throughput__row">
+                  <span class="cds--type-label-01"
+                        i18n>Writes</span>
+                  <a cdsLink
+                     class="cds--type-body-compact-01">{{ throughput.writes | number:'1.2-2' }} MB/s</a>
+                </div>
+              </ng-container>
+              <p class="cds--type-label-01 cds-mt-5">
+                <span i18n>Active connections</span>: {{ (nvmeof$ | async)?.activeConnections ?? 0 }}
+              </p>
+              <ng-template #footer>
+                <a cdsLink
+                   class="nvmeof-throughput__footer-link"
+                   (click)="onSelected(Tabs.gateways)">
+                  <span i18n>View detailed information</span>
+                  <svg cdsIcon="arrow--right"
+                       size="16"></svg>
+                </a>
+              </ng-template>
+            </cd-productive-card>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+
+  @if (showSetupCards) {
+  <cd-nvmeof-setup-cards class="cds-mt-5"
+                         [hasGatewayGroups]="hasGatewayGroups"
+                         [hasSubsystems]="hasSubsystems"
+                         [hasNamespaces]="hasNamespaces"
+                         [isAllConfigured]="isAllConfigured"
+                         (viewStatus)="dismissOnboarding()">
+  </cd-nvmeof-setup-cards>
+  }
+
+  <section class="cds-mt-5">
+    <cds-tabs type="contained"
+              followFocus="true"
+              isNavigation="true"
+              [cacheActive]="false">
+    <cds-tab
+      heading="Gateways"
+      i18n-heading
+      [active]="activeTab === Tabs.gateways"
+      (selected)="onSelected(Tabs.gateways)">
+    </cds-tab>
+    <cds-tab
+      heading="Subsystems"
+      i18n-heading
+      [active]="activeTab === Tabs.subsystems"
+      (selected)="onSelected(Tabs.subsystems)">
+    </cds-tab>
+    <cds-tab
+      heading="Namespaces"
+      i18n-heading
+      [active]="activeTab === Tabs.namespaces"
+      (selected)="onSelected(Tabs.namespaces)">
+    </cds-tab>
+  </cds-tabs>
+  </section>
+}
+
+<router-outlet></router-outlet>

@@ -41,6 +41,9 @@
     </cds-table-toolbar-actions>
     <!-- end batch actions -->
     <cds-table-toolbar-content>
+      <!-- gateway group / custom filter slot -->
+      <ng-content select=".table-filter"></ng-content>
+      <!-- end custom filter slot -->
       <!-- search -->
       <cds-table-toolbar-search *ngIf="searchField"
                                 [expandable]="false"
@@ -52,29 +55,28 @@
       <!-- end search -->
       <!-- column filters -->
       <ng-container *ngIf="columnFilters.length !== 0">
-        <div class="filter-wrapper">
-          <svg [cdsIcon]="icons.filter"
-               [size]="icons.size16"
-               class="cds--toolbar-action__icon"></svg>
-          <cds-select (valueChange)="onSelectFilter($event)"
-                      display="inline"
-                      id="filter_name">
-            <ng-container *ngFor="let filter of columnFilters">
-              <option [value]="filter.column.name"
-                      [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
-            </ng-container>
-          </cds-select>
-          <cds-select (valueChange)="onChangeFilter($event)"
-                      display="inline"
-                      id="filter_option">
-            <option *ngIf="!selectedFilter.value"
-                    i18n>Any</option>
-            <ng-container *ngFor="let option of selectedFilter.options">
-              <option [value]="option.raw"
-                      [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
-            </ng-container>
-          </cds-select>
+        <div class="d-inline-flex position-relative">
+        <svg [cdsIcon]="icons.filter"
+             [size]="icons.size16"></svg>
         </div>
+        <cds-select (valueChange)="onSelectFilter($event)"
+                    display="inline"
+                    id="filter_name">
+          <ng-container *ngFor="let filter of columnFilters">
+            <option [value]="filter.column.name"
+                    [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
+          </ng-container>
+        </cds-select>
+        <cds-select (valueChange)="onChangeFilter($event)"
+                    display="inline"
+                    id="filter_option">
+          <option *ngIf="!selectedFilter.value"
+                  i18n>Any</option>
+          <ng-container *ngFor="let option of selectedFilter.options">
+            <option [value]="option.raw"
+                    [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
+          </ng-container>
+        </cds-select>
       </ng-container>
       <!-- end column filters -->
       <!-- refresh button -->
@@ -335,9 +337,9 @@
              let-column="data.column"
              let-row="data.row"
              let-value="data.value">
-  <cds-inline-loading *ngIf="row.cdExecuting"
-                      state="active"></cds-inline-loading>
-  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+  <i [ngClass]="icons.spinner"
+     *ngIf="row.cdExecuting"></i>
+  <span [ngClass]="column?.customTemplateConfig?.valueClass || ''">
     {{ value }}
   </span>
   <span *ngIf="row.cdExecuting"

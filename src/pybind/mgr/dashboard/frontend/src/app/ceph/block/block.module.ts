@@ -61,13 +61,10 @@ import {
   CheckboxModule,
   ComboBoxModule,
   DatePickerModule,
-  FileUploaderModule,
   GridModule,
   IconModule,
   IconService,
-  InlineLoadingModule,
   InputModule,
-  LoadingModule,
   ModalModule,
   NumberModule,
   RadioModule,
@@ -93,6 +90,7 @@ import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
 import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
 import Search from '@carbon/icons/es/search/32';
 import Datastore from '@carbon/icons/es/datastore/16';
+import ArrowRight from '@carbon/icons/es/arrow--right/16';
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
@@ -105,6 +103,9 @@ import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
+import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
+import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -124,15 +125,12 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     ButtonModule,
     GridModule,
     IconModule,
-    InlineLoadingModule,
-    LoadingModule,
     CheckboxModule,
     RadioModule,
     SelectModule,
     NumberModule,
     ModalModule,
     DatePickerModule,
-    FileUploaderModule,
     ComboBoxModule,
     TabsModule,
     TagModule,
@@ -141,7 +139,10 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     ContainedListModule,
     SideNavModule,
     LayoutModule,
-    ThemeModule
+    ThemeModule,
+    NvmeofSetupCardsComponent,
+    NvmeofGatewayGroupFilterComponent,
+    ProductiveCardComponent
   ],
   declarations: [
     RbdListComponent,
@@ -210,7 +211,8 @@ export class BlockModule {
       ProgressBarRound,
       SubtractAlt,
       Search,
-      Datastore
+      Datastore,
+      ArrowRight
     ]);
   }
 }
@@ -335,6 +337,7 @@ const routes: Routes = [
   {
     path: 'nvmeof',
     canActivate: [ModuleStatusGuardService],
+    component: NvmeofTabsComponent,
     data: {
       breadcrumbs: true,
       text: 'NVMe/TCP',

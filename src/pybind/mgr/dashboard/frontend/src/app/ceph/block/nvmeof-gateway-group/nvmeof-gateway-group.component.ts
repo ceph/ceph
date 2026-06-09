@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { catchError, map, shareReplay, switchMap, tap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -24,6 +24,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -65,7 +66,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
-
   iconSize = IconSize;
 
   constructor(
@@ -78,7 +78,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     public taskWrapper: TaskWrapperService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
-    private router: Router
+    private router: Router,
+    private nvmeofStateService: NvmeofStateService
   ) {}
 
   ngOnInit(): void {
@@ -171,7 +172,9 @@ export class NvmeofGatewayGroupComponent implements OnInit {
             return of([]);
           })
         )
-      )
+      ),
+      tap(() => this.nvmeofStateService.requestRefresh()),
+      shareReplay({ bufferSize: 1, refCount: true })
     );
     this.checkNodesAvailability();
   }
@@ -209,7 +212,9 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       submitActionObservable: () => {
         return this.taskWrapper
           .wrapTaskAroundCall({
-            task: new FinishedTask('nvmeof/gateway/delete', { group: selectedGroup.spec.group }),
+            task: new FinishedTask('service/delete', {
+              service_name: serviceName
+            }),
             call: this.cephServiceService.delete(serviceName)
           })
           .pipe(
