@@ -12,15 +12,6 @@ log = logging.getLogger(__name__)
 
 
 def _validate_pool_config(config):
-    """
-    Validate pool configuration for incompatible combinations.
-    
-    Args:
-        config: Pool configuration dictionary
-        
-    Raises:
-        ValueError: If configuration contains incompatible settings
-    """
     num_zones = config.get('num_zones', 1)
     if num_zones > 1:
         log.info(
@@ -42,7 +33,6 @@ def _validate_pool_config(config):
         raise ValueError(
             "erasure_code_crush specified but ec_pool is not true"
         )
-
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -79,7 +69,7 @@ def task(ctx, config):
         use-pool-config: if true, read pool configuration from overrides/ceph/pool-config
                         instead of from tasks/radosbench (default: false)
 
-    example (traditional style):
+    example:
 
     tasks:
     - ceph:
@@ -205,7 +195,6 @@ def task(ctx, config):
                     num_zones=config.get('num_zones',None),
                 )
             
-            # Apply additional pool settings
             if config.get('fast_read', False):
                 manager.raw_cluster_cmd(
                     'osd', 'pool', 'set', pool, 'fast_read', 'true')
