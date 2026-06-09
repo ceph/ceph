@@ -505,3 +505,62 @@ TEST(ectransaction, truncate_to_stripe) {
   ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
   ASSERT_EQ(ref_write, plan.will_write);
 }
+
+TEST(ectransaction, truncate_then_write_one_shard) {
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  bufferlist a, b;
+
+  // Simulate a sparsify operation that overwrites an existing object with data at
+  // specific offsets, creating a sparse pattern.
+  //
+  // Initial object is 20k, with zeros at 0~4k, 8k~4k, 16k~4k
+  //
+  // The sparsify operation writes at offsets 4k~4k and 12k~4k.
+  op.truncate = std::pair(0, 0);
+  
+  // First write at offset 4096, length 4KB (0~4096)
+  a.append_zero(4096);
+  op.buffer_updates.insert(4096, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+  
+  // Second write at offset 12288 (12KB), length 4KB
+  b.append_zero(4096);
+  op.buffer_updates.insert(12288, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  
+  // EC configuration: k=2, m=1, chunk_size=4096 (matching FastEC profile)
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  
+  // Set current object size to 16384 (16KB) - the object exists with this size
+  object_info_t oi;
+  oi.size = 16384;
+  
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(0), 3);  // k=2 + m=1 = 3 shards
+
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    20480,  // current_size
+    oi,
+    std::nullopt,
+    0);
+
+  generic_derr << "plan " << plan << dendl;
+
+  // With truncate 0, we're starting fresh - no reads should be required
+  ASSERT_FALSE(plan.to_read);
+  
+  // Truncates are handled by the transaction generation. 
+  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
+  ref_write[shard_id_t(1)].insert(0, 8192);
+  ref_write[shard_id_t(2)].insert(0, 8192);
+  
+  ASSERT_EQ(ref_write, plan.will_write);
+}
