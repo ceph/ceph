@@ -24,6 +24,7 @@
 #include "common/dout.h"
 #include "../posix/bucket_cache.h"
 #include "nsfsDB.h"
+#include "fs_strategy.h"
 
 class RGWLC;
 
@@ -103,21 +104,23 @@ protected:
   struct statx stx;
   bool stat_done{false};
   CephContext* ctx;
+  FSStrategy* fs_strategy;
 
 public:
   static constexpr uint32_t FLAG_NONE =      0x0;
   static constexpr uint32_t FLAG_CURRENT =   0x2;
   static constexpr uint32_t FLAG_LIST_VERSIONS = 0x4;
 
-  FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
-  FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
-  FSEnt(const FSEnt& _e) :
-    fname(_e.fname),
-    parent(_e.parent),
-    exist(_e.exist),
-    stx(_e.stx),
-    stat_done(_e.stat_done),
-    ctx(_e.ctx)
+  FSEnt(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat = nullptr);
+  FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx, FSStrategy* _strat = nullptr);
+  FSEnt(const FSEnt& _ent) :
+    fname(_ent.fname),
+    parent(_ent.parent),
+    exist(_ent.exist),
+    stx(_ent.stx),
+    stat_done(_ent.stat_done),
+    ctx(_ent.ctx),
+    fs_strategy(_ent.fs_strategy)
   { }
 
   virtual ~FSEnt() { }
@@ -181,7 +184,7 @@ class Directory : public FSEnt {
 protected:
 
 public:
-  Directory(std::string _name, Directory* _parent, CephContext* _ctx) : FSEnt(_name, _parent, _ctx)
+  Directory(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat = nullptr) : FSEnt(_name, _parent, _ctx, _strat)
     {}
   Directory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : FSEnt(_name, _parent, _stx, _ctx)
     {}
@@ -393,6 +396,7 @@ protected:
   std::unique_ptr<rgw::store::NSFSAccountDB> accountDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
+  std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;
   std::unique_ptr<nsfs::Directory> root_dir;
   int root_fd;
@@ -706,6 +710,7 @@ public:
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  nsfs::FSStrategy* get_fs_strategy() { return fs_strategy.get(); }
 
   /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */

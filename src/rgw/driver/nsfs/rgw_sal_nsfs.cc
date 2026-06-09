@@ -273,75 +273,6 @@ static std::string synthesize_etag(const struct statx& stx)
   return nsfs_version_id_from_statx(stx);
 }
 
-enum class SafeResult {
-  OK = 0,
-  MISMATCH = 1,
-  ERROR = 2,
-};
-
-static bool stat_matches(int fd, const std::string& name,
-                         uint64_t expected_mtime_ns, uint64_t expected_ino)
-{
-  struct statx stx;
-  int ret = statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
-  if (ret < 0) {
-    return false;
-  }
-  return statx_mtime_ns(stx) == expected_mtime_ns &&
-         stx.stx_ino == expected_ino;
-}
-
-/* CAS link: link src_name (under src_dir_fd) to dst_name (under dst_dir_fd),
- * then verify that dst's inode+mtime match expected values.
- * If mismatch, undo the link and return MISMATCH (caller retries).
- * Follows noobaa's SafeLink pattern (fs_napi.cpp). */
-static SafeResult safe_link(int src_dir_fd, const std::string& src_name,
-                            int dst_dir_fd, const std::string& dst_name,
-                            uint64_t expected_mtime_ns,
-                            uint64_t expected_ino)
-{
-  int ret = ::linkat(src_dir_fd, src_name.c_str(),
-                     dst_dir_fd, dst_name.c_str(), 0);
-  if (ret < 0) {
-    if (errno == EEXIST) {
-      return SafeResult::MISMATCH;
-    }
-    return SafeResult::ERROR;
-  }
-  if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
-    return SafeResult::OK;
-  }
-  ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
-  return SafeResult::MISMATCH;
-}
-
-/* CAS unlink: rename target to a temp name (under tmp_dir_fd), verify
- * inode+mtime, then unlink the temp.  If mismatch, put it back.
- * Follows noobaa's SafeUnlink pattern (fs_napi.cpp). */
-static SafeResult safe_unlink(int dir_fd, const std::string& name,
-                              int tmp_dir_fd,
-                              uint64_t expected_mtime_ns,
-                              uint64_t expected_ino)
-{
-  static std::atomic<uint64_t> counter{0};
-  std::string tmp_name = ".unlink_tmp_" +
-    std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
-
-  int ret = ::renameat(dir_fd, name.c_str(),
-                       tmp_dir_fd, tmp_name.c_str());
-  if (ret < 0) {
-    if (errno == ENOENT) {
-      return SafeResult::OK;
-    }
-    return SafeResult::ERROR;
-  }
-  if (stat_matches(tmp_dir_fd, tmp_name, expected_mtime_ns, expected_ino)) {
-    ::unlinkat(tmp_dir_fd, tmp_name.c_str(), 0);
-    return SafeResult::OK;
-  }
-  ::renameat(tmp_dir_fd, tmp_name.c_str(), dir_fd, name.c_str());
-  return SafeResult::MISMATCH;
-}
 
 /* LMDB comparator for versioned bucket listing.
  * Key format: name \0 instance.
@@ -416,7 +347,8 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
  * Retries on CAS mismatch (the candidate was moved by another thread).
  */
 static void promote_version(int parent_fd, const std::string& leaf,
-                            const DoutPrefixProvider* dpp)
+                            const DoutPrefixProvider* dpp,
+                            FSStrategy* fs_strategy)
 {
   for (int attempt = 0; attempt < NSFS_VERSION_RETRIES; ++attempt) {
     /* bail if a current version already exists */
@@ -504,10 +436,10 @@ static void promote_version(int parent_fd, const std::string& leaf,
     }
 
     /* CAS link: .versions/candidate → current path */
-    SafeResult sr = safe_link(vfd, max_name,
-                              parent_fd, leaf,
-                              statx_mtime_ns(cand_stx),
-                              cand_stx.stx_ino);
+    SafeResult sr = fs_strategy->safe_link(vfd, max_name,
+                                           parent_fd, leaf,
+                                           statx_mtime_ns(cand_stx),
+                                           cand_stx.stx_ino);
     ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
       << " → " << leaf << " result=" << (int)sr << dendl;
     if (sr == SafeResult::OK) {
@@ -972,6 +904,16 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 
 namespace nsfs {
 
+FSEnt::FSEnt(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat)
+  : fname(_name), parent(_parent), ctx(_ctx),
+    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr))
+{}
+
+FSEnt::FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx, FSStrategy* _strat)
+  : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx),
+    fs_strategy(_strat ? _strat : (_parent ? _parent->fs_strategy : nullptr))
+{}
+
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 {
   if (force) {
@@ -1357,24 +1299,10 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return 0;
   }
 
-  char temp_file_path[PATH_MAX];
-  // Only works on Linux - Non-portable
-  snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", fd);
-
-  int ret = linkat(AT_FDCWD, temp_file_path, parent->get_fd(), temp_fname.c_str(), AT_SYMLINK_FOLLOW);
-  if(ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: linkat for temp file could not finish: "
-	<< cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  ret = renameat(parent->get_fd(), temp_fname.c_str(), parent->get_fd(), get_name().c_str());
-  if(ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: renameat for object could not finish: "
-	<< cpp_strerror(ret) << dendl;
-    return -ret;
+  int ret = fs_strategy->link_temp_file(fd, parent->get_fd(),
+                                        get_name(), dpp);
+  if (ret < 0) {
+    return ret;
   }
 
   /* note that open() and stat() return already sign-reversed result codes */
@@ -2135,6 +2063,13 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
 
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp);
+  if (!fs_strategy) {
+    fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
+  }
+  ldpp_dout(dpp, 1) << "nsfs: using " << fs_strategy->name()
+    << " fs strategy" << dendl;
+
   /* ordered listing cache */
   bucket_cache.reset(
     new BucketCache(
@@ -2145,7 +2080,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count")));
 
-  root_dir = std::make_unique<Directory>(base_path, nullptr, ctx());
+  root_dir = std::make_unique<Directory>(base_path, nullptr, ctx(), fs_strategy.get());
   ret = root_dir->open(dpp);
   if (ret < 0) {
     if (ret == -ENOTDIR) {
@@ -4623,7 +4558,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         if (promote_fd >= 0) {
           ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
             << promote_leaf << dendl;
-          promote_version(promote_fd, promote_leaf, dpp);
+          promote_version(promote_fd, promote_leaf, dpp,
+                          source->driver->get_fs_strategy());
           ::close(promote_fd);
         }
         source->driver->get_bucket_cache()->invalidate_bucket(
@@ -4850,7 +4786,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
-      SafeResult sr = safe_link(parent_fd, dm_leaf,
+      SafeResult sr = source->driver->get_fs_strategy()->safe_link(
+                                parent_fd, dm_leaf,
                                 vfd, ver_name,
                                 cur_mtime, cur_ino);
       if (sr == SafeResult::OK) {
@@ -4865,7 +4802,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           ::close(demoted_fd);
         }
         /* CAS unlink: remove current only if it still matches */
-        safe_unlink(parent_fd, dm_leaf, vfd,
+        source->driver->get_fs_strategy()->safe_unlink(
+                    parent_fd, dm_leaf, vfd,
                     cur_mtime, cur_ino);
         break;
       }
@@ -5431,7 +5369,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
             : nsfs_version_id_from_statx(cur_stx);
           std::string ver_name = leaf_name + "_" + cur_ver_id;
 
-          SafeResult sr = safe_link(leaf_fd, leaf_name, vfd, ver_name,
+          SafeResult sr = driver->get_fs_strategy()->safe_link(
+                                    leaf_fd, leaf_name, vfd, ver_name,
                                     statx_mtime_ns(cur_stx), cur_stx.stx_ino);
           if (sr == SafeResult::OK) {
             int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
@@ -5815,7 +5754,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
               : nsfs_version_id_from_statx(cur_stx);
             std::string ver_name = cur_leaf + "_" + cur_ver_id;
 
-            SafeResult sr = safe_link(parent_fd, cur_leaf,
+            SafeResult sr = driver->get_fs_strategy()->safe_link(
+                                      parent_fd, cur_leaf,
                                       vfd, ver_name,
                                       statx_mtime_ns(cur_stx),
                                       cur_stx.stx_ino);
