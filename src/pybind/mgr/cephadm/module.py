@@ -79,7 +79,7 @@ from .services.node_proxy import NodeProxy
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
-from .upgrade import CephadmUpgrade, PREFERRED_CIPHER
+from .upgrade import CephadmUpgrade, ROTATION_CIPHER
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
     cephadmNoImage, CEPH_UPGRADE_ORDER, SpecialHostLabels
@@ -2384,7 +2384,7 @@ Then run the following:
             'prefix': 'auth rotate',
             'entity': daemon_spec.entity_name(),
             'format': 'json',
-            'key_type': PREFERRED_CIPHER
+            'key_type': ROTATION_CIPHER
         })
         if rc:
             raise OrchestratorError(
