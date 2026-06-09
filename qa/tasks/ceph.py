@@ -398,6 +398,14 @@ def _apply_crush_zones(mon_remote, cluster_name, crush_config):
                           'osd', 'crush', 'set', f'osd.{osd_id}', '1.0',
                           'root=default', f'datacenter={zone_name}']
                 )
+                
+                # Set crush_location config so OSD maintains this location on restart
+                log.info(f"Setting crush_location config for osd.{osd_id}")
+                mon_remote.run(
+                    args=['sudo', 'ceph', '--cluster', cluster_name,
+                          'config', 'set', f'osd.{osd_id}',
+                          'crush_location', f'datacenter={zone_name} root=default']
+                )
     
     elif failure_domain == 'host':
         for zone in zones:
@@ -426,6 +434,14 @@ def _apply_crush_zones(mon_remote, cluster_name, crush_config):
                         args=['sudo', 'ceph', '--cluster', cluster_name,
                               'osd', 'crush', 'set', f'osd.{osd_id}', '1.0',
                               f'host={host_name}']
+                    )
+                    
+                    # Set crush_location config so OSD maintains this location on restart
+                    log.info(f"Setting crush_location config for osd.{osd_id}")
+                    mon_remote.run(
+                        args=['sudo', 'ceph', '--cluster', cluster_name,
+                              'config', 'set', f'osd.{osd_id}',
+                              'crush_location', f'host={host_name}']
                     )
     
     for zone in zones:
