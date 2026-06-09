@@ -808,3 +808,146 @@ def test_command_agent(_agent_run, cephadm_fs):
         cephadm_fs.create_dir(AGENT_DIR)
         _cephadm.command_agent(ctx)
         _agent_run.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_agent_version() and the VersionStatusUpdater agent path
+# ---------------------------------------------------------------------------
+
+class TestGetAgentVersion:
+    """Unit tests for cephadmlib.agent.get_agent_version()."""
+
+    def test_primary_module_used(self):
+        """Returns CEPH_GIT_NICE_VER from _cephadmmeta.version when available."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock()
+        fake_vmod.CEPH_GIT_NICE_VER = 'v19.2.0'
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        return_value=fake_vmod) as _imp:
+            result = get_agent_version()
+
+        _imp.assert_called_once_with('_cephadmmeta.version')
+        assert result == 'v19.2.0'
+
+    def test_fallback_to_legacy_module(self):
+        """Falls back to _version when _cephadmmeta.version is not importable."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock()
+        fake_vmod.CEPH_GIT_NICE_VER = 'v18.2.4'
+
+        def _side_effect(name):
+            if name == '_cephadmmeta.version':
+                raise ImportError('no _cephadmmeta')
+            return fake_vmod
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        side_effect=_side_effect):
+            result = get_agent_version()
+
+        assert result == 'v18.2.4'
+
+    def test_returns_none_when_no_module(self):
+        """Returns None when neither version module is importable."""
+        from cephadmlib.agent import get_agent_version
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        side_effect=ImportError('nothing here')):
+            result = get_agent_version()
+
+        assert result is None
+
+    def test_returns_none_when_attribute_missing(self):
+        """Returns None when the version module lacks CEPH_GIT_NICE_VER."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock(spec=[])  # no attributes
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        return_value=fake_vmod):
+            result = get_agent_version()
+
+        assert result is None
+
+
+class TestVersionStatusUpdaterAgent:
+    """Unit tests for the agent code-path in VersionStatusUpdater."""
+
+    def _make_updater(self):
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+        return VersionStatusUpdater()
+
+    def _make_val(self, version=None, container_id='', image_id=None):
+        return {
+            'container_id': container_id,
+            'container_image_id': image_id,
+            'version': version,
+        }
+
+    def _make_identity(self, daemon_type='agent'):
+        identity = mock.MagicMock()
+        identity.daemon_type = daemon_type
+        return identity
+
+    def test_agent_version_populated(self):
+        """val['version'] is set for the agent daemon type."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value='v19.2.0'):
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        assert val['version'] == 'v19.2.0'
+
+    def test_agent_version_cached(self):
+        """get_agent_version() is only called once; subsequent calls use the cache."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value='v19.2.0') as _gav:
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(self._make_val(), ctx, identity, '/data')
+                updater.update(self._make_val(), ctx, identity, '/data')
+
+        # second call must use the cache, not re-import
+        _gav.assert_called_once()
+
+    def test_agent_version_none_when_unavailable(self):
+        """val['version'] remains None when get_agent_version() returns None."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value=None):
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        assert val['version'] is None
+
+    def test_non_agent_without_image_id_returns_early(self):
+        """Non-agent daemon with no image_id and no version still returns early."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()  # no image_id, no version
+        identity = self._make_identity('mon')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version') as _gav:
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        _gav.assert_not_called()
+        assert val.get('version') is None
