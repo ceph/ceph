@@ -49,6 +49,19 @@ bool ISALCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in, s
 }
 
 /*
+ * Constant-time byte comparison to prevent timing attacks on tag verification.
+ * Always compares all bytes regardless of differences found.
+ */
+static inline bool ct_memeq(const unsigned char* a, const unsigned char* b, size_t len)
+{
+  volatile unsigned char diff = 0;
+  for (size_t i = 0; i < len; ++i) {
+    diff |= static_cast<unsigned char>(a[i] ^ b[i]);
+  }
+  return diff == 0;
+}
+
+/*
  * Thread-local GCM key cache to avoid re-running aes_gcm_pre_256() for
  * repeated keys. Key material is securely wiped on thread exit.
  */
@@ -69,7 +82,7 @@ static inline const gcm_key_data* get_cached_gcm_key(const unsigned char* key)
   if (!cache)
     cache = std::make_unique<gcm_key_cache_t>();
 
-  if (memcmp(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE) != 0) {
+  if (!ct_memeq(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE)) {
     aes_gcm_pre_256(key, &cache->cached_gkey);
     memcpy(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE);
   }
@@ -127,7 +140,7 @@ bool ISALCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in, s
                   static_cast<uint64_t>(aad_len),
                   computed_tag, AES_GCM_TAGSIZE);
 
-  if (memcmp(computed_tag, tag, AES_GCM_TAGSIZE) != 0) {
+  if (!ct_memeq(computed_tag, &tag[0], AES_GCM_TAGSIZE)) {
     memset(out, 0, size);  // Clear output on auth failure
     return false;
   }
