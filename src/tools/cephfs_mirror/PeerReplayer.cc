@@ -123,6 +123,21 @@ struct C_PersistSyncStatAio : Context {
     }
   }
 };
+
+struct C_RemovePersistedSyncStatAio : Context {
+  std::string dir_root;
+
+  explicit C_RemovePersistedSyncStatAio(std::string dir_root_)
+    : dir_root(std::move(dir_root_)) {}
+
+  void finish(int r) override {
+    if (r < 0 && r != -ENOENT) {
+      generic_derr << "cephfs::mirror: aio remove persisted sync stats failed for dir_root="
+                     << dir_root << ": " << cpp_strerror(r) << dendl;
+    }
+  }
+};
+
 class PeerAdminSocketCommand {
 public:
   virtual ~PeerAdminSocketCommand() {
@@ -438,6 +453,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
 
   auto it1 = m_registered.find(_dir_root);
   if (it1 == m_registered.end()) {
+    remove_persisted_dir_sync_stat(_dir_root);
     m_snap_sync_stats.erase(_dir_root);
   } else {
     it1->second.canceled = true;
@@ -590,6 +606,26 @@ void PeerReplayer::load_persisted_dir_sync_stats() {
     }
     apply_persisted_dir_sync_stat(st_it->second, bl);
   }
+}
+
+void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
+  ceph_assert(m_local_ioctx);
+
+  const std::string key = peer_sync_stat_omap_key(dir_root);
+  librados::ObjectWriteOperation write_op;
+  write_op.omap_rm_keys({key});
+
+  Context *ctx = new C_RemovePersistedSyncStatAio(dir_root);
+  librados::AioCompletion *aio_comp = create_rados_callback(ctx);
+  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  if (r < 0) {
+    delete ctx;
+    derr << ": failed to submit aio remove persisted sync stats for dir_root="
+         << dir_root << ": " << cpp_strerror(r) << dendl;
+    aio_comp->release();
+    return;
+  }
+  aio_comp->release();
 }
 
 void PeerReplayer::add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
@@ -828,6 +864,7 @@ void PeerReplayer::unregister_directory(const std::string &dir_root) {
   unlock_directory(it->first, it->second);
   m_registered.erase(it);
   if (std::find(m_directories.begin(), m_directories.end(), dir_root) == m_directories.end()) {
+    remove_persisted_dir_sync_stat(dir_root);
     m_snap_sync_stats.erase(dir_root);
   }
 }

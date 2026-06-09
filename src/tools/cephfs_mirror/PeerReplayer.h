@@ -716,6 +716,7 @@ private:
   void load_persisted_dir_sync_stats();
   void load_persisted_dir_sync_stat(const std::string &dir_root);
   void apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat, const bufferlist &bl);
+  void remove_persisted_dir_sync_stat(const std::string &dir_root);
   void persist_dir_sync_stat(const std::string &dir_root);
   void add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
                                         SnapSyncStat &sync_stat);
