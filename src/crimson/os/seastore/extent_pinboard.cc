@@ -290,6 +290,7 @@ public:
 
   void register_metrics(store_index_t store_index) final {
     namespace sm = seastar::metrics;
+    auto shard_label = sm::label_instance("shard_store_index", std::to_string(store_index));
     metrics.add_group(
       "cache",
       {
@@ -299,7 +300,7 @@ public:
             return get_current_size_bytes();
           },
           sm::description("total bytes pinned by the lru"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          {shard_label}
         ),
         sm::make_counter(
           "lru_num_extents",
@@ -307,7 +308,7 @@ public:
             return get_current_num_extents();
           },
           sm::description("total extents pinned by the lru"),
-          {sm::label_instance("shard_store_index", std::to_string(store_index))}
+          {shard_label}
         ),
       }
     );
@@ -788,6 +789,7 @@ void ExtentPinboardTwoQ::get_stats(
 
 void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
   namespace sm = seastar::metrics;
+  auto shard_label = sm::label_instance("shard_store_index", std::to_string(store_index));
   metrics.add_group(
     "cache",
     {
@@ -797,7 +799,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return warm_in.get_current_size_bytes();
         },
         sm::description("total bytes pinned by the 2q warm_in queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_warm_in_num_extents",
@@ -805,7 +807,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return warm_in.get_current_num_extents();
         },
         sm::description("total extents pinned by the 2q warm_in queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_hot_size_bytes",
@@ -813,7 +815,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return hot.get_current_size_bytes();
         },
         sm::description("total bytes pinned by the 2q hot queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
       sm::make_counter(
         "2q_hot_num_extents",
@@ -821,7 +823,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
           return hot.get_current_num_extents();
         },
         sm::description("total extents pinned by the 2q hot queue"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+        {shard_label}
       ),
     }
   );
