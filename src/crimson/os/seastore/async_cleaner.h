@@ -1852,10 +1852,11 @@ public:
 
   store_statfs_t get_stat() const final {
     store_statfs_t st;
+    auto used = get_used_bytes();
     st.total = get_total_bytes();
-    st.available = get_total_bytes() - get_journal_bytes() - stats.used_bytes;
-    st.allocated = get_journal_bytes() + stats.used_bytes;
-    st.data_stored = get_journal_bytes() + stats.used_bytes;
+    st.available = get_total_bytes() - get_journal_bytes() - used;
+    st.allocated = get_journal_bytes() + used;
+    st.data_stored = get_journal_bytes() + used;
     return st;
   }
 
@@ -1975,6 +1976,25 @@ public:
       total += p->get_journal_size();
     }
     return total;
+  }
+
+  // Allocator-view used bytes across all RBM devices (data section only).
+  uint64_t get_allocator_used_bytes() const {
+    uint64_t used = 0;
+    for (auto *rbm : rb_group->get_rb_managers()) {
+      uint64_t data = rbm->get_size();
+      uint64_t free = static_cast<uint64_t>(rbm->get_free_blocks())
+                     * rbm->get_block_size();
+      used += (data > free) ? (data - free) : 0;
+    }
+    return used;
+  }
+
+  // Used bytes for statfs and metrics; stats.used_bytes until the allocator
+  // is populated at mount.
+  uint64_t get_used_bytes() const {
+    return background_callback->is_ready()
+         ? get_allocator_used_bytes() : stats.used_bytes;
   }
 
   // Testing interfaces
