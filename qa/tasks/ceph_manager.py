@@ -2760,6 +2760,16 @@ class CephManager:
         ops = status['pgmap'].get('recovering_objects_per_sec', 0)
         return kps > 0 or bps > 0 or ops > 0
 
+    def get_is_making_migration_progress(self):
+        """
+        Return whether there is migration progress discernable in the
+        raw cluster status
+        """
+        status = self.raw_cluster_status()
+        bps = status['pgmap'].get('migrating_bytes_per_sec', 0)
+        ops = status['pgmap'].get('migrating_objects_per_sec', 0)
+        return bps > 0 or ops > 0
+
     def get_num_active(self):
         """
         Find the number of active pgs.
@@ -2935,7 +2945,7 @@ class CephManager:
                 self.log('PG %s is not active or peered' % pg['pgid'])
                 self.log(pg)
 
-    def wait_for_clean(self, timeout=1200):
+    def wait_for_clean(self, timeout=1200, wait_for_migration=True):
         """
         Returns true when all pgs are clean.
         """
@@ -2945,7 +2955,10 @@ class CephManager:
         while not self.is_clean():
             if timeout is not None:
                 if self.get_is_making_recovery_progress():
-                    self.log("making progress, resetting timeout")
+                    self.log("making recovery progress, resetting timeout")
+                    start = time.time()
+                elif wait_for_migration and self.get_is_making_migration_progress():
+                    self.log("making migration progress, resetting timeout")
                     start = time.time()
                 else:
                     self.log("no progress seen, keeping timeout for now")
