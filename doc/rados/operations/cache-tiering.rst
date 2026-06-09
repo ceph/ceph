@@ -2,14 +2,16 @@
  Cache Tiering
 ===============
 
-.. warning:: Cache tiering has been deprecated in the Reef release. Cache
-   tiering has lacked a maintainer for a long time. This does not mean that
-   it will certainly be removed, but it might be removed without much
-   notice.
+.. warning:: Cache tiering was deprecated in the Reef release and has lacked
+   a maintainer for a long time. It will be removed in a future release without
+   notice. **Do not deploy new cache tiers.** Migrate existing cache
+   tier deployments as soon as possible.
 
-   The upstream Ceph community strongly advises against deploying new cache
-   tiers. The upstream Ceph community also recommends migrating from legacy
-   deployments.
+.. note:: The following documentation is retained for reference for existing
+   deployments only. For new deployments, use erasure-coded pools or fast
+   storage pools directly. As a community-supported block-level caching
+   alternative, consider ``dm-cache`` (the Linux kernel's device-mapper cache
+   target).
 
 A cache tier provides Ceph clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
