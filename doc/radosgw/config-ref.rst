@@ -379,3 +379,14 @@ These configuration options are necessary to enable CORS-based access for tools 
 .. confval:: rgw_gcors_allow_headers
 .. confval:: rgw_gcors_allow_methods
 .. confval:: rgw_gcors_expose_headers
+
+Cloud Delete Settings
+=====================
+
+When ``allow_delete_through`` and ``retain_head_object`` are both enabled,
+RGW enqueues asynchronous deletes of remote cloud objects. These settings
+control the background worker that processes that queue.
+
+.. confval:: rgw_cloud_delete_interval
+.. confval:: rgw_cloud_delete_max_objs
+.. confval:: rgw_enable_cloud_delete_threads

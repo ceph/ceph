@@ -25,6 +25,7 @@
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_cloud_delete.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -48,6 +49,9 @@ public:
   virtual bool retain_head_object() { return tier.retain_head_object; }
   virtual bool allow_read_through() { return tier.allow_read_through; }
   virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
+  virtual bool allow_delete_through() {
+    return tier.is_tier_type_s3() ? tier.t.s3.allow_delete_through : false;
+  }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
@@ -282,6 +286,7 @@ class RadosStore : public StoreDriver {
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Restore> get_restore(void) override;
+    virtual std::unique_ptr<CloudDelete> get_cloud_delete(void) override;
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(
@@ -344,6 +349,7 @@ class RadosStore : public StoreDriver {
                                  const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual rgw::restore::Restore* get_rgwrestore(void) override { return rados->get_restore(); }
+    virtual rgw::cloud_delete::CloudDelete* get_rgwcloud_delete(void) override { return rados->get_cloud_delete(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
@@ -1022,6 +1028,47 @@ public:
 		int index, ceph::buffer::list&& bl);
   int push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::deque<ceph::buffer::list>&& items);
+};
+
+class RadosCloudDeleteSerializer : public StoreCloudDeleteSerializer {
+  librados::IoCtx& ioctx;
+  ::rados::cls::lock::Lock lock;
+
+public:
+  RadosCloudDeleteSerializer(RadosStore* store, const std::string& oid,
+                             const std::string& lock_name, const std::string& cookie);
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+};
+
+class RadosCloudDelete : public StoreCloudDelete {
+  RadosStore* store;
+  neorados::RADOS& r;
+  neorados::IOContext neo_ioctx;
+  std::vector<std::unique_ptr<fifo::FIFO>> fifos;
+  int num_objs{0};
+  std::vector<std::string> obj_names;
+
+public:
+  RadosCloudDelete(RadosStore* _st);
+  ~RadosCloudDelete() override;
+
+  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+                        int n_objs, std::vector<std::string>& obj_names) override;
+  virtual int enqueue(const DoutPrefixProvider* dpp, optional_yield y,
+                     const rgw::cloud_delete::CloudDeleteEntry& entry) override;
+  virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                          int index, const std::string& marker,
+                          std::string* out_marker, uint32_t max_entries,
+                          std::vector<rgw::cloud_delete::CloudDeleteEntry>& entries,
+                          bool* truncated) override;
+  virtual int trim_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                          int index, const std::string& marker) override;
+  virtual std::unique_ptr<CloudDeleteSerializer> get_serializer(
+                          const std::string& lock_name,
+                          const std::string& oid,
+                          const std::string& cookie) override;
 };
 
 class RadosNotification : public StoreNotification {

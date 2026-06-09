@@ -45,6 +45,7 @@ using Attrs = std::map<std::string, ceph::buffer::list>;
   class MultipartUpload;
   class Lifecycle;
   class Restore;
+  class CloudDelete;
   class Notification;
   class Writer;
   class PlacementTier;

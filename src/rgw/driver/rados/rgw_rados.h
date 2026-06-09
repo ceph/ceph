@@ -31,6 +31,7 @@
 #include "rgw_trim_bilog.h"
 #include "rgw_service.h"
 #include "rgw_sal_store.h"
+#include "rgw_cloud_delete.h"
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
@@ -342,6 +343,8 @@ class RGWRados
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp);
+  int open_cloud_delete_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_cloud_delete_pool_neo_ctx(const DoutPrefixProvider *dpp);
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
@@ -358,10 +361,12 @@ class RGWRados
   RGWGC* gc{nullptr};
   RGWLC* lc{nullptr};
   std::unique_ptr<rgw::restore::Restore> restore{nullptr};
+  std::unique_ptr<rgw::cloud_delete::CloudDelete> cloud_delete{nullptr};
   RGWObjectExpirer* obj_expirer{nullptr};
   bool use_gc_thread{false};
   bool use_lc_thread{false};
   bool use_restore_thread{false};
+  bool use_cloud_delete_thread{false};
   bool quota_threads{false};
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
@@ -438,7 +443,9 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx restore_pool_ctx;        // .rgw.restore
-  neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore 
+  librados::IoCtx cloud_delete_pool_ctx;   // .rgw.cloud-delete
+  neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore
+  neorados::IOContext cloud_delete_pool_neo_ctx;   // .rgw.cloud-delete
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
@@ -494,6 +501,9 @@ public:
   rgw::restore::Restore *get_restore() {
     return restore.get();
   }
+  rgw::cloud_delete::CloudDelete *get_cloud_delete() {
+    return cloud_delete.get();
+  }
 
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
@@ -507,6 +517,10 @@ public:
 
   RGWRados& set_run_restore_thread(bool _use_restore_thread) {
     use_restore_thread = _use_restore_thread;
+    return *this;
+  }
+  RGWRados& set_run_cloud_delete_thread(bool _use_cloud_delete_thread) {
+    use_cloud_delete_thread = _use_cloud_delete_thread;
     return *this;
   }
 
@@ -543,8 +557,16 @@ public:
     return &restore_pool_ctx;
   }
 
+  librados::IoCtx* get_cloud_delete_pool_ctx() {
+    return &cloud_delete_pool_ctx;
+  }
+
   neorados::IOContext* get_restore_pool_neo_ctx() {
     return &restore_pool_neo_ctx;
+  }
+
+  neorados::IOContext* get_cloud_delete_pool_neo_ctx() {
+    return &cloud_delete_pool_neo_ctx;
   }
   
   librados::IoCtx& get_notif_pool_ctx() {

@@ -227,6 +227,10 @@ int rgw::AppMain::init_storage()
     (g_conf()->rgw_enable_restore_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_restore_threads)));
 
+  auto run_cloud_delete =
+    (g_conf()->rgw_enable_cloud_delete_threads &&
+      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_cloud_delete_threads)));
+
   auto run_quota =
     (g_conf()->rgw_enable_quota_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_quota_threads)));
@@ -243,6 +247,7 @@ int rgw::AppMain::init_storage()
           run_gc,
           run_lc,
           run_restore,
+          run_cloud_delete,
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),

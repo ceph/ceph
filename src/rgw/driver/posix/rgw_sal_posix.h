@@ -656,6 +656,7 @@ public:
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override { return nullptr; } // TODO: implement
   virtual std::unique_ptr<Restore> get_restore(void) { return nullptr; }
+  virtual std::unique_ptr<CloudDelete> get_cloud_delete(void) override { return nullptr; }
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override { return 0; }
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,

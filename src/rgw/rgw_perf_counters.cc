@@ -63,6 +63,10 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_d4n_cache_hits, "d4n_cache_hits", "D4N cache hits");
   pcb->add_u64_counter(l_rgw_d4n_cache_misses, "d4n_cache_misses", "D4N cache misses");
   pcb->add_u64_counter(l_rgw_d4n_cache_evictions, "d4n_cache_evictions", "D4N cache evictions");
+  pcb->add_u64_counter(l_rgw_cloud_delete_queued, "cloud_delete_queued", "Cloud delete operations enqueued");
+  pcb->add_u64_counter(l_rgw_cloud_delete_success, "cloud_delete_success", "Cloud delete operations succeeded");
+  pcb->add_u64_counter(l_rgw_cloud_delete_fail, "cloud_delete_fail", "Cloud delete operations failed");
+  pcb->add_u64_counter(l_rgw_cloud_delete_retry, "cloud_delete_retry", "Cloud delete operations retried");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {

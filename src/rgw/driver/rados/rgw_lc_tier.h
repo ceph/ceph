@@ -80,3 +80,7 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp,
 
 bool is_restore_in_progress(const DoutPrefixProvider *dpp,
                             std::map<std::string, std::string>& headers);
+std::string make_target_obj_name(const std::string& bucket_name,
+                                 const rgw_obj_key& obj_key,
+                                 bool target_by_bucket,
+                                 bool is_current);
