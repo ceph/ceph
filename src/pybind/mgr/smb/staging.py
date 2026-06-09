@@ -404,8 +404,8 @@ def _check_share_resource(
                 raise ErrorResult(
                     share,
                     msg=(f"Earmark has already been set by SMB cluster "
-                        f"'{parsed_earmark['cluster_id']}' and cannot be reused. "
-                        "Ensure all data is cleaned and manually remove the earmark before reuse."
+                        f"'{parsed_earmark['cluster_id']}'."
+                        "Remove or update the existing earmark before reusing it with a different cluster. Ensure any existing SMB data, permissions, and ACLs are reviewed before reuse."
                         ),
                 )
 
