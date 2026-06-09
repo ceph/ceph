@@ -12,8 +12,7 @@ follow a predictable and robust way of preparing, activating, and starting OSDs.
 
 **Command Line Subcommands**
 
-There is currently support for ``lvm``, and plain disks (with GPT partitions)
-that may have been deployed with ``ceph-disk``.
+There is currently support for ``lvm``, and plain disks (with GPT partitions).
 
 ``zfs`` support is available for running a FreeBSD cluster.
 
@@ -39,8 +38,6 @@ that users start consuming ``ceph-volume``. There are two paths for migrating:
 #. Redeploy existing OSDs with ``ceph-volume``: This is covered in depth on
    :ref:`rados-replacing-an-osd`
 
-For details on why ``ceph-disk`` was removed please see the :ref:`Why was
-ceph-disk replaced? <ceph-disk-replaced>` section.
 
 
 New deployments
