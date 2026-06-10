@@ -4,7 +4,7 @@
 #ifndef CEPH_OSDC_STRIPER_TYPES_H
 #define CEPH_OSDC_STRIPER_TYPES_H
 
-#include "include/types.h"
+#include "include/container_ios.h"
 #include <boost/container/small_vector.hpp>
 #include <ios>
 #include <utility>

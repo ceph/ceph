@@ -24,6 +24,7 @@
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
+#include "include/rados_encoder.h"
 #include "common/hobject.h"
 
 /*

@@ -4,6 +4,8 @@
 #include "mds/flock.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/container_ios.h"
 #include "mdstypes.h"
 
 #include <iostream>

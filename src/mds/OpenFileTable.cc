@@ -19,6 +19,7 @@
 #include "mds/CInode.h"
 #include "mds/CDir.h"
 #include "mds/inode_backtrace.h" // for inode_backpointer_t
+#include "mds/MDSContext.h" // for MDSIOContextBase
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "osdc/Objecter.h"

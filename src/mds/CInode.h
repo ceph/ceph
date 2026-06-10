@@ -34,6 +34,7 @@
 #include "include/filepath.h"
 #include "include/types.h"
 #include "include/compact_set.h"
+#include "include/object.h" // for object_t
 
 #include "MDSCacheObject.h"
 #include "mdstypes.h" // for old_inode_t

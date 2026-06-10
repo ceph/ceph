@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 
+#include "include/errorcode32.h"
 #include "msg/Message.h"
 #include "MMgrCommand.h"
 

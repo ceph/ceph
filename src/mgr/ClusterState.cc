@@ -13,6 +13,7 @@
  */
 
 #include "mgr/ClusterState.h"
+#include "common/debug.h"
 #include "common/JSONFormatter.h"
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
