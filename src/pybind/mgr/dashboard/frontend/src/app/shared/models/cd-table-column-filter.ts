@@ -18,3 +18,9 @@ export interface CdTableColumnFilterOption {
   raw: string;
   formatted: string;
 }
+
+export interface CdTableCustomColumnFilter {
+  id: number;
+  key: string;
+  value: string;
+}

@@ -280,6 +280,55 @@ describe('TableComponent', () => {
     });
   });
 
+  describe('test custom filtering', () => {
+    beforeEach(() => {
+      component.customFilter = true;
+      component.customFilters = [];
+      spyOn(component.customFilterChange, 'emit');
+    });
+
+    it('should toggle popover and add an empty rule', () => {
+      component.toggleFilterPopover();
+
+      expect(component.openFilterPopover).toBe(true);
+      expect(component.customFilters.length).toBe(1);
+      expect(component.customFilters[0]).toEqual({ id: 0, key: '', value: '' });
+
+      // toggling again should close but not add a new rule
+      component.toggleFilterPopover();
+      expect(component.openFilterPopover).toBe(false);
+      expect(component.customFilters.length).toBe(1);
+    });
+
+    it('should manually add new custom filters', () => {
+      component.addCustomFilter();
+      component.addCustomFilter();
+      expect(component.customFilters.length).toBe(2);
+      expect(component.customFilters[0]).toEqual({ id: 0, key: '', value: '' });
+      expect(component.customFilters[1]).toEqual({ id: 1, key: '', value: '' });
+    });
+
+    it('should remove a filter by its id', () => {
+      component.addCustomFilter();
+      component.addCustomFilter();
+      component.addCustomFilter();
+
+      component.removeCustomFilter(1);
+      expect(component.customFilters.length).toBe(2);
+      expect(component.customFilters[0]).toEqual({ id: 0, key: '', value: '' });
+      expect(component.customFilters[1]).toEqual({ id: 2, key: '', value: '' });
+    });
+
+    it('should emit custom filters on submit', () => {
+      component.addCustomFilter();
+      component.customFilters[0] = { id: 0, key: 'foo', value: 'bar' };
+      component.onSubmitFilter();
+      expect(component.customFilterChange.emit).toHaveBeenCalledWith([
+        { id: 0, key: 'foo', value: 'bar' }
+      ]);
+    });
+  });
+
   describe('test search', () => {
     const expectSearch = (keyword: string, expectedResult: object[]) => {
       component.search = keyword;
