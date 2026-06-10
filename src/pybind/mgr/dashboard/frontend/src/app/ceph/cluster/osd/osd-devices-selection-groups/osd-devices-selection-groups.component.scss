@@ -1,3 +1,17 @@
 .tc_clearSelections {
   text-decoration: none;
 }
+
+.osd-devices-selection-row {
+  .cd-form-label,
+  .cd-col-form-input {
+    flex: 0 0 100%;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  cd-inventory-devices {
+    display: block;
+    width: 100%;
+  }
+}
