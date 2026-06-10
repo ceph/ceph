@@ -4438,6 +4438,15 @@ options:
   default: 3
   services:
   - rgw
+- name: rgw_nsfs_gpfs_lib_path
+  type: str
+  level: advanced
+  desc: Path to libgpfs.so for GPFS-accelerated operations
+  long_desc: If the library is found at this path, the NSFS driver uses
+    GPFS-native atomic link/unlink operations instead of POSIX emulation.
+  default: /usr/lpp/mmfs/lib/libgpfs.so
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
