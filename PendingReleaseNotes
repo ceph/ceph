@@ -27,6 +27,14 @@
   of the key/value store). They surface automatically as ``ceph_mon_*``
   Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
   enabling trending of mon DB growth and filesystem free space.
+* tools: A new eBPF-based tracing tool ``radostrace`` has been added. It
+  attaches dynamically to any running librados-based client (QEMU/RBD,
+  RGW, cephfs-mirror, etc.) and reports per-operation latency, object
+  name, pool/PG, acting set and operation types in real time, without
+  any code changes or client restarts. It requires Linux kernel 5.8+
+  and the ceph debuginfo/dbgsym packages for the traced client. See
+  the ``radostrace(8)`` man page and ``doc/dev/radostrace.rst`` for
+  details.
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
