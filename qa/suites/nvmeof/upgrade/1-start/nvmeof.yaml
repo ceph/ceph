@@ -1,0 +1,12 @@
+- nvmeof:
+    installer: host.a
+    rbd:
+      pool_name: mypool
+      image_name_prefix: myimage
+    gateway_config:
+      subsystems_count: 3
+      namespaces_count: 20
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
+    refresh: True
