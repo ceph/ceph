@@ -135,8 +135,6 @@ SafeResult POSIXStrategy::safe_unlink(int dir_fd, const std::string& name,
 
 /* --- GPFSStrategy ----------------------------------------------------- */
 
-static const char* gpfs_dl_path = "/usr/lpp/mmfs/lib/libgpfs.so";
-
 GPFSStrategy::~GPFSStrategy()
 {
   if (dl_handle) {
@@ -145,11 +143,11 @@ GPFSStrategy::~GPFSStrategy()
 }
 
 std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
-  const DoutPrefixProvider* dpp)
+  const DoutPrefixProvider* dpp, const std::string& dl_path)
 {
-  void* dl = dlopen(gpfs_dl_path, RTLD_NOW | RTLD_LOCAL);
+  void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
-    ldpp_dout(dpp, 5) << "gpfs: dlopen " << gpfs_dl_path
+    ldpp_dout(dpp, 5) << "gpfs: dlopen " << dl_path
       << " failed: " << dlerror() << dendl;
     return nullptr;
   }
@@ -163,12 +161,12 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
 
   if (!la || !lai || !ua) {
     ldpp_dout(dpp, 0) << "gpfs: dlsym failed — missing symbols in "
-      << gpfs_dl_path << dendl;
+      << dl_path << dendl;
     dlclose(dl);
     return nullptr;
   }
 
-  ldpp_dout(dpp, 1) << "gpfs: loaded " << gpfs_dl_path << dendl;
+  ldpp_dout(dpp, 1) << "gpfs: loaded " << dl_path << dendl;
   return std::unique_ptr<GPFSStrategy>(new GPFSStrategy(dl, la, lai, ua));
 }
 

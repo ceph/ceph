@@ -91,7 +91,7 @@ public:
   ~GPFSStrategy() override;
 
   static std::unique_ptr<GPFSStrategy> try_create(
-    const DoutPrefixProvider* dpp);
+    const DoutPrefixProvider* dpp, const std::string& dl_path);
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
