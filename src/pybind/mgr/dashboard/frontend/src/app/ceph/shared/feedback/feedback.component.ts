@@ -48,8 +48,15 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.createForm();
+    this.loadFeedbackState();
+  }
+
+  private loadFeedbackState() {
+    this.keySub?.unsubscribe();
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
+        this.isFeedbackEnabled = true;
+        this.feedbackForm.enable();
         this.isAPIKeySet = data;
         if (this.isAPIKeySet) {
           this.feedbackForm.get('api_key').clearValidators();
@@ -110,7 +117,13 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
       null,
       null,
       'Enabled Feedback Module',
+      false,
+      undefined,
       true
     );
+    const subscription = this.mgrModuleService.updateCompleted$.subscribe(() => {
+      subscription.unsubscribe();
+      this.loadFeedbackState();
+    });
   }
 }

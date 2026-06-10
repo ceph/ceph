@@ -61,6 +61,21 @@ describe('MgrModuleService', () => {
     service.enable('foo').subscribe();
     const req = httpTesting.expectOne('api/mgr/module/foo/enable');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toBeNull();
+  });
+
+  it('should call enable with force for whitelisted modules', () => {
+    service.enable('feedback').subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/feedback/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
+  });
+
+  it('should call enable with explicit force', () => {
+    service.enable('foo', true).subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/foo/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
   });
 
   it('should call disable', () => {
@@ -106,7 +121,7 @@ describe('MgrModuleService', () => {
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
-      expect(service.enable).toHaveBeenCalledWith('foo');
+      expect(service.enable).toHaveBeenCalledWith('foo', false);
       expect(service.list).toHaveBeenCalledTimes(2);
       expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
       expect(blockUIService.start).toHaveBeenCalled();
