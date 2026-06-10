@@ -2063,7 +2063,8 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
 
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp);
+  auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
