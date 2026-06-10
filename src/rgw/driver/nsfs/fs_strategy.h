@@ -31,6 +31,17 @@ enum class SafeResult {
   ERROR = 2,
 };
 
+/* RAII handle returned by FSStrategy::version_lock().
+ * Destructor releases the lock. */
+class VersionLockHandle {
+public:
+  virtual ~VersionLockHandle() = default;
+  VersionLockHandle(const VersionLockHandle&) = delete;
+  VersionLockHandle& operator=(const VersionLockHandle&) = delete;
+protected:
+  VersionLockHandle() = default;
+};
+
 class FSStrategy {
 public:
   virtual ~FSStrategy() = default;
@@ -77,6 +88,18 @@ public:
   virtual void cleanup_clone(const DoutPrefixProvider* dpp,
                              int dir_fd, const std::string& name) = 0;
 
+  /* acquire an exclusive lock for versioned object operations.
+   * lock_fd is an open fd on the .versions/.lock file.
+   *
+   * POSIX: OFD write lock (per-fd, single-node).
+   * GPFS/LWE: cluster-wide exclusive right via the GPFS token
+   *   manager, falling back to OFD on failure.
+   *
+   * Returns an RAII handle — the lock is released when the
+   * handle is destroyed. */
+  virtual std::unique_ptr<VersionLockHandle> version_lock(
+    const DoutPrefixProvider* dpp, int lock_fd) = 0;
+
   virtual const char* name() const = 0;
 };
 
@@ -105,11 +128,15 @@ public:
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override {}
 
+  std::unique_ptr<VersionLockHandle> version_lock(
+    const DoutPrefixProvider* dpp, int lock_fd) override;
+
   const char* name() const override { return "posix"; }
 };
 
 class GPFSStrategy : public FSStrategy {
   void* dl_handle;
+  void* dmapi_handle;
   decltype(&gpfs_linkat) fn_linkat;
   decltype(&gpfs_linkatif) fn_linkatif;
   decltype(&gpfs_unlinkat) fn_unlinkat;
@@ -118,23 +145,57 @@ class GPFSStrategy : public FSStrategy {
   decltype(&gpfs_clone_unsnap) fn_clone_unsnap;
   bool clone_enabled;
 
-  GPFSStrategy(void* dl, decltype(&gpfs_linkat) la,
+  /* LWE cluster-wide locking via GPFS token manager.
+   * dm_fd_to_handle/dm_handle_free come from libdmapi.so;
+   * gpfs_lwe_* come from libgpfs.so. */
+  using dm_fd_to_handle_t = int(*)(int, void**, size_t*);
+  using dm_handle_free_t = void(*)(void*, size_t);
+  using lwe_create_session_t = int(*)(gpfs_lwe_sessid_t, char*,
+                                      gpfs_lwe_sessid_t*);
+  using lwe_destroy_session_t = int(*)(gpfs_lwe_sessid_t);
+  using lwe_request_right_t = int(*)(gpfs_lwe_sessid_t, void*, size_t,
+                                     unsigned int, unsigned int,
+                                     gpfs_lwe_token_t*);
+  using lwe_release_right_t = int(*)(gpfs_lwe_sessid_t, void*, size_t,
+                                     gpfs_lwe_token_t);
+
+  dm_fd_to_handle_t fn_dm_fd_to_handle;
+  dm_handle_free_t fn_dm_handle_free;
+  lwe_create_session_t fn_lwe_create_session;
+  lwe_destroy_session_t fn_lwe_destroy_session;
+  lwe_request_right_t fn_lwe_request_right;
+  lwe_release_right_t fn_lwe_release_right;
+
+  gpfs_lwe_sessid_t lwe_session;
+  bool lwe_enabled;
+
+  GPFSStrategy(void* dl, void* dmapi_dl,
+               decltype(&gpfs_linkat) la,
                decltype(&gpfs_linkatif) lai,
                decltype(&gpfs_unlinkat) ua,
                decltype(&gpfs_clone_snap) cs,
                decltype(&gpfs_clone_copy) cc,
                decltype(&gpfs_clone_unsnap) cu,
-               bool clone_en)
-    : dl_handle(dl), fn_linkat(la), fn_linkatif(lai), fn_unlinkat(ua),
+               bool clone_en,
+               dm_fd_to_handle_t dm_fd, dm_handle_free_t dm_free,
+               lwe_create_session_t lcs, lwe_destroy_session_t lds,
+               lwe_request_right_t lrr, lwe_release_right_t lrl,
+               gpfs_lwe_sessid_t session, bool lwe_en)
+    : dl_handle(dl), dmapi_handle(dmapi_dl),
+      fn_linkat(la), fn_linkatif(lai), fn_unlinkat(ua),
       fn_clone_snap(cs), fn_clone_copy(cc), fn_clone_unsnap(cu),
-      clone_enabled(clone_en) {}
+      clone_enabled(clone_en),
+      fn_dm_fd_to_handle(dm_fd), fn_dm_handle_free(dm_free),
+      fn_lwe_create_session(lcs), fn_lwe_destroy_session(lds),
+      fn_lwe_request_right(lrr), fn_lwe_release_right(lrl),
+      lwe_session(session), lwe_enabled(lwe_en) {}
 
 public:
   ~GPFSStrategy() override;
 
   static std::unique_ptr<GPFSStrategy> try_create(
     const DoutPrefixProvider* dpp, const std::string& dl_path,
-    bool clone_enabled);
+    bool clone_enabled, bool lwe_enabled);
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
@@ -159,10 +220,18 @@ public:
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override;
 
+  std::unique_ptr<VersionLockHandle> version_lock(
+    const DoutPrefixProvider* dpp, int lock_fd) override;
+
   const char* name() const override { return "gpfs"; }
 
   bool has_clone() const {
     return clone_enabled && fn_clone_snap && fn_clone_copy && fn_clone_unsnap;
+  }
+
+  bool has_lwe() const {
+    return lwe_enabled && fn_dm_fd_to_handle && fn_dm_handle_free &&
+           fn_lwe_request_right && fn_lwe_release_right;
   }
 };
 
