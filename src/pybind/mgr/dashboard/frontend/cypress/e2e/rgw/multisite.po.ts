@@ -46,7 +46,13 @@ export class MultisitePageHelper extends PageHelper {
     }
 
     cy.visit(page.url);
-    cy.get(page.id, { timeout: 10000 }).should('be.visible');
+    // For modals, wait for the cds-modal to be visible instead of the component wrapper
+    if (name === 'wizard' || name === 'create' || name === 'edit') {
+      cy.get('cds-modal', { timeout: 10000 }).should('be.visible');
+      cy.get(page.id).should('exist');
+    } else {
+      cy.get(page.id, { timeout: 10000 }).should('be.visible');
+    }
   }
 
   tableExist() {

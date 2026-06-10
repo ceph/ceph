@@ -100,6 +100,7 @@ export abstract class PageHelper {
   }
 
   getTabText(index: number) {
+    // Trim is needed for Carbon's internal whitespace
     return this.getTabs().eq(index).invoke('text').then((text: string) => text.trim());
   }
 
