@@ -51,31 +51,82 @@
       </cds-table-toolbar-search>
       <!-- end search -->
       <!-- column filters -->
-      <ng-container *ngIf="columnFilters.length !== 0">
-        <div class="filter-wrapper">
-          <svg [cdsIcon]="icons.filter"
-               [size]="icons.size16"
-               class="cds--toolbar-action__icon"></svg>
-          <cds-select (valueChange)="onSelectFilter($event)"
-                      display="inline"
-                      id="filter_name">
-            <ng-container *ngFor="let filter of columnFilters">
-              <option [value]="filter.column.name"
-                      [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
-            </ng-container>
-          </cds-select>
-          <cds-select (valueChange)="onChangeFilter($event)"
-                      display="inline"
-                      id="filter_option">
-            <option *ngIf="!selectedFilter.value"
-                    i18n>Any</option>
-            <ng-container *ngFor="let option of selectedFilter.options">
-              <option [value]="option.raw"
-                      [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
-            </ng-container>
-          </cds-select>
+       @if (columnFilters.length !== 0) {
+        <div cdsPopover
+             [isOpen]="openFilterPopover"
+             [autoAlign]="true"
+             [caret]="false">
+          <cds-icon-button
+            kind="ghost"
+            class="toolbar-action"
+            (click)="toggleFilterPopover()"
+            data-testid="filter-button">
+            <svg [cdsIcon]="icons.filter"
+                 [size]="icons.size16"
+                 class="cds--toolbar-action__icon"></svg>
+          </cds-icon-button>
+          <cds-popover-content [cdsLayer]="0">
+            <div
+              cdsGrid
+              [fullWidth]="true"
+              [condensed]="true"
+              [narrow]="true">
+            @for (filter of columnFilters; track filter.column.name; let i = $index) {
+            <div
+              cdsRow
+              [cdsLayer]="2"
+              class="cds-mt-4">
+
+              <!-- filter names column -->
+              <div
+                cdsCol
+                [columnNumbers]="{sm: 4, md: 4}">
+                <cds-text-label>Filter
+                  <input cdsText
+                         readonly
+                         size="sm"
+                         [id]="'filter_key_' + i"
+                         [name]="'filter_key_' + i"
+                         [value]="filter.column.name">
+                </cds-text-label>
+              </div>
+
+              <!-- filter values column -->
+              <div
+                cdsCol
+                [columnNumbers]="{sm: 4, md: 4}">
+                <cds-select (valueChange)="onChangeFilter($event, filter)"
+                            [id]="'filter_value_' + i"
+                            label="Value"
+                            size="sm"
+                            [attr.data-testid]="'filter-select-' + filter.column.name"
+                            i18n-label>
+                  <option i18n>Any</option>
+                  @for (option of filter.options; track option.raw) {
+                    <option [value]="option.raw"
+                            [selected]="option.raw === selectedFilters[filter.column.name]">
+                      {{ option.formatted }}
+                    </option>
+                  }
+
+                </cds-select>
+              </div>
+            </div>
+          }
+          <div cdsRow
+               class="cds-mt-4 cds-mb-4">
+
+            <button cdsButton="primary"
+                    size="sm"
+                    data-testid="apply-filters"
+                    (click)="onSubmitFilter()">
+              <ng-container i18n>Apply filters</ng-container>
+            </button>
+          </div>
+          </div>
+          </cds-popover-content>
         </div>
-      </ng-container>
+      }
       <!-- end column filters -->
       <!-- refresh button -->
       <cds-icon-button
@@ -126,27 +177,51 @@
     </cds-table-toolbar-content>
   </cds-table-toolbar>
   <!-- filter chips for column filters -->
-  <div class="d-flex justify-content-end align-items-center filter-tags"
-       *ngIf="toolHeader && columnFiltered">
-  <div class="d-flex gap-2">
-    <ng-container *ngFor="let filter of columnFilters">
-      <cds-tag *ngIf="filter.value"
-               type="outline"
-               class="align-self-center">
-        <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
-        <button class="cds--tag__close-icon"
-                (click)="onChangeFilter(filter)">
-          <svg [cdsIcon]="icons.destroy"
-               [size]="icons.size16"></svg>
+   @if (toolHeader && columnFiltered) {
+    <div class="filter-tags">
+      <div
+        class="align-items-center"
+        cdsStack="horizontal"
+        [gap]="2">
+        @for (filter of activeFilters | slice:0:3; track filter.column.name) {
+          @if (filter.value) {
+            <cds-tag-filter
+              closeButtonLabel="Clear"
+              i18n-closeButtonLabel
+              (close)="onRemoveFilter(filter)">
+              {{ filter.column.name }}={{ filter.value.formatted }}
+            </cds-tag-filter>
+          }
+        }
+        @if (activeFilters.length > 3) {
+          <cds-tooltip [description]="remainingFiltersTpl">
+            <cds-tag>
+              +{{ activeFilters.length - 3 }}
+            </cds-tag>
+
+            <ng-template #remainingFiltersTpl>
+              <div
+                cdsStack="vertical"
+                [gap]="2">
+              @for (filter of activeFilters | slice:3; track filter.column.name) {
+                <cds-tag-filter
+                  closeButtonLabel="Clear"
+                  i18n-closeButtonLabel
+                  (close)="onRemoveFilter(filter)">
+                  {{ filter.column.name }}={{ filter.value.formatted }}
+                </cds-tag-filter>
+              }
+              </div>
+            </ng-template>
+          </cds-tooltip>
+        }
+        <button cdsButton="ghost"
+                (click)="onClearFilters($event)">
+          <ng-container i18n>Clear filters</ng-container>
         </button>
-      </cds-tag>
-    </ng-container>
-    <button cdsButton="ghost"
-            (click)="onClearFilters($event)">
-      <ng-container i18n>Clear filters</ng-container>
-    </button>
-  </div>
-  </div>
+      </div>
+    </div>
+  }
   <!-- end filter chips for column filters -->
   <table cdsTable
          [sortable]="sortable"

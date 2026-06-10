@@ -64,8 +64,8 @@
 }
 
 .filter-tags {
-  background-color: var(--cds-layer-accent);
-  border-bottom: 1px solid var(--cds-layer-active);
+  background-color: var(--cds-layer-01);
+  border-top: var(--cds-spacing-01) solid var(--cds-layer-02);
   color: var(--cds-text-primary);
 }
 
