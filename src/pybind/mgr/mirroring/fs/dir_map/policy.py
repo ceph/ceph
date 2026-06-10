@@ -102,7 +102,8 @@ class Policy:
             if dir_state:
                 return {'instance_id': dir_state.instance_id,
                         'mapped_time': dir_state.mapped_time,
-                        'purging': dir_state.purging}
+                        'purging': dir_state.purging,
+                        'state': dir_state.state}
             return None
 
     def get_tracked_instance_id(self, dir_path):
