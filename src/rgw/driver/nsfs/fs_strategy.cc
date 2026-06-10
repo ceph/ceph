@@ -18,11 +18,15 @@
 #include <atomic>
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <linux/stat.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <unistd.h>
+
+#include "gpfs/gpfs_fcntl.h"
 
 #include "common/dout.h"
 #include "common/errno.h"
@@ -191,6 +195,88 @@ std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
   return std::make_unique<OFDLockHandle>(lock_fd);
 }
 
+int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
+                              xattr_map_t& attrs)
+{
+  char namebuf[64 * 1024];
+  ssize_t list_len = ::flistxattr(fd, namebuf, sizeof(namebuf));
+  if (list_len < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 0) << "ERROR: flistxattr failed: "
+      << cpp_strerror(err) << dendl;
+    return -err;
+  }
+  if (list_len == 0) {
+    return 0;
+  }
+
+  char* p = namebuf;
+  ssize_t remaining = list_len;
+  while (remaining > 0) {
+    std::string name(p);
+    ssize_t keylen = name.size() + 1;
+
+    ssize_t vallen = ::fgetxattr(fd, p, nullptr, 0);
+    if (vallen < 0) {
+      if (errno == ENODATA || errno == EACCES || errno == ERANGE) {
+        remaining -= keylen;
+        p += keylen;
+        continue;
+      }
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: fgetxattr " << p
+        << " failed: " << cpp_strerror(err) << dendl;
+      return -err;
+    }
+
+    std::string value(vallen, '\0');
+    if (vallen > 0) {
+      ssize_t got = ::fgetxattr(fd, p, &value[0], vallen);
+      if (got < 0) {
+        remaining -= keylen;
+        p += keylen;
+        continue;
+      }
+      value.resize(got);
+    }
+
+    attrs.emplace(std::move(name), std::move(value));
+    remaining -= keylen;
+    p += keylen;
+  }
+  return 0;
+}
+
+int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
+                              const xattr_map_t& attrs)
+{
+  for (auto& [name, value] : attrs) {
+    int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
+    if (ret < 0) {
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
+        << " failed: " << cpp_strerror(err) << dendl;
+      return -err;
+    }
+  }
+  return 0;
+}
+
+int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                                 const std::vector<std::string>& names)
+{
+  for (auto& name : names) {
+    int ret = ::fremovexattr(fd, name.c_str());
+    if (ret < 0 && errno != ENODATA) {
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: fremovexattr " << name
+        << " failed: " << cpp_strerror(err) << dendl;
+      return -err;
+    }
+  }
+  return 0;
+}
+
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name)
@@ -252,7 +338,7 @@ GPFSStrategy::~GPFSStrategy()
 
 std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   const DoutPrefixProvider* dpp, const std::string& dl_path,
-  bool clone_enabled, bool lwe_enabled)
+  bool clone_enabled, bool lwe_enabled, bool batch_xattrs)
 {
   void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
@@ -273,6 +359,9 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
     dlsym(dl, "gpfs_clone_copy"));
   auto cu = reinterpret_cast<decltype(&gpfs_clone_unsnap)>(
     dlsym(dl, "gpfs_clone_unsnap"));
+
+  auto fc = reinterpret_cast<GPFSStrategy::gpfs_fcntl_t>(
+    dlsym(dl, "gpfs_fcntl"));
 
   if (!la || !lai || !ua) {
     ldpp_dout(dpp, 0) << "gpfs: dlsym failed — missing symbols in "
@@ -346,14 +435,22 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
     }
   }
 
+  bool batch_ok = batch_xattrs && fc;
+  if (batch_xattrs && !fc) {
+    ldpp_dout(dpp, 5) << "gpfs: gpfs_fcntl symbol not available, "
+      << "batch xattr ops will fall back to POSIX" << dendl;
+  }
+
   std::string features;
   if (clone_enabled) features += " clone";
   if (lwe_ok) features += " lwe";
+  if (batch_ok) features += " batch-xattrs";
   ldpp_dout(dpp, 1) << "gpfs: loaded " << dl_path
     << (features.empty() ? "" : " (" + features.substr(1) + ")") << dendl;
 
   return std::unique_ptr<GPFSStrategy>(
-    new GPFSStrategy(dl, dmapi_dl, la, lai, ua, cs, cc, cu, clone_enabled,
+    new GPFSStrategy(dl, dmapi_dl, la, lai, ua, cs, cc, cu, fc,
+                     clone_enabled, batch_ok,
                      dm_fd, dm_free, lcs, lds, lrr, lrl, session, lwe_ok));
 }
 
@@ -575,6 +672,235 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 10) << "gpfs cleanup_clone: removed "
       << snap_name << dendl;
   }
+}
+
+/* --- GPFS batch xattr operations ----------------------------------------
+ *
+ * gpfs_fcntl accepts a buffer starting with gpfsFcntlHeader_t followed
+ * by one or more typed structs.  For xattrs, each gpfsGetSetXAttr_t
+ * carries one name+value pair.  We pack as many as fit into a single
+ * GPFS_MAX_FCNTL_LENGTH (64KB) buffer, reducing N syscalls to 1.
+ *
+ * Buffer layout for GET_XATTR:
+ *   [header][getset1 + name\0 + padding][getset2 + name\0 + padding]...
+ *
+ * For SET_XATTR:
+ *   [header][getset1 + name\0 + padding + value + padding]...
+ *
+ * Name and value are each rounded up to 8-byte alignment. */
+
+static size_t align8(size_t n) { return (n + 7) & ~7; }
+
+int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
+                             xattr_map_t& attrs)
+{
+  if (!has_batch_xattrs()) {
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+  }
+
+  /* first, list xattr names via gpfs_fcntl LIST_XATTR */
+  struct {
+    gpfsFcntlHeader_t hdr;
+    gpfsListXAttr_t list;
+    char buf[GPFS_MAX_FCNTL_LENGTH - sizeof(gpfsFcntlHeader_t)
+             - sizeof(gpfsListXAttr_t)];
+  } list_arg;
+  memset(&list_arg, 0, sizeof(list_arg));
+  list_arg.hdr.totalLength = sizeof(list_arg);
+  list_arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  list_arg.list.structLen = sizeof(list_arg.list) + sizeof(list_arg.buf);
+  list_arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  list_arg.list.bufferLen = sizeof(list_arg.buf);
+
+  int ret = fn_fcntl(fd, &list_arg);
+  if (ret < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 5) << "gpfs get_xattrs: LIST_XATTR failed: "
+      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+  }
+
+  /* parse the length-prefixed name list */
+  std::vector<std::string> names;
+  char* p = list_arg.list.buffer;
+  int remaining = list_arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (names.empty()) {
+    return 0;
+  }
+
+  /* batch GET_XATTR for all names in a single gpfs_fcntl call */
+  char get_buf[GPFS_MAX_FCNTL_LENGTH];
+  auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(get_buf);
+  memset(hdr, 0, sizeof(*hdr));
+  hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+  size_t off = sizeof(gpfsFcntlHeader_t);
+  struct xattr_slot {
+    size_t struct_off;
+    std::string name;
+  };
+  std::vector<xattr_slot> slots;
+
+  for (auto& name : names) {
+    size_t namelen = name.size() + 1;
+    size_t padded_name = align8(namelen);
+    size_t val_space = align8(GPFS_FCNTL_XATTR_MAX_VALUELEN);
+    size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + val_space;
+
+    if (off + entry_size > sizeof(get_buf)) break;
+
+    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + off);
+    memset(ea, 0, entry_size);
+    ea->structLen = entry_size;
+    ea->structType = GPFS_FCNTL_GET_XATTR;
+    ea->nameLen = namelen;
+    ea->bufferLen = padded_name + val_space;
+    ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+    memcpy(ea->buffer, name.c_str(), namelen);
+
+    slots.push_back({off, name});
+    off += entry_size;
+  }
+
+  hdr->totalLength = off;
+  ret = fn_fcntl(fd, get_buf);
+  if (ret < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
+      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+  }
+
+  for (auto& slot : slots) {
+    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + slot.struct_off);
+    if (ea->errReasonCode == 0 && ea->bufferLen > 0) {
+      size_t padded_name = align8(ea->nameLen);
+      char* valp = ea->buffer + padded_name;
+      attrs.emplace(std::move(slot.name),
+                    std::string(valp, ea->bufferLen));
+    }
+  }
+
+  ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
+    << slots.size() << " xattrs" << dendl;
+  return 0;
+}
+
+int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
+                             const xattr_map_t& attrs)
+{
+  if (!has_batch_xattrs() || attrs.empty()) {
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+  }
+
+  char buf[GPFS_MAX_FCNTL_LENGTH];
+  auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(buf);
+  memset(hdr, 0, sizeof(*hdr));
+  hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+  size_t off = sizeof(gpfsFcntlHeader_t);
+
+  for (auto& [name, value] : attrs) {
+    size_t namelen = name.size() + 1;
+    size_t padded_name = align8(namelen);
+    size_t padded_value = align8(value.size());
+    size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + padded_value;
+
+    if (off + entry_size > sizeof(buf)) {
+      /* flush what we have so far */
+      hdr->totalLength = off;
+      int ret = fn_fcntl(fd, buf);
+      if (ret < 0) {
+        int err = errno;
+        ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
+          << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+        return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+      }
+      off = sizeof(gpfsFcntlHeader_t);
+      memset(hdr, 0, sizeof(*hdr));
+      hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+    }
+
+    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(buf + off);
+    memset(ea, 0, entry_size);
+    ea->structLen = entry_size;
+    ea->structType = GPFS_FCNTL_SET_XATTR;
+    ea->nameLen = namelen;
+    ea->bufferLen = value.size();
+    ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+    memcpy(ea->buffer, name.c_str(), namelen);
+    memcpy(ea->buffer + padded_name, value.data(), value.size());
+
+    off += entry_size;
+  }
+
+  hdr->totalLength = off;
+  int ret = fn_fcntl(fd, buf);
+  if (ret < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
+      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+  }
+
+  ldpp_dout(dpp, 20) << "gpfs set_xattrs: batch wrote "
+    << attrs.size() << " xattrs" << dendl;
+  return 0;
+}
+
+int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                                const std::vector<std::string>& names)
+{
+  if (!has_batch_xattrs() || names.empty()) {
+    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+  }
+
+  char buf[GPFS_MAX_FCNTL_LENGTH];
+  auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(buf);
+  memset(hdr, 0, sizeof(*hdr));
+  hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+  size_t off = sizeof(gpfsFcntlHeader_t);
+
+  for (auto& name : names) {
+    size_t namelen = name.size() + 1;
+    size_t padded_name = align8(namelen);
+    size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name;
+
+    if (off + entry_size > sizeof(buf)) break;
+
+    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(buf + off);
+    memset(ea, 0, entry_size);
+    ea->structLen = entry_size;
+    ea->structType = GPFS_FCNTL_SET_XATTR;
+    ea->nameLen = namelen;
+    ea->bufferLen = -1;
+    ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+    memcpy(ea->buffer, name.c_str(), namelen);
+
+    off += entry_size;
+  }
+
+  hdr->totalLength = off;
+  int ret = fn_fcntl(fd, buf);
+  if (ret < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 5) << "gpfs remove_xattrs: batch delete failed: "
+      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+  }
+
+  ldpp_dout(dpp, 20) << "gpfs remove_xattrs: batch deleted "
+    << names.size() << " xattrs" << dendl;
+  return 0;
 }
 
 /* LWE lock handle — holds a cluster-wide exclusive right via the
