@@ -30,6 +30,25 @@ export class MultisitePageHelper extends PageHelper {
     status: 4
   };
 
+  navigateTo(name: string = null) {
+    name = name || 'index';
+    const page = this.pages[name];
+
+    // For modal routes, first navigate to parent page to ensure tabs are loaded
+    if (name === 'create' || name === 'edit') {
+      cy.visit(this.pages.index.url);
+      cy.get(this.pages.index.id).should('be.visible');
+      cy.get('cd-rgw-multisite-tabs').should('be.visible');
+    } else if (name === 'wizard') {
+      cy.visit(this.pages.topology.url);
+      cy.get(this.pages.topology.id).should('be.visible');
+      cy.get('cd-rgw-multisite-tabs').should('be.visible');
+    }
+
+    cy.visit(page.url);
+    cy.get(page.id, { timeout: 10000 }).should('be.visible');
+  }
+
   tableExist() {
     cy.get('cd-rgw-multisite-sync-policy cd-table').should('exist');
     cy.get('cd-rgw-multisite-sync-policy cd-table-actions').should('exist');
@@ -346,9 +365,8 @@ export class MultisitePageHelper extends PageHelper {
   }
 
   gotoStep(step: Step) {
-    cy.get('cd-wizard').then(() => {
-      cy.get('form').should('be.visible');
-      cy.get('button').contains(WizardSteps[step]).click();
-    });
+    cy.get('cd-wizard').should('be.visible');
+    cy.get('form').should('be.visible');
+    cy.get('button').contains(WizardSteps[step]).should('be.visible').click({ force: true });
   }
 }

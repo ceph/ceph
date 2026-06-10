@@ -100,7 +100,7 @@ export abstract class PageHelper {
   }
 
   getTabText(index: number) {
-    return this.getTabs().its(index).text();
+    return this.getTabs().eq(index).invoke('text').then((text: string) => text.trim());
   }
 
   getTabsCount(): any {
