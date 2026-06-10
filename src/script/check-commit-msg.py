@@ -61,7 +61,7 @@ MAX_BODY_LINE_LEN: int = 72
 # hyphens, underscores, dots) separated by slashes.  Examples:
 #   osd  mds  mgr/dashboard  doc/rados/api  qa/suites  bluestore
 _SUBSYSTEM_RE = re.compile(
-    r"^(?P<subsystem>[\w][\w.\-]*(?:/[\w][\w.\-]*)*):\s+(?P<description>.+)$"
+    r"^(?P<subsystem>[\w][\w./-]*):\s+(?P<description>.+)$"
 )
 
 # Signed-off-by trailer (required).

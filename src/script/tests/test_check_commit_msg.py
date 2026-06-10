@@ -343,7 +343,7 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestCLI:
-    def test_stdin_valid(self, tmp_path, monkeypatch, capsys):
+    def test_stdin_valid(self, monkeypatch, capsys):
         import io
         good_msg = (
             "osd: fix memory leak in BlueStore\n"
