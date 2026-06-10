@@ -31,6 +31,8 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
 
   @Input() canSelect: boolean;
 
+  @Input() inlineSelection = false;
+
   @Output()
   selected = new EventEmitter<DevicesSelectionChangeEvent>();
 
@@ -45,6 +47,23 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   isOsdPage: boolean;
 
   addButtonTooltip: String;
+  filterColumns = [
+    'hostname',
+    'human_readable_type',
+    'sys_api.vendor',
+    'sys_api.model',
+    'sys_api.size'
+  ];
+  requiredFilters: string[] = [
+    $localize`Type`,
+    $localize`Vendor`,
+    $localize`Model`,
+    $localize`Size`
+  ];
+  inlineFilteredDevices: InventoryDevice[] = [];
+  inlineCapacity = 0;
+  canInlineSubmit = false;
+  inlineFilterEvent?: CdTableColumnFiltersChange;
   tooltips = {
     noAvailDevices: $localize`No available devices`,
     addPrimaryFirst: $localize`Please add primary devices first`,
@@ -77,37 +96,63 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   }
 
   showSelectionModal() {
-    const filterColumns = [
-      'hostname',
-      'human_readable_type',
-      'sys_api.vendor',
-      'sys_api.model',
-      'sys_api.size'
-    ];
     const diskType = this.name === 'Primary' ? 'hdd' : 'ssd';
     const initialState = {
       hostname: this.hostname,
       deviceType: this.name,
       diskType: diskType,
       devices: this.availDevices,
-      filterColumns: filterColumns
+      filterColumns: this.filterColumns
     };
     const modalRef = this.modalService.show(OsdDevicesSelectionModalComponent, initialState, {
       size: 'xl'
     });
     modalRef.componentInstance.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
-      this.devices = result.data;
-      this.capacity = _.sumBy(this.devices, 'sys_api.size');
-      this.appliedFilters = result.filters;
-      const event = _.assign({ type: this.type }, result);
-      if (!this.isOsdPage) {
-        this.osdService.osdDevices[this.type] = this.devices;
-        this.osdService.osdDevices['disableSelect'] =
-          this.canSelect || this.devices.length === this.availDevices.length;
-        this.osdService.osdDevices[this.type]['capacity'] = this.capacity;
-      }
-      this.selected.emit(event);
+      this.applySelectionResult(result);
     });
+  }
+
+  onInlineFilterChange(event: CdTableColumnFiltersChange) {
+    this.inlineCapacity = 0;
+    this.canInlineSubmit = false;
+    this.inlineFilterEvent = undefined;
+
+    if (_.isEmpty(event.filters)) {
+      this.inlineFilteredDevices = [];
+      return;
+    }
+
+    const filters = event.filters.filter((filter) => filter.prop !== 'hostname');
+    this.canInlineSubmit = !_.isEmpty(filters);
+    this.inlineFilteredDevices = event.data;
+    this.inlineCapacity = _.sumBy(this.inlineFilteredDevices, 'sys_api.size');
+    this.inlineFilterEvent = event;
+  }
+
+  submitInlineSelection() {
+    if (
+      !this.inlineFilterEvent ||
+      !this.canInlineSubmit ||
+      this.inlineFilteredDevices.length === 0
+    ) {
+      return;
+    }
+
+    this.applySelectionResult(this.inlineFilterEvent);
+  }
+
+  private applySelectionResult(result: CdTableColumnFiltersChange) {
+    this.devices = result.data;
+    this.capacity = _.sumBy(this.devices, 'sys_api.size');
+    this.appliedFilters = result.filters;
+    const event = _.assign({ type: this.type }, result);
+    if (!this.isOsdPage) {
+      this.osdService.osdDevices[this.type] = this.devices;
+      this.osdService.osdDevices['disableSelect'] =
+        this.canSelect || this.devices.length === this.availDevices.length;
+      this.osdService.osdDevices[this.type]['capacity'] = this.capacity;
+    }
+    this.selected.emit(event);
   }
 
   private updateAddButtonTooltip() {
@@ -136,6 +181,10 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
       clearedDevices: [...this.devices]
     };
     this.devices = [];
+    this.inlineFilteredDevices = [];
+    this.inlineCapacity = 0;
+    this.canInlineSubmit = false;
+    this.inlineFilterEvent = undefined;
     this.cleared.emit(event);
   }
 }

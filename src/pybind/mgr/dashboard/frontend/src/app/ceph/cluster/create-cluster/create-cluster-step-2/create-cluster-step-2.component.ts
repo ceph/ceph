@@ -16,6 +16,7 @@ export class CreateClusterStep2Component implements OnInit, TearsheetStep {
   @Output() skipStep = new EventEmitter<void>();
 
   formGroup: CdFormGroup;
+  showForm = false;
 
   ngOnInit() {
     this.formGroup = new CdFormGroup({
@@ -29,6 +30,15 @@ export class CreateClusterStep2Component implements OnInit, TearsheetStep {
   onSkip() {
     this.formGroup.patchValue({ skipped: true });
     this.skipStep.emit();
+  }
+
+  onOsdCreated() {
+    this.showForm = false;
+    this.formGroup.patchValue({ skipped: true });
+  }
+
+  onCreateAction() {
+    this.showForm = true;
   }
 
   setDriveGroup(driveGroup: DriveGroup) {

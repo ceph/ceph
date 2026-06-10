@@ -1,221 +1,449 @@
-<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
+@if (!hasOrchestrator) {
+  <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
+}
 
-<div class="card"
-     *cdFormLoading="loading">
-  <div i18n="form title|Example: Create Pool@@formTitle"
-       class="card-header"
-       *ngIf="!hideTitle">{{ action | titlecase }} {{ resource | upperFirst }}</div>
-  <div class="card-body ms-2">
-    <form name="form"
-          #formDir="ngForm"
-          [formGroup]="form"
-          novalidate>
-      <cd-alert-panel *ngIf="availDevices?.length === 0"
-                      type="warning"
-                      class="mx-3"
-                      i18n>
-        <div cdsStack="vertical"
-             [gap]="2">
-          <span class="cds--type-heading-compact-01">No eligible devices found for OSD creation.</span>
-          <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements (unused, unformatted, and not already configured by Ceph).</span>
-        </div>
-      </cd-alert-panel>
-      <div class="accordion">
-        <div class="accordion-item">
-          <h2 class="accordion-header">
-            <button class="accordion-button"
-                    type="button"
-                    data-toggle="collapse"
-                    aria-label="toggle deployment options"
-                    [ngClass]="{collapsed: !simpleDeployment}"
-                    (click)="emitDeploymentMode()"
-                    i18n>Deployment Options</button>
-          </h2>
-        </div>
-        <div class="accordion-collapse collapse"
-             [ngClass]="{show: simpleDeployment}">
-          <div class="accordion-body">
-            <div class="pt-3 pb-3"
-                 *ngFor="let optionName of optionNames">
-              <div class="custom-control form-check custom-control-inline">
-                <input class="form-check-input"
-                       type="radio"
-                       name="deploymentOption"
-                       [id]="optionName"
-                       [value]="optionName"
-                       formControlName="deploymentOption"
-                       (change)="emitDeploymentSelection()"
-                       [attr.disabled]="!deploymentOptions?.options[optionName].available ? true : null">
-                <label class="form-check-label"
-                       [id]="'label_' + optionName"
-                       [for]="optionName"
-                       i18n>{{ deploymentOptions?.options[optionName].title }}
-                       {{ deploymentOptions?.recommended_option === optionName ? "(Recommended)" : "" }}
-                  <cd-helper>
-                    <span>{{ deploymentOptions?.options[optionName].desc }}</span>
-                  </cd-helper>
-                </label>
+<cd-tearsheet
+  [steps]="steps"
+  [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
+  (submitRequested)="submit()"
+  (stepChanged)="populateReviewData()"
+  [isSubmitLoading]="isSubmitLoading"
+  [submitButtonLabel]="simpleDeployment ? createOsdsLabel : actionLabels.PREVIEW"
+  type="full">
+
+  <cd-tearsheet-step>
+  <div class="osd-tearsheet-content">
+    <form
+    [formGroup]="form"
+    cdsStack="vertical"
+    [gap]="6">
+
+    @if (availDevices?.length === 0) {
+    <cd-alert-panel
+      type="warning"
+      class="osd-alert-block"
+      i18n>
+      <div
+      cdsStack="vertical"
+      [gap]="2">
+      <span class="cds--type-heading-compact-01">
+        No eligible devices found for OSD creation.
+      </span>
+      <span class="cds--type-body-compact-01">
+        Physical disks may be present, but none meet the requirements
+        (unused, unformatted, and not already configured by Ceph).
+      </span>
+      </div>
+    </cd-alert-panel>
+    }
+
+    <div>
+      <cds-text-label
+      class="cds--type-heading-compact-02 cds-mb-5"
+      i18n>
+      Deployment Options
+      </cds-text-label>
+
+      <div cdsStack="vertical"
+           [gap]="4">
+        <cds-radio-group
+          formControlName="deploymentMode"
+          orientation="vertical">
+
+          <cds-radio value="automatic">
+            <div class="osd-radio-label-wrapper">
+              <span
+              class="cds--type-body-short-01"
+              i18n>
+                Automatic
+              </span>
+              <div
+              class="cds--type-helper-text-01 osd-radio-helper-text cds-mt-2"
+              i18n>
+                Choose a pre-configured profile for you.
               </div>
             </div>
-            <!-- @TODO: Visualize the storage used on a chart -->
-            <!-- <div class="pie-chart">
-              <h4 class="text-center">Selected Capacity</h4>
-              <h5 class="margin text-center">10 Hosts | 30 NVMes </h5>
-              <div class="char-i-contain">
-                <cd-health-pie [data]="data"
-                               [config]="rawCapacityChartConfig"
-                               [isBytesData]="true"
-                               (prepareFn)="prepareRawUsage($event[0], $event[1])">
-                </cd-health-pie>
+          </cds-radio>
+
+        @if (form.get('deploymentMode').value !== 'manual') {
+        <div class="cds-pl-7 cds-mb-5"
+             cdsStack="vertical"
+             [gap]="4">
+          <cds-text-label
+            class="cds--type-heading-compact-02"
+            i18n>
+            Pre-configured profiles
+          </cds-text-label>
+
+          <cds-radio-group
+            formControlName="deploymentOption"
+            (change)="emitDeploymentSelection()"
+            orientation="vertical">
+
+            @for (optionName of optionNames; track optionName; let isLast = $last) {
+            <cds-radio
+              [value]="optionName"
+              [class.cds-mb-5]="!isLast"
+              [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
+
+              <div class="osd-radio-label-wrapper">
+              <span class="cds--type-body-short-01">
+                {{ deploymentOptions?.options[optionName].title }}
+                @if (deploymentOptions?.recommended_option === optionName) {
+                <strong i18n>(Recommended)</strong>
+                }
+              </span>
+
+              <div class="cds--type-helper-text-01 osd-radio-helper-text cds-mt-2">
+                {{ deploymentOptions?.options[optionName].desc }}
               </div>
-            </div> -->
-          </div>
+              </div>
+            </cds-radio>
+            }
+          </cds-radio-group>
         </div>
-        <div class="accordion-item">
-          <h2 class="accordion-header">
-            <button class="accordion-button"
-                    type="button"
-                    aria-label="toggle advanced mode"
-                    [ngClass]="{collapsed: simpleDeployment}"
-                    (click)="emitDeploymentMode()"
-                    i18n>Advanced Mode</button>
-          </h2>
-        </div>
-        <div class="accordion-collapse collapse"
-             [ngClass]="{show: !simpleDeployment}">
-          <div class="accordion-body">
-            <div class="card-body">
-              <fieldset>
-                <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
-                                                 name="Primary"
-                                                 type="data"
-                                                 [availDevices]="availDevices"
-                                                 [canSelect]="availDevices.length !== 0"
-                                                 (selected)="onDevicesSelected($event)"
-                                                 (cleared)="onDevicesCleared($event)">
-                </cd-osd-devices-selection-groups>
-              </fieldset>
+        }
 
-              <!-- Shared devices -->
-              <fieldset>
-                <legend i18n>Shared devices</legend>
-
-                <!-- WAL devices button and table -->
-                <cd-osd-devices-selection-groups #walDeviceSelectionGroups
-                                                 name="WAL"
-                                                 type="wal"
-                                                 [availDevices]="availDevices"
-                                                 [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-                                                 (selected)="onDevicesSelected($event)"
-                                                 (cleared)="onDevicesCleared($event)"
-                                                 [hostname]="hostname">
-                </cd-osd-devices-selection-groups>
-
-                <!-- WAL slots -->
-                <div class="form-group row"
-                     *ngIf="walDeviceSelectionGroups.devices.length !== 0">
-                  <label class="cd-col-form-label"
-                         for="walSlots">
-                    <ng-container i18n>WAL slots</ng-container>
-                    <cd-helper>
-                      <span i18n>How many OSDs per WAL device.</span>
-                      <br>
-                      <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
-                    </cd-helper>
-                  </label>
-                  <div class="cd-col-form-input">
-                    <input class="form-control"
-                           id="walSlots"
-                           name="walSlots"
-                           type="number"
-                           min="0"
-                           formControlName="walSlots">
-                    <span class="invalid-feedback"
-                          *ngIf="form.showError('walSlots', formDir, 'min')"
-                          i18n>Value should be greater than or equal to 0</span>
-                  </div>
-                </div>
-
-                <!-- DB devices button and table -->
-                <cd-osd-devices-selection-groups #dbDeviceSelectionGroups
-                                                 name="DB"
-                                                 type="db"
-                                                 [availDevices]="availDevices"
-                                                 [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-                                                 (selected)="onDevicesSelected($event)"
-                                                 (cleared)="onDevicesCleared($event)"
-                                                 [hostname]="hostname">
-                </cd-osd-devices-selection-groups>
-
-                <!-- DB slots -->
-                <div class="form-group row"
-                     *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
-                  <label class="cd-col-form-label"
-                         for="dbSlots">
-                    <ng-container i18n>DB slots</ng-container>
-                    <cd-helper>
-                      <span i18n>How many OSDs per DB device.</span>
-                      <br>
-                      <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
-                    </cd-helper>
-                  </label>
-                  <div class="cd-col-form-input">
-                    <input class="form-control"
-                           id="dbSlots"
-                           name="dbSlots"
-                           type="number"
-                           min="0"
-                           formControlName="dbSlots">
-                    <span class="invalid-feedback"
-                          *ngIf="form.showError('dbSlots', formDir, 'min')"
-                          i18n>Value should be greater than or equal to 0</span>
-                  </div>
-                </div>
-              </fieldset>
-            </div>
-          </div>
-        </div>
-
-        <!-- Features -->
-        <div class="accordion-item">
-          <h2 class="accordion-header">
-            <button class="accordion-button"
-                    type="button"
-                    data-toggle="collapse"
-                    aria-label="features"
-                    aria-expanded="true"
-                    i18n>Features</button>
-          </h2>
-        </div>
-        <div class="accordion-collapse collapse show">
-          <div class="accordion-body">
-            <div class="pt-3 pb-3"
-                 formGroupName="features">
-              <div class="custom-control custom-checkbox"
-                   *ngFor="let feature of featureList">
-                <input type="checkbox"
-                       class="custom-control-input"
-                       id="{{ feature.key }}"
-                       name="{{ feature.key }}"
-                       formControlName="{{ feature.key }}"
-                       (change)="emitDeploymentSelection()">
-                <label class="custom-control-label"
-                       for="{{ feature.key }}">{{ feature.desc }}</label>
+          <cds-radio value="manual">
+            <div class="osd-radio-label-wrapper">
+              <span
+              class="cds--type-body-short-01"
+              i18n>
+                Manual selection
+              </span>
+              <div
+              class="cds--type-helper-text-01 osd-radio-helper-text cds-mt-2"
+              i18n>
+                Custom Configuration
               </div>
             </div>
+          </cds-radio>
+        </cds-radio-group>
+      </div>
+    </div>
+
+    </form>
+  </div>
+  </cd-tearsheet-step>
+
+  @if (form.get('deploymentMode').value === 'manual') {
+  <cd-tearsheet-step>
+  <div class="osd-tearsheet-content">
+    <form
+    [formGroup]="form"
+    cdsStack="vertical"
+    [gap]="7">
+
+      <div>
+        <cds-text-label
+        class="cds--type-heading-compact-02 cds-mb-5"
+        i18n>
+        Select data devices
+        </cds-text-label>
+        <cd-osd-devices-selection-groups
+        #dataDeviceSelectionGroups
+        name="Primary"
+        i18n-name
+        type="data"
+        [availDevices]="availDevices"
+        [canSelect]="availDevices.length !== 0"
+        [inlineSelection]="true"
+        (selected)="onDevicesSelected($event)"
+        (cleared)="onDevicesCleared($event)">
+        </cd-osd-devices-selection-groups>
+      </div>
+
+    </form>
+  </div>
+  </cd-tearsheet-step>
+
+  <cd-tearsheet-step>
+  <div class="osd-tearsheet-content">
+    <form
+    [formGroup]="form"
+    cdsStack="vertical"
+    [gap]="7">
+
+      <div>
+        <cds-text-label
+        class="cds--type-heading-compact-02 cds-mb-5"
+        i18n>
+        Select DB/WAL devices (optional)
+        </cds-text-label>
+
+        <div
+        cdsStack="vertical"
+        [gap]="6">
+        <cd-osd-devices-selection-groups
+          #walDeviceSelectionGroups
+          name="WAL"
+          i18n-name
+          type="wal"
+          [availDevices]="availDevices"
+          [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+          [inlineSelection]="true"
+          (selected)="onDevicesSelected($event)"
+          (cleared)="onDevicesCleared($event)"
+          [hostname]="hostname">
+        </cd-osd-devices-selection-groups>
+
+        @if (walDeviceSelectionGroups.devices.length !== 0) {
+          <div>
+          <cds-number
+            label="WAL slots"
+            i18n-label
+            helperText="How many OSDs per WAL device. Specify 0 to let Orchestrator backend decide it."
+            i18n-helperText
+            id="walSlots"
+            formControlName="walSlots"
+            min="0">
+          </cds-number>
           </div>
+        }
+
+        <cd-osd-devices-selection-groups
+          #dbDeviceSelectionGroups
+          name="DB"
+          i18n-name
+          type="db"
+          [availDevices]="availDevices"
+          [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+          [inlineSelection]="true"
+          (selected)="onDevicesSelected($event)"
+          (cleared)="onDevicesCleared($event)"
+          [hostname]="hostname">
+        </cd-osd-devices-selection-groups>
+
+        @if (dbDeviceSelectionGroups.devices.length !== 0) {
+          <div>
+          <cds-number
+            label="DB slots"
+            i18n-label
+            helperText="How many OSDs per DB device. Specify 0 to let Orchestrator backend decide it."
+            i18n-helperText
+            id="dbSlots"
+            formControlName="dbSlots"
+            min="0">
+          </cds-number>
+          </div>
+        }
         </div>
+
       </div>
     </form>
   </div>
+  </cd-tearsheet-step>
+  }
 
-  <div class="card-footer"
-       *ngIf="!hideSubmitBtn">
-    <cd-form-button-panel #previewButtonPanel
-                          (submitActionEvent)="submit()"
-                          [form]="form"
-                          [disabled]="dataDeviceSelectionGroups.devices.length === 0 && !simpleDeployment"
-                          [submitText]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW"
-                          wrappingClass="text-right"></cd-form-button-panel>
+  <cd-tearsheet-step>
+  <div class="osd-tearsheet-content">
+    <form
+    [formGroup]="form">
+
+    <div formGroupName="features">
+      <cds-text-label
+      class="cds--type-heading-compact-02 cds-mb-5"
+      i18n>
+      Features
+      </cds-text-label>
+
+    @for (feature of featureList; track feature.key) {
+      <cds-checkbox
+      [name]="feature.key"
+      formControlName="{{ feature.key }}"
+      (checkedChange)="emitDeploymentSelection()">
+      {{ feature.desc }}
+      </cds-checkbox>
+    }
+    </div>
+
+    </form>
   </div>
-</div>
+  </cd-tearsheet-step>
+
+    <cd-tearsheet-step>
+    <div class="osd-tearsheet-content">
+      <div
+        cdsGrid
+        [useCssGrid]="true"
+        [narrow]="true"
+        [fullWidth]="true">
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 8, lg: 12 }">
+        <h3
+          class="cds--type-heading-03 cds-mb-5"
+          i18n>Review summary</h3>
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Deployment mode</p>
+        <p class="cds--type-label-02 cds-mt-2">{{ reviewDeploymentModeLabel }}</p>
+      </div>
+
+      @if (simpleDeployment) {
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Profile</p>
+        <p class="cds--type-label-02 cds-mt-2">{{ reviewDeploymentOptionTitle }}</p>
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Profile details</p>
+        <p class="cds--type-label-02 cds-mt-2">{{ reviewDeploymentOptionDescription }}</p>
+      </div>
+      } @else {
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 2, md: 4, lg: 6 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Host pattern</p>
+        <p class="cds--type-label-02 cds-mt-2">{{ reviewHostPattern }}</p>
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+          class="cds-mt-7">
+        <h4
+          class="cds--type-heading-compact-01"
+          i18n>Device selections</h4>
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Data devices</p>
+        @if (reviewDataSelection.hasSelection) {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>{{ reviewDataSelection.count }} device(s) selected</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>Total capacity: {{ reviewDataSelection.capacity }}</p>
+        @if (reviewDataSelection.filters.length > 0) {
+        <div class="osd-review-section cds-pl-4 cds-mt-3">
+         @for (filter of reviewDataSelection.filters; track filter.label + filter.value) {
+          <p class="cds--type-label-01 cds-mb-2">{{ filter.label }}</p>
+          <p class="cds--type-label-02 cds-mt-1">{{ filter.value }}</p>
+         }
+        </div>
+        }
+        } @else {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>None selected</p>
+        }
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>WAL devices</p>
+        @if (reviewWalSelection.hasSelection) {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>{{ reviewWalSelection.count }} device(s) selected</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>Total capacity: {{ reviewWalSelection.capacity }}</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>WAL slots: {{ reviewWalSelection.slots }}</p>
+        @if (reviewWalSelection.filters.length > 0) {
+        <div class="osd-review-section cds-pl-4 cds-mt-3">
+         @for (filter of reviewWalSelection.filters; track filter.label + filter.value) {
+          <p class="cds--type-label-01 cds-mb-2">{{ filter.label }}</p>
+          <p class="cds--type-label-02 cds-mt-1">{{ filter.value }}</p>
+         }
+        </div>
+        }
+        } @else {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>None selected</p>
+        }
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+          class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>DB devices</p>
+        @if (reviewDbSelection.hasSelection) {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>{{ reviewDbSelection.count }} device(s) selected</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>Total capacity: {{ reviewDbSelection.capacity }}</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>DB slots: {{ reviewDbSelection.slots }}</p>
+        @if (reviewDbSelection.filters.length > 0) {
+        <div class="osd-review-section cds-pl-4 cds-mt-3">
+         @for (filter of reviewDbSelection.filters; track filter.label + filter.value) {
+          <p class="cds--type-label-01 cds-mb-2">{{ filter.label }}</p>
+          <p class="cds--type-label-02 cds-mt-1">{{ filter.value }}</p>
+         }
+        </div>
+        }
+        } @else {
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>None selected</p>
+        }
+      </div>
+      }
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+          class="cds-mt-7">
+        <h4
+          class="cds--type-heading-compact-01"
+          i18n>Features</h4>
+      </div>
+
+      <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+          class="cds-mt-5">
+        @if (reviewEnabledFeatures.length > 0) {
+        @for (feature of reviewEnabledFeatures; track feature) {
+        <p class="cds--type-label-02 osd-review-item">{{ feature }}</p>
+        }
+        } @else {
+        <p
+          class="cds--type-label-02"
+          i18n>No features enabled</p>
+        }
+      </div>
+      </div>
+    </div>
+    </cd-tearsheet-step>
+  </cd-tearsheet>
