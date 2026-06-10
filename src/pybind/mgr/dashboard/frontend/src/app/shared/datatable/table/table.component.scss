@@ -111,8 +111,22 @@ tr:hover .edit-btn {
   white-space: nowrap;
 }
 
-.filter-wrapper {
-  display: inline-flex;
+.filter--header {
   align-items: center;
-  gap: 0.5rem;
+  border-bottom: 1px solid var(--cds-ui-03);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--cds-spacing-04);
+}
+
+.filter--footer {
+  display: flex;
+  margin-top: var(--cds-spacing-08);
+  width: 100%;
+
+  button {
+    flex: 1;
+    justify-content: center;
+    max-width: 50%;
+  }
 }

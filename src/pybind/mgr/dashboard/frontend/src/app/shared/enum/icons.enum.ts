@@ -174,7 +174,8 @@ export const ICON_TYPE = {
   leftArrow: 'caret--left',
   rightArrow: 'caret--right',
   locked: 'locked',
-  cloudMonitoring: 'cloud--monitoring'
+  cloudMonitoring: 'cloud--monitoring',
+  trash: 'trash-can'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

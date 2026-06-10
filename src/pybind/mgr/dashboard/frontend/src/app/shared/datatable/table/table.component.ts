@@ -26,10 +26,12 @@ import { Icons, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
+  CdTableActiveColumnFilter,
   CdTableColumnFilter,
   CdTableColumnFilterOption,
   CdTableColumnSelectedFilter,
-  CdTableColumnStagedFilter
+  CdTableColumnStagedFilter,
+  CdTableCustomColumnFilter
 } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -197,6 +199,14 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   extraFilterableColumns: CdTableColumn[] = [];
 
+  /*
+  Used to set custom filters on the table.
+  boolean - if you just want to enable custom filters with default settings
+  string - if you want to enable custom filters and set a specific col prop to be used as filter name
+  */
+  @Input()
+  customFilter: boolean | string = false;
+
   @Input()
   status = new TableStatus();
 
@@ -292,6 +302,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @Output()
   isCellEditingEvent = new EventEmitter<boolean>();
+
+  @Output()
+  customFilterChange = new EventEmitter<CdTableCustomColumnFilter[]>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -428,10 +441,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   columnFilters: CdTableColumnFilter[] = [];
   selectedFilter: CdTableColumnFilter;
   get columnFiltered(): boolean {
-    return _.some(this.columnFilters, (filter: any) => {
+    const hasStandardFilters = _.some(this.columnFilters, (filter: any) => {
       return filter.value !== undefined;
     });
+    const hasCustomFilters = this.customFilters && this.customFilters.length > 0;
+
+    return hasStandardFilters || hasCustomFilters;
   }
+  customFilters: CdTableCustomColumnFilter[] = [];
+  private nextFilterId = 0;
   private previousRows = new Map<string | number, TableItem[]>();
   private debouncedSearch = this.reloadData.bind(this);
 
@@ -442,9 +460,32 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   openFilterPopover = false;
   stagedFilters: CdTableColumnStagedFilter = {};
   selectedFilters: CdTableColumnSelectedFilter = {};
+  stagedCustomFilters: CdTableCustomColumnFilter[] = [];
 
   get activeFilters() {
-    return this.columnFilters.filter((filter) => filter.value);
+    const standard: CdTableActiveColumnFilter[] = this.columnFilters
+      .filter((filter) => filter.value)
+      .map((filter) => ({
+        isCustom: false,
+        id: `std_${filter.column.name}`,
+        name: filter.column.name,
+        value: filter.value.formatted,
+        original: filter
+      }));
+
+    const custom: CdTableActiveColumnFilter[] = (this.customFilters || []).map((filter) => ({
+      isCustom: true,
+      id: `cst_${filter.id}`,
+      name: filter.key,
+      value: filter.value,
+      original: filter
+    }));
+
+    return [...standard, ...custom];
+  }
+
+  get isApplyFilterDisabled(): boolean {
+    return this.stagedCustomFilters.some((filter) => !filter.key.trim() || !filter.value.trim());
   }
 
   constructor(
@@ -769,6 +810,27 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   toggleFilterPopover() {
     this.openFilterPopover = !this.openFilterPopover;
+
+    if (this.openFilterPopover) {
+      this.stagedCustomFilters = _.cloneDeep(this.customFilters || []);
+
+      if (this.customFilter && this.customFilters.length === 0) {
+        this.addCustomFilter();
+      }
+    }
+  }
+
+  addCustomFilter() {
+    this.stagedCustomFilters = [
+      ...this.stagedCustomFilters,
+      { id: this.nextFilterId++, key: '', value: '' }
+    ];
+  }
+
+  removeCustomFilter(idToRemove: number) {
+    this.stagedCustomFilters = this.stagedCustomFilters.filter(
+      (filter) => filter.id !== idToRemove
+    );
   }
 
   initColumnFilters() {
@@ -852,21 +914,41 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         this.selectedFilter = filter;
       }
     });
-
     this.stagedFilters = {};
+
+    if (this.customFilter) {
+      this.customFilters = this.stagedCustomFilters.filter(
+        (customFilter: CdTableCustomColumnFilter) =>
+          customFilter.key.trim() !== '' && customFilter.value.trim() !== ''
+      );
+      this.customFilterChange.emit(this.customFilters);
+    }
+
     this.updateFilter();
     this.openFilterPopover = false;
   }
 
-  onRemoveFilter(filter: CdTableColumnFilter) {
-    const filterName = filter.column.name;
-    filter.value = undefined;
-    this.selectedFilters[filterName] = undefined;
-    delete this.stagedFilters[filterName];
-    if (this.selectedFilter?.column.name === filterName) {
-      this.selectedFilter = undefined;
+  onRemoveFilter(filter: CdTableActiveColumnFilter) {
+    if (filter.isCustom) {
+      this.customFilters = (this.customFilters || []).filter(
+        (customFilter: CdTableCustomColumnFilter) => customFilter.id !== filter.original.id
+      );
+      this.stagedCustomFilters = this.stagedCustomFilters.filter(
+        (customFilter: CdTableCustomColumnFilter) => customFilter.id !== filter.original.id
+      );
+
+      this.customFilterChange.emit(this.customFilters);
+      this.updateFilter();
+    } else {
+      const filterName = filter.original.name;
+      filter.original.value = undefined;
+      this.selectedFilters[filterName] = undefined;
+      delete this.stagedFilters[filterName];
+      if (this.selectedFilter?.column.name === filterName) {
+        this.selectedFilter = undefined;
+      }
+      this.updateFilter();
     }
-    this.updateFilter();
   }
 
   doColumnFiltering() {
@@ -896,6 +978,85 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       data = parts[0];
       dataOut = [...dataOut, ...parts[1]];
     });
+
+    if (this.customFilter && this.customFilters.length > 0) {
+      this.customFilters.forEach((customFilter: CdTableCustomColumnFilter) => {
+        const matchingColumn = this.localColumns.find(
+          (col: CdTableColumn) =>
+            col.name && col.name.toLowerCase() === customFilter.key.trim().toLowerCase()
+        );
+        const resolvedProp = matchingColumn
+          ? (matchingColumn.prop as string)
+          : customFilter.key.trim();
+        const displayKeyName = matchingColumn ? matchingColumn.name : customFilter.key;
+
+        appliedFilters.push({
+          name: displayKeyName,
+          prop: typeof this.customFilter === 'string' ? this.customFilter : resolvedProp,
+          value: { raw: customFilter.value, formatted: customFilter.value }
+        });
+      });
+
+      // grouping filters by keys so we can filter the data with all the given filters
+      const groupedFilters = _.groupBy(
+        this.customFilters,
+        (customFilter: CdTableCustomColumnFilter) => customFilter.key.trim().toLowerCase()
+      );
+      const filterGroups = Object.values(groupedFilters);
+
+      const parts = _.partition(data, (row) => {
+        return filterGroups.every((group) => {
+          return group.some((customFilter: CdTableCustomColumnFilter) => {
+            const matchingColumn = this.localColumns.find(
+              (col: CdTableColumn) =>
+                col.name && col.name.toLowerCase() === customFilter.key.trim().toLowerCase()
+            );
+
+            const filterKey = matchingColumn
+              ? (matchingColumn.prop as string)
+              : customFilter.key.trim();
+            const rawKey = customFilter.key.trim();
+            const filterValue = customFilter.value;
+
+            if (_.has(row, filterKey)) {
+              if (`${_.get(row, filterKey)}` === filterValue) return true;
+            }
+
+            // this is only when the customFilter is for a column that has a
+            // key-value pair for its values.
+            // eg: tags of objects in s3.
+            if (typeof this.customFilter === 'string' && _.has(row, this.customFilter)) {
+              const nestedData = _.get(row, this.customFilter);
+
+              // when the data is an array of objects or strings,
+              // we need to check each element in the array.
+              if (_.isArray(nestedData)) {
+                return _.some(nestedData, (key) => {
+                  if (_.isObject(key) && _.has(key, rawKey)) {
+                    return `${(key as any)[rawKey]}` === filterValue;
+                  }
+                  if (typeof key === 'string') {
+                    return key === `${rawKey}:${filterValue}` || key === `${rawKey}=${filterValue}`;
+                  }
+                  return false;
+                });
+              }
+
+              // if object is a simple dict
+              if (_.isObject(nestedData) && !_.isArray(nestedData)) {
+                if (_.has(nestedData, rawKey)) {
+                  if (`${(nestedData as any)[rawKey]}` === filterValue) return true;
+                }
+              }
+            }
+            return false;
+          });
+        });
+      });
+
+      data = parts[0];
+      dataOut = [...dataOut, ...parts[1]];
+    }
 
     this.columnFiltersChanged.emit({
       filters: appliedFilters,
@@ -1340,6 +1501,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       filter.value = undefined;
     });
     this.selectedFilter = _.first(this.columnFilters);
+    this.customFilters = [];
+    this.stagedCustomFilters = [];
+
+    if (this.customFilter) {
+      this.addCustomFilter();
+    }
+
     this.updateFilter();
     this.initSelectedColumnFilters();
   }
@@ -1357,7 +1525,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       }
       this.rows = this.data;
     } else {
-      let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
+      let rows = this.doColumnFiltering();
 
       if (this.search.length > 0 && rows?.length) {
         const columns = this.localColumns.filter(
