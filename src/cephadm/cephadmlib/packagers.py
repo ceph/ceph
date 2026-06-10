@@ -19,6 +19,7 @@ logger = logging.getLogger()
 def get_distro():
     # type: () -> Tuple[Optional[str], Optional[str], Optional[str]]
     distro = None
+    distro_like: List[str] = []
     distro_version = None
     distro_codename = None
     with open('/etc/os-release', 'r') as f:
@@ -31,11 +32,32 @@ def get_distro():
                 val = val[1:-1]
             if var == 'ID':
                 distro = val.lower()
+            elif var == 'ID_LIKE':
+                # ID_LIKE can be space-separated or comma-separated
+                for token in val.replace(',', ' ').split():
+                    distro_like.append(token.strip().lower())
             elif var == 'VERSION_ID':
                 distro_version = val.lower()
             elif var == 'VERSION_CODENAME':
                 distro_codename = val.lower()
+
+    if not is_known_distro(distro):
+        for candidate_distro in distro_like:
+            if is_known_distro(candidate_distro):
+                distro = candidate_distro
+                break
+
     return distro, distro_version, distro_codename
+
+
+def is_known_distro(distro: Optional[str]) -> bool:
+    if not distro:
+        return False
+    return (
+        distro in YumDnf.DISTRO_NAMES
+        or distro in Apt.DISTRO_NAMES
+        or distro in Zypper.DISTRO_NAMES
+    )
 
 
 class Packager(object):
