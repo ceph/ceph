@@ -344,6 +344,28 @@ class TestGetDevices(object):
             result = disk.get_devices()
         assert result[sda_path]['actuators'] == fake_actuator_nb
 
+    def test_lvm_device_is_included(self, patched_get_block_devs_sysfs, fake_filesystem):
+        lv_path = '/dev/vg_test/lv1'
+        dm_path = '/dev/dm-0'
+        mapper_path = '/dev/mapper/vg_test-lv1'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'lvm', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-0/queue')
+        fake_filesystem.create_file('/sys/block/dm-0/size', contents='204800')
+        fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-0/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.slashed_path = lv_path
+            mock_instance.environment = {}
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert lv_path in result
+        assert result[lv_path]['type'] == 'lvm'
+        assert result[lv_path]['human_readable_size'] == '100.00 MB'
+
 
 class TestSizeCalculations(object):
 
