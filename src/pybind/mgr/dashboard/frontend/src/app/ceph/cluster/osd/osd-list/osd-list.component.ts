@@ -1,4 +1,12 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -53,6 +61,9 @@ const BASE_URL = 'osd';
   standalone: false
 })
 export class OsdListComponent extends ListWithDetails implements OnInit {
+  @Input() showTabs = true;
+  @Output() createAction = new EventEmitter<void>();
+
   @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
   @ViewChild('markOsdConfirmationTpl', { static: true })
@@ -125,7 +136,17 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
+        click: () => {
+          if (this.createAction.observers.length > 0) {
+            this.createAction.emit();
+          } else {
+            this.router.navigate([this.urlBuilder.getCreate()], {
+              state: {
+                returnUrl: this.router.url
+              }
+            });
+          }
+        },
         disable: (selection: CdTableSelection) => this.getDisable('create', selection),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },

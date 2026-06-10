@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -114,7 +115,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   currentStep: number = 0;
-  lastStep: number = null;
+  lastStep: number | null = null;
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
   private destroy$ = new Subject<void>();
@@ -124,7 +125,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
     private location: Location,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -163,6 +165,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
@@ -177,6 +180,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
