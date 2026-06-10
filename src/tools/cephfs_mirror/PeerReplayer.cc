@@ -360,6 +360,10 @@ void PeerReplayer::add_directory(string_view dir_root) {
   std::scoped_lock locker(m_lock);
   m_directories.emplace_back(dir_root);
   m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+
+  // Initialize checkpoint states based on remote sync status
+  initialize_checkpoints(std::string(dir_root));
+
   m_cond.notify_all();
 }
 
@@ -661,6 +665,87 @@ void PeerReplayer::checkpoint_sync_complete(const std::string &dir_root,
   // Cleanup old completed checkpoints (keep last 10)
   cleanup_old_synced_checkpoints(dir_root, 10);
 }
+void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
+  dout(10) << ": dir_root=" << dir_root << dendl;
+
+  // Build local snapshot map
+  std::map<uint64_t, std::string> local_snap_map;
+  int r = build_snap_map(dir_root, &local_snap_map, false);
+  if (r < 0) {
+    derr << ": failed to build local snap map for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  // Build remote snapshot map
+  std::map<uint64_t, std::string> remote_snap_map;
+  r = build_snap_map(dir_root, &remote_snap_map, true);
+  if (r < 0) {
+    derr << ": failed to build remote snap map for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  // Get the highest snap_id from remote or last synced snap_id
+  uint64_t remote_highest_snap_id = 0;
+  if (!remote_snap_map.empty()) {
+    remote_highest_snap_id = remote_snap_map.rbegin()->first;
+  }
+
+  dout(10) << ": remote_highest_snap_id=" << remote_highest_snap_id << dendl;
+
+  // Iterate through local snapshots and mark checkpoints as COMPLETE
+  // if their snap_id is <= remote_highest_snap_id
+  for (const auto &[snap_id, snap_name] : local_snap_map) {
+    // Read snapshot metadata
+    auto snap_path = snapshot_path(m_cct, dir_root, snap_name);
+    std::map<std::string, std::string> snap_metadata;
+    r = read_snap_metadata(m_local_mount, snap_path, &snap_metadata);
+    if (r < 0) {
+      derr << ": failed to read snap metadata for snap_id=" << snap_id
+           << " snap_name=" << snap_name << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    if (!has_checkpoint(snap_metadata)) {
+      continue;
+    }
+
+    CheckpointInfo info;
+    r = read_checkpoint_metadata(snap_id, snap_name, snap_metadata, &info);
+    if (r < 0) {
+      derr << ": failed to read checkpoint for snap_id=" << snap_id
+           << " snap_name=" << snap_name << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    // Update checkpoints that are in CREATED or FAILED status and have snap_id <= remote_highest_snap_id
+    if ((info.status == CheckpointStatus::CREATED || info.status == CheckpointStatus::FAILED)
+        && snap_id <= remote_highest_snap_id) {
+      dout(10) << ": marking checkpoint as COMPLETE for snap_id=" << snap_id
+               << " snap_name=" << snap_name << " (previous status: "
+               << checkpoint_status_to_string(info.status) << ")" << dendl;
+
+      info.status = CheckpointStatus::COMPLETE;
+      info.updated_at = ceph_clock_now();
+      info.error_msg.clear(); // Clear any previous error message
+
+      r = write_checkpoint_metadata(m_cct, m_local_mount, dir_root, snap_name, snap_metadata, info);
+      if (r < 0) {
+        derr << ": failed to update checkpoint status for snap_id=" << snap_id
+             << " snap_name=" << snap_name << " dir_root=" << dir_root
+             << ": " << cpp_strerror(r) << dendl;
+      } else {
+        dout(10) << ": successfully marked checkpoint as COMPLETE for snap_id=" << snap_id
+                 << " snap_name=" << snap_name << dendl;
+      }
+    }
+  }
+
+  // Cleanup old synced checkpoints
+  cleanup_old_synced_checkpoints(dir_root);
+}
+
 
 void PeerReplayer::cleanup_old_synced_checkpoints(const std::string &dir_root,
                                                    size_t keep_count) {
