@@ -43,13 +43,15 @@ public:
 
   /* CAS link: link src to dst, verify inode+mtime match expected;
    * undo on mismatch */
-  virtual SafeResult safe_link(int src_dir_fd, const std::string& src_name,
+  virtual SafeResult safe_link(const DoutPrefixProvider* dpp,
+                               int src_dir_fd, const std::string& src_name,
                                int dst_dir_fd, const std::string& dst_name,
                                uint64_t expected_mtime_ns,
                                uint64_t expected_ino) = 0;
 
   /* CAS unlink: remove entry only if it matches expected inode+mtime */
-  virtual SafeResult safe_unlink(int dir_fd, const std::string& name,
+  virtual SafeResult safe_unlink(const DoutPrefixProvider* dpp,
+                                 int dir_fd, const std::string& name,
                                  int tmp_dir_fd,
                                  uint64_t expected_mtime_ns,
                                  uint64_t expected_ino) = 0;
@@ -63,12 +65,14 @@ public:
                      const std::string& name,
                      const DoutPrefixProvider* dpp) override;
 
-  SafeResult safe_link(int src_dir_fd, const std::string& src_name,
+  SafeResult safe_link(const DoutPrefixProvider* dpp,
+                       int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
                        uint64_t expected_ino) override;
 
-  SafeResult safe_unlink(int dir_fd, const std::string& name,
+  SafeResult safe_unlink(const DoutPrefixProvider* dpp,
+                         int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino) override;
@@ -97,12 +101,14 @@ public:
                      const std::string& name,
                      const DoutPrefixProvider* dpp) override;
 
-  SafeResult safe_link(int src_dir_fd, const std::string& src_name,
+  SafeResult safe_link(const DoutPrefixProvider* dpp,
+                       int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
                        uint64_t expected_ino) override;
 
-  SafeResult safe_unlink(int dir_fd, const std::string& name,
+  SafeResult safe_unlink(const DoutPrefixProvider* dpp,
+                         int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino) override;

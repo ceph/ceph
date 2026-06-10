@@ -435,7 +435,7 @@ static void promote_version(int parent_fd, const std::string& leaf,
     }
 
     /* CAS link: .versions/candidate → current path */
-    SafeResult sr = fs_strategy->safe_link(vfd, max_name,
+    SafeResult sr = fs_strategy->safe_link(dpp, vfd, max_name,
                                            parent_fd, leaf,
                                            statx_mtime_ns(cand_stx),
                                            cand_stx.stx_ino);
@@ -4761,7 +4761,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_ino = cur_stx.stx_ino;
 
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
-                                parent_fd, dm_leaf,
+                                dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
                                 cur_mtime, cur_ino);
       if (sr == SafeResult::OK) {
@@ -4777,7 +4777,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         }
         /* CAS unlink: remove current only if it still matches */
         source->driver->get_fs_strategy()->safe_unlink(
-                    parent_fd, dm_leaf, vfd,
+                    dpp, parent_fd, dm_leaf, vfd,
                     cur_mtime, cur_ino);
         break;
       }
@@ -5343,7 +5343,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
           std::string ver_name = leaf_name + "_" + cur_ver_id;
 
           SafeResult sr = driver->get_fs_strategy()->safe_link(
-                                    leaf_fd, leaf_name, vfd, ver_name,
+                                    dpp, leaf_fd, leaf_name, vfd, ver_name,
                                     statx_mtime_ns(cur_stx), cur_stx.stx_ino);
           if (sr == SafeResult::OK) {
             int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
@@ -5713,6 +5713,10 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
         struct statx cur_stx;
         if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
                   STATX_ALL, &cur_stx) == 0) {
+          ldpp_dout(dpp, 10) << "versioned PUT demote: cur_leaf="
+            << cur_leaf << " ino=" << cur_stx.stx_ino
+            << " nlink=" << cur_stx.stx_nlink
+            << " parent_fd=" << parent_fd << dendl;
           bool cur_is_null = false;
           {
             int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
@@ -5728,7 +5732,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
             std::string ver_name = cur_leaf + "_" + cur_ver_id;
 
             SafeResult sr = driver->get_fs_strategy()->safe_link(
-                                      parent_fd, cur_leaf,
+                                      dpp, parent_fd, cur_leaf,
                                       vfd, ver_name,
                                       statx_mtime_ns(cur_stx),
                                       cur_stx.stx_ino);
