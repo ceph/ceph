@@ -1634,7 +1634,6 @@ private:
 
   uint64_t qtine_inflight_ops;
   std::chrono::milliseconds qtine_sleep;
-  std::chrono::seconds qtine_replica_timeout;
 };
 
 /**

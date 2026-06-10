@@ -188,8 +188,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   quiesce_threshold(g_conf().get_val<Option::size_t>("mds_cache_quiesce_threshold")),
   quiesce_sleep(g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_sleep")),
   qtine_inflight_ops(g_conf().get_val<Option::size_t>("mds_max_inflight_qtine_ops")),
-  qtine_sleep(g_conf().get_val<std::chrono::milliseconds>("mds_cache_qtine_sleep")),
-  qtine_replica_timeout(g_conf().get_val<std::chrono::seconds>("mds_qtine_replica_timeout"))
+  qtine_sleep(g_conf().get_val<std::chrono::milliseconds>("mds_cache_qtine_sleep"))
 {
   migrator.reset(new Migrator(mds, this));
 
@@ -283,9 +282,6 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   }
   if (changed.count("mds_max_inflight_qtine_ops")) {
     qtine_inflight_ops = g_conf().get_val<uint64_t>("mds_max_inflight_qtine_ops");
-  }
-  if (changed.count("mds_qtine_replica_timeout")) {
-    qtine_replica_timeout = g_conf().get_val<std::chrono::seconds>("mds_qtine_replica_timeout");
   }
   if (changed.count("mds_cache_trim_decay_rate")) {
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
@@ -15034,30 +15030,6 @@ void MDCache::quarantine_work(const MDRequestRef& mdr)
   dout(20) << __func__ << " all inodes discovered, sealing tracker" << dendl;
   qtine_mgr->seal();
 
-  // If there's still pending work (e.g., waiting for replica replies), start a
-  // timeout watchdog. If replies don't arrive in time, fail the operation.
-  if (qtine_mgr->get_pending() > 0 && qtine_replica_timeout.count() > 0) {
-    auto qtine_root_ino = mdr->qtine_root_ino;
-    dout(10) << __func__ << " starting replica timeout watchdog for "
-             << qtine_root_ino << " with " << qtine_mgr->get_pending()
-             << " pending work items, timeout=" << qtine_replica_timeout.count()
-             << "s" << dendl;
-    mds->timer.add_event_after(qtine_replica_timeout,
-      new LambdaContext([this, qtine_root_ino](int) {
-        // mds->timer is a SafeTimer initialized with mds_lock (see MDSDaemon
-        // constructor). SafeTimer holds mds_lock during callback execution
-        // when safe_callbacks=true (the default). Do NOT acquire mds_lock here
-        // as ceph::fair_mutex is non-recursive and would cause a self-deadlock.
-        auto qtine_mgr = mds->get_quarantine_mgr(qtine_root_ino);
-        if (qtine_mgr && !qtine_mgr->is_complete()) {
-          dout(1) << "quarantine replica timeout for " << qtine_root_ino
-                  << " with " << qtine_mgr->get_pending() << " work items pending"
-                  << dendl;
-          qtine_mgr->complete(-ETIMEDOUT);
-        }
-      }));
-  }
-
   mds->server->respond_to_request(mdr, 0);
 }
 
@@ -15070,26 +15042,20 @@ void MDCache::quarantine_dir_auth(const MDRequestRef& mdr)
   CInode *in = mds->server->rdlock_path_pin_ref(mdr,  mdr->get_filepath(), true, false);
 
   if (!in) {
-    // rdlock_path_pin_ref returns null if the request was forwarded or
-    // already responded to. For internal ops, request_forward calls
-    // internal_op_finish->complete() and request_cleanup, so the mdr
-    // is already dead. Only complete qtine_mgr if the request is still alive.
-    if (!mdr->dead && mdr->qtine_mgr) {
-      dout(20) << __func__ << " no inode for path:" << mdr->get_filepath() << dendl;
-      mdr->qtine_mgr->complete(-ENOENT);
-      mdr->qtine_mgr = nullptr;
-      mds->server->respond_to_request(mdr, -ENOENT);
-    }
+    // rdlock_path_pin_ref returns null when:
+    // 1. Path traversal is in progress (discover, lock wait, freeze) —
+    //    the request is queued for retry, do nothing.
+    // 2. Path not found or error — rdlock_path_pin_ref already called
+    //    respond_to_request(), which completes internal_op_finish and
+    //    notifies the quarantine tracker.
+    // 3. Inode frozen/freezing — waiter queued, request will retry.
+    // In all cases, we must not touch qtine_mgr or respond again.
     return;
   }
 
-  if (!in->is_auth()) {
-    dout(20) << __func__ << " inode is not auth; giving up" << dendl;
-    mdr->qtine_mgr->complete(-EAGAIN);
-    mdr->qtine_mgr = nullptr;
-    mds->server->respond_to_request(mdr, -EAGAIN);
-    return;
-  }
+  // rdlock_path_pin_ref was called with want_auth=true, so the returned
+  // inode is guaranteed to be authoritative on this rank.
+  ceph_assert(in->is_auth());
 
   mdr->qtine_root_ino = in->ino();
 
@@ -15147,8 +15113,12 @@ void MDCache::quarantine_dir_auth(const MDRequestRef& mdr)
   mds->locker->drop_locks(mdr.get());
   start_quarantine_inode_work(in, mdr->qtine_op, qtine_mgr);
 
-  // Note: tracker remains registered until async work completes.
-
+  // respond_to_request cleans up this MDRequest and calls
+  // internal_op_finish->complete(0). Since r=0, the lambda in
+  // command_quarantine_dir does nothing (it only acts on r<0).
+  // The actual asok/CLI response is deferred until the quarantine
+  // tracker callback fires after all cap revocations complete
+  // (seal + all work_done), so the caller waits for full completion.
   mds->server->respond_to_request(mdr, 0);
 }
 
@@ -15239,12 +15209,15 @@ void MDCache::quarantine_inode(MDRequestRef const& mdr)
   mds->server->respond_to_request(mdr, 0);
 }
 
-// we need the user to specify the subvolume dir and not the uuid dir
-// here we just weed out the .meta* file
 bool MDCache::start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op)
 {
-  auto name = in->get_projected_parent_dn()->get_name();
-  if (name == ".meta") {
+  // Skip the .meta file directly under the subvolume root — it stores
+  // subvolume metadata managed by the mgr volumes module and should not
+  // have its caps revoked. Only match .meta whose parent is the subvolume
+  // root itself, not arbitrary files named .meta deeper in the tree.
+  auto *parent_dn = in->get_projected_parent_dn();
+  if (parent_dn && parent_dn->get_name() == ".meta" &&
+      parent_dn->get_dir()->get_inode()->ino() == qtine_root_ino) {
     return false;
   }
 
