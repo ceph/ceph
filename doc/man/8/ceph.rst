@@ -756,10 +756,7 @@ Usage::
 
 Subcommand ``create`` creates new OSD (with optional UUID and ID).
 
-This command is DEPRECATED as of the Luminous release, and will be removed in
-a future release.
-
-Subcommand ``new`` should instead be used.
+This command is deprecated. Use ``ceph osd new`` instead.
 
 Usage::
 
