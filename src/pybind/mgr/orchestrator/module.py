@@ -523,7 +523,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
             'criticals': ['HOST', 'SYS_ID', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
             'memory': ['HOST', 'SYS_ID', 'NAME', 'STATUS', 'STATE'],
-            'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
+            'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'SLOT', 'FW', 'STATUS', 'STATE'],
             'processors': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
             'network': ['HOST', 'SYS_ID', 'NAME', 'SPEED', 'STATUS', 'STATE'],
             'power': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
@@ -609,7 +609,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return json.dumps(data)
         mapping = {
             'memory': ('description', 'health', 'state'),
-            'storage': ('description', 'model', 'capacity_bytes', 'protocol', 'serial_number', 'health', 'state'),
+            'storage': ('description', 'model', 'capacity_bytes', 'protocol', 'serial_number', 'slot', 'firmware_version', 'health', 'state'),
             'processors': ('model', 'total_cores', 'total_threads', 'health', 'state'),
             'network': ('name', 'speed_mbps', 'health', 'state'),
             'power': ('name', 'model', 'manufacturer', 'health', 'state'),
