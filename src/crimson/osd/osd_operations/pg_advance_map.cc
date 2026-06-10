@@ -160,40 +160,40 @@ seastar::future<> PGAdvanceMap::split_pg(
   // be applied in order. 
   for (auto child_pgid : split_children) {
     children_pgids.insert(child_pgid);
-
-    // Map each child pg ID to a core
-    auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id(), pg->get_store_index());
-    DEBUG(" PG {} mapped to {}", child_pgid.pgid, core);
-    DEBUG(" {} map epoch: {}", child_pgid.pgid, pg_epoch);
-    auto map = next_map;
-    auto child_pg = co_await shard_services.make_pg(std::move(map), child_pgid, pg->get_store_index(), true);
-
-    DEBUG(" Parent pgid: {}", pg->get_pgid());
-    DEBUG(" Child pgid: {}", child_pg->get_pgid());
-    unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
-    unsigned split_bits = child_pg->get_pgid().get_split_bits(new_pg_num);
-    DEBUG(" pg num is {}, m_seed is {}, split bits is {}",
-	new_pg_num, child_pg->get_pgid().ps(), split_bits);
-
-    co_await pg->split_colls(child_pg->get_pgid(), split_bits, child_pg->get_pgid().ps(),
-                             &child_pg->get_pgpool().info, rctx.transaction);
-    DEBUG(" {} split collection done", child_pg->get_pgid());
-    pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
-    auto child_coll_ref = child_pg->get_collection_ref();
-    rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
-
-    co_await handle_split_pg_creation(child_pg, next_map);
+    auto child_pg = co_await handle_split_pg_creation(child_pgid, next_map);
     split_pgs.insert(child_pg);
   }
 
   split_stats(split_pgs, children_pgids);
 }
 
-seastar::future<> PGAdvanceMap::handle_split_pg_creation(
-    Ref<PG> child_pg,
+seastar::future<Ref<PG>> PGAdvanceMap::handle_split_pg_creation(
+    spg_t child_pgid,
     cached_map_t next_map)
 {
   LOG_PREFIX(PGAdvanceMap::handle_split_pg_creation);
+
+  // Map each child pg ID to a core
+  auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id(), pg->get_store_index());
+  DEBUG(" PG {} mapped to {}", child_pgid.pgid, core);
+  DEBUG(" {} map epoch: {}", child_pgid.pgid, next_map->get_epoch());
+  auto child_pg = co_await shard_services.make_pg(next_map, child_pgid, pg->get_store_index(), true);
+
+  DEBUG(" Parent pgid: {}", pg->get_pgid());
+  DEBUG(" Child pgid: {}", child_pg->get_pgid());
+  unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
+  unsigned split_bits = child_pg->get_pgid().get_split_bits(new_pg_num);
+  DEBUG(" pg num is {}, m_seed is {}, split bits is {}",
+	new_pg_num, child_pg->get_pgid().ps(), split_bits);
+
+  PeeringCtx child_rctx;
+  co_await pg->split_colls(child_pg->get_pgid(), split_bits, child_pg->get_pgid().ps(),
+                           &child_pg->get_pgpool().info, child_rctx.transaction);
+  DEBUG(" {} split collection done", child_pg->get_pgid());
+  pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
+  auto child_coll_ref = child_pg->get_collection_ref();
+  child_rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
+
   // We must create a new Trigger instance for each pg.
   // The BlockingEvent object which tracks whether a pg creation is complete
   // or still blocking, shouldn't be used across multiple pgs so we can track
@@ -216,8 +216,9 @@ seastar::future<> PGAdvanceMap::handle_split_pg_creation(
   }));
   co_await shard_services.start_operation<PGAdvanceMap>(
       child_pg, shard_services, next_map->get_epoch(),
-      std::move(rctx), true).second;
+      std::move(child_rctx), true).second;
   co_await std::move(fut);
+  co_return child_pg;
 }
 
 
