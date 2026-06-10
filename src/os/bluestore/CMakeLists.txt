@@ -19,6 +19,7 @@ add_library(bluestore OBJECT
   HybridAllocator.cc
   Writer.cc
   Compression.cc
+  OnodeScan.cc
   BlueAdmin.cc
   BlueEnv.cc)
 
