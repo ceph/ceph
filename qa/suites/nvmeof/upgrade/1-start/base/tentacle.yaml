@@ -1,0 +1,14 @@
+tasks:
+- install:
+    branch: tentacle
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+    extra_packages:
+      - nvme-cli
+- print: "**** done install task..."
+
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle
