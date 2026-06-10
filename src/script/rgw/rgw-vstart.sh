@@ -12,8 +12,12 @@
 #   --store nsfs|posix  Backend store (default: nsfs)
 #   --gpfs              Redirect data root to a GPFS mount (nsfs only)
 #   --clone             Enable GPFS clone_snap+clone_copy (implies --gpfs)
+#   --lwe               Enable GPFS LWE cluster-wide locking (implies --gpfs)
 #   --gpfs-root DIR     GPFS data directory (default: /mnt/rgw/nsfs)
 #   --debug-rgw N       Debug level (default: 20)
+#   --foreground        Print the radosgw command instead of running it;
+#                       use this to start the daemon as root in another
+#                       terminal (LWE requires root for DMAPI handles)
 #
 # Must be run from the build directory.
 
@@ -22,16 +26,20 @@ set -euo pipefail
 STORE=nsfs
 GPFS=false
 CLONE=false
+LWE=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
+FOREGROUND=false
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--store)      STORE="$2"; shift 2 ;;
 		--gpfs)       GPFS=true; shift ;;
 		--clone)      CLONE=true; GPFS=true; shift ;;
+		--lwe)        LWE=true; GPFS=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
+		--foreground) FOREGROUND=true; shift ;;
 		*) echo "unknown option: $1" >&2; exit 1 ;;
 	esac
 done
@@ -60,15 +68,17 @@ PID="$BUILD_DIR/out/radosgw.8000.pid"
 
 echo "==> killing any existing radosgw on port 8000"
 if [[ -f "$PID" ]]; then
-	kill "$(cat "$PID")" 2>/dev/null || true
+	kill "$(cat "$PID" 2>/dev/null)" 2>/dev/null || true
 	sleep 1
 fi
 fuser -k 8000/tcp 2>/dev/null || true
 
 # --- clean data dirs ---
+# tolerate permission errors from root-owned files (e.g. LMDB
+# created when the daemon ran as root for LWE testing)
 
 echo "==> cleaning data dirs"
-rm -rf "$BUILD_DIR/dev/rgw/$STORE"/{lmdb,root,userdb}/*
+rm -rf "$BUILD_DIR/dev/rgw/$STORE"/{lmdb,root,userdb}/* 2>/dev/null || true
 
 if $GPFS; then
 	mkdir -p "$GPFS_ROOT"/{root,lmdb,userdb}
@@ -96,7 +106,7 @@ if $GPFS; then
 			| xargs -0 -r "$MMCLONE" split 2>/dev/null || true
 	fi
 
-	rm -rf "$GPFS_ROOT"/{root,lmdb,userdb}/*
+	rm -rf "$GPFS_ROOT"/{root,lmdb,userdb}/* 2>/dev/null || true
 fi
 
 # --- run vstart.sh (bootstraps users + config) ---
@@ -137,26 +147,61 @@ sleep 1
 echo "==> patching ceph.conf for GPFS base path"
 sed -i "s|rgw nsfs base path = .*|rgw nsfs base path = $GPFS_ROOT/root|" "$CONF"
 
-if $CLONE; then
-	if grep -q 'rgw nsfs gpfs clone files' "$CONF"; then
-		sed -i 's/rgw nsfs gpfs clone files = .*/rgw nsfs gpfs clone files = true/' "$CONF"
+patch_conf_bool() {
+	local key="$1" val="$2"
+	if grep -q "$key" "$CONF"; then
+		sed -i "s/$key = .*/$key = $val/" "$CONF"
 	else
-		sed -i "/rgw nsfs base path/a\\        rgw nsfs gpfs clone files = true" "$CONF"
+		sed -i "/rgw nsfs base path/a\\        $key = $val" "$CONF"
 	fi
-	echo "    clone_files = true"
+	echo "    $key = $val"
+}
+
+if $CLONE; then
+	patch_conf_bool "rgw nsfs gpfs clone files" "true"
+fi
+
+if $LWE; then
+	patch_conf_bool "rgw nsfs gpfs lwe locking" "true"
+fi
+
+# --- build the radosgw command line ---
+
+RGW_CMD=(
+	"$BUILD_DIR/bin/radosgw"
+	-c "$CONF"
+	--log-file="$BUILD_DIR/out/radosgw.8000.log"
+	--admin-socket="$BUILD_DIR/out/radosgw.8000.asok"
+	--pid-file="$PID"
+	--rgw_luarocks_location="$BUILD_DIR/out/radosgw.8000.luarocks"
+	--debug-rgw="$DEBUG_RGW"
+	--debug-ms=0
+	-n client.rgw.8000
+	--rgw_frontends='beast port=8000'
+)
+
+if $FOREGROUND; then
+	# Print the command for the user to run (e.g. as root).
+	# LWE requires root for DMAPI handle operations.
+	echo ""
+	echo "==> run the following command (e.g. as root for LWE):"
+	echo ""
+	local_cmd=""
+	for arg in "${RGW_CMD[@]}"; do
+		if [[ "$arg" == *" "* || "$arg" == *"'"* ]]; then
+			local_cmd+=" '${arg}'"
+		else
+			local_cmd+=" ${arg}"
+		fi
+	done
+	echo " ${local_cmd# }"
+	echo ""
+	echo "data root: $GPFS_ROOT/root"
+	exit 0
 fi
 
 echo "==> starting radosgw"
-"$BUILD_DIR/bin/radosgw" \
-	-c "$CONF" \
-	--log-file="$BUILD_DIR/out/radosgw.8000.log" \
-	--admin-socket="$BUILD_DIR/out/radosgw.8000.asok" \
-	--pid-file="$PID" \
-	--rgw_luarocks_location="$BUILD_DIR/out/radosgw.8000.luarocks" \
-	--debug-rgw="$DEBUG_RGW" \
-	--debug-ms=0 \
-	-n client.rgw.8000 \
-	--rgw_frontends='beast port=8000'
+"${RGW_CMD[@]}"
 
 sleep 2
 if fuser 8000/tcp >/dev/null 2>&1; then

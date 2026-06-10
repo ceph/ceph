@@ -23,6 +23,10 @@ Run from the **build directory**:
 
 # nsfs with GPFS CoW clones for CopyObject
 ../src/script/rgw/rgw-vstart.sh --store nsfs --clone
+
+# nsfs with GPFS + LWE locking (print command for root)
+../src/script/rgw/rgw-vstart.sh --clone --lwe --foreground
+# then run the printed command as root in another terminal
 ```
 
 Options:
@@ -32,8 +36,25 @@ Options:
 | `--store nsfs\|posix` | `nsfs` | Backend store |
 | `--gpfs` | off | Redirect data root to GPFS mount (nsfs only) |
 | `--clone` | off | Enable GPFS clone_snap+clone_copy (implies `--gpfs`) |
+| `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
 | `--debug-rgw N` | `20` | RGW debug log level |
+| `--foreground` | off | Print the radosgw command instead of running it |
+
+### Running as root (for LWE)
+
+LWE locking requires root for DMAPI handle operations.  Use
+`--foreground` to have the script do all the setup (vstart, cleanup,
+ceph.conf patching) as your normal user, then print the radosgw
+command for you to run as root:
+
+```bash
+../src/script/rgw/rgw-vstart.sh --clone --lwe --foreground
+# copy the printed command and run it as root
+sudo <printed command>
+```
+
+Without root, LWE falls back to OFD locks automatically.
 
 ### Running tests
 
