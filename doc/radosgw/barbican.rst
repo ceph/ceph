@@ -1,3 +1,5 @@
+.. _radosgw-barbican:
+
 ==============================
 OpenStack Barbican Integration
 ==============================
