@@ -86,6 +86,7 @@
 * DASHBOARD: RGW User Accounts can now be linked to individual RGW users,
   root account user functionality has been added, and the bucket form
   differentiates account users from standalone RGW users.
+* DASHBOARD: RGW IAM Roles management has been redesigned and integrated into the RGW User Account details view. The legacy global RGW tenant Roles tab has been decommissioned.
 * DASHBOARD: RGW tiering now supports read-through configuration and bucket
   tiering options in lifecycle policies.
 * DASHBOARD: RGW multisite setup improvements: the RGW module is now
