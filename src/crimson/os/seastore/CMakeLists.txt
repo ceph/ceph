@@ -5,6 +5,7 @@ set(crimson_seastore_srcs
   segment_manager.cc
   segment_manager/ephemeral.cc
   segment_manager/block.cc
+  block_io_driver.cc
   transaction_interruptor.cc
   transaction_manager.cc
   cache.cc
