@@ -188,6 +188,86 @@ introduced the regression. For example::
      Fixes: 9dbe7a003989f8bb45fe14aaa587e9d60a392727
 
 
+Checking commit message format
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The script ``src/script/check-commit-msg.py`` validates commit messages against
+the conventions described in this document.  It can be used locally before
+opening a PR, or wired up as a ``commit-msg`` git hook so that violations are
+caught at commit time.
+
+**Accepted inputs**
+
+Check a single commit by SHA::
+
+    src/script/check-commit-msg.py <sha>
+
+Check a range of commits (e.g., everything in your feature branch)::
+
+    src/script/check-commit-msg.py HEAD~5..HEAD
+
+Read a raw commit message from stdin (useful as a ``commit-msg`` hook)::
+
+    src/script/check-commit-msg.py --stdin
+
+Read a raw commit message from a file (the path git passes to ``commit-msg``
+hooks)::
+
+    src/script/check-commit-msg.py --file .git/COMMIT_EDITMSG
+
+To install it as a git hook so every commit is checked automatically::
+
+    ln -s ../../src/script/check-commit-msg.py .git/hooks/commit-msg
+
+**Rules enforced**
+
+The following rules produce **errors** (non-zero exit code):
+
+* Subject line must be at most 72 characters long.
+* Subject line must follow ``subsystem: description`` format; the subsystem
+  may be a path-like string such as ``mgr/dashboard`` or ``doc/rados/api``.
+* If the commit has a body, the second line must be blank.
+* A ``Signed-off-by: Name <email>`` trailer must be present.
+
+The following rule produces a **warning** (does not affect exit code by
+default; pass ``--warnings-as-errors`` to make it fatal):
+
+* Body lines should be at most 72 characters long (URLs and trailer lines are
+  exempt).
+
+**Example: passing commit message** ::
+
+    osd: fix memory leak in BlueStore write path
+
+    The write path was not releasing a buffer when the transaction was
+    aborted mid-way.  This led to unbounded memory growth under heavy
+    write load.
+
+    Fixes: http://tracker.ceph.com/issues/99999
+    Signed-off-by: Jane Dev <jane@example.org>
+
+**Example: failing commit messages** ::
+
+    # ERROR: no subsystem prefix
+    fix memory leak
+
+    # ERROR: missing Signed-off-by
+    osd: fix memory leak
+
+    # ERROR: subject line too long (> 72 characters)
+    osd: fix a very important and complex memory leak in the BlueStore write path which was annoying
+
+    # ERROR: second line is not blank
+    osd: fix memory leak
+    This line should be blank.
+
+    Signed-off-by: Jane Dev <jane@example.org>
+
+**Running the tests** ::
+
+    python3 -m pytest src/script/tests/test_check_commit_msg.py
+
+
 PR best practices
 -----------------
 
