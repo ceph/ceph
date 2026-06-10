@@ -15014,7 +15014,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     mono_clock::now() - txc->start,
     cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
-      bool v = cct->_conf->bluestore_log_op_verbose;
+      bool v = cct->_conf->bluestore_log_op_verbose_kv_txc;
       return ", txc = " + stringify(txc) +
              ", txc bytes = " + stringify(txc->bytes) +
              ", txc ios = " + stringify(txc->ios) +
