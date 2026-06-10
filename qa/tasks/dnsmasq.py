@@ -14,22 +14,22 @@ from tasks.util import get_remote_for_role
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
-def install_dnsmasq(remote):
+def install_package(remote, name):
     """
     If dnsmasq is not installed, install it for the duration of the task.
     """
     try:
-        existing = packaging.get_package_version(remote, 'dnsmasq')
+        existing = packaging.get_package_version(remote, name)
     except:
         existing = None
 
     if existing is None:
-        packaging.install_package('dnsmasq', remote)
+        packaging.install_package(name, remote)
     try:
         yield
     finally:
         if existing is None:
-            packaging.remove_package('dnsmasq', remote)
+            packaging.remove_package(name, remote)
 
 @contextlib.contextmanager
 def configure_resolved(remote, testdir, cnames):
@@ -154,7 +154,8 @@ def task(ctx, config):
     # run subtasks for each unique remote
     subtasks = []
     for remote, cnames in remote_names.items():
-        subtasks.extend([ lambda r=remote: install_dnsmasq(r) ])
+        subtasks.extend([ lambda r=remote: install_package(r, 'dnsmasq') ])
+        subtasks.extend([ lambda r=remote: install_package(r, 'systemd-resolved') ])
         subtasks.extend([ lambda r=remote, cn=cnames: configure_resolved(r, testdir, cn) ])
         subtasks.extend([ lambda r=remote, cn=cnames: setup_dnsmasq(r, testdir, cn) ])
 
