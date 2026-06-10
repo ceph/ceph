@@ -157,6 +157,24 @@ TEST_F(S3VectorFilterTest, NotExistsOnJson) {
   free_exprs(*result);
 }
 
+TEST_F(S3VectorFilterTest, ExistsWithQuotedTrueRejected) {
+  auto result = build(R"({"color": {"$exists": "true"}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ExistsWithNumberRejected) {
+  auto result = build(R"({"color": {"$exists": 1}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ExistsWithEmptyValueRejected) {
+  auto result = build(R"({"color": {"$exists": ""}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 // ---- $in / $nin ----
 
 TEST_F(S3VectorFilterTest, InOnColumn) {
@@ -427,6 +445,54 @@ TEST_F(S3VectorFilterTest, InvalidNumberValueRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, OrWithObjectValueRejected) {
+  auto result = build(R"({"$or": {"$eq": {"field": "value"}}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, OrWithScalarValueRejected) {
+  auto result = build(R"({"$or": "value"})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, OrWithScalarArrayRejected) {
+  auto result = build(R"({"$or": [1, 2, 3]})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, AndWithObjectValueRejected) {
+  auto result = build(R"({"$and": {"genre": "rock"}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, AndWithScalarValueRejected) {
+  auto result = build(R"({"$and": 42})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, InWithObjectValueRejected) {
+  auto result = build(R"({"color": {"$in": {"field": "value"}}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, InWithScalarValueRejected) {
+  auto result = build(R"({"color": {"$in": "red"}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, NinWithObjectValueRejected) {
+  auto result = build(R"({"color": {"$nin": {"field": "value"}}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 TEST_F(S3VectorFilterTest, EmptyInListRejected) {
   auto result = build(R"({"color": {"$in": []}})");
   EXPECT_FALSE(result.has_value());
@@ -454,8 +520,14 @@ TEST_F(S3VectorFilterTest, ArrayValueInJsonEqRejected) {
 }
 
 TEST_F(S3VectorFilterTest, ObjectValueInJsonEqRejected) {
-  // nested object value is misclassified as NUMBER by infer_value_type, then from_chars fails
+  // object value rejected by infer_value_type
   auto result = build(R"({"color": {"$eq": {"nested": "value"}}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ObjectValueInJsonNeRejected) {
+  auto result = build(R"({"color": {"$ne": {"nested": "value"}}})");
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
 }
