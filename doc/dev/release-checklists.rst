@@ -15,10 +15,10 @@ that was just released (X-1).2.0.
 Versions and tags
 -----------------
 
-- [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
-- [x] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
-- [x] Update src/ceph_release with the new release name, number, and type ('dev')
-- [x] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
+- [ ] Update CMakeLists.txt VERSION (right at the top to X.0.0)
+- [ ] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
+- [ ] Update src/ceph_release with the new release name, number, and type ('dev')
+- [ ] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
 
 .. note::
 
@@ -31,35 +31,35 @@ Define release names and constants
 
 Make sure X (and, ideally, X+1) is defined:
 
-- [x] src/common/ceph_releases.h (`ceph_release_t`)
-- [x] src/common/ceph_strings.cc (`ceph_release_name()`)
-- [x] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
-- [x] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
-- [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
-- [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
+- [ ] src/common/ceph_releases.h (`ceph_release_t`)
+- [ ] src/common/ceph_strings.cc (`ceph_release_name()`)
+- [ ] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
+- [ ] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
+- [ ] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
+- [ ] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 
 Github Actions
 ~~~~~~~~~~~~~~
 
-- [x] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
-- [x] .github/workflows/releng-audit.yml add release branch to pull_request_target trigger
+- [ ] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
+- [ ] .github/workflows/releng-audit.yml add release branch to pull_request_target trigger
 
 Scripts
 ~~~~~~~
 
-- [x] src/script/backport-create-issue (`releases()`)
-- [x] src/script/ceph-release-notes (up to X)
+- [ ] src/script/backport-create-issue (`releases()`)
+- [ ] src/script/ceph-release-notes (up to X)
 
 Misc
 ~~~~
-- [x] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
-- [x] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` and `LATEST_STABLE_RELEASE` to X)
+- [ ] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
+- [ ] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` and `LATEST_STABLE_RELEASE` to X)
 
 Feature bits
 ------------
 
-- [x] ensure that `SERVER_X` is defined
-- [x] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
+- [ ] ensure that `SERVER_X` is defined
+- [ ] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
 - [ ] look for features that (1) were present in X-2 and (2) have no
   client dependency and mark them `DEPRECATED` as of X.
 
@@ -67,57 +67,57 @@ Feature bits
 Compatsets
 ----------
 
-- [x] mon/Monitor.h (`CEPH_MON_FEATURE_INCOMPAT_X`)
-- [x] mon/Monitor.cc (include in `get_supported_features()`)
-- [x] mon/Monitor.cc (`apply_monmap_to_compatset_features()`)
-- [x] mon/Monitor.cc (`calc_quorum_requirements()`)
-- [x] test/cli/monmaptool/feature-set-unset-list.t (`supported`, `persistent`)
-- [x] test/cli/monmaptool/feature-set-unset-list.t Update "unknown(X)" to next unused and update monmaptool --feature-unset examples
+- [ ] mon/Monitor.h (`CEPH_MON_FEATURE_INCOMPAT_X`)
+- [ ] mon/Monitor.cc (include in `get_supported_features()`)
+- [ ] mon/Monitor.cc (`apply_monmap_to_compatset_features()`)
+- [ ] mon/Monitor.cc (`calc_quorum_requirements()`)
+- [ ] test/cli/monmaptool/feature-set-unset-list.t (`supported`, `persistent`)
+- [ ] test/cli/monmaptool/feature-set-unset-list.t Update "unknown(X)" to next unused and update monmaptool --feature-unset examples
 
 Mon
 ---
 
-- [x] src/tools/monmaptool.cc: bump min_mon_release to X for created (new) clusters
-- [x] src/test/cli/monmaptool/8.t: update output for monmaptool to X
-- [x] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
-- [x] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
-- [x] mon/MgrMonitor.cc adjust `always_on_modules`
-- [x] common/options/global.yaml.in define `mon_debug_no_require_X`
-- [x] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
-- [x] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
-- [x] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
-- [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
-- [x] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
-- [x] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
+- [ ] src/tools/monmaptool.cc: bump min_mon_release to X for created (new) clusters
+- [ ] src/test/cli/monmaptool/8.t: update output for monmaptool to X
+- [ ] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
+- [ ] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
+- [ ] mon/MgrMonitor.cc adjust `always_on_modules`
+- [ ] common/options/global.yaml.in define `mon_debug_no_require_X`
+- [ ] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
+- [ ] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
+- [ ] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
+- [ ] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
+- [ ] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
+- [ ] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
 
 OSDMap
 ------
 
-- [x] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
+- [ ] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
 - [ ] OSDMap::get_min_compat_client: core team evaluate
 
 Code cleanup
 ------------
 
-- [x] search code for "after X-1" or "X" for conditional checks
-- [x] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
+- [ ] search code for "after X-1" or "X" for conditional checks
+- [ ] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
 - [ ] search code for `min_mon_release`
-- [x] check include/denc.h if DENC_START macro still needs reference to squid
+- [ ] check include/denc.h if DENC_START macro still needs reference to squid
 
 QA suite
 --------
 
-- [x] create qa/workunits/test_telemetry_(X-1).sh
-- [x] create qa/workunits/test_telemetry_(X-1)_x.sh
-- [x] create qa/suites/upgrade/(X-1)-x
-- [x] remove qa/suites/upgrade/(X-3)-x-*
-- [x] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
-- [x] update qa/ upgrade suites require-osd-release calls to tentacle
-- [x] create qa/releases/X.yaml
-- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
-- [x] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
+- [ ] create qa/workunits/test_telemetry_(X-1).sh
+- [ ] create qa/workunits/test_telemetry_(X-1)_x.sh
+- [ ] create qa/suites/upgrade/(X-1)-x
+- [ ] remove qa/suites/upgrade/(X-3)-x-*
+- [ ] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
+- [ ] update qa/ upgrade suites require-osd-release calls to tentacle
+- [ ] create qa/releases/X.yaml
+- [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [ ] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
 ceph-build
