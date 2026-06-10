@@ -45,6 +45,7 @@ set(crimson_seastore_srcs
   random_block_manager.cc
   random_block_manager/block_rb_manager.cc
   random_block_manager/rbm_device.cc
+  random_block_manager/nvme_io_driver.cc
   random_block_manager/nvme_block_device.cc
   random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
