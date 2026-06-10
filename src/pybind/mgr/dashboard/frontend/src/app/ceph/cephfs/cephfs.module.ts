@@ -61,9 +61,10 @@ import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
-import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
-import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
-import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
+import ReplicateIcon from '@carbon/icons/es/replicate/32';
+import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
+import ShareIcon from '@carbon/icons/es/share/32';
+import ShareIcon24 from '@carbon/icons/es/share/24';
 
 @NgModule({
   imports: [
@@ -122,15 +123,21 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
-    CephfsMirroringWizardComponent,
-    CephfsFilesystemSelectorComponent,
-    CephfsMirroringErrorComponent,
-    CephfsMirroringEntityComponent
+    CephfsMirroringErrorComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash]);
+    this.iconService.registerAll([
+      AddIcon,
+      LaunchIcon,
+      Close,
+      Trash,
+      ReplicateIcon,
+      ReplicateIcon24,
+      ShareIcon,
+      ShareIcon24
+    ]);
   }
 }
