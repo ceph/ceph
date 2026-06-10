@@ -1235,6 +1235,7 @@ struct pg_pool_t {
     // Allow decreasing pg_num/pgp_num (PG merge) for crimson pools.
     // Note: requires that the pool is currently all bluestore.
     FLAG_CRIMSON_ALLOW_PG_MERGE = 1<<22,
+    FLAG_NOBACKFILL = 1<<23, // stop the pool's backfill
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1262,6 +1263,7 @@ struct pg_pool_t {
     case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     case FLAG_OMAP: return "supports_omap";
     case FLAG_CRIMSON_ALLOW_PG_MERGE: return "crimson_allow_pg_merge";
+    case FLAG_NOBACKFILL: return "nobackfill";
     default: return "???";
     }
   }
@@ -1326,6 +1328,8 @@ struct pg_pool_t {
       return FLAG_CLIENT_SPLIT_READS;
     if (name == "supports_omap")
       return FLAG_OMAP;
+    if (name == "nobackfill")
+      return FLAG_NOBACKFILL;
     return 0;
   }
 
