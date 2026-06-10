@@ -1216,26 +1216,10 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       Directory* dst_dir, const std::string& dst_name)
 {
-  off64_t scount = 0, dcount = 0;
-
-  int ret = stat(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not stat source file " << get_name()
-                      << dendl;
-    return ret;
-  }
-
-  ret = open(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open source file " << get_name()
-                      << dendl;
-    return ret;
-  }
-
-  // Delete the target
+  /* remove any existing target */
   {
     std::unique_ptr<FSEnt> del;
-    ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
+    int ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
     if (ret >= 0) {
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
@@ -1246,32 +1230,19 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
     }
   }
 
-  std::unique_ptr<File> dest = clone();
-  dest->parent = dst_dir;
-  dest->fname = dst_name;
-
-  ret = dest->create(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not create dest file "
-                      << dest->get_name() << dendl;
-    return ret;
+  int src_dir_fd = parent->get_fd();
+  if (src_dir_fd < 0) {
+    parent->open(dpp);
+    src_dir_fd = parent->get_fd();
   }
-  ret = dest->open(dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open dest file "
-                      << dest->get_name() << dendl;
-    return ret;
+  int dst_dir_fd = dst_dir->get_fd();
+  if (dst_dir_fd < 0) {
+    dst_dir->open(dpp);
+    dst_dir_fd = dst_dir->get_fd();
   }
 
-  ret = copy_file_range(fd, &scount, dest->get_fd(), &dcount, get_size(), 0);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not copy object " << dest->get_name()
-                      << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  return 0;
+  return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
+                                 dst_dir_fd, dst_name);
 }
 
 int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
@@ -1280,7 +1251,8 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
     return 0;
   }
 
-  int ret = unlinkat(parent->get_fd(), fname.c_str(), 0);
+  int parent_fd = parent->get_fd();
+  int ret = unlinkat(parent_fd, fname.c_str(), 0);
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
@@ -1288,6 +1260,10 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
                         << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     }
+  }
+
+  if (fs_strategy) {
+    fs_strategy->cleanup_clone(dpp, parent_fd, fname);
   }
 
   return 0;
@@ -2064,7 +2040,8 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
 
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib);
+  bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, gpfs_clone);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }

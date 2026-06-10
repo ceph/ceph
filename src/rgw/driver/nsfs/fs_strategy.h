@@ -56,6 +56,27 @@ public:
                                  uint64_t expected_mtime_ns,
                                  uint64_t expected_ino) = 0;
 
+  /* clone a file's data — GPFS can use clone_snap+clone_copy (CoW,
+   * experimental) or fall back to copy_file_range / read+write.
+   *
+   * The GPFS clone path (clone_snap + clone_copy) keeps data at rest
+   * and produces a mutable destination with independent xattrs.
+   * However, clone parents are immutable and must be explicitly
+   * cleaned up via cleanup_clone() when the child is removed or
+   * overwritten.  A GPFS extension for automatic clone-parent
+   * garbage collection would eliminate this lifecycle burden; until
+   * then, the clone path is experimental. */
+  virtual int clone_file(const DoutPrefixProvider* dpp,
+                         int src_dir_fd, const std::string& src_name,
+                         int dst_dir_fd, const std::string& dst_name) = 0;
+
+  /* remove the hidden clone parent associated with name, if any.
+   * Call when an object created by clone_file is deleted or
+   * overwritten.  No-op when no clone parent exists or when the
+   * strategy does not use GPFS clones. */
+  virtual void cleanup_clone(const DoutPrefixProvider* dpp,
+                             int dir_fd, const std::string& name) = 0;
+
   virtual const char* name() const = 0;
 };
 
@@ -77,6 +98,13 @@ public:
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino) override;
 
+  int clone_file(const DoutPrefixProvider* dpp,
+                 int src_dir_fd, const std::string& src_name,
+                 int dst_dir_fd, const std::string& dst_name) override;
+
+  void cleanup_clone(const DoutPrefixProvider* dpp,
+                     int dir_fd, const std::string& name) override {}
+
   const char* name() const override { return "posix"; }
 };
 
@@ -85,17 +113,28 @@ class GPFSStrategy : public FSStrategy {
   decltype(&gpfs_linkat) fn_linkat;
   decltype(&gpfs_linkatif) fn_linkatif;
   decltype(&gpfs_unlinkat) fn_unlinkat;
+  decltype(&gpfs_clone_snap) fn_clone_snap;
+  decltype(&gpfs_clone_copy) fn_clone_copy;
+  decltype(&gpfs_clone_unsnap) fn_clone_unsnap;
+  bool clone_enabled;
 
   GPFSStrategy(void* dl, decltype(&gpfs_linkat) la,
                decltype(&gpfs_linkatif) lai,
-               decltype(&gpfs_unlinkat) ua)
-    : dl_handle(dl), fn_linkat(la), fn_linkatif(lai), fn_unlinkat(ua) {}
+               decltype(&gpfs_unlinkat) ua,
+               decltype(&gpfs_clone_snap) cs,
+               decltype(&gpfs_clone_copy) cc,
+               decltype(&gpfs_clone_unsnap) cu,
+               bool clone_en)
+    : dl_handle(dl), fn_linkat(la), fn_linkatif(lai), fn_unlinkat(ua),
+      fn_clone_snap(cs), fn_clone_copy(cc), fn_clone_unsnap(cu),
+      clone_enabled(clone_en) {}
 
 public:
   ~GPFSStrategy() override;
 
   static std::unique_ptr<GPFSStrategy> try_create(
-    const DoutPrefixProvider* dpp, const std::string& dl_path);
+    const DoutPrefixProvider* dpp, const std::string& dl_path,
+    bool clone_enabled);
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
@@ -113,7 +152,18 @@ public:
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino) override;
 
+  int clone_file(const DoutPrefixProvider* dpp,
+                 int src_dir_fd, const std::string& src_name,
+                 int dst_dir_fd, const std::string& dst_name) override;
+
+  void cleanup_clone(const DoutPrefixProvider* dpp,
+                     int dir_fd, const std::string& name) override;
+
   const char* name() const override { return "gpfs"; }
+
+  bool has_clone() const {
+    return clone_enabled && fn_clone_snap && fn_clone_copy && fn_clone_unsnap;
+  }
 };
 
 } } } // namespace rgw::sal::nsfs
