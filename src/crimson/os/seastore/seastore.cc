@@ -1866,7 +1866,15 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, (uint32_t)op->op, oid);
         fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
       }
-      fut = std::move(fut).si_then([&ctx](auto onode) {
+      // write the resolved onode back into the slot
+      bool populate_slot = slot && slot->oid == oid;
+      fut = std::move(fut).si_then([&ctx, slot_ref=slot,
+                                    populate_slot, FNAME](auto onode) {
+        if (populate_slot) {
+          DEBUGT("[onode_cache] stored resolved onode in slot",
+                 *ctx.transaction);
+          slot_ref->resolved_onode = std::make_shared<OnodeRef>(onode);
+        }
         return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
       });
     }

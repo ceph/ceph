@@ -259,6 +259,7 @@ public:
   struct OnodeCacheSlot {
     ghobject_t oid;
     std::shared_ptr<void> onode;
+    std::shared_ptr<void> resolved_onode;
   };
   std::shared_ptr<OnodeCacheSlot> onode_cache;
 #endif
