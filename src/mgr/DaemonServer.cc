@@ -19,6 +19,7 @@
 
 #include "include/stringify.h"
 #include "include/str_list.h"
+#include "include/variant_print.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
@@ -44,6 +45,7 @@
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/pick_address.h"

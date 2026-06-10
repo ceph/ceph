@@ -16,6 +16,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/encoding.h"
+#include "include/encoding_unordered_set.h"
 #include "rgw_rest_s3.h"
 #include <cctype>
 #include <fstream>

@@ -19,7 +19,9 @@
 #include "common/ceph_argparse.h"
 #include "include/compat.h"
 
+#include "include/client_t.h"
 #include "include/stringify.h"
+#include "include/types.h" // for client_t
 #include "include/ceph_features.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
@@ -27,6 +29,7 @@
 
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"
+#include "msg/Messenger.h"
 #include "NVMeofGwMonitorClient.h"
 #include "NVMeofGwClient.h"
 #include "NVMeofGwMonitorGroupClient.h"

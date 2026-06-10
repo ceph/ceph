@@ -22,7 +22,7 @@
 #include <iosfwd>
 #include <iostream>
 
-#include "common/PluginRegistry.h"
+#include "common/Plugin.h"
 #include "include/common_fwd.h"
 #include "Compressor.h"
 

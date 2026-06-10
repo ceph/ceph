@@ -7,7 +7,7 @@
 
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
-#include "include/types.h"
+#include "include/shard_id.h"
 
 using namespace std::literals::string_view_literals;
 

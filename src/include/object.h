@@ -23,13 +23,8 @@
 #include <string>
 #include <string_view>
 
-#include <fmt/compile.h>
-#include <fmt/format.h>
-
-#include "include/rados.h"
-
-#include "hash.h"
 #include "encoding.h"
+#include "hash.h"
 #include "ceph_hash.h"
 
 namespace ceph { class Formatter; }
@@ -90,109 +85,5 @@ struct file_object_t {
     return object_t(c_str());
   }
 };
-
-
-// ---------------------------
-// snaps
-
-struct snapid_t {
-  uint64_t val;
-  // cppcheck-suppress noExplicitConstructor
-  constexpr snapid_t(uint64_t v=0) : val(v) {}
-  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
-  snapid_t operator++() { ++val; return *this; }
-  constexpr operator uint64_t() const { return val; }
-};
-
-inline void encode(snapid_t i, ceph::buffer::list &bl) {
-  using ceph::encode;
-  encode(i.val, bl);
-}
-inline void decode(snapid_t &i, ceph::buffer::list::const_iterator &p) {
-  using ceph::decode;
-  decode(i.val, p);
-}
-
-template<>
-struct denc_traits<snapid_t> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = true;
-  static void bound_encode(const snapid_t& o, size_t& p) {
-    denc(o.val, p);
-  }
-  static void encode(const snapid_t &o, ceph::buffer::list::contiguous_appender& p) {
-    denc(o.val, p);
-  }
-  static void decode(snapid_t& o, ceph::buffer::ptr::const_iterator &p) {
-    denc(o.val, p);
-  }
-};
-
-std::ostream& operator<<(std::ostream& out, const snapid_t& s);
-
-namespace fmt {
-template <>
-struct formatter<snapid_t> {
-
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const snapid_t& snp, FormatContext& ctx) const
-  {
-    if (snp == CEPH_NOSNAP) {
-      return fmt::format_to(ctx.out(), "head");
-    }
-    if (snp == CEPH_SNAPDIR) {
-      return fmt::format_to(ctx.out(), "snapdir");
-    }
-    return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
-  }
-};
-} // namespace fmt
-
-struct sobject_t {
-  object_t oid;
-  snapid_t snap;
-
-  sobject_t() : snap(0) {}
-  sobject_t(object_t o, snapid_t s) : oid(o), snap(s) {}
-
-  auto operator<=>(const sobject_t&) const noexcept = default;
-
-  void swap(sobject_t& o) {
-    oid.swap(o.oid);
-    snapid_t t = snap;
-    snap = o.snap;
-    o.snap = t;
-  }
-
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(oid, bl);
-    encode(snap, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(oid, bl);
-    decode(snap, bl);
-  }
-  void dump(ceph::Formatter *f) const;
-  static std::list<sobject_t> generate_test_instances();
-};
-WRITE_CLASS_ENCODER(sobject_t)
-
-std::ostream& operator<<(std::ostream& out, const sobject_t &o);
-
-namespace std {
-template<> struct hash<sobject_t> {
-  size_t operator()(const sobject_t &r) const {
-    static hash<object_t> H;
-    static rjhash<uint64_t> I;
-    return H(r.oid) ^ I(r.snap);
-  }
-};
-} // namespace std
 
 #endif

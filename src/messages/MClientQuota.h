@@ -1,8 +1,12 @@
 #ifndef CEPH_MCLIENTQUOTA_H
 #define CEPH_MCLIENTQUOTA_H
 
+#include <ostream>
+
 #include "msg/Message.h"
+#include "include/cephfs/encoding.h"
 #include "include/cephfs/types.h" // for nest_info_t, quota_info_t
+#include "include/fs_types.h" // for inodeno_t
 
 class MClientQuota final : public SafeMessage {
 public:

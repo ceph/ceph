@@ -61,7 +61,7 @@
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
 #ifdef WITH_CPUTRACE
-#include "common/cputrace.h"
+struct cpucounter_group;
 #endif
 
 #ifdef WITH_BLKIN

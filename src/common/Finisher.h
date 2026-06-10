@@ -23,11 +23,11 @@
 #include <string>
 #include <vector>
 
-#include "include/Context.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
-#include "common/Cond.h"
-#include "common/perf_counters.h" // for class PerfCounters
+
+namespace TOPNSPC::common { class PerfCounters; }
+class Context;
 
 /// Finisher queue length performance counter ID.
 enum {
@@ -62,7 +62,7 @@ class Finisher {
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
-  PerfCounters *logger = nullptr;
+  TOPNSPC::common::PerfCounters *logger = nullptr;
 
   void *finisher_thread_entry();
 
@@ -71,6 +71,8 @@ class Finisher {
     explicit FinisherThread(Finisher *f) : fin(f) {}
     void* entry() override { return fin->finisher_thread_entry(); }
   } finisher_thread;
+
+  void LoggerInc(int idx, uint64_t v = 1);
 
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
@@ -84,8 +86,7 @@ class Finisher {
       }
     }
 
-    if (logger)
-      logger->inc(l_finisher_queue_len);
+    LoggerInc(l_finisher_queue_len);
   }
 
   // TODO use C++20 concept checks instead of SFINAE
@@ -101,8 +102,7 @@ class Finisher {
 	finisher_cond.notify_one();
       }
     }
-    if (logger)
-      logger->inc(l_finisher_queue_len, ls.size());
+    LoggerInc(l_finisher_queue_len, ls.size());
     ls.clear();
   }
 
@@ -137,29 +137,6 @@ class Finisher {
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, std::string_view name, std::string &&tn);
   ~Finisher();
-};
-
-/// Context that is completed asynchronously on the supplied finisher.
-class C_OnFinisher : public Context {
-  Context *con;
-  Finisher *fin;
-public:
-  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
-    ceph_assert(fin != NULL);
-    ceph_assert(con != NULL);
-  }
-
-  ~C_OnFinisher() override {
-    if (con != nullptr) {
-      delete con;
-      con = nullptr;
-    }
-  }
-
-  void finish(int r) override {
-    fin->queue(con, r);
-    con = nullptr;
-  }
 };
 
 class ContextQueue {

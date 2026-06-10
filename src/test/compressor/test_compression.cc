@@ -24,6 +24,7 @@
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/PluginRegistry.h"
 #include "compressor/Compressor.h"
 #include "compressor/CompressionPlugin.h"
 #include "global/global_context.h"

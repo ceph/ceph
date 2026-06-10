@@ -13,7 +13,8 @@
 #include <fmt/format.h>
 
 #include "common/Formatter.h"
-#include "include/types.h"
+#include "include/container_ios.h"
+#include "include/encoding_vector.h"
 
 bool entity_name_t::parse(std::string_view s)
 {

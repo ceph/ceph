@@ -4,6 +4,7 @@
 #include <utility>
 #include <functional>
 
+#include "common/hobject_fmt.h"
 #include "crimson/common/log.h"
 
 #include "crimson/os/seastore/object_data_handler.h"

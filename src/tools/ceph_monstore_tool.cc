@@ -25,6 +25,8 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "common/JSONFormatter.h"
+#include "include/byte_u_t.h"
+#include "include/encoding_flat_map.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "mgr/mgr_commands.h"
@@ -37,6 +39,7 @@
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 #include "mon/CreatingPGs.h"
+#include "mon/mon_types.h" // for CEPH_MON_ONDISK_MAGIC
 
 namespace po = boost::program_options;
 

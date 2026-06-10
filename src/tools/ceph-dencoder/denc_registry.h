@@ -9,6 +9,8 @@
 #include <string_view>
 
 #include "include/buffer_fwd.h"
+#include "include/cephfs/encoding.h"
+#include "global/global_context.h" // for g_ceph_context
 #include "msg/Message.h"
 
 namespace ceph {

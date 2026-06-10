@@ -35,6 +35,7 @@
 #include "common/cmdparse.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "messages/MMDSBeacon.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -43,12 +44,13 @@
 #include "messages/MGenericMessage.h"
 
 #include "include/ceph_assert.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
-#include "mds/cephfs_features.h"
-#include "mds/mdstypes.h"
 #include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
+#include "mds/mdstypes.h"
 #include "Session.h"
 
 using namespace TOPNSPC::common;
@@ -2029,6 +2031,8 @@ void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::Transa
 
 int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
+  using ceph::decode;
+
   bufferlist bl;
   int r = mon.store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
   if (r) {
@@ -2037,7 +2041,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   }
 
   auto it = bl.cbegin();
-  ceph::decode(m, it);
+  decode(m, it);
   return 0;
 }
 

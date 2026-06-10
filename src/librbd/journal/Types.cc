@@ -3,6 +3,9 @@
 
 #include "librbd/journal/Types.h"
 #include "include/ceph_assert.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "common/Formatter.h"

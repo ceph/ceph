@@ -15,6 +15,7 @@
 
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/OnFinisher.h"
 #include "osdc/Journaler.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
@@ -40,7 +41,10 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+#include "include/cephfs/encoding.h"
 #include "include/denc.h"
+#include "include/encoding_small_vector.h" // for encoding frag_vec_t
+#include "include/encoding_tuple.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
 
@@ -48,6 +52,7 @@
 
 #include "LogSegment.h"
 
+#include "MDSContext.h" // for MDSIOContext
 #include "MDSRank.h"
 #include "MDLog.h"
 #include "MDCache.h"
