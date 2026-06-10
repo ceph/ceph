@@ -5,6 +5,11 @@ from types cimport timespec
 
 
 cdef:
+    int32_t ceph_to_hostos_errno(int32_t e):
+        pass
+
+
+cdef:
     cdef struct statx "ceph_statx":
         uint32_t    stx_mask
         uint32_t    stx_blksize
