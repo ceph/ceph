@@ -116,6 +116,8 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
+import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
+import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
 
 @NgModule({
   imports: [
@@ -220,7 +222,9 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RgwTopicDetailsComponent,
     RgwTopicFormComponent,
     RgwBucketNotificationListComponent,
-    RgwNotificationFormComponent
+    RgwNotificationFormComponent,
+    RgwAccountRolesListComponent,
+    RgwAccountRoleFormComponent
   ],
   providers: [TitleCasePipe]
 })

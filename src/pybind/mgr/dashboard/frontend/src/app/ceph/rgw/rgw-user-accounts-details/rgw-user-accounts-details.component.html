@@ -1,13 +1,27 @@
-<!-- Account quota -->
-<div *ngIf="selection.quota">
-  <legend i18n>Account quota</legend>
-  <cd-table-key-value [data]="quota">
-  </cd-table-key-value>
-</div>
-
-<!-- Bucket quota -->
-<div *ngIf="selection.bucket_quota">
-  <legend i18n>Bucket quota</legend>
-  <cd-table-key-value [data]="bucket_quota">
-  </cd-table-key-value>
-</div>
+@if (selection) {
+<cds-tabs>
+  <cds-tab heading="Quotas" i18n-heading>
+    <div class="row">
+      @if (selection.quota) {
+      <div class="col-sm-6">
+        <legend i18n>Account quota</legend>
+        <cd-table-key-value [data]="quota"> </cd-table-key-value>
+      </div>
+      } @if (selection.bucket_quota) {
+      <div class="col-sm-6">
+        <legend i18n>Bucket quota</legend>
+        <cd-table-key-value [data]="bucket_quota"> </cd-table-key-value>
+      </div>
+      }
+    </div>
+  </cds-tab>
+  <cds-tab heading="Roles" i18n-heading>
+    <div class="mt-4">
+      <cd-rgw-account-roles-list
+        [accountId]="selection.id"
+        [accountName]="selection.name"
+      ></cd-rgw-account-roles-list>
+    </div>
+  </cds-tab>
+</cds-tabs>
+}
