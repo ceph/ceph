@@ -91,6 +91,19 @@ public:
       const ghobject_t& oid,
       uint32_t op_flags = 0) = 0;
 
+    // Similar to get_attrs but also returns the OnodeRef during onode tree lookup.
+    // This allows caching the Onode and skip the lookup on the next wirte.
+    // Non-SeaStore stores return nullptr for the onode.
+    virtual get_attrs_ertr::future<std::pair<attrs_t, std::shared_ptr<void>>>
+    get_attrs_with_onode(
+      CollectionRef c,
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) {
+      return get_attrs(c, oid, op_flags).safe_then([](attrs_t a) {
+        return std::make_pair(std::move(a), std::shared_ptr<void>{});
+      });
+    }
+
     virtual seastar::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
