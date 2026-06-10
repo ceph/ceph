@@ -534,7 +534,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'processors': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
             'network': ['HOST', 'SYS_ID', 'NAME', 'SPEED', 'STATUS', 'STATE'],
             'power': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
-            'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'STATUS', 'STATE']
+            'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
+            'temperatures': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
         }
 
         if category not in table_heading_mapping.keys():
@@ -619,7 +620,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'processors': ('model', 'total_cores', 'total_threads', 'health', 'state'),
             'network': ('name', 'speed_mbps', 'health', 'state'),
             'power': ('name', 'model', 'manufacturer', 'health', 'state'),
-            'fans': ('name', 'health', 'state')
+            'fans': ('name', 'reading', 'reading_units', 'health', 'state'),
+            'temperatures': ('name', 'reading', 'reading_units', 'health', 'state'),
         }
 
         fields = mapping.get(category, ())
@@ -634,7 +636,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                             row.append(v['status'][field])
                         else:
                             row.append('')
-                    if category in ('power', 'fans', 'processors'):
+                    if category in ('power', 'fans', 'temperatures', 'processors'):
                         table.add_row((host, sys_id,) + (k,) + tuple(row))
                     else:
                         table.add_row((host, sys_id,) + tuple(row))

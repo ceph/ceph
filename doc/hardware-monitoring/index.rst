@@ -88,6 +88,7 @@ Supported categories are:
 * network
 * power
 * fans
+* temperatures
 * firmwares
 * criticals
 
@@ -187,6 +188,7 @@ For Developers
 .. automethod:: NodeProxyEndpoint.power
 .. automethod:: NodeProxyEndpoint.processors
 .. automethod:: NodeProxyEndpoint.fans
+.. automethod:: NodeProxyEndpoint.temperatures
 .. automethod:: NodeProxyEndpoint.firmwares
 .. automethod:: NodeProxyEndpoint.led
 
