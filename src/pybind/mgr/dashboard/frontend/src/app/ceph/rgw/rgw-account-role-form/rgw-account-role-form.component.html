@@ -1,0 +1,116 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ getMode() }} Role</h3>
+  </cds-modal-header>
+
+  <form class="form"
+        #formDir="ngForm"
+        [formGroup]="form">
+    <div cdsModalContent>
+      <!-- Role Name -->
+      <div class="form-item">
+        <cds-text-label label="Role Name"
+                        for="role_name"
+                        cdRequiredField="Role Name"
+                        [invalid]="form.controls.role_name.invalid && form.controls.role_name.dirty"
+                        [invalidText]="roleNameError">Role Name
+          <input cdsText
+                 type="text"
+                 id="role_name"
+                 name="role_name"
+                 formControlName="role_name"
+                 [invalid]="form.controls.role_name.invalid && form.controls.role_name.dirty"
+                 [autofocus]="true"
+                 modal-primary-focus>
+        </cds-text-label>
+        <ng-template #roleNameError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('role_name', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Path (Create only) -->
+      <div class="form-item" *ngIf="!isEdit">
+        <cds-text-label label="Path"
+                        for="role_path"
+                        cdRequiredField="Path"
+                        [invalid]="form.controls.role_path.invalid && form.controls.role_path.dirty"
+                        [invalidText]="pathError">Path
+          <input cdsText
+                 type="text"
+                 id="role_path"
+                 name="role_path"
+                 formControlName="role_path"
+                 [invalid]="form.controls.role_path.invalid && form.controls.role_path.dirty">
+        </cds-text-label>
+        <ng-template #pathError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('role_path', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Assume Role Policy Document (Create only) -->
+      <div class="form-item" *ngIf="!isEdit">
+        <cds-textarea-label
+          labelInputID="role_assume_policy_doc"
+          [invalid]="form.controls.role_assume_policy_doc.invalid && form.controls.role_assume_policy_doc.dirty"
+          [invalidText]="policyError"
+          cdRequiredField="Trust Policy">Trust Policy
+          <textarea cdsTextArea
+                    id="role_assume_policy_doc"
+                    name="role_assume_policy_doc"
+                    formControlName="role_assume_policy_doc"
+                    rows="8"
+                    [invalid]="form.controls.role_assume_policy_doc.invalid && form.controls.role_assume_policy_doc.dirty"
+                    [invalidText]="policyError"></textarea>
+        </cds-textarea-label>
+        <ng-template #policyError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('role_assume_policy_doc', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('role_assume_policy_doc', formDir, 'json')"
+                i18n>Must be a valid JSON.</span>
+        </ng-template>
+      </div>
+
+      <!-- Max Session Duration (Edit only) -->
+      <div class="form-item" *ngIf="isEdit">
+        <cds-number
+          label="Max Session Duration (Hours)"
+          [invalid]="form.controls.max_session_duration.invalid && form.controls.max_session_duration.dirty"
+          [invalidText]="durationError"
+          formControlName="max_session_duration"
+          min="1"
+          max="12"
+          i18n-label
+        >
+        </cds-number>
+        <ng-template #durationError>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('max_session_duration', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('max_session_duration', formDir, 'min')"
+                i18n>Minimum value is 1 hour.</span>
+          <span class="invalid-feedback"
+                *ngIf="form.showError('max_session_duration', formDir, 'max')"
+                i18n>Maximum value is 12 hours.</span>
+        </ng-template>
+      </div>
+
+    </div>
+
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="form"
+                          [submitText]="getMode()"
+                          [modalForm]="true"></cd-form-button-panel>
+  </form>
+</cds-modal>
