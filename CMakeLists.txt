@@ -545,7 +545,14 @@ if(WITH_CATCH2)
   # Restore the original CPM settings in case someone else wants to use the module:
   set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
 
-  message("-- Enabled Catch2 support")
+  # CPM skips the fetch silently if downloads are disabled,
+  # e.g. with FETCHCONTENT_FULLY_DISCONNECTED=ON on deb builds
+  if(NOT TARGET Catch2::Catch2WithMain)
+    message(WARNING "Catch2 unavailable, disabling Catch2 tests")
+    set(WITH_CATCH2 OFF)
+  else()
+    message("-- Enabled Catch2 support")
+  endif()
 endif()
 
 # enable breakpad unless win32 or power
