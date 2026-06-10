@@ -72,7 +72,16 @@ void format_image_disk_usage(const std::string& name,
                               uint64_t snap_id,
                               uint64_t size,
                               uint64_t used_size,
+                              librbd::Image &image,
                               TextTable& tbl, Formatter *f) {
+  std::string snap_ns_type_name;
+  if (!snap_name.empty()) {
+    librbd::snap_namespace_type_t namespace_type;
+    int r = image.snap_get_namespace_type(snap_id, &namespace_type);
+    if (r == 0) {
+      snap_ns_type_name = utils::get_snap_namespace_name(namespace_type);
+    }
+  }
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", name);
@@ -80,6 +89,7 @@ void format_image_disk_usage(const std::string& name,
     if (!snap_name.empty()) {
       f->dump_string("snapshot", snap_name);
       f->dump_unsigned("snapshot_id", snap_id);
+      f->dump_string("snapshot_namespace_type", snap_ns_type_name);
     }
     f->dump_unsigned("provisioned_size", size);
     f->dump_unsigned("used_size" , used_size);
@@ -87,7 +97,7 @@ void format_image_disk_usage(const std::string& name,
   } else {
     std::string full_name = name;
     if (!snap_name.empty()) {
-      full_name += "@" + snap_name;
+      full_name += "@" + snap_name + " (" + snap_ns_type_name + ")";
     }
     tbl << full_name
         << stringify(byte_u_t(size))
@@ -234,7 +244,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
         }
         if (!merge_snap) {
           format_image_disk_usage(image_spec.name, image_spec.id, snap->name,
-                                   snap->id, snap->size, used_size, tbl, f);
+                                   snap->id, snap->size, used_size, image, tbl, f);
         }
 
         image_full_used_size += used_size;
@@ -272,10 +282,10 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
       if (!merge_snap) {
         format_image_disk_usage(image_spec.name, image_spec.id, "", CEPH_NOSNAP,
-                                 info.size, used_size, tbl, f);
+                                 info.size, used_size, image, tbl, f);
       } else {
         format_image_disk_usage(image_spec.name, image_spec.id, "", CEPH_NOSNAP,
-                                 info.size, image_full_used_size, tbl, f);
+                                 info.size, image_full_used_size, image, tbl, f);
       }
 
       total_prov += info.size;
