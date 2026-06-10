@@ -33,7 +33,20 @@ class BaseRedfishSystem(BaseSystem):
         "Status",
     ]
     POWER_FIELDS: List[str] = ["Name", "Model", "Manufacturer", "Status"]
-    FANS_FIELDS: List[str] = ["Name", "PhysicalContext", "Status"]
+    FANS_FIELDS: List[str] = [
+        "Name",
+        "PhysicalContext",
+        "Reading",
+        "ReadingUnits",
+        "Status",
+    ]
+    TEMPERATURES_FIELDS: List[str] = [
+        "Name",
+        "PhysicalContext",
+        "Reading",
+        "ReadingUnits",
+        "Status",
+    ]
     FIRMWARES_FIELDS: List[str] = [
         "Name",
         "Description",
@@ -62,6 +75,11 @@ class BaseRedfishSystem(BaseSystem):
         ],
         "fans": [
             ComponentUpdateSpec("chassis", "Thermal", FANS_FIELDS, "Fans"),
+        ],
+        "temperatures": [
+            ComponentUpdateSpec(
+                "chassis", "Thermal", TEMPERATURES_FIELDS, "Temperatures"
+            ),
         ],
         "firmwares": [
             ComponentUpdateSpec(
@@ -102,6 +120,7 @@ class BaseRedfishSystem(BaseSystem):
                 "memory",
                 "power",
                 "fans",
+                "temperatures",
                 "network",
                 "processors",
                 "storage",
@@ -209,6 +228,7 @@ class BaseRedfishSystem(BaseSystem):
                 "memory": self.get_memory(),
                 "power": self.get_power(),
                 "fans": self.get_fans(),
+                "temperatures": self.get_temperatures(),
             },
             "firmwares": self.get_firmwares(),
         }
@@ -250,6 +270,9 @@ class BaseRedfishSystem(BaseSystem):
 
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("fans", {}))
+
+    def get_temperatures(self) -> Dict[str, Dict[str, Dict]]:
+        return dict(self._sys.get("temperatures", {}))
 
     def get_component_spec_overrides(self) -> Dict[str, Dict[str, Any]]:
         return {}
@@ -360,6 +383,9 @@ class BaseRedfishSystem(BaseSystem):
 
     def _update_fans(self) -> None:
         self._run_update("fans")
+
+    def _update_temperatures(self) -> None:
+        self._run_update("temperatures")
 
     def _update_firmwares(self) -> None:
         self._run_update("firmwares")

@@ -606,6 +606,16 @@ class NodeProxyEndpoint:
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
+    def temperatures(self, **kw: Any) -> Dict[str, Any]:
+        try:
+            results = self.mgr.node_proxy_cache.common('temperatures', **kw)
+        except (KeyError, OrchestratorError):
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
     def firmwares(self, **kw: Any) -> Dict[str, Any]:
         """
         Handles GET request to retrieve firmware information.
