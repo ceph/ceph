@@ -101,33 +101,9 @@ static constexpr int NSFS_VERSION_RETRIES = 5;
 static constexpr int NSFS_VERSION_DELAY_BASE_MS = 50;
 static const std::string VERSIONS_LOCKFILE = ".versions/.lock";
 
-/* RAII wrapper for Linux OFD (open file description) write lock.
- * OFD locks are per-fd (not per-process like traditional POSIX fcntl
- * locks), so they serialize correctly across threads.  They also work
- * across processes sharing a filesystem mount. */
-class VersionLock {
-  int fd;
-public:
-  explicit VersionLock(int fd) : fd(fd) {
-    if (fd >= 0) {
-      struct flock fl{};
-      fl.l_type = F_WRLCK;
-      fl.l_whence = SEEK_SET;
-      ::fcntl(fd, F_OFD_SETLKW, &fl);
-    }
-  }
-  ~VersionLock() {
-    if (fd >= 0) {
-      struct flock fl{};
-      fl.l_type = F_UNLCK;
-      fl.l_whence = SEEK_SET;
-      ::fcntl(fd, F_OFD_SETLK, &fl);
-      ::close(fd);
-    }
-  }
-  VersionLock(const VersionLock&) = delete;
-  VersionLock& operator=(const VersionLock&) = delete;
-};
+/* version locking is now handled by FSStrategy::version_lock(),
+ * which returns an RAII VersionLockHandle — OFD on POSIX,
+ * LWE cluster-wide right on GPFS. */
 
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
@@ -2041,7 +2017,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, gpfs_clone);
+  bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, gpfs_clone,
+                                               gpfs_lwe);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
@@ -5323,7 +5301,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (versioned && leaf_fd >= 0) {
     int vfd = open_versions_dir(leaf_fd);
     if (vfd >= 0) {
-      VersionLock vlock(open_versions_lockfile(leaf_fd));
+      auto vlock = driver->get_fs_strategy()->version_lock(
+        dpp, open_versions_lockfile(leaf_fd));
 
       if (!ver_enabled) {
         std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
@@ -5706,7 +5685,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     if (parent_fd >= 0) {
       int vfd = open_versions_dir(parent_fd);
       if (vfd >= 0) {
-        VersionLock vlock(open_versions_lockfile(parent_fd));
+        auto vlock = driver->get_fs_strategy()->version_lock(
+          dpp, open_versions_lockfile(parent_fd));
 
         /* in suspended mode, remove any existing _null from .versions/ */
         if (!ver_enabled) {
