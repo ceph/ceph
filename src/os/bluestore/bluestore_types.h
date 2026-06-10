@@ -29,6 +29,7 @@
 #include "common/Checksummer.h"
 #include "include/ceph_hash.h"
 #include "include/intarith.h" // for round_up_to()
+#include "include/anote.h"
 
 namespace ceph {
   class Formatter;
@@ -122,7 +123,11 @@ struct bluestore_pextent_t : public bluestore_interval_t<uint64_t, uint32_t>
     denc_lba(v.offset, p);
     denc_varint_lowz(v.length, p);
   }
-
+  void decode(anote::annotator& p)
+  {
+    ANOTE(denc_lba, offset, p);
+    ANOTE(denc_varint_lowz, length, p);
+  }
   void dump(ceph::Formatter *f) const;
   static std::list<bluestore_pextent_t> generate_test_instances();
 };
@@ -161,6 +166,17 @@ struct denc_traits<PExtentVector> {
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
+    }
+  }
+  static void decode(PExtentVector& v, anote::annotator& p) {
+    unsigned num;
+    ANOTE(denc_varint, num, p);
+    v.clear();
+    // num can be corrupted, don't allocate infinite memory
+    size_t message_left = p.get_it().get_end() - p.get_it().get_pos();
+    v.resize(std::min<size_t>(num, message_left));
+    for (unsigned i=0; i<num; ++i) {
+      v[i].decode(anote::scope(p, "pextent").get());
     }
   }
 };
@@ -598,6 +614,29 @@ public:
     }
     if (has_unused()) {
       denc(unused, p);
+    }
+  }
+  void decode(anote::annotator& p, uint64_t struct_v) {
+    ceph_assert(struct_v == 1 || struct_v == 2);
+    denc(extents, anote::scope(p, "pextents").get());
+    ANOTE_NONL(denc_varint, flags, p);
+    p.print(" " + get_flags_string(flags)).newline();
+    if (is_compressed()) {
+      ANOTE(denc_varint_lowz, logical_length, p);
+      ANOTE(denc_varint_lowz, compressed_length, p);
+    } else {
+      logical_length = get_ondisk_length();
+    }
+    if (has_csum()) {
+      ANOTE(denc, csum_type, p);
+      ANOTE(denc, csum_chunk_order, p);
+      int len;
+      ANOTE(denc_varint, len, p);
+      anote::small_scope(p, "csum_data"), csum_data = p.get_ptr(len);
+      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    }
+    if (has_unused()) {
+      ANOTE(denc, unused, p);
     }
   }
 

@@ -2980,6 +2980,38 @@ void BlueStore::Blob::decode(
   }
 }
 
+void BlueStore::Blob::decode(
+  anote::annotator& p,
+  uint64_t struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection *coll)
+{
+  anote::scope(p, "blob"), blob.decode(p, struct_v);
+  if (blob.is_shared()) {
+    ANOTE_NAME(denc, "shared_blob_id", *sbid, p);
+  }
+
+  if (include_ref_map) {
+    if (struct_v > 1) {
+      anote::scope(p, "used_in_blob"), used_in_blob.decode(p);
+    } else {
+      used_in_blob.clear();
+      bluestore_extent_ref_map_t legacy_ref_map;
+      legacy_ref_map.decode(p);
+      if (coll) {
+        for (auto r : legacy_ref_map.ref_map) {
+          get_ref(
+            coll,
+            r.first,
+            r.second.refs * r.second.length);
+        }
+      }
+    }
+  }
+}
+
+
 // Extent
 
 void BlueStore::Extent::dump(Formatter* f) const
@@ -4133,6 +4165,26 @@ bool BlueStore::ExtentMap::encode_some(
   return false;
 }
 
+std::string enc_flags_to_string(uint8_t flags) {
+  std::string s;
+  if (flags & BLOBID_FLAG_CONTIGUOUS) {
+    s += "cont";
+  }
+  if (flags & BLOBID_FLAG_ZEROOFFSET) {
+    if (!s.empty()) s += "+";
+    s += "zeroofs";
+  }
+  if (flags & BLOBID_FLAG_SAMELENGTH) {
+    if (!s.empty()) s += "+";
+    s += "samelen";
+  }
+  if (flags & BLOBID_FLAG_SPANNING) {
+    if (!s.empty()) s += "+";
+    s += "spanning";
+  }
+  return s;
+}
+
 /////////////////// BlueStore::ExtentMap::DecoderExtent ///////////
 void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
   Extent* le,
@@ -4175,51 +4227,119 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
   ++extent_pos;
 }
 
-unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
-  const bufferlist& bl, Collection* c)
+void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
+  Extent* le,
+  __u8 struct_v,
+  anote::annotator& p,
+  Collection* c)
 {
+  uint64_t blobid;
+  ANOTE_NONL(denc_varint, blobid, p);
+  p.print("blob=").print(blobid >> BLOBID_SHIFT_BITS)
+   .print(" " + enc_flags_to_string(blobid));
+  if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
+    uint64_t gap;
+    ANOTE(denc_varint_lowz, gap, p);
+    pos += gap;
+  }
+  le->logical_offset = pos;
+  p.indent().print("logical_offset=").print(le->logical_offset);
+  if ((blobid & BLOBID_FLAG_ZEROOFFSET) == 0) {
+    ANOTE_NAME(denc_varint_lowz, "blob_offset", le->blob_offset, p);
+  } else {
+    le->blob_offset = 0;
+    p.indent().print("blob_offset=").print(le->blob_offset);
+  }
+  if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
+    ANOTE_NAME(denc_varint_lowz, "length", prev_len, p);
+    le->length = prev_len;
+  } else {
+    le->length = prev_len;
+    p.indent().print("length=").print(le->length);
+  }
+  if (blobid & BLOBID_FLAG_SPANNING) {
+    consume_blobid(le, true, blobid >> BLOBID_SHIFT_BITS);
+  } else {
+    blobid >>= BLOBID_SHIFT_BITS;
+    if (blobid) {
+      consume_blobid(le, false, blobid - 1);
+    } else {
+      // dummy onodes might not have collections, we need a check for it.
+      BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+      uint64_t sbid = 0;
+      b->decode(p, struct_v, &sbid, false, c);
+      consume_blob(le, extent_pos, sbid, b);
+    }
+  }
+  pos += prev_len;
+  ++extent_pos;
+}
+
+template <typename T> requires anote::annotator_or_iterator<T>
+unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some_it(T& p, Collection* c) {
   __u8 struct_v;
   uint32_t num;
-
-  ceph_assert(bl.get_num_buffers() <= 1);
-  auto p = bl.front().begin_deep();
-  denc(struct_v, p);
+  ANOTE(denc, struct_v, p);
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level below.
   ceph_assert(struct_v == 1 || struct_v == 2);
-  denc_varint(num, p);
-
+  ANOTE(denc_varint, num, p);
   extent_pos = 0;
   while (!p.end()) {
     Extent* le = get_next_extent();
-    decode_extent(le, struct_v, p, c);
+    anote::scope(p, "extent"), decode_extent(le, struct_v, p, c);
     add_extent(le);
   }
   ceph_assert(extent_pos == num);
   return num;
 }
 
+template
+unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some_it<::ceph::buffer::ptr::const_iterator>
+  (::ceph::buffer::ptr::const_iterator& p, Collection* c);
+template
+unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some_it<::anote::annotator>
+  (::anote::annotator& p, Collection* c);
+
+unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
+  const bufferlist& bl, Collection* c)
+{
+  ceph_assert(bl.get_num_buffers() <= 1);
+  auto p = bl.front().begin_deep();
+  uint32_t num = decode_some_it(p, c);
+  return num;
+}
+
+template <typename T> requires anote::annotator_or_iterator<T>
 void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
-  bptr_c_it_t& p, Collection* c)
+  T& p, Collection* c)
 {
   __u8 struct_v;
-  denc(struct_v, p);
+  ANOTE(denc, struct_v, p);
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
   ceph_assert(struct_v == 1 || struct_v == 2);
 
   unsigned n;
-  denc_varint(n, p);
+  ANOTE(denc_varint, n, p);
   while (n--) {
     BlobRef b = c ? c->new_blob() : new Blob(nullptr);
-    denc_varint(b->id, p);
+    ANOTE_NAME(denc_varint, "blob.id", b->id, p);
     uint64_t sbid = 0;
     b->decode(p, struct_v, &sbid, true, c);
     consume_spanning_blob(sbid, b);
   }
 }
+
+template
+void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs<::ceph::buffer::ptr::const_iterator>
+  (::ceph::buffer::ptr::const_iterator& p, Collection* c);
+template
+void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs<::anote::annotator>
+  (::anote::annotator& p, Collection* c);
+
 
 /////////////////// BlueStore::ExtentMap::DecoderExtentFull ///////////
 void BlueStore::ExtentMap::ExtentDecoderFull::consume_blobid(

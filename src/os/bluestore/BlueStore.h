@@ -831,6 +831,12 @@ public:
       uint64_t* sbid,
       bool include_ref_map,
       Collection *coll);
+    void decode(
+      anote::annotator& p,
+      uint64_t struct_v,
+      uint64_t* sbid,
+      bool include_ref_map,
+      Collection *coll);
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
   typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
@@ -1037,14 +1043,20 @@ public:
 
       void decode_extent(Extent* le,
                          __u8 struct_v,
-                         bptr_c_it_t& p,
+                         ceph::buffer::ptr::const_iterator& p,
+                         Collection* c);
+      void decode_extent(Extent* le,
+                         __u8 struct_v,
+                         anote::annotator& p,
                          Collection* c);
     public:
       virtual ~ExtentDecoder() {
       }
-
       unsigned decode_some(const ceph::buffer::list& bl, Collection* c);
-      void decode_spanning_blobs(bptr_c_it_t& p, Collection* c);
+      template <typename T> requires anote::annotator_or_iterator<T>
+      unsigned decode_some_it(T& it, Collection* c);
+      template <typename T> requires anote::annotator_or_iterator<T>
+      void decode_spanning_blobs(T& p, Collection* c);
     };
 
     class ExtentDecoderFull : public ExtentDecoder {
