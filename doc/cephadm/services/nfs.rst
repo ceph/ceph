@@ -112,6 +112,34 @@ Example with RDMA enabled:
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
 
+Transparent State Migration (TSM)
+----------------------------------
+
+Transparent State Migration (TSM) is a high-availability feature that allows NFS
+clients to maintain their state (open files, locks, etc.) when failing over to
+another NFS server. TSM is disabled by default.
+
+To enable TSM, set ``enable_tsm: true`` in the NFS service spec. You can optionally
+set ``tsm_port`` to use a custom TSM port. If omitted, NFS Ganesha uses its default.
+
+Example with TSM enabled:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      enable_tsm: true
+      tsm_port: 5000   # optional
+
+.. note:: TSM is a cluster-level feature that enables state migration across all
+   NFS servers in the cluster. It is configured in the NFS_CORE_PARAM block of
+   the ganesha.conf file.
+
 NFS Daemon Colocation
 ----------------------
 

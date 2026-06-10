@@ -27,6 +27,12 @@ NFS_CORE_PARAM {
 {% if cqos_port %}
         Cqos_Port = {{ cqos_port }};
 {% endif %}
+{% if enable_tsm %}
+        enable_TSM = {{ enable_tsm|lower }};
+{% if tsm_port %}
+        Tsm_Port = {{ tsm_port }};
+{% endif %}
+{% endif %}
 }
 
 NFSv4 {

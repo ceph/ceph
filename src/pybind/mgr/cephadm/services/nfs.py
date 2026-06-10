@@ -142,6 +142,8 @@ class NFSService(CephService):
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
         deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
         deps.append(f'rdma_port: {nfs_spec.rdma_port}')
+        deps.append(f'enable_tsm: {nfs_spec.enable_tsm}')
+        deps.append(f'tsm_port: {nfs_spec.tsm_port}')
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -243,6 +245,10 @@ class NFSService(CephService):
         elif spec.enable_rdma:
             rdma_port = spec.rdma_port
 
+        tsm_port = None
+        if spec.enable_tsm:
+            tsm_port = spec.tsm_port
+
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
@@ -268,7 +274,9 @@ class NFSService(CephService):
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
-                "ceph_nodes": ceph_nodes
+                "ceph_nodes": ceph_nodes,
+                "enable_tsm": spec.enable_tsm,
+                "tsm_port": tsm_port
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

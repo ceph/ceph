@@ -1819,6 +1819,50 @@ def test_ganesha_validate_squash():
         _validate_squash("toot")
 
 
+def test_nfs_service_spec_with_tsm():
+    """Test NFSServiceSpec with TSM parameters."""
+    cluster_id = "foo"
+    
+    # Test with TSM enabled
+    spec_with_tsm = NFSServiceSpec(
+        service_id=cluster_id,
+        enable_tsm=True,
+        tsm_port=5000
+    )
+    assert spec_with_tsm.enable_tsm is True
+    assert spec_with_tsm.tsm_port == 5000
+
+    # Test with TSM disabled (default)
+    spec_without_tsm = NFSServiceSpec(service_id=cluster_id)
+    assert spec_without_tsm.enable_tsm is False
+    assert spec_without_tsm.tsm_port is None
+
+    # Test with TSM enabled but no port specified
+    spec_tsm_no_port = NFSServiceSpec(
+        service_id=cluster_id,
+        enable_tsm=True
+    )
+    assert spec_tsm_no_port.enable_tsm is True
+    assert spec_tsm_no_port.tsm_port is None
+
+
+def test_nfs_service_spec_tsm_serialization():
+    """Test that TSM parameters are properly serialized."""
+    cluster_id = "foo"
+    spec = NFSServiceSpec(
+        service_id=cluster_id,
+        enable_tsm=True,
+        tsm_port=6000
+    )
+    # Convert to dict and back
+    spec_dict = spec.to_json()
+    assert 'enable_tsm' in spec_dict['spec']
+    assert spec_dict['spec']['enable_tsm'] is True
+    assert 'tsm_port' in spec_dict['spec']
+    assert spec_dict['spec']['tsm_port'] == 6000
+
+
+
 def test_ganesha_validate_access_type():
     """Check error handling of internal validation function for access type value."""
     from nfs.ganesha_conf import _validate_access_type
@@ -1855,3 +1899,5 @@ class TestCephfsClientForMgr:
             r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
             assert r1._cephfs_client is r2._cephfs_client
             mock_cephfs_cls.assert_called_once_with(mgr)
+
+
