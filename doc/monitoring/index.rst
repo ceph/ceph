@@ -70,35 +70,6 @@ most important cluster and service metrics.  Many of the examples in this docume
 are taken from Dashboard graphics or extrapolated from metrics exposed by the
 Ceph Dashboard.
 
-Ceph daemon health metrics
-==========================
-
-The ``ceph_exporter`` provides a metric named ``ceph_daemon_socket_up`` that
-indicates the health status of a Ceph daemon based on its ability to respond
-via the admin socket, where a value of ``1`` means healthy, and ``0`` means
-unhealthy. Although a Ceph daemon might still be "alive" when it
-reports ``ceph_daemon_socket_up=0``, this status indicates a significant issue
-in its functionality. As such, this metric serves as an excellent means of
-detecting problems in any of the main Ceph daemons.
-
-The ``ceph_daemon_socket_up`` Prometheus metrics also have labels as described below:
-* ``ceph_daemon``: Identifier of the Ceph daemon exposing an admin socket on the host.
-* ``hostname``: Name of the host where the Ceph daemon is running.
-
-Example:
-
-.. code-block:: bash
-
-   ceph_daemon_socket_up{ceph_daemon="mds.a",hostname="testhost"} 1
-   ceph_daemon_socket_up{ceph_daemon="osd.1",hostname="testhost"} 0
-
-To identify any Ceph daemons that were not responsive at any point in the last
-12 hours, you can use the following PromQL expression:
-
-.. code-block:: bash
-
-   ceph_daemon_socket_up == 0 or min_over_time(ceph_daemon_socket_up[12h]) == 0
-
 Performance metrics
 ===================
 
