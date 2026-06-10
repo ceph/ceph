@@ -2469,10 +2469,10 @@ int CrushWrapper::add_simple_stretch_rule_at(
 
   std::vector<int> children;
   get_children_of_type(root, zone_type, &children, false);
-  if (int(children.size()) < num_failure_domains && !force) {
+  if (int(children.size()) != num_failure_domains && !force) {
     if (err)
       *err << "number of zones " << children.size() << " for type "
-           << zone_failure_domain_name << " is less than num_failure_domains " << num_failure_domains;
+           << zone_failure_domain_name << " is not equal to num_failure_domains " << num_failure_domains;
     return -EINVAL;
   }
 
