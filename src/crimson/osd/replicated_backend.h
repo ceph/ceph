@@ -53,7 +53,8 @@ private:
     ceph::os::Transaction&& txn,
     osd_op_params_t&& osd_op_p,
     epoch_t min_epoch, epoch_t max_epoch,
-    std::vector<pg_log_entry_t>&& log_entries) final;
+    std::vector<pg_log_entry_t>&& log_entries,
+    const PGLog &pg_log) final;
   const pg_t pgid;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:

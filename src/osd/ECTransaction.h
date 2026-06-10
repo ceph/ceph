@@ -22,6 +22,9 @@
 #include "os/Transaction.h"
 #include "OSDMap.h"
 #include "PGTransaction.h"
+#include "osd/ECOmapJournal.h"
+
+class PGLog;
 
 namespace ECTransaction {
 class WritePlanObj {
@@ -77,6 +80,85 @@ struct WritePlan {
   }
 };
 
+/**
+ * Decode and accumulate omap updates from encoded operation list.
+ * Handles Insert, Remove, and RemoveRange operations.
+ */
+void accumulate_omap_updates(
+  bool clear_omap,
+  const std::optional<ceph::buffer::list>& header,
+  const std::vector<std::pair<OmapUpdateType, ceph::buffer::list>>& updates,
+  std::optional<ceph::buffer::list>& out_header,
+  std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
+  std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges);
+
+/**
+ * Apply accumulated omap updates to primary-capable shard transactions.
+ */
+void apply_omap_to_transactions(
+  shard_id_map<ceph::os::Transaction>& transactions,
+  const pg_t& pgid,
+  const hobject_t& target_oid,
+  const ECUtil::stripe_info_t& sinfo,
+  bool clear_omap,
+  const std::optional<ceph::buffer::list>& header,
+  const std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
+  const std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
+  const DoutPrefixProvider* dpp);
+
+
+/**
+ * OmapCloneVisitor - Visitor to extract and apply omap updates to clone transactions
+ *
+ * This visitor implements ObjectModDesc::Visitor to traverse PG log entries and
+ * accumulate omap updates (key-value pairs, range removals, header changes) that
+ * need to be applied to a cloned object. It ensures that incomplete omap updates
+ * from the PG log are properly transferred to the clone.
+ */
+class OmapCloneVisitor : public ObjectModDesc::Visitor {
+private:
+  shard_id_map<ceph::os::Transaction> &transactions;
+  const pg_t &pgid;
+  const hobject_t &source_oid;
+  const hobject_t &dest_oid;
+  const ECUtil::stripe_info_t &sinfo;
+  ECOmapJournal &ec_omap_journal;
+  const DoutPrefixProvider *dpp;
+  
+  // Accumulated omap state
+  bool has_clear_omap = false;
+  std::optional<ceph::buffer::list> omap_header;
+  std::map<std::string, std::optional<ceph::buffer::list>> omap_updates;
+  std::list<std::pair<std::string, std::optional<std::string>>> removed_ranges;
+
+public:
+  OmapCloneVisitor(
+    shard_id_map<ceph::os::Transaction> &txns,
+    const pg_t &pg,
+    const hobject_t &src,
+    const hobject_t &dst,
+    const ECUtil::stripe_info_t &stripe_info,
+    ECOmapJournal &journal,
+    const DoutPrefixProvider *dpp)
+    : transactions(txns), pgid(pg), source_oid(src), dest_oid(dst),
+      sinfo(stripe_info), ec_omap_journal(journal), dpp(dpp) {}
+
+  /**
+   * Called by ObjectModDesc::visit() when an ec_omap modification is encountered
+   * Accumulates omap updates from the PG log entry
+   */
+  void ec_omap(
+    bool clear_omap,
+    std::optional<ceph::buffer::list> header,
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &updates) override;
+  
+  /**
+   * Apply accumulated omap updates to the clone transaction
+   * This should be called after visiting all relevant log entries
+   */
+  void apply_to_clone();
+};
+
 class Generate {
   PGTransaction &t;
   const ErasureCodeInterfaceRef &ec_impl;
@@ -97,6 +179,8 @@ class Generate {
   std::vector<shard_id_set> rollback_shards;
   uint32_t fadvise_flags = 0;
   bool written_shards_final{false};
+  ECOmapJournal &ec_omap_journal;
+  const PGLog &pg_log;
 
   void all_shards_written();
   void shard_written(const shard_id_t shard);
@@ -110,6 +194,15 @@ class Generate {
   void appends_and_clone_ranges();
   void written_shards();
   void attr_updates();
+  std::vector<const pg_log_entry_t*> get_incomplete_ec_omap_log_entries(
+    const hobject_t &hoid,
+    eversion_t can_rollback_to);
+  /**
+   * Apply omap updates directly to transactions without journaling.
+   * Should only be called when entry is null (temporary/non-journaled operations).
+   * For journaled operations, use entry->mod_desc.ec_omap() instead.
+   */
+  void apply_omap_updates_without_journal();
 
  public:
   Generate(PGTransaction &t,
@@ -123,7 +216,9 @@ class Generate {
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
     pg_log_entry_t *entry,
-    bool &first_write_in_interval);
+    bool &first_write_in_interval,
+    ECOmapJournal &ec_omap_journal,
+    const PGLog &pg_log);
 };
 
 void generate_transactions(
@@ -140,6 +235,8 @@ void generate_transactions(
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap,
-    bool &first_write_in_interval
+    bool &first_write_in_interval,
+    ECOmapJournal &ec_omap_journal,
+    const PGLog &pg_log
   );
 }

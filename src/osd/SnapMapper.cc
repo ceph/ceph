@@ -855,7 +855,7 @@ void SnapMapper::update_snap_map(
         i.soid,
         _snaps,
         _t);
-    } else if (i.is_modify()) {
+    } else if (i.is_modify() || i.is_replace()) {
       int r = update_snaps(
         i.soid,
         _snaps,

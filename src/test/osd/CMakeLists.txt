@@ -215,10 +215,18 @@ target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )
 
+# unittest ECOmapJournal
+add_executable(unittest_ec_omap_journal
+  test_ec_omap_journal.cc
+)
+add_ceph_unittest(unittest_ec_omap_journal)
+target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
+
 # osd_unittests: custom target that builds and runs all OSD unit tests
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
   unittest_backend_basics
+  unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l
   unittest_ecbackend

@@ -45,6 +45,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
 		     DoutPrefixProvider &dpp,
 		     ECListener &eclistener)
   : PGBackend{whoami, coll, shard_services, store_index, dpp},
+    ECCommon(dpp),
     ec_impl{create_ec_impl(ec_profile)},
     sinfo(ec_impl, &(eclistener.get_pool()), stripe_width),
     fast_read{fast_read},
@@ -104,6 +105,7 @@ ECBackend::_read(const hobject_t& hoid,
 
 struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
+  const PGLog &pg_log;
 
   static PGTransactionUPtr transate_transaction(
     ceph::os::Transaction&& t,
@@ -235,9 +237,11 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 
   ECCrimsonOp(ceph::os::Transaction&& t,
               crimson::osd::ObjectContextRef &&obc,
-	      ECCommon::RMWPipeline& rmw_pipeline)
+              const PGLog &pg_log,
+       ECCommon::RMWPipeline& rmw_pipeline)
     : Op(rmw_pipeline),
-      t(transate_transaction(std::move(t), std::move(obc))) {
+      t(transate_transaction(std::move(t), std::move(obc))),
+      pg_log(pg_log) {
   }
 
   void generate_transactions(
@@ -248,7 +252,8 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       shard_id_map<ceph::os::Transaction> *transactions,
       DoutPrefixProvider *dpp,
       const OSDMapRef &osdmap,
-      bool &first_write_in_interval) final
+      bool &first_write_in_interval,
+      ECOmapJournal &ec_omap_journal) final
   {
     assert(t);
     ECTransaction::generate_transactions(
@@ -265,7 +270,9 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       &temp_cleared,
       dpp,
       osdmap,
-      first_write_in_interval);
+      first_write_in_interval,
+      ec_omap_journal,
+      pg_log);
   }
 
   bool skip_transaction(
@@ -301,12 +308,14 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
                               ceph::os::Transaction&& txn,
                               osd_op_params_t&& osd_op_p,
                               epoch_t min_epoch, epoch_t max_epoch,
-			      std::vector<pg_log_entry_t>&& log_entries)
+			      std::vector<pg_log_entry_t>&& log_entries,
+                              const PGLog &pg_log)
 {
   const hobject_t& hoid = obc->obs.oi.soid;
   logger().debug("{} hoid={} obc->attr_cache={}", __func__, hoid, obc->attr_cache);
   auto op =
-    std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc), rmw_pipeline);
+    std::make_unique<ECCrimsonOp>(
+      std::move(txn), std::move(obc), pg_log, rmw_pipeline);
   op->hoid = hoid;
   //op->delta_stats = delta_stats;
   op->version = osd_op_p.at_version;

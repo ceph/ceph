@@ -101,7 +101,8 @@ ReplicatedBackend::submit_transaction(
   ceph::os::Transaction&& t,
   osd_op_params_t&& opp,
   epoch_t min_epoch, epoch_t map_epoch,
-  std::vector<pg_log_entry_t>&& logv)
+  std::vector<pg_log_entry_t>&& logv,
+  const PGLog &pg_log)
 {
   LOG_PREFIX(ReplicatedBackend::submit_transaction);
   const hobject_t& hoid = obc->obs.oi.soid;
