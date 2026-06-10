@@ -4447,6 +4447,21 @@ options:
   default: /usr/lpp/mmfs/lib/libgpfs.so
   services:
   - rgw
+- name: rgw_nsfs_gpfs_clone_files
+  type: bool
+  level: advanced
+  desc: Use GPFS clone_snap+clone_copy for CopyObject (experimental)
+  long_desc: >
+    When enabled and GPFS clone symbols are available, CopyObject uses
+    gpfs_clone_snap + gpfs_clone_copy to produce a CoW copy with data
+    at rest.  The clone child gets its own inode and independent xattrs.
+    Clone parents are immutable and managed by cleanup_clone(); a future
+    GPFS auto-gc extension for orphaned clone parents would make this
+    fully production-ready.  Falls back to copy_file_range/read+write
+    when disabled or when clone operations fail.
+  default: false
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
