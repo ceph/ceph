@@ -86,7 +86,8 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   return 0;
 }
 
-SafeResult POSIXStrategy::safe_link(int src_dir_fd,
+SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
+                                    int src_dir_fd,
                                     const std::string& src_name,
                                     int dst_dir_fd,
                                     const std::string& dst_name,
@@ -108,7 +109,8 @@ SafeResult POSIXStrategy::safe_link(int src_dir_fd,
   return SafeResult::MISMATCH;
 }
 
-SafeResult POSIXStrategy::safe_unlink(int dir_fd, const std::string& name,
+SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
+                                      int dir_fd, const std::string& name,
                                       int tmp_dir_fd,
                                       uint64_t expected_mtime_ns,
                                       uint64_t expected_ino)
@@ -186,31 +188,33 @@ int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
   return 0;
 }
 
-SafeResult GPFSStrategy::safe_link(int src_dir_fd,
+SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
+                                   int src_dir_fd,
                                    const std::string& src_name,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
                                    uint64_t expected_mtime_ns,
                                    uint64_t expected_ino)
 {
-  /* open the source to get an fd for linkatif's inode verification */
-  int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
-  if (src_fd < 0) {
-    if (errno == ENOENT) {
-      return SafeResult::MISMATCH;
-    }
-    return SafeResult::ERROR;
+  /* verify the source still matches expectations before linking */
+  if (!stat_matches(src_dir_fd, src_name, expected_mtime_ns, expected_ino)) {
+    ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch or gone"
+      << " src=" << src_name << dendl;
+    return SafeResult::MISMATCH;
   }
 
-  /* gpfs_linkatif atomically replaces dst only if its inode matches
-   * the replacefd — no post-check needed */
+  /* gpfs_linkatif with replacefd=0 skips the destination inode check,
+   * creating a new link or unconditionally replacing an existing one */
   int ret = fn_linkatif(src_dir_fd, src_name.c_str(),
                         dst_dir_fd, dst_name.c_str(),
-                        0, src_fd);
-  ::close(src_fd);
+                        0, 0);
+  int err = errno;
 
   if (ret < 0) {
-    if (errno == EEXIST) {
+    ldpp_dout(dpp, 0) << "ERROR: gpfs_linkatif failed: "
+      << cpp_strerror(err)
+      << " src=" << src_name << " dst=" << dst_name << dendl;
+    if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
     return SafeResult::ERROR;
@@ -218,7 +222,8 @@ SafeResult GPFSStrategy::safe_link(int src_dir_fd,
   return SafeResult::OK;
 }
 
-SafeResult GPFSStrategy::safe_unlink(int dir_fd, const std::string& name,
+SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
+                                     int dir_fd, const std::string& name,
                                      int tmp_dir_fd,
                                      uint64_t expected_mtime_ns,
                                      uint64_t expected_ino)
@@ -227,9 +232,12 @@ SafeResult GPFSStrategy::safe_unlink(int dir_fd, const std::string& name,
    * only if its inode matches this fd */
   int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
   if (fd < 0) {
-    if (errno == ENOENT) {
+    int err = errno;
+    if (err == ENOENT) {
       return SafeResult::OK;
     }
+    ldpp_dout(dpp, 0) << "ERROR: gpfs safe_unlink: openat " << name
+      << " failed: " << cpp_strerror(err) << dendl;
     return SafeResult::ERROR;
   }
 
@@ -244,10 +252,13 @@ SafeResult GPFSStrategy::safe_unlink(int dir_fd, const std::string& name,
   }
 
   ret = fn_unlinkat(dir_fd, name.c_str(), fd);
+  int err = errno;
   ::close(fd);
 
   if (ret < 0) {
-    if (errno == EEXIST) {
+    ldpp_dout(dpp, 0) << "ERROR: gpfs_unlinkat failed: "
+      << cpp_strerror(err) << " name=" << name << dendl;
+    if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
     return SafeResult::ERROR;
