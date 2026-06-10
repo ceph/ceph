@@ -766,6 +766,34 @@ def test_filterable_metadata_list_keys():
 
 
 @pytest.mark.index_test
+def test_metadata_dots_in_names_rejected():
+    """Test that dots in metadata key names are rejected at index creation."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    dimension = 4
+
+    # dots in filterable metadata key names
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        vectorBucketName=bucket_name, indexName='test-dot-filterable',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [{'name': 'user.name'}]})
+
+    # dots in non-filterable metadata key names
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[0]',
+        vectorBucketName=bucket_name, indexName='test-dot-nonfilterable',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['user.name']})
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.index_test
 def test_delete_index():
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -1627,6 +1655,84 @@ def test_put_vectors_malformed_metadata():
     result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result.get('vectors', [])) == 0
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_vectors_null_metadata_value():
+    """Test that vectors with null metadata values are rejected."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # null value in metadata field
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': '{"color": null}'},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.color',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # null among valid fields
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': '{"genre": "rock", "year": null}'},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.year',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # valid vector followed by null vector - all-or-nothing
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'color': 'red'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': '{"color": null}'},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[1].metadata.color',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # verify no vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result.get('vectors', [])) == 0
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_vectors_dots_in_metadata_field_names():
+    """Test that vectors with dots in metadata field names are rejected."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'user.name': 'alice'})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.user.name',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)

@@ -505,6 +505,36 @@ TEST_F(S3VectorFilterTest, MixedTypesInListRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, NullImplicitEqRejected) {
+  auto result = build(R"({"color": null})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, NullExplicitEqRejected) {
+  auto result = build(R"({"color": {"$eq": null}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, NullNeRejected) {
+  auto result = build(R"({"color": {"$ne": null}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, NullInListElementRejected) {
+  auto result = build(R"({"color": {"$in": [null, "red"]}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, NullGtRejected) {
+  auto result = build(R"({"score": {"$gt": null}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 TEST_F(S3VectorFilterTest, ListTypeFilteringRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, true}};
   auto result = build(R"({"tags": {"$eq": "foo"}})", keys);

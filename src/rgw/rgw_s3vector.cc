@@ -561,13 +561,29 @@ namespace rgw::s3vector {
       return -EIO;
     }
 
-    // verify that filterable metadata keys don't start with an underscore
-    // for future proof table schema changes
+    // validate metadata key names
     for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.filterable_metadata_keys[i].name;
       if (name.starts_with('_')) {
         errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
             fmt::format("'{}' must not start with an underscore", name)});
+        break;
+      }
+      if (name.find('.') != std::string::npos) {
+        errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
+            fmt::format("'{}' must not contain '.'", name)});
+        break;
+      }
+    }
+    if (!errors.empty()) {
+      lancedb_connection_free(conn);
+      return -EINVAL;
+    }
+    for (unsigned int i = 0; i < configuration.non_filterable_metadata_keys.size(); ++i) {
+      const auto& name = configuration.non_filterable_metadata_keys[i];
+      if (name.find('.') != std::string::npos) {
+        errors.push_back({fmt::format("metadataConfiguration.nonFilterableMetadataKeys[{}]", i),
+            fmt::format("'{}' must not contain '.'", name)});
         break;
       }
     }
@@ -1235,6 +1251,27 @@ namespace rgw::s3vector {
         ldpp_dout(dpp, 1) << "ERROR: s3vector invalid metadata JSON for key: " << vector.key << dendl;
         errors.push_back({fmt::format("vectors[{}].metadata", vi), "invalid JSON"});
         break;
+      }
+      if (has_metadata) {
+        bool invalid_field = false;
+        for (auto it = parser.find_first(); !it.end(); ++it) {
+          auto* field = *it;
+          const auto& name = field->get_name();
+          if (name.find('.') != std::string::npos) {
+            ldpp_dout(dpp, 1) << "ERROR: s3vector metadata field name '" << name << "' must not contain '.' in key: " << vector.key << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "field name must not contain '.'"});
+            invalid_field = true;
+            break;
+          }
+          const auto& dv = field->get_data_val();
+          if (!dv.quoted && dv.str == "null") {
+            ldpp_dout(dpp, 1) << "ERROR: s3vector null metadata value for field '" << name << "' in key: " << vector.key << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "null values are not supported"});
+            invalid_field = true;
+            break;
+          }
+        }
+        if (invalid_field) break;
       }
       // add key
       key_builder.Append(vector.key).ok();

@@ -69,6 +69,7 @@ namespace rgw::s3vector {
     const auto& dv = value_obj->get_data_val();
     if (dv.quoted) return JsonValueType::STRING;
     if (dv.str == "true" || dv.str == "false") return JsonValueType::BOOLEAN;
+    if (dv.str == "null") return std::nullopt;
     return JsonValueType::NUMBER;
   }
 
