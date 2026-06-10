@@ -161,6 +161,36 @@ static int copy_file_data(int src_fd, int dst_fd, off64_t size)
   return 0;
 }
 
+/* OFD (open file description) lock handle — per-fd, works across
+ * threads and local processes but NOT across GPFS cluster nodes. */
+class OFDLockHandle : public VersionLockHandle {
+  int fd;
+public:
+  explicit OFDLockHandle(int fd) : fd(fd) {
+    if (fd >= 0) {
+      struct flock fl{};
+      fl.l_type = F_WRLCK;
+      fl.l_whence = SEEK_SET;
+      ::fcntl(fd, F_OFD_SETLKW, &fl);
+    }
+  }
+  ~OFDLockHandle() override {
+    if (fd >= 0) {
+      struct flock fl{};
+      fl.l_type = F_UNLCK;
+      fl.l_whence = SEEK_SET;
+      ::fcntl(fd, F_OFD_SETLK, &fl);
+      ::close(fd);
+    }
+  }
+};
+
+std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
+  const DoutPrefixProvider* dpp, int lock_fd)
+{
+  return std::make_unique<OFDLockHandle>(lock_fd);
+}
+
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name)
@@ -209,6 +239,12 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
 
 GPFSStrategy::~GPFSStrategy()
 {
+  if (lwe_session != GPFS_LWE_NO_SESSION && fn_lwe_destroy_session) {
+    fn_lwe_destroy_session(lwe_session);
+  }
+  if (dmapi_handle) {
+    dlclose(dmapi_handle);
+  }
   if (dl_handle) {
     dlclose(dl_handle);
   }
@@ -216,7 +252,7 @@ GPFSStrategy::~GPFSStrategy()
 
 std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   const DoutPrefixProvider* dpp, const std::string& dl_path,
-  bool clone_enabled)
+  bool clone_enabled, bool lwe_enabled)
 {
   void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
@@ -250,10 +286,75 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
       << "clone_file will fall back to copy" << dendl;
   }
 
+  /* LWE cluster-wide locking.
+   *
+   * GPFS Lightweight Events (LWE) provide cluster-wide exclusive
+   * access rights coordinated by the GPFS token manager.  Unlike
+   * OFD/POSIX locks which only serialize within a single kernel,
+   * LWE rights are enforced across all nodes mounting the same
+   * GPFS filesystem — required for multi-gateway deployments.
+   *
+   * We dlopen libdmapi.so for dm_fd_to_handle/dm_handle_free
+   * (converts an fd to the opaque DMAPI handle that LWE APIs
+   * require), then dlsym the LWE session and right management
+   * functions from libgpfs.so itself. */
+  dm_fd_to_handle_t dm_fd = nullptr;
+  dm_handle_free_t dm_free = nullptr;
+  lwe_create_session_t lcs = nullptr;
+  lwe_destroy_session_t lds = nullptr;
+  lwe_request_right_t lrr = nullptr;
+  lwe_release_right_t lrl = nullptr;
+  gpfs_lwe_sessid_t session = GPFS_LWE_NO_SESSION;
+  void* dmapi_dl = nullptr;
+  bool lwe_ok = false;
+
+  if (lwe_enabled) {
+    dmapi_dl = dlopen("libdmapi.so", RTLD_NOW | RTLD_LOCAL);
+    if (!dmapi_dl) {
+      ldpp_dout(dpp, 5) << "gpfs: dlopen libdmapi.so failed: "
+        << dlerror() << ", LWE locking will fall back to OFD" << dendl;
+    } else {
+      dm_fd = reinterpret_cast<dm_fd_to_handle_t>(
+        dlsym(dmapi_dl, "dm_fd_to_handle"));
+      dm_free = reinterpret_cast<dm_handle_free_t>(
+        dlsym(dmapi_dl, "dm_handle_free"));
+    }
+
+    lcs = reinterpret_cast<lwe_create_session_t>(
+      dlsym(dl, "gpfs_lwe_create_session"));
+    lds = reinterpret_cast<lwe_destroy_session_t>(
+      dlsym(dl, "gpfs_lwe_destroy_session"));
+    lrr = reinterpret_cast<lwe_request_right_t>(
+      dlsym(dl, "gpfs_lwe_request_right"));
+    lrl = reinterpret_cast<lwe_release_right_t>(
+      dlsym(dl, "gpfs_lwe_release_right"));
+
+    if (dm_fd && dm_free && lcs && lds && lrr && lrl) {
+      char sess_info[] = "ceph-rgw-nsfs";
+      int ret = lcs(GPFS_LWE_NO_SESSION, sess_info, &session);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "gpfs: lwe_create_session failed: "
+          << cpp_strerror(errno)
+          << ", LWE locking will fall back to OFD" << dendl;
+        session = GPFS_LWE_NO_SESSION;
+      } else {
+        lwe_ok = true;
+      }
+    } else {
+      ldpp_dout(dpp, 5) << "gpfs: LWE/DMAPI symbols not available, "
+        << "version locking will fall back to OFD" << dendl;
+    }
+  }
+
+  std::string features;
+  if (clone_enabled) features += " clone";
+  if (lwe_ok) features += " lwe";
   ldpp_dout(dpp, 1) << "gpfs: loaded " << dl_path
-    << (clone_enabled ? " (clone enabled)" : "") << dendl;
+    << (features.empty() ? "" : " (" + features.substr(1) + ")") << dendl;
+
   return std::unique_ptr<GPFSStrategy>(
-    new GPFSStrategy(dl, la, lai, ua, cs, cc, cu, clone_enabled));
+    new GPFSStrategy(dl, dmapi_dl, la, lai, ua, cs, cc, cu, clone_enabled,
+                     dm_fd, dm_free, lcs, lds, lrr, lrl, session, lwe_ok));
 }
 
 int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
@@ -474,6 +575,73 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 10) << "gpfs cleanup_clone: removed "
       << snap_name << dendl;
   }
+}
+
+/* LWE lock handle — holds a cluster-wide exclusive right via the
+ * GPFS token manager.  The right is released when the handle is
+ * destroyed, then the DMAPI handle is freed. */
+class LWELockHandle : public VersionLockHandle {
+  int(*fn_release)(gpfs_lwe_sessid_t, void*, size_t, gpfs_lwe_token_t);
+  void(*fn_handle_free)(void*, size_t);
+  gpfs_lwe_sessid_t session;
+  void* hanp;
+  size_t hlen;
+  gpfs_lwe_token_t token;
+  int fd;
+public:
+  LWELockHandle(decltype(fn_release) rel,
+                decltype(fn_handle_free) hfree,
+                gpfs_lwe_sessid_t sid,
+                void* h, size_t hl, gpfs_lwe_token_t tok, int fd)
+    : fn_release(rel), fn_handle_free(hfree),
+      session(sid), hanp(h), hlen(hl), token(tok), fd(fd) {}
+
+  ~LWELockHandle() override {
+    fn_release(session, hanp, hlen, token);
+    fn_handle_free(hanp, hlen);
+    ::close(fd);
+  }
+};
+
+std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
+  const DoutPrefixProvider* dpp, int lock_fd)
+{
+  if (!has_lwe()) {
+    ldpp_dout(dpp, 10) << "gpfs version_lock: LWE not available, "
+      << "falling back to OFD" << dendl;
+    return std::make_unique<OFDLockHandle>(lock_fd);
+  }
+
+  void* hanp = nullptr;
+  size_t hlen = 0;
+  int ret = fn_dm_fd_to_handle(lock_fd, &hanp, &hlen);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "gpfs version_lock: dm_fd_to_handle failed: "
+      << cpp_strerror(errno)
+      << ", falling back to OFD" << dendl;
+    return std::make_unique<OFDLockHandle>(lock_fd);
+  }
+
+  gpfs_lwe_token_t token;
+  ret = fn_lwe_request_right(lwe_session, hanp, hlen,
+                             GPFS_LWE_RIGHT_EXCL,
+                             GPFS_LWE_FLAG_WAIT, &token);
+  if (ret < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 5) << "gpfs version_lock: lwe_request_right failed: "
+      << cpp_strerror(err)
+      << ", falling back to OFD" << dendl;
+    fn_dm_handle_free(hanp, hlen);
+    return std::make_unique<OFDLockHandle>(lock_fd);
+  }
+
+  ldpp_dout(dpp, 20) << "gpfs version_lock: acquired LWE exclusive right"
+    << dendl;
+
+  /* LWE handle takes ownership of hanp and lock_fd */
+  return std::make_unique<LWELockHandle>(
+    fn_lwe_release_right, fn_dm_handle_free,
+    lwe_session, hanp, hlen, token, lock_fd);
 }
 
 } } } // namespace rgw::sal::nsfs
