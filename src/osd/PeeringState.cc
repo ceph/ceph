@@ -6030,6 +6030,7 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
 
+  ceph_assert(!ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL));
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   pl->request_local_background_io_reservation(
     ps->get_backfill_priority(),
