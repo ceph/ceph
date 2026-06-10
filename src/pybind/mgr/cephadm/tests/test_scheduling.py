@@ -847,6 +847,32 @@ class NodeAssignmentTest(NamedTuple):
              'nfs:host2(rank=2.0 *:2050,9588,31312)', 'nfs:host1(rank=3.0 *:2050,9588,31312)'],
             []
         ),
+        # NFS with TSM - no colocation, one daemon per host
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=2),
+            'host1 host2'.split(),
+            [],
+            {},
+            {0: {0: None}, 1: {0: None}},
+            ['nfs:host2(rank=0.0 *:2049,9587,31311,36369)', 'nfs:host1(rank=1.0 *:2049,9587,31311,36369)'],
+            ['nfs:host2(rank=0.0 *:2049,9587,31311,36369)', 'nfs:host1(rank=1.0 *:2049,9587,31311,36369)'],
+            []
+        ),
+        # NFS colocation with TSM - count > hosts, TSM ports should increment
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=4),
+            'host1 host2'.split(),
+            [],
+            {},
+            {0: {0: None}, 1: {0: None}, 2: {0: None}, 3: {0: None}},
+            ['nfs:host2(rank=0.0 *:2049,9587,31311,36369)', 'nfs:host1(rank=1.0 *:2049,9587,31311,36369)',
+             'nfs:host2(rank=2.0 *:2050,9588,31312,36370)', 'nfs:host1(rank=3.0 *:2050,9588,31312,36370)'],
+            ['nfs:host2(rank=0.0 *:2049,9587,31311,36369)', 'nfs:host1(rank=1.0 *:2049,9587,31311,36369)',
+             'nfs:host2(rank=2.0 *:2050,9588,31312,36370)', 'nfs:host1(rank=3.0 *:2050,9588,31312,36370)'],
+            []
+        ),
         # NFS colocation with existing daemons
         NodeAssignmentTest(
             'nfs',
@@ -892,8 +918,15 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
     elif service_type == 'nfs':
         service_id = 'mynfs'
         allow_colo = True
+        # Check if this is a TSM test by looking for TSM port (36369) in expected output
+        if expected and any('36369' in str(e) for e in expected):
+            # TSM enabled test case
+            spec = NFSServiceSpec(service_type=service_type,
+                                  service_id=service_id,
+                                  placement=placement,
+                                  enable_tsm=True)
         # Check if this is the custom ports test by looking at expected ports
-        if expected and any('3049' in str(e) for e in expected):
+        elif expected and any('3049' in str(e) for e in expected):
             # Custom colocation ports test case
             # First daemon uses base ports (port, monitoring_port, cluster_qos_port)
             # colocation_ports defines ADDITIONAL daemons only
@@ -2082,3 +2115,4 @@ def test_related_service_downsize(service_type, placement, hosts, daemons, relat
     assert sorted(got_add) == sorted(expected_add)
 
     assert sorted([d.name() for d in to_remove]) == sorted(expected_remove)
+
