@@ -36,6 +36,9 @@ class BaseSystem(BaseThread):
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 
+    def get_temperatures(self) -> Dict[str, Dict[str, Dict]]:
+        raise NotImplementedError()
+
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 

@@ -113,6 +113,12 @@ class API(Server):
     @cherrypy.expose
     @cherrypy.tools.allow(methods=["GET"])
     @cherrypy.tools.json_out()
+    def temperatures(self) -> Dict[str, Any]:
+        return {"temperatures": self.backend.get_temperatures()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=["GET"])
+    @cherrypy.tools.json_out()
     def firmwares(self) -> Dict[str, Any]:
         return {"firmwares": self.backend.get_firmwares()}
 
