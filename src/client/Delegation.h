@@ -28,6 +28,9 @@ public:
   Fh *get_fh() { return fh; }
   unsigned get_type() { return type; }
   bool is_recalled() { return !recall_time.is_zero(); }
+  bool is_write_delegated() {
+    return type == CEPH_DELEGATION_WR;
+  }
 
   void reinit(unsigned _type, ceph_deleg_cb_t _recall_cb, void *_priv);
   void recall(bool skip_read);
