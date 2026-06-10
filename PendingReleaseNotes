@@ -31,15 +31,72 @@
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
 * RGW: Fixed bucket notification events so the 'x_amz_request_id' in NotificationEvent now matches the 'x_amz_request_id' returned by the corresponding S3 operation.
 
-* DASHBOARD: Introduces a new landing page - "Overview". This revamps UX and adds more information in the landing page - overall cluster health, health checks, resilency panel (showing PG status, active/clean percent), total and used raw capacity, alerts, capacity breakdown by object, file and block and performance charts - throughput, latency and IOPS. This renames the landing page from "Dashboard" to "Overview"
-* DASHBOARD: Removed the older landing page which was deprecated in Quincy.
-  Admins can no longer enable the older, deprecated landing page layout by
-  adjusting FEATURE_TOGGLE_DASHBOARD.
+
+* DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
+  with health status, capacity, performance metrics, and quick-access links. All the
+  previous legacy landing pages are removed.
 * DASHBOARD: RGW Service form updated to take input regarding QAT compression.
-  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
-* Monitoring: Added new Prometheus alerts for certificate management:
+  QAT compression is an optional field which can be set to 'Hardware' or 
+  'Software' by selecting options from provided dropdwon. If 'None' is selected,
+  compression is removed altogether.
+* DASHBOARD: NVMe-oF management workflows have been revamped with DH-HMAC-CHAP
+  in-band authentication support for both unidirectional (host-to-controller) and
+  bidirectional (mutual) authentication, namespace host masking, and an integrated
+  subsystem creation wizard that combines NQN setup, host addition, and
+  authentication configuration in a single guided flow. Subsystem HA is now enabled
+  by default. Gateway group creation and deletion are now supported directly from
+  the dashboard, including per-gateway node management. NVMe-oF performance and
+  overview Grafana dashboards are embedded directly in the Block > NVMe/TCP tab.
+* DASHBOARD: RGW Storage Classes now support Glacier and Local storage class
+  types with full create, list, edit, and delete operations.
+* DASHBOARD: RGW S3 Bucket Notifications are now fully manageable from the dashboard.
+  Notification destinations (topics) support full CRUD operations (create, list, edit, delete)
+  for configuring webhook endpoints, Kafka brokers, and AMQP queues. Bucket notification
+  configurations can be created, listed, edited, and deleted to define which S3 events
+  trigger notifications and which destination to use.
+* DASHBOARD: RGW User Accounts can now be linked to individual RGW users,
+  root account user functionality has been added, and the bucket form
+  differentiates account users from standalone RGW users.
+* DASHBOARD: RGW tiering now supports read-through configuration and bucket
+  tiering options in lifecycle policies.
+* DASHBOARD: RGW multisite setup improvements: the RGW module is now
+  auto-enabled on primary and secondary clusters during multisite automation,
+  FQDN endpoints are supported (not only IPs), and users can re-use existing
+  realm/zonegroup/zone configurations when setting up replication.
+* DASHBOARD: RGW archive zone configuration is now available from the dashboard.
+* DASHBOARD: SMB shares now support QoS rate limiting, including per-share
+  bandwidth limits and cluster-wide rate limiting configuration.
+* DASHBOARD: NFS export management has been enhanced with subvolume group and
+  subvolume selection in the edit export form, CephFS snapshot visibility
+  toggling per export, and IPv6 address support. NFS cluster and export listing
+  is now available.
+* DASHBOARD: CephFS volume creation now supports selecting existing pools for
+  metadata and data instead of always creating new ones.
+* DASHBOARD: Certificate management is now integrated into the dashboard.
+  Service detail views include a Certificate tab showing certificate status, and
+  the service create/edit modal supports certmgr-based certificate provisioning.
+  Certificate health alerts are surfaced in the dashboard and Prometheus.
+* DASHBOARD: The onboarding (cluster creation) wizard has been redesigned with
+  an updated layout and improved visual flow.
+* DASHBOARD: The dashboard UI has been modernized with the Carbon Design
+  System — including forms, modals, notifications, icons, performance charts,
+  and multi-cluster views.
+* DASHBOARD: Logging infrastructure has been migrated from Promtail to Grafana
+  Alloy.
+* DASHBOARD: Prometheus configuration now supports a remote write section for
+  forwarding metrics to external systems.
+* DASHBOARD: `ceph dashboard sso enable oauth2` checks for oauth2-proxy service for SSO enablement.  If the `oauth2-proxy` service goes down, cephadm will automatically disable Dashboard OAuth2 SSO.
+* Monitoring: New Grafana dashboards have been added for Application Overview,
+  CephFS, CephFS Subvolume, NVMe-oF (performance and overview), SMB Overview,
+  and RGW Bucket Notification. The Grafana dashboards naming convention has been
+  standardized. Grafana has been upgraded to version 12.3.1.
+* Monitoring: Added ``NVMeoFHostKeepAliveTimeout`` Prometheus alert that fires
+  when an NVMe-oF host keepalive times out.
+* Monitoring: Certificate management health checks now generate Prometheus
+  alerts and dashboard warnings for certificate expiration and errors.
   - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
   - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
+
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 * RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
   to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
