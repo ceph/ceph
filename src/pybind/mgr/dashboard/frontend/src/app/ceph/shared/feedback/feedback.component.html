@@ -17,13 +17,13 @@
       class="modal-wrapper"
     >
       @if (!isFeedbackEnabled) {
-      <cd-alert-panel type="error"
+      <cd-alert-panel type="info"
                       spacingClass="mb-3"
-                      actionName="Enable"
+                      actionName="Enable feedback"
                       class="align-items-center"
                       (action)="enableFeedbackModule()"
                       i18n-actionName>
-        In order to report an issue, Feedback module must be enabled.
+        Enable the feedback service to report issues.
       </cd-alert-panel>
       }
       <!-- api_key -->
@@ -31,14 +31,13 @@
       <div class="form-item">
         <cds-password-label
           labelInputID="api_key"
-          label="Ceph Tracker API Key"
-          cdRequiredField="Ceph Tracker API Key"
           [invalid]="!feedbackForm.controls.api_key.valid && feedbackForm.controls.api_key.dirty"
           [invalidText]="apiKeyError"
           [helperText]="apiKeyHelperTpl"
           [disabled]="!isFeedbackEnabled"
           i18n
         >
+          API key
           <input
             cdsPassword
             id="api_key"
@@ -50,18 +49,19 @@
         <ng-template #apiKeyError>
           @if (feedbackForm.showError('api_key', formDir, 'required')) {
           <span class="invalid-feedback"
-                i18n> Ceph Tracker API key is required. </span>
+                i18n>API key is required.</span>
           } @if (feedbackForm.showError('api_key', formDir, 'invalidApiKey')) {
           <span class="invalid-feedback"
-                i18n> Ceph Tracker API key is invalid. </span>
+                i18n>API key is invalid.</span>
           }
         </ng-template>
 
         <ng-template #apiKeyHelperTpl>
-          You can obtain your API key from
-          <a href="https://tracker.ceph.com/my/account"
-             target="_blank">https://tracker.ceph.com/my/account
-          </a>
+          <ng-container i18n>
+            Enter your Ceph Tracker API key. You can find your API key in your
+            <a href="https://tracker.ceph.com/my/account"
+               target="_blank">Ceph Tracker account</a>.
+          </ng-container>
         </ng-template>
       </div>
       }
@@ -72,12 +72,10 @@
           label="Project name"
           id="project"
           formControlName="project"
-          cdRequiredField="Project name"
           [invalid]="!feedbackForm.controls.project.valid && feedbackForm.controls.project.dirty"
           [invalidText]="projectError"
           i18n
         >
-          <option value="">--- Select a project ---</option>
           @for (project of projects; track project) {
           <option [value]="project">{{ project }}</option>
           }
@@ -90,25 +88,24 @@
         </ng-template>
       </div>
 
-      <!-- tracker -->
+      <!-- issue type -->
       <div class="form-item cds-select-label">
         <cds-select
-          label="Tracker"
+          label="Issue type"
           id="tracker"
           formControlName="tracker"
-          cdRequiredField="Tracker"
           [invalid]="!feedbackForm.controls.tracker.valid && feedbackForm.controls.tracker.dirty"
           [invalidText]="trackerError"
           i18n
-        > Tracker
-          @for (trackerName of tracker; track trackerName) {
-          <option [value]="trackerName">{{ trackerName }}</option>
+        >
+          @for (issueType of issueTypes; track issueType.value) {
+          <option [value]="issueType.value">{{ issueType.label }}</option>
           }
         </cds-select>
 
         <ng-template #trackerError>
           @if (feedbackForm.showError('tracker', formDir, 'required')) {
-          <span i18n>Tracker name is required.</span>
+          <span i18n>Issue type is required.</span>
           }
         </ng-template>
       </div>
@@ -116,25 +113,25 @@
       <!-- subject -->
       <div class="form-item">
         <cds-text-label
-          cdRequiredField="Subject"
           [invalid]="!feedbackForm.controls.subject.valid && feedbackForm.controls.subject.dirty"
           [invalidText]="subjectError"
           [disabled]="!isFeedbackEnabled"
           i18n
         >
-          Subject
+          Issue title
           <input
             cdsText
             id="subject"
             type="text"
             formControlName="subject"
-            placeholder="Add issue title"
+            placeholder="Enter a short summary of the issue"
+            i18n-placeholder
           />
         </cds-text-label>
 
         <ng-template #subjectError>
           @if (feedbackForm.showError('subject', formDir, 'required')) {
-          <span i18n>Subject is required.</span>
+          <span i18n>Issue title is required.</span>
           }
         </ng-template>
       </div>
@@ -142,7 +139,6 @@
       <!-- description -->
       <div class="form-item">
         <cds-text-label
-          cdRequiredField="Description"
           [invalid]="!feedbackForm.controls.description.valid && feedbackForm.controls.description.dirty"
           [invalidText]="descriptionError"
           [disabled]="!isFeedbackEnabled"
@@ -154,7 +150,8 @@
             id="description"
             type="text"
             formControlName="description"
-            placeholder="Explain your issue"
+            placeholder="Describe the issue and include steps to reproduce it, if applicable"
+            i18n-placeholder
           />
         </cds-text-label>
 
