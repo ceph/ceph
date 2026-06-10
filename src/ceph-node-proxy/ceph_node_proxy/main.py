@@ -104,6 +104,7 @@ class NodeProxyManager:
             raise SystemExit(1)
         try:
             vendor = self.config.get("system", {}).get("vendor", "generic")
+            self.log.info("Using Redfish vendor: %s", vendor)
             system_cls = get_system_class(vendor)
             self.system = system_cls(
                 host=oob_details["host"],

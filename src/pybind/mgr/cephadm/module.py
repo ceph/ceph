@@ -401,6 +401,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Whether the hardware monitoring daemon be deployed on every host?'
         ),
         Option(
+            'hw_monitoring_vendor',
+            type='str',
+            default='generic',
+            desc='Redfish vendor implementation for node-proxy (generic, dell, atollon).'
+        ),
+        Option(
             'max_osd_draining_count',
             type='int',
             default=10,
@@ -603,6 +609,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
+            self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
