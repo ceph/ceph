@@ -43,6 +43,19 @@ def handle_type_error(method: FuncT) -> FuncT:
     return cast(FuncT, inner)
 
 
+class YamlLiteralString(str):
+    """
+    Class used as marker for yaml representer to properly format
+    multi-line strings for yaml export
+    """
+    @staticmethod
+    def represent_as_literal(dumper: 'yaml.SafeDumper', data: str) -> Any:
+        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+
+
+yaml.add_representer(YamlLiteralString, YamlLiteralString.represent_as_literal)
+
+
 class HostPlacementSpec(NamedTuple):
     hostname: str
     network: str
@@ -1119,7 +1132,15 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
+        json_data = data.to_json()
+        spec = json_data.get('spec', {})
+
+        # Marking multi-line strings with the YamlLiteralString class
+        for key, value in spec.items():
+            if isinstance(value, str) and '\n' in value:
+                spec[key] = YamlLiteralString(value)
+
+        return dumper.represent_dict(cast(Mapping, json_data.items()))
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
