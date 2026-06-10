@@ -25,7 +25,7 @@ from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
 from .dir_map.update import UpdateDirMapRequest, UpdateInstanceRequest
 from .dir_map.policy import Policy
-from .dir_map.state_transition import ActionType
+from .dir_map.state_transition import ActionType, State
 from .checkpoint import (
     Checkpoint,
     checkpoint_from_snap,
@@ -849,6 +849,37 @@ class FSSnapshotMirror:
     def _client_snapdir(self):
         return self.mgr.get_foreign_ceph_option('client', 'client_snapdir')
 
+    def _send_acquire_notification(self, fs_name, dir_path):
+        """Send acquire notification directly to daemon for a directory."""
+        try:
+            fspolicy = self.pool_policy.get(fs_name, None)
+            if not fspolicy:
+                log.warning(f'filesystem {fs_name} is not mirrored')
+                return
+
+            lookup_info = fspolicy.policy.lookup(dir_path)
+            if not lookup_info:
+                log.warning(f'directory {dir_path} not found in policy map')
+                return
+
+            if lookup_info.get('state') != State.ASSOCIATED:
+                log.debug(f'directory {dir_path} is not associated yet '
+                          f'(state={lookup_info.get("state")}), skipping acquire notification')
+                return
+
+            instance_id = lookup_info['instance_id']
+            if not instance_id:
+                log.warning(f'directory {dir_path} not mapped to any instance yet')
+                return
+
+            acquire_msg = json.dumps({'dir_path': dir_path, 'mode': 'acquire'})
+
+            log.debug(f'sending acquire notification for {dir_path} to instance {instance_id}')
+            fspolicy.op_tracker.start_async_op()
+            fspolicy.notifier.notify(dir_path, (instance_id, acquire_msg), fspolicy.handle_peer_ack)
+        except Exception as e:
+            log.error(f'failed to send acquire notification for {dir_path}: {e}')
+
     def checkpoint_add(self, fs_name, dir_path, snap_name):
         """Add a checkpoint for a snapshot via snapshot metadata on the primary filesystem."""
         try:
@@ -858,6 +889,9 @@ class FSSnapshotMirror:
             with open_filesystem(self.local_fs, fs_name) as fsh:
                 info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
                 self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            # Send acquire notification to trigger checkpoint state initialization
+            self._send_acquire_notification(fs_name, dir_path)
 
             result = {
                 'status': 'success',
@@ -939,6 +973,9 @@ class FSSnapshotMirror:
             with open_filesystem(self.local_fs, fs_name) as fsh:
                 snap_name, info = self.checkpoint.get_latest_snap(fsh, dir_path)
                 self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            # Send acquire notification to trigger checkpoint state initialization
+            self._send_acquire_notification(fs_name, dir_path)
 
             result = {
                 'status': 'success',
