@@ -47,6 +47,7 @@ enum {
   l_cephfs_mirror_peer_replayer_last_synced_end,
   l_cephfs_mirror_peer_replayer_last_synced_duration,
   l_cephfs_mirror_peer_replayer_last_synced_bytes,
+  l_cephfs_mirror_peer_replayer_add_directory,
   l_cephfs_mirror_peer_replayer_last,
 };
 
@@ -289,6 +290,8 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
 	       "last_synced_duration", "Last Synced Duration", "lsdn", prio);
   plb.add_u64_counter(l_cephfs_mirror_peer_replayer_last_synced_bytes,
 		      "last_synced_bytes", "Last Synced Bytes", "lsbt", prio);
+  plb.add_u64_counter(l_cephfs_mirror_peer_replayer_add_directory,
+		      "add_directory", "Add Directory Calls", "adir", prio);
   m_perf_counters = plb.create_perf_counters();
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
 }
@@ -724,10 +727,15 @@ void PeerReplayer::shutdown() {
 
 void PeerReplayer::add_directory(string_view dir_root) {
   dout(20) << ": dir_root=" << dir_root << dendl;
+  if (m_perf_counters) {
+    m_perf_counters->inc(l_cephfs_mirror_peer_replayer_add_directory);
+  }
   auto _dir_root = std::string(dir_root);
 
   {
     std::scoped_lock locker(m_lock);
+    m_checkpoint_init_pending.insert(_dir_root);
+
     if (std::find(m_directories.begin(), m_directories.end(), _dir_root) !=
         m_directories.end()) {
       dout(10) << ": dir_root=" << _dir_root << " already in replay list" << dendl;
@@ -766,6 +774,7 @@ void PeerReplayer::remove_directory(string_view dir_root, bool purging) {
     if (it1 == m_registered.end()) {
       if (purging) {
         remove_persisted_dir_sync_stat(_dir_root);
+        m_checkpoint_init_pending.erase(_dir_root);
       }
       remove_directory_perf_counters(_dir_root);
       m_snap_sync_stats.erase(_dir_root);
@@ -1419,6 +1428,82 @@ void PeerReplayer::checkpoint_sync_complete(const std::string &dir_root,
 
   dout(10) << ": marked checkpoint completed for snap_id=" << synced_snap_id
            << " snap_name=" << snap_name << dendl;
+}
+
+void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
+  dout(10) << ": dir_root=" << dir_root << dendl;
+
+  // Build local snapshot map
+  std::map<uint64_t, std::string> local_snap_map;
+  int r = build_snap_map(dir_root, &local_snap_map, false);
+  if (r < 0) {
+    derr << ": failed to build local snap map for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (local_snap_map.empty()) {
+    dout(10) << ": no local snapshots for dir_root=" << dir_root << dendl;
+    return;
+  }
+
+  // Build remote snapshot map
+  std::map<uint64_t, std::string> remote_snap_map;
+  r = build_snap_map(dir_root, &remote_snap_map, true);
+  if (r < 0) {
+    derr << ": failed to build remote snap map for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (remote_snap_map.empty()) {
+    dout(10) << ": no remote snapshots for dir_root=" << dir_root << dendl;
+    return;
+  }
+
+  // Get the highest snap_id from remote
+  uint64_t remote_highest_snap_id = remote_snap_map.rbegin()->first;
+
+  dout(10) << ": remote_highest_snap_id=" << remote_highest_snap_id << dendl;
+
+  // Iterate through local snapshots and mark checkpoints as COMPLETE
+  // if their snap_id is <= remote_highest_snap_id
+  for (const auto &[snap_id, snap_name] : local_snap_map) {
+    // Read snapshot metadata
+    auto snap_path = snapshot_path(m_cct, dir_root, snap_name);
+    std::map<std::string, std::string> snap_metadata;
+    r = read_snap_metadata(m_local_mount, snap_path, &snap_metadata);
+    if (r < 0) {
+      derr << ": failed to read snap metadata for snap_id=" << snap_id
+           << " snap_name=" << snap_name << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    if (!has_checkpoint(snap_metadata)) {
+      continue;
+    }
+
+    CheckpointInfo info = read_checkpoint_metadata(snap_id, snap_name, snap_metadata);
+    // Update checkpoints that are in CREATED or FAILED status and have snap_id <= remote_highest_snap_id
+    if ((info.status == CheckpointStatus::CREATED || info.status == CheckpointStatus::FAILED)
+        && snap_id <= remote_highest_snap_id) {
+      dout(10) << ": marking checkpoint as COMPLETE for snap_id=" << snap_id
+               << " snap_name=" << snap_name << " (previous status: "
+               << checkpoint_status_to_string(info.status) << ")" << dendl;
+
+      info.status = CheckpointStatus::COMPLETE;
+      info.updated_at = ceph_clock_now();
+      info.error_msg.clear(); // Clear any previous error message
+
+      r = write_checkpoint_metadata(m_cct, m_local_mount, dir_root, snap_name, snap_metadata, info);
+      if (r < 0) {
+        derr << ": failed to update checkpoint status for snap_id=" << snap_id
+             << " snap_name=" << snap_name << " dir_root=" << dir_root
+             << ": " << cpp_strerror(r) << dendl;
+      } else {
+        dout(10) << ": successfully marked checkpoint as COMPLETE for snap_id=" << snap_id
+                 << " snap_name=" << snap_name << dendl;
+      }
+    }
+  }
 }
 
 void PeerReplayer::checkpoint_sync_failed(const std::string &dir_root,
@@ -3232,6 +3317,10 @@ void PeerReplayer::run_tick() {
       refresh_directory_current_sync_perf_counters(kv.first);
     }
 
+    std::vector<std::string> checkpoint_dirs(
+      m_checkpoint_init_pending.begin(), m_checkpoint_init_pending.end());
+    m_checkpoint_init_pending.clear();
+
     // persist sync stats to omap for registered directories
     std::vector<std::string> dirs;
     dirs.reserve(m_registered.size());
@@ -3241,6 +3330,9 @@ void PeerReplayer::run_tick() {
     locker.unlock();
     for (const auto &dir_root : dirs) {
       persist_dir_sync_stat(dir_root);
+    }
+    for (const auto &dir_root : checkpoint_dirs) {
+      initialize_checkpoints(dir_root);
     }
     locker.lock();
   }
