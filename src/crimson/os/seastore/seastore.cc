@@ -1377,7 +1377,10 @@ SeaStore::Shard::get_attrs(
   assert(store_active);
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
-
+  auto _ = seastar::defer([this] noexcept {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
   return repeat_with_onode<attrs_t>(
     ch,
     oid,
@@ -1391,10 +1394,37 @@ SeaStore::Shard::get_attrs(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
+  );
+}
+
+SeaStore::Shard::get_attrs_ertr::future<
+    std::pair<SeaStore::Shard::attrs_t, std::shared_ptr<void>>>
+SeaStore::Shard::get_attrs_with_onode(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  uint32_t op_flags)
+{
+  assert(store_active);
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+  std::shared_ptr<void> onode_handle;
+  auto attrs = co_await repeat_with_onode<attrs_t>(
+    ch, oid, Transaction::src_t::READ, "get_attrs",
+    op_type_t::GET_ATTRS, op_flags,
+    [this, &onode_handle](auto& t, auto& onode) {
+      onode_handle = std::static_pointer_cast<void>(
+        std::make_shared<OnodeRef>(&onode));
+      return _get_attrs(t, onode);
+    }
+  ).handle_error(
+    crimson::ct_error::input_output_error::assert_failure{
+      "EIO when getting attrs"},
+    crimson::ct_error::pass_further_all{}
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
+  co_return std::make_pair(std::move(attrs), std::move(onode_handle));
 }
 
 seastar::future<struct stat> SeaStore::Shard::_stat(
