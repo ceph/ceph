@@ -185,12 +185,6 @@ public:
       return 256;
     }
 
-    uint64_t get_max_object_size() const override final {
-      return std::min<uint64_t>(
-        crimson::common::local_conf()->osd_max_object_size,
-        max_object_size);
-    }
-
     omap_root_t select_log_omap_root(Onode& onode) const;
 
   // only exposed to SeaStore
@@ -593,6 +587,12 @@ public:
     return shard_stores.local().mshard_stores[0]->get_fsid();
   }
 
+  uint64_t get_max_object_size() const override final {
+    return std::min<uint64_t>(
+      crimson::common::local_conf()->osd_max_object_size,
+      crimson::common::get_conf<uint64_t>("seastore_default_max_object_size"));
+  }
+
   seastar::future<> write_meta(const std::string& key, const std::string& value) override;
 
   seastar::future<std::tuple<int, std::string>> read_meta(const std::string& key) override;
@@ -624,6 +624,7 @@ public:
     assert(shard_store.get_status() == true);
     return shard_store;
   }
+
   static col_obj_ranges_t
   get_objs_range(CollectionRef ch, unsigned bits);
 
