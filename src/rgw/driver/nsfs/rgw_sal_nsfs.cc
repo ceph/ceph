@@ -928,7 +928,45 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
 
-  /* Remove xattrs that are on disk but no longer in the attrs map */
+#if 0
+  /* disabled pending heap corruption investigation */
+  if (fs_strategy) {
+    nsfs::xattr_map_t old_raw;
+    fs_strategy->get_xattrs(dpp, fd, old_raw);
+
+    nsfs::xattr_map_t to_write;
+    if (extra_attrs) {
+      for (auto& [key, bl] : *extra_attrs) {
+        to_write.emplace(make_xattr_name(key), bl.to_str());
+      }
+    }
+    for (auto& [key, bl] : attrs) {
+      to_write.emplace(make_xattr_name(key), bl.to_str());
+    }
+
+    std::vector<std::string> to_remove;
+    for (auto& [disk_name, _] : old_raw) {
+      if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
+                            NSFS_XATTR_PREFIX) != 0) {
+        continue;
+      }
+      if (to_write.find(disk_name) == to_write.end()) {
+        to_remove.push_back(disk_name);
+      }
+    }
+
+    if (!to_remove.empty()) {
+      ret = fs_strategy->remove_xattrs(dpp, fd, to_remove);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    return fs_strategy->set_xattrs(dpp, fd, to_write);
+  }
+#endif
+
+  /* per-attr syscalls */
   Attrs old_attrs;
   ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
   if (ret >= 0) {
@@ -2018,8 +2056,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
   bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
+  bool gpfs_batch = g_conf().get_val<bool>("rgw_nsfs_gpfs_batch_xattrs");
   fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, gpfs_clone,
-                                               gpfs_lwe);
+                                               gpfs_lwe, gpfs_batch);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }

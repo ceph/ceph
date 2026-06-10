@@ -4479,6 +4479,20 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_gpfs_batch_xattrs
+  type: bool
+  level: advanced
+  desc: Use gpfs_fcntl for batch xattr operations (experimental)
+  long_desc: >
+    When enabled, xattr read/write operations use gpfs_fcntl to pack
+    multiple xattr operations into a single kernel call instead of
+    individual fgetxattr/fsetxattr syscalls.  Reduces syscall count
+    from O(N) to O(1) per object for metadata-heavy operations like
+    PUT, GET, and listing.  Falls back to POSIX xattr calls when
+    disabled or when gpfs_fcntl is unavailable.
+  default: false
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced

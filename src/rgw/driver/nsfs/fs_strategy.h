@@ -18,12 +18,17 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
+
+#include <boost/container/flat_map.hpp>
 
 #include "gpfs/gpfs.h"
 
 class DoutPrefixProvider;
 
 namespace rgw { namespace sal { namespace nsfs {
+
+using xattr_map_t = boost::container::flat_map<std::string, std::string>;
 
 enum class SafeResult {
   OK = 0,
@@ -100,6 +105,23 @@ public:
   virtual std::unique_ptr<VersionLockHandle> version_lock(
     const DoutPrefixProvider* dpp, int lock_fd) = 0;
 
+  /* batch xattr operations.
+   *
+   * POSIX: loops over flistxattr/fgetxattr/fsetxattr/fremovexattr.
+   * GPFS: packs multiple gpfsGetSetXAttr_t structs into a single
+   *   gpfs_fcntl call, reducing N+1 syscalls to 1.
+   *
+   * names in xattr_map_t are the full on-disk names (e.g.
+   * "user.rgw.etag"); the caller handles any prefix mapping. */
+  virtual int get_xattrs(const DoutPrefixProvider* dpp, int fd,
+                         xattr_map_t& attrs) = 0;
+
+  virtual int set_xattrs(const DoutPrefixProvider* dpp, int fd,
+                         const xattr_map_t& attrs) = 0;
+
+  virtual int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                            const std::vector<std::string>& names) = 0;
+
   virtual const char* name() const = 0;
 };
 
@@ -131,6 +153,13 @@ public:
   std::unique_ptr<VersionLockHandle> version_lock(
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
+  int get_xattrs(const DoutPrefixProvider* dpp, int fd,
+                 xattr_map_t& attrs) override;
+  int set_xattrs(const DoutPrefixProvider* dpp, int fd,
+                 const xattr_map_t& attrs) override;
+  int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                    const std::vector<std::string>& names) override;
+
   const char* name() const override { return "posix"; }
 };
 
@@ -143,7 +172,10 @@ class GPFSStrategy : public FSStrategy {
   decltype(&gpfs_clone_snap) fn_clone_snap;
   decltype(&gpfs_clone_copy) fn_clone_copy;
   decltype(&gpfs_clone_unsnap) fn_clone_unsnap;
+  using gpfs_fcntl_t = int(*)(gpfs_file_t, void*);
+  gpfs_fcntl_t fn_fcntl;
   bool clone_enabled;
+  bool batch_xattrs_enabled;
 
   /* LWE cluster-wide locking via GPFS token manager.
    * dm_fd_to_handle/dm_handle_free come from libdmapi.so;
@@ -176,7 +208,8 @@ class GPFSStrategy : public FSStrategy {
                decltype(&gpfs_clone_snap) cs,
                decltype(&gpfs_clone_copy) cc,
                decltype(&gpfs_clone_unsnap) cu,
-               bool clone_en,
+               gpfs_fcntl_t fc,
+               bool clone_en, bool batch_en,
                dm_fd_to_handle_t dm_fd, dm_handle_free_t dm_free,
                lwe_create_session_t lcs, lwe_destroy_session_t lds,
                lwe_request_right_t lrr, lwe_release_right_t lrl,
@@ -184,7 +217,8 @@ class GPFSStrategy : public FSStrategy {
     : dl_handle(dl), dmapi_handle(dmapi_dl),
       fn_linkat(la), fn_linkatif(lai), fn_unlinkat(ua),
       fn_clone_snap(cs), fn_clone_copy(cc), fn_clone_unsnap(cu),
-      clone_enabled(clone_en),
+      fn_fcntl(fc), clone_enabled(clone_en),
+      batch_xattrs_enabled(batch_en),
       fn_dm_fd_to_handle(dm_fd), fn_dm_handle_free(dm_free),
       fn_lwe_create_session(lcs), fn_lwe_destroy_session(lds),
       fn_lwe_request_right(lrr), fn_lwe_release_right(lrl),
@@ -195,7 +229,7 @@ public:
 
   static std::unique_ptr<GPFSStrategy> try_create(
     const DoutPrefixProvider* dpp, const std::string& dl_path,
-    bool clone_enabled, bool lwe_enabled);
+    bool clone_enabled, bool lwe_enabled, bool batch_xattrs);
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
@@ -223,6 +257,13 @@ public:
   std::unique_ptr<VersionLockHandle> version_lock(
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
+  int get_xattrs(const DoutPrefixProvider* dpp, int fd,
+                 xattr_map_t& attrs) override;
+  int set_xattrs(const DoutPrefixProvider* dpp, int fd,
+                 const xattr_map_t& attrs) override;
+  int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
+                    const std::vector<std::string>& names) override;
+
   const char* name() const override { return "gpfs"; }
 
   bool has_clone() const {
@@ -232,6 +273,10 @@ public:
   bool has_lwe() const {
     return lwe_enabled && fn_dm_fd_to_handle && fn_dm_handle_free &&
            fn_lwe_request_right && fn_lwe_release_right;
+  }
+
+  bool has_batch_xattrs() const {
+    return batch_xattrs_enabled && fn_fcntl;
   }
 };
 
