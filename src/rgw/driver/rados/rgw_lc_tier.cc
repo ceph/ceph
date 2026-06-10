@@ -823,9 +823,10 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
 
   attrs["x-amz-meta-rgwx-source-mtime"] = buf;
   attrs["x-amz-meta-rgwx-source-etag"] = obj_properties.etag;
-  attrs["x-amz-meta-rgwx-source-key"] = rest_obj.key.name;
+  // url-encoded; decode the fields for restore if required
+  attrs["x-amz-meta-rgwx-source-key"] = url_encode(rest_obj.key.name);
   if (!rest_obj.key.instance.empty()) {
-    attrs["x-amz-meta-rgwx-source-version-id"] = rest_obj.key.instance;
+    attrs["x-amz-meta-rgwx-source-version-id"] = url_encode(rest_obj.key.instance);
   }
   for (const auto& a : attrs) {
     ldpp_dout(dpp, 30) << "init_send_attrs attr[" << a.first << "] = " << a.second <<dendl;
