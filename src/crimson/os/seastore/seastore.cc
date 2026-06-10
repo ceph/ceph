@@ -1836,14 +1836,39 @@ SeaStore::Shard::_do_transaction_step(
   }
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
-    if (!create) {
-      DEBUGT("op {}, get oid={} ...",
-             *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_onode(*ctx.transaction, oid);
+    auto& slot = ctx.ext_transaction.onode_cache;
+
+    // Fast path: cache hit — assign directly and skip the fltree lookup below.
+    if (slot && slot->oid == oid && slot->onode) {
+      auto sp = std::static_pointer_cast<OnodeRef>(slot->onode);
+      if ((*sp)->is_reusable()) {
+        DEBUGT("[onode_cache] hit oid={}", *ctx.transaction, oid);
+        onodes[op->oid] = *sp;
+      } else {
+        DEBUGT("[onode_cache] stale (cursor invalidated) oid={}", *ctx.transaction, oid);
+      }
+    } else if (slot && slot->oid == oid && !slot->onode) {
+      DEBUGT("[onode_cache] miss (slot empty) oid={}", *ctx.transaction, oid);
+    } else if (slot && slot->oid != oid) {
+      DEBUGT("[onode_cache] miss (slot oid mismatch slot={} op={})",
+             *ctx.transaction, slot->oid, oid);
     } else {
-      DEBUGT("op {}, get_or_create oid={} ...",
-             *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      DEBUGT("[onode_cache] miss (no slot) oid={}", *ctx.transaction, oid);
+    }
+
+    if (!onodes[op->oid]) {
+      if (!create) {
+        DEBUGT("op {}, get oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        fut = onode_manager->get_onode(*ctx.transaction, oid);
+      } else {
+        DEBUGT("op {}, get_or_create oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      }
+      fut = std::move(fut).si_then([&ctx](auto onode) {
+        return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
+      });
     }
   }
   return fut.si_then([&, op, this, FNAME](auto get_onode)
