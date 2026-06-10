@@ -157,13 +157,17 @@ PGBackend::load_metadata_iertr::future
 PGBackend::load_metadata(const hobject_t& oid)
 {
   return interruptor::make_interruptible(
-    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+    crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::get_attrs_with_onode>(
     store,
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, get_shard()}, 0)).safe_then_interruptible(
-      [oid, this](auto &&attrs) -> load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> {
+      [oid, this](auto &&attrs_and_onode)
+          -> load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> {
+        auto& [attrs, onode] = attrs_and_onode;
         if (auto maybe_decoded = decode_metadata2(oid, std::move(attrs));
             maybe_decoded.has_value()) {
+          (*maybe_decoded)->cached_onode = std::move(onode);
           return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
             std::move(*maybe_decoded));
         } else {
