@@ -91,7 +91,6 @@ namespace TOPNSPC::crypto {
         SHA512 () : OpenSSLDigest(EVP_sha512()) { }
     };
 
-
 # if OPENSSL_VERSION_NUMBER < 0x10100000L
   class HMAC {
   private:

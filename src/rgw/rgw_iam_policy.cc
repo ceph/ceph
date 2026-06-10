@@ -94,6 +94,8 @@ static const actpair actpairs[] =
  { "s3:GetPublicAccessBlock", s3GetPublicAccessBlock },
  { "s3:GetObjectAcl", s3GetObjectAcl },
  { "s3:GetObject", s3GetObject },
+ { "s3:GetObjectAttributes", s3GetObjectAttributes },
+ { "s3:GetObjectVersionAttributes", s3GetObjectVersionAttributes },
  { "s3:GetObjectTorrent", s3GetObjectTorrent },
  { "s3:GetObjectVersionAcl", s3GetObjectVersionAcl },
  { "s3:GetObjectVersion", s3GetObjectVersion },
@@ -1340,6 +1342,7 @@ const char* action_bit_string(uint64_t action) {
 
   case s3ListBucketVersions:
     return "s3:ListBucketVersions";
+
   case s3ListAllMyBuckets:
     return "s3:ListAllMyBuckets";
 
@@ -1480,6 +1483,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3BypassGovernanceRetention:
     return "s3:BypassGovernanceRetention";
+
+  case s3GetObjectAttributes:
+    return "s3:GetObjectAttributes";
+
+  case s3GetObjectVersionAttributes:
+    return "s3:GetObjectVersionAttributes";
 
   case s3DescribeJob:
     return "s3:DescribeJob";
