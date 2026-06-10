@@ -266,15 +266,6 @@ ECTransaction::WritePlanObj::WritePlanObj(
    * read the existing data on the partial stripe.
    */
   if (op.truncate && op.truncate->first < orig_size) {
-    if (to_read) {
-      ECUtil::shard_extent_set_t truncate_mask(sinfo.get_k_plus_m());
-      sinfo.ro_range_to_shard_extent_set(0, op.truncate->first, truncate_mask);
-      
-      to_read->intersection_of(truncate_mask);
-      if (to_read->empty()) {
-          to_read = std::nullopt;
-      }
-    }
     ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
     uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
     uint64_t next_align = ECUtil::align_next(op.truncate->first);
