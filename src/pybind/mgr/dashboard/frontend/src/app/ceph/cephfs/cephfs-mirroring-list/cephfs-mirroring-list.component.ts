@@ -3,9 +3,14 @@ import { Subject, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
 
 @Component({
@@ -18,7 +23,15 @@ export class CephfsMirroringListComponent implements OnInit {
   @ViewChild('table', { static: true }) table: TableComponent;
 
   columns: CdTableColumn[];
+  tableActions: CdTableAction[];
   selection = new CdTableSelection();
+  permission: Permission;
+  isPrepareModalOpen = false;
+  isAddPathOpen = false;
+  addPathFsName = '';
+  addPathFsId = 0;
+  addPathDestCluster = '';
+  addPathDestFs = '';
 
   private subject$ = new Subject<void>();
 
@@ -29,7 +42,13 @@ export class CephfsMirroringListComponent implements OnInit {
     map((daemons) => this.buildRows(daemons))
   );
 
-  constructor(private cephfsService: CephfsService) {}
+  constructor(
+    private cephfsService: CephfsService,
+    private authStorageService: AuthStorageService,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.permission = this.authStorageService.getPermissions().cephfs;
+  }
 
   ngOnInit() {
     this.columns = [
@@ -40,14 +59,44 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
       { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
     ];
+    this.tableActions = [
+      {
+        name: $localize`Add mirror path`,
+        permission: 'update',
+        icon: Icons.add,
+        click: () => this.openAddPath(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+      }
+    ];
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 
   loadDaemonStatus() {
     this.subject$.next();
   }
 
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
+
+  openAddPath() {
+    const selected = this.selection.first();
+    if (selected) {
+      this.addPathFsName = selected.local_fs_name;
+      this.addPathFsId = selected.filesystem_id ?? 0;
+      this.addPathDestCluster = selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
+      this.addPathDestFs = selected.fs_name !== '-' ? selected.fs_name : '';
+      this.isAddPathOpen = true;
+    }
+  }
+
+  onPathsAdded(_paths: string[]) {
+    this.isAddPathOpen = false;
+    this.loadDaemonStatus();
+  }
+
+  closeAddPathTearsheet() {
+    this.isAddPathOpen = false;
   }
 
   private buildRows(daemons: Daemon[]): MirroringRow[] {
@@ -78,6 +127,7 @@ export class CephfsMirroringListComponent implements OnInit {
       fs_name: peer.remote?.fs_name ?? '-',
       client_name: peer.remote?.client_name ?? '-',
       directory_count: fs.directory_count ?? 0,
+      filesystem_id: fs.filesystem_id,
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };
   }
@@ -89,6 +139,7 @@ export class CephfsMirroringListComponent implements OnInit {
       fs_name: fs.name,
       client_name: '-',
       directory_count: fs.directory_count ?? 0,
+      filesystem_id: fs.filesystem_id,
       peerId: '-',
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };

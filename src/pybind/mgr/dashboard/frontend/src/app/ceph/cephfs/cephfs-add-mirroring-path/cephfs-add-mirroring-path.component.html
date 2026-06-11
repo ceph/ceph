@@ -1,0 +1,21 @@
+<ng-template #descTpl>Filesystem: <strong>{{fsName}}</strong></ng-template>
+
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [label]="label"
+  [descriptionTemplate]="descTpl"
+  [isSubmitLoading]="isSubmitLoading"
+  progressPosition="top"
+  submitButtonLabel="Add paths"
+  i18n-submitButtonLabel
+  (submitRequested)="onSubmit($event)"
+  (closeRequested)="onClose()">
+  <cd-tearsheet-step>
+    <cd-mirroring-paths-step
+      #tearsheetStep
+      [fsName]="fsName"
+      [fsId]="fsId">
+    </cd-mirroring-paths-step>
+  </cd-tearsheet-step>
+</cd-tearsheet>

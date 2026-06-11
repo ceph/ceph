@@ -1,0 +1,12 @@
+.path-chevron {
+  transition: transform 150ms ease;
+  align-self: flex-start;
+
+  &--expanded {
+    transform: rotate(180deg);
+  }
+}
+
+.path-separator {
+  align-self: center;
+}

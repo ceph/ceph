@@ -48,6 +48,7 @@ export interface MirroringRow {
   local_fs_name?: string;
   client_name: string;
   directory_count: number;
+  filesystem_id?: number;
   peerId?: string;
   id?: string;
 }

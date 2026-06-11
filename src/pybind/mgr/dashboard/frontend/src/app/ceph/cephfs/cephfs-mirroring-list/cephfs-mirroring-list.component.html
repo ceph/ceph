@@ -23,7 +23,7 @@
         </cds-clickable-tile>
       </div>
       <div class="jump-in-card">
-        <cds-clickable-tile>
+        <cds-clickable-tile (click)="isPrepareModalOpen = true">
           <div class="tile-content">
             <p class="cds--type-heading-compact-01 cds-mb-3"
                i18n>Prepare to receive</p>
@@ -53,7 +53,27 @@
     [columns]="columns"
     columnMode="flex"
     selectionType="single"
+    emptyStateTitle="No mirrored filesystems"
+    i18n-emptyStateTitle
+    emptyStateMessage="Set up mirroring to protect critical workloads by replicating data to a secondary cluster."
+    i18n-emptyStateMessage
     (updateSelection)="updateSelection($event)"
     (fetchData)="loadDaemonStatus()">
+    <div class="table-actions">
+      <cd-table-actions
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </cd-table>
 </section>
+
+@if (isAddPathOpen) {
+  <cd-cephfs-add-mirroring-path
+    [fsName]="addPathFsName"
+    [fsId]="addPathFsId"
+    (pathsAdded)="onPathsAdded($event)"
+    (cancelled)="closeAddPathTearsheet()">
+  </cd-cephfs-add-mirroring-path>
+}
