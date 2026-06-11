@@ -53,10 +53,7 @@ public:
     uint64_t range_begin,
     uint64_t range_end,
     size_t max_count,
-    free_extent_vector_t* out) override
-  {
-    ceph_abort_msg("BitmapAllocator::get_free_extents not implemented");
-  }
+    free_extent_vector_t* out) override;
   double get_fragmentation() override
   {
     return get_fragmentation_internal();
