@@ -928,8 +928,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
 
-#if 0
-  /* disabled pending heap corruption investigation */
   if (fs_strategy) {
     nsfs::xattr_map_t old_raw;
     fs_strategy->get_xattrs(dpp, fd, old_raw);
@@ -937,11 +935,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     nsfs::xattr_map_t to_write;
     if (extra_attrs) {
       for (auto& [key, bl] : *extra_attrs) {
-        to_write.emplace(make_xattr_name(key), bl.to_str());
+        to_write.try_emplace(make_xattr_name(key), bl.to_str());
       }
     }
     for (auto& [key, bl] : attrs) {
-      to_write.emplace(make_xattr_name(key), bl.to_str());
+      to_write.try_emplace(make_xattr_name(key), bl.to_str());
     }
 
     std::vector<std::string> to_remove;
@@ -964,7 +962,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
     return fs_strategy->set_xattrs(dpp, fd, to_write);
   }
-#endif
 
   /* per-attr syscalls */
   Attrs old_attrs;
