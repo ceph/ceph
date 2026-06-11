@@ -110,45 +110,6 @@
       </div>
       }
 
-      <!-- NVMe/TCP -->
-      <!-- Block Pool -->
-      @if (serviceForm.controls.service_type.value === 'nvmeof') {
-      <div class="form-item">
-        <cds-select id="pool"
-                    formControlName="pool"
-                    label="Block Pool"
-                    cdRequiredField="Block Pool"
-                    helperText="An RBD application-enabled pool in which the gateway configuration can be managed."
-                    i18n-helperText
-                    [invalid]="serviceForm.controls.pool.invalid && serviceForm.controls.pool.dirty"
-                    [invalidText]="requiredFieldPool"
-                    (change)="setNvmeServiceId()">
-          @if (rbdPools === null) {
-          <option [ngValue]="null"
-                  i18n>Loading...</option>
-          }
-          @if (rbdPools && rbdPools.length === 0) {
-          <option [ngValue]="null"
-                  i18n>-- No block pools available --</option>
-          }
-          @if (rbdPools && rbdPools.length > 0) {
-          <option [ngValue]="null"
-                  i18n>-- Select a pool --</option>
-          }
-          @for (pool of rbdPools; track pool) {
-          <option [value]="pool.pool_name">{{ pool.pool_name }}</option>
-          }
-        </cds-select>
-        <ng-template #requiredFieldPool>
-
-          @if (serviceForm.showError('pool', frm, 'required')) {
-          <span class="invalid-feedback"
-                i18n>This field is required.</span>
-          }
-        </ng-template>
-      </div>
-      }
-
       <!-- Group Name -->
       @if (serviceForm.controls.service_type.value === 'nvmeof') {
       <div class="form-item">
