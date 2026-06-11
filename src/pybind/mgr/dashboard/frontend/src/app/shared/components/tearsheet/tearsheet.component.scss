@@ -90,19 +90,30 @@
   background-color: var(--cds-background);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
+  &-label {
+    color: var(--cds-text-secondary);
+    margin-bottom: var(--cds-spacing-02);
+  }
+
   &-title {
     color: var(--cds-text-primary);
   }
 
   &-description {
     margin-top: var(--cds-spacing-04);
-    color: var(--cds-text-secondary);
+    color: var(--cds-text-primary);
   }
 
   &--full {
     position: sticky;
     padding: 0 0 var(--cds-spacing-05) var(--cds-spacing-07);
   }
+}
+
+// TOP PROGRESS INDICATOR
+.tearsheet-top-progress {
+  padding: var(--cds-spacing-05) var(--cds-spacing-07);
+  flex-shrink: 0;
 }
 
 // BODY

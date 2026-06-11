@@ -1,14 +1,15 @@
-import { Component, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { Subject, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { NotificationService } from '~/app/shared/services/notification.service';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
 
@@ -16,14 +17,21 @@ import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/ceph
   selector: 'cd-cephfs-mirroring-list',
   templateUrl: './cephfs-mirroring-list.component.html',
   styleUrls: ['./cephfs-mirroring-list.component.scss'],
-  standalone: false,
-  encapsulation: ViewEncapsulation.None
+  standalone: false
 })
 export class CephfsMirroringListComponent implements OnInit {
   @ViewChild('table', { static: true }) table: TableComponent;
 
   columns: CdTableColumn[];
+  tableActions: CdTableAction[];
   selection = new CdTableSelection();
+  permission: Permission;
+  isPrepareModalOpen = false;
+  isAddPathOpen = false;
+  addPathFsName = '';
+  addPathFsId = 0;
+  addPathDestCluster = '';
+  addPathDestFs = '';
 
   private subject$ = new Subject<void>();
 
@@ -35,9 +43,9 @@ export class CephfsMirroringListComponent implements OnInit {
   );
 
   constructor(
+    private cephfsService: CephfsService,
     private authStorageService: AuthStorageService,
-    private notificationService: NotificationService,
-    public actionLabels: ActionLabelsI18n, private cephfsService: CephfsService
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().cephfs;
   }
@@ -51,14 +59,23 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
       { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
     ];
-  }
-
-  loadDaemonStatus() {
-    this.subject$.next();
+    this.tableActions = [
+      {
+        name: $localize`Add mirror path`,
+        permission: 'update',
+        icon: Icons.add,
+        click: () => this.openAddPath(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+      }
+    ];
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  loadDaemonStatus() {
+    this.subject$.next();
   }
 
   openAddPath() {
@@ -66,8 +83,7 @@ export class CephfsMirroringListComponent implements OnInit {
     if (selected) {
       this.addPathFsName = selected.local_fs_name;
       this.addPathFsId = selected.filesystem_id ?? 0;
-      this.addPathDestCluster =
-        selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
+      this.addPathDestCluster = selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
       this.addPathDestFs = selected.fs_name !== '-' ? selected.fs_name : '';
       this.isAddPathOpen = true;
     }
@@ -80,28 +96,6 @@ export class CephfsMirroringListComponent implements OnInit {
 
   closeAddPathTearsheet() {
     this.isAddPathOpen = false;
-  }
-
-  disableMirroring() {
-    const selected = this.selection.first();
-    if (selected) {
-      const fsName = selected.local_fs_name;
-      this.cephfsService.disableMirror(fsName).subscribe({
-        next: () => {
-          this.notificationService.show(
-            NotificationType.success,
-            $localize`Mirroring disabled for filesystem '${fsName}'`
-          );
-          this.loadDaemonStatus();
-        },
-        error: () => {
-          this.notificationService.show(
-            NotificationType.error,
-            $localize`Failed to disable mirroring for filesystem '${fsName}'`
-          );
-        }
-      });
-    }
   }
 
   private buildRows(daemons: Daemon[]): MirroringRow[] {

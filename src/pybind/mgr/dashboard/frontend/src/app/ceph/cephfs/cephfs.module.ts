@@ -53,13 +53,16 @@ import {
   SelectModule,
   TagModule,
   TimePickerModule,
+  TimePickerSelectModule,
   TilesModule,
   TreeviewModule,
   TabsModule,
+  ToggleModule,
   NotificationModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
+import AddIcon16 from '@carbon/icons/es/add/16';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
@@ -77,6 +80,7 @@ import {
   MirroringPathsStepComponent,
   MirroringScheduleStepComponent,
 } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import FolderIcon16 from '@carbon/icons/es/folder/16';
 
 @NgModule({
   imports: [
@@ -102,6 +106,7 @@ import {
     PlaceholderModule,
     DatePickerModule,
     TimePickerModule,
+    TimePickerSelectModule,
     ButtonModule,
     NumberModule,
     LayoutModule,
@@ -115,6 +120,7 @@ import {
     RadioModule,
     TilesModule,
     TagModule,
+    ToggleModule,
     NotificationModule
   ],
   declarations: [
@@ -136,12 +142,10 @@ import {
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
-    CephfsMirroringWizardComponent,
-    CephfsFilesystemSelectorComponent,
     CephfsMirroringErrorComponent,
     CephfsAddMirroringPathComponent,
     MirroringPathsStepComponent,
-    MirroringScheduleStepComponent,
+    MirroringScheduleStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -161,7 +165,8 @@ export class CephfsModule {
       ShareIcon24,
       ChevronDown16,
       ChevronRight16,
-      WarningAltFilled16
+      WarningAltFilled16,
+      FolderIcon16
     ]);
   }
 }
