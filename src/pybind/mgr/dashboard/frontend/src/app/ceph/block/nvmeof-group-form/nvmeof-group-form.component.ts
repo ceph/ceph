@@ -6,8 +6,6 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { PoolService } from '~/app/shared/api/pool.service';
-import { Pool } from '../../pool/pool';
 import { NvmeofGatewayNodeComponent } from '../nvmeof-gateway-node/nvmeof-gateway-node.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -30,15 +28,12 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   group: string;
-  pools: Pool[] = [];
-  poolsLoading = false;
   pageURL: string;
   hasAvailableNodes = true;
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
-    private poolService: PoolService,
     private taskWrapperService: TaskWrapperService,
     private cephServiceService: CephServiceService,
     private nvmeofService: NvmeofService,
@@ -52,7 +47,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.createForm();
-    this.loadPools();
   }
 
   createForm() {
@@ -68,9 +62,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         ],
         [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)]
       ),
-      pool: new UntypedFormControl('rbd', {
-        validators: [Validators.required]
-      }),
       unmanaged: new UntypedFormControl(false),
       enableEncryption: new UntypedFormControl(false),
       encryptionConfig: new UntypedFormControl(null)
@@ -118,27 +109,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     return false;
   }
 
-  loadPools() {
-    this.poolsLoading = true;
-    this.poolService.list().then(
-      (pools: Pool[]) => {
-        this.pools = (pools || []).filter(
-          (pool: Pool) => pool.application_metadata && pool.application_metadata.includes('rbd')
-        );
-        this.poolsLoading = false;
-        if (this.pools.length >= 1) {
-          const allPoolNames = this.pools.map((pool) => pool.pool_name);
-          const poolName = allPoolNames.includes('rbd') ? 'rbd' : this.pools[0].pool_name;
-          this.groupForm.patchValue({ pool: poolName });
-        }
-      },
-      () => {
-        this.pools = [];
-        this.poolsLoading = false;
-      }
-    );
-  }
-
   onSubmit() {
     if (this.groupForm.invalid) {
       return;
@@ -156,12 +126,11 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       return;
     }
     let taskUrl = `service/${URLVerbs.CREATE}`;
-    const serviceName = `${formValues.pool}.${formValues.groupName}`;
+    const serviceName = `${formValues.groupName}`;
 
     const serviceSpec: Record<string, any> = {
       service_type: 'nvmeof',
       service_id: serviceName,
-      pool: formValues.pool,
       group: formValues.groupName,
       placement: {
         hosts: selectedHostnames
