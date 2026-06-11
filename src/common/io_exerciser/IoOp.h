@@ -175,6 +175,49 @@ class TruncateOp : public TestOp<OpType::Truncate> {
   uint64_t size;
 };
 
+template <OpType opType, int numIOs>
+class TruncateWriteOp : public TestOp<opType> {
+ public:
+  uint64_t size;
+  std::array<uint64_t, numIOs> offset;
+  std::array<uint64_t, numIOs> length;
+
+ protected:
+  TruncateWriteOp(uint64_t size,
+                  std::array<uint64_t, numIOs>&& offset,
+                  std::array<uint64_t, numIOs>&& length);
+  std::string to_string(uint64_t block_size) const override;
+};
+
+class SingleTruncateWriteOp : public TruncateWriteOp<OpType::TruncateWrite, 1> {
+ public:
+  SingleTruncateWriteOp(uint64_t size, uint64_t offset, uint64_t length);
+  static std::unique_ptr<SingleTruncateWriteOp> generate(uint64_t size,
+                                                          uint64_t offset,
+                                                          uint64_t length);
+};
+
+class DoubleTruncateWriteOp : public TruncateWriteOp<OpType::TruncateWrite2, 2> {
+ public:
+  DoubleTruncateWriteOp(uint64_t size, uint64_t offset1, uint64_t length1,
+                        uint64_t offset2, uint64_t length2);
+  static std::unique_ptr<DoubleTruncateWriteOp> generate(uint64_t size,
+                                                          uint64_t offset1,
+                                                          uint64_t length1,
+                                                          uint64_t offset2,
+                                                          uint64_t length2);
+};
+
+class TripleTruncateWriteOp : public TruncateWriteOp<OpType::TruncateWrite3, 3> {
+ public:
+  TripleTruncateWriteOp(uint64_t size, uint64_t offset1, uint64_t length1,
+                        uint64_t offset2, uint64_t length2, uint64_t offset3,
+                        uint64_t length3);
+  static std::unique_ptr<TripleTruncateWriteOp> generate(
+      uint64_t size, uint64_t offset1, uint64_t length1, uint64_t offset2,
+      uint64_t length2, uint64_t offset3, uint64_t length3);
+};
+
 class SingleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite, 1> {
  public:
   SingleFailedWriteOp(uint64_t offset, uint64_t length);
