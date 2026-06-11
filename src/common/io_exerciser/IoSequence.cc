@@ -59,6 +59,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ15:
       os << "SEQUENCE_SEQ15";
       break;
+    case Sequence::SEQUENCE_SEQ16:
+      os << "SEQUENCE_SEQ16";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -108,6 +111,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq14>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ15:
       return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ16:
+      return std::make_unique<Seq16>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -855,8 +860,82 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
       [[fallthrough]];
     default:
       done = true;
+      remove = true;
       break;
   }
 
   return r;
+}
+
+
+// Seq16: Multiple TruncateWrite operations with Consistency checks
+// Each operation performs:
+//   1. Truncate to a random size between 0 and current object size
+//   2. Write a single block (size 1) at a random offset within the object
+//   3. Consistency check
+ceph::io_exerciser::Seq16::Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
+      truncate_size(0),
+      write_offset(0),
+      operation_count(0),
+      total_operations(20),
+      truncate_write_done(false),
+      consistency_done(false) {
+  select_random_object_size();
+  setup_next_operation();
+}
+
+Sequence ceph::io_exerciser::Seq16::get_id() const {
+  return Sequence::SEQUENCE_SEQ16;
+}
+
+std::string ceph::io_exerciser::Seq16::get_name() const {
+  return "Multiple TruncateWrite operations with varying sizes and Consistency checks";
+}
+
+void ceph::io_exerciser::Seq16::setup_next_operation() {
+  // Generate random truncate size between 0 and current object size
+  truncate_size = rng(obj_size + 1);
+  
+  // Generate random write offset within object size
+  // Ensure write stays within bounds (write_offset < obj_size for size 1 write)
+  write_offset = obj_size > 0 ? rng(obj_size) : 0;
+  
+  truncate_write_done = false;
+  consistency_done = false;
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
+  // Check if we're done with all operations
+  if (operation_count >= total_operations) {
+    done = true;
+    remove = true;
+    barrier = true;
+    return BarrierOp::generate();
+  }
+  
+  // Perform TruncateWrite operation with a single write of size 1
+  if (!truncate_write_done) {
+    truncate_write_done = true;
+    barrier = true;
+    return SingleTruncateWriteOp::generate(truncate_size, write_offset, 1);
+  }
+  
+  // Perform Consistency check
+  if (!consistency_done) {
+    consistency_done = true;
+    barrier = true;
+    
+    // Move to next operation
+    operation_count++;
+    if (operation_count < total_operations) {
+      setup_next_operation();
+    }
+    
+    return ConsistencyOp::generate();
+  }
+  
+  // Should not reach here
+  barrier = true;
+  return BarrierOp::generate();
 }
