@@ -805,31 +805,30 @@ class VolumeClient(CephfsClient["Module"]):
         Enable or disable quarantine on a subvolume by sending command to MDS.
         Quarantine blocks normal client access while allowing recovery clients
         with 'rwq' capabilities to access the data.
+
+        The subvolume root path is constructed directly from the volume spec
+        without opening the subvolume via CephFS, because the mgr's CephFS
+        client does not have quarantine access and would be blocked.
         """
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
-        enable     = kwargs['enable']
-
-        op_type = SubvolumeOpType.QUARANTINE_ENABLE if enable else SubvolumeOpType.QUARANTINE_DISABLE
-        cmd_prefix = "quarantine enable" if enable else "quarantine disable"
+        cmd_prefix = "quarantine enable" if kwargs['enable'] else "quarantine disable"
 
         try:
-            with open_volume(self, volname) as fs_handle:
-                with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, op_type) as subvolume:
-                        # subvolume.path is the data path (includes UUID dir).
-                        # MDS expects the subvolume root path (parent of data dir).
-                        data_path = subvolume.path.decode('utf-8')
-                        path = data_path.rsplit('/', 1)[0] or '/'
-                        log.info("Sending %s for subvolume root path %s", cmd_prefix, path)
+            group_name = groupname if groupname else "_nogroup"
+            path = "{base_dir}/{group}/{subvol}".format(
+                base_dir=self.volspec.base_dir,
+                group=group_name,
+                subvol=subvolname)
+            log.info("Sending %s for subvolume root path %s", cmd_prefix, path)
 
-                        mds_map = get_mds_map(self.mgr, volname)
-                        if mds_map is None:
-                            raise VolumeException(-errno.ENOENT, f"Volume '{volname}' not found")
+            mds_map = get_mds_map(self.mgr, volname)
+            if mds_map is None:
+                raise VolumeException(-errno.ENOENT, f"Volume '{volname}' not found")
 
-                        ret = self._send_quarantine_command(mds_map, cmd_prefix, path)
+            ret = self._send_quarantine_command(mds_map, cmd_prefix, path)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

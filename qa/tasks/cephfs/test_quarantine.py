@@ -338,10 +338,24 @@ class TestQuarantineAuthCaps(QuarantineTestBase):
         info = self.get_ceph_cmd_stdout("auth", "get", c)
         self.assertIn("allow rwQ", info)
 
-    def test_allow_star_includes_Q_prime(self):
-        c = self._create_tracked_client("client.qtine_star", "allow *")
-        info = self.get_ceph_cmd_stdout("auth", "get", c)
-        self.assertIn("allow *", info)
+    def test_allow_star_excludes_quarantine(self):
+        """allow * does NOT grant quarantine access — q/Q must be explicit.
+        The client cannot even mount a quarantined subvolume with allow *."""
+        self.enable_and_wait()
+        caps = "allow * fsname=%s" % self.volname
+        authid, keyring = self._create_qtine_client("client.qtine_star", caps)
+        self._custom_clients.append("client.qtine_star")
+
+        self.mount_b.umount_wait()
+        try:
+            self.mount_b.mount_wait(
+                cephfs_name=self.volname,
+                client_id=authid,
+                cephfs_mntpt=self.subvol_path,
+                client_keyring_path=keyring)
+            self.fail("Mount should have failed for allow * on quarantined subvol")
+        except CommandFailedError:
+            log.info("Mount correctly failed for allow * client on quarantined subvol")
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +584,244 @@ class TestQuarantineMultipleSubvolumes(QuarantineTestBase):
 
         # subvol1 blocked
         self.assert_blocked(lambda: self.mount_a.read_file(f1))
+
+    def test_quarantine_multiple_subvols_quarantined(self):
+        """Multiple subvolumes can be quarantined at the same time."""
+        f1 = self._get_test_file_path(subvol_path=self.subvol1_path)
+        f2 = self._get_test_file_path(subvol_path=self.subvol2_path)
+
+        self.enable_and_wait(subvol_name=self.SUBVOL1)
+        self.enable_and_wait(subvol_name=self.SUBVOL2)
+
+        self.assert_blocked(lambda: self.mount_a.read_file(f1))
+        self.assert_blocked(lambda: self.mount_a.read_file(f2))
+
+        self.disable_and_wait(subvol_name=self.SUBVOL1)
+        self.assertEqual(self.mount_a.read_file(f1).strip(),
+                         "Data in %s" % self.SUBVOL1)
+        self.assert_blocked(lambda: self.mount_a.read_file(f2))
+
+
+# ---------------------------------------------------------------------------
+# Mgr operations on quarantined subvolumes
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
+class TestQuarantineMgrOps(QuarantineTestBase):
+    """Test that mgr subvolume operations are correctly blocked or allowed
+    when a subvolume is quarantined."""
+    CLIENTS_REQUIRED = 1
+    SUBVOLUME_NAME = "quarantine_mgr_ops_subvol"
+    TEST_FILE = "mgrops_test.txt"
+    TEST_DATA = "Mgr ops test data."
+
+    def setUp(self):
+        super().setUp()
+        self._create_test_file()
+
+    def test_quarantine_blocks_subvolume_rm(self):
+        """subvolume rm should fail on a quarantined subvolume."""
+        self.enable_and_wait()
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, self.SUBVOLUME_NAME)
+            self.fail("subvolume rm should have failed on quarantined subvol")
+        except CommandFailedError:
+            log.info("subvolume rm correctly blocked")
+
+    def test_quarantine_blocks_snapshot_create(self):
+        """subvolume snapshot create should fail on a quarantined subvolume."""
+        self.enable_and_wait()
+        try:
+            self._fs_cmd("subvolume", "snapshot", "create",
+                         self.volname, self.SUBVOLUME_NAME, "blocked_snap")
+            self.fail("snapshot create should have failed on quarantined subvol")
+        except CommandFailedError:
+            log.info("snapshot create correctly blocked")
+
+    def test_quarantine_blocks_resize(self):
+        """subvolume resize should fail on a quarantined subvolume."""
+        self.enable_and_wait()
+        try:
+            self._fs_cmd("subvolume", "resize", self.volname,
+                         self.SUBVOLUME_NAME, "10737418240")
+            self.fail("resize should have failed on quarantined subvol")
+        except CommandFailedError:
+            log.info("resize correctly blocked")
+
+    def test_quarantine_blocks_info(self):
+        """subvolume info fails on a quarantined subvolume because the mgr
+        client cannot access .meta without quarantine caps."""
+        self.enable_and_wait()
+        try:
+            self._fs_cmd("subvolume", "info",
+                         self.volname, self.SUBVOLUME_NAME)
+            self.fail("subvolume info should have failed on quarantined subvol")
+        except CommandFailedError:
+            log.info("subvolume info correctly blocked")
+
+    def test_quarantine_blocks_getpath(self):
+        """subvolume getpath fails on a quarantined subvolume because the mgr
+        client cannot access .meta without quarantine caps."""
+        self.enable_and_wait()
+        try:
+            self._fs_cmd("subvolume", "getpath",
+                         self.volname, self.SUBVOLUME_NAME)
+            self.fail("subvolume getpath should have failed on quarantined subvol")
+        except CommandFailedError:
+            log.info("subvolume getpath correctly blocked")
+
+    def test_quarantine_list_still_works(self):
+        """subvolume ls should still work — it reads the group directory
+        which is above the quarantined subvolume, not the subvolume itself."""
+        self.enable_and_wait()
+        subvols = json.loads(self._fs_cmd("subvolume", "ls", self.volname))
+        names = [s["name"] for s in subvols]
+        self.assertIn(self.SUBVOLUME_NAME, names)
+
+
+# ---------------------------------------------------------------------------
+# Subvolume group quarantine
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
+class TestQuarantineSubvolumeGroup(QuarantineTestBase):
+    """Test quarantine with explicit subvolume group."""
+    CLIENTS_REQUIRED = 1
+    SUBVOLUME_NAME = None  # managed manually
+    GROUP_NAME = "quarantine_test_group"
+    SUBVOL_IN_GROUP = "quarantine_group_subvol"
+
+    def setUp(self):
+        super().setUp()
+        self.volname = self.fs.name
+        self._fs_cmd("subvolumegroup", "create", self.volname,
+                     self.GROUP_NAME)
+        self._fs_cmd("subvolume", "create", self.volname,
+                     self.SUBVOL_IN_GROUP, "--group_name", self.GROUP_NAME,
+                     "--mode=777")
+        self.subvol_path = self._fs_cmd(
+            "subvolume", "getpath", self.volname,
+            self.SUBVOL_IN_GROUP, "--group_name", self.GROUP_NAME).strip()
+        self.subvol_root_path = os.path.dirname(self.subvol_path)
+        self._create_test_file(subvol_path=self.subvol_path)
+
+    def tearDown(self):
+        try:
+            self._quarantine_disable(subvol_name=self.SUBVOL_IN_GROUP,
+                                     group_name=self.GROUP_NAME)
+        except Exception:
+            pass
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname,
+                         self.SUBVOL_IN_GROUP, "--group_name",
+                         self.GROUP_NAME, "--force")
+        except Exception:
+            pass
+        try:
+            self._fs_cmd("subvolumegroup", "rm", self.volname,
+                         self.GROUP_NAME)
+        except Exception:
+            pass
+        super().tearDown()
+
+    def test_quarantine_under_subvolume_group(self):
+        """Quarantine works on subvolumes under explicit subvolume groups."""
+        fp = self._get_test_file_path(subvol_path=self.subvol_path)
+        self.assertEqual(self.mount_a.read_file(fp).strip(),
+                         self.TEST_DATA.strip())
+
+        self._quarantine_enable(subvol_name=self.SUBVOL_IN_GROUP,
+                                group_name=self.GROUP_NAME)
+        time.sleep(2)
+
+        self.assert_blocked(lambda: self.mount_a.read_file(fp))
+
+        self._quarantine_disable(subvol_name=self.SUBVOL_IN_GROUP,
+                                 group_name=self.GROUP_NAME)
+        time.sleep(2)
+
+        self.assertEqual(self.mount_a.read_file(fp).strip(),
+                         self.TEST_DATA.strip())
+
+
+# ---------------------------------------------------------------------------
+# Disruptive: MDS restart
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
+class TestQuarantineDisruptive(QuarantineTestBase):
+    """Test that quarantine state survives MDS restart."""
+    CLIENTS_REQUIRED = 1
+    SUBVOLUME_NAME = "quarantine_disruptive_subvol"
+    TEST_FILE = "disruptive_test.txt"
+    TEST_DATA = "Data to survive restart."
+
+    def setUp(self):
+        super().setUp()
+        self._create_test_file()
+
+    def test_quarantine_survives_mds_restart(self):
+        """Quarantine flag is retained after MDS restart."""
+        fp = self._get_test_file_path()
+        self.enable_and_wait()
+        self.assert_blocked(lambda: self.mount_a.read_file(fp))
+
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+        time.sleep(5)
+
+        self.wait_until_blocked(
+            lambda: self.mount_a.read_file(fp),
+            timeout=30,
+            msg="Read should still be blocked after MDS restart")
+
+
+# ---------------------------------------------------------------------------
+# Negative tests
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
+class TestQuarantineNegative(QuarantineTestBase):
+    """Negative test cases for quarantine."""
+    CLIENTS_REQUIRED = 1
+    SUBVOLUME_NAME = None  # some tests don't need a subvolume
+
+    def test_quarantine_nonexistent_subvol(self):
+        """Quarantining a non-existent subvolume returns an error."""
+        try:
+            self._fs_cmd("subvolume", "quarantine", "enable",
+                         self.fs.name, "nonexistent_subvol_xyz")
+            self.fail("Should have failed for non-existent subvolume")
+        except CommandFailedError as e:
+            log.info("Correctly failed for non-existent subvol: %s", e)
+
+    def test_quarantine_subdir_blocked(self):
+        """Mounting a subdir under a quarantined subvolume is blocked."""
+        sv_name = "quarantine_subdir_test_subvol"
+        self._fs_cmd("subvolume", "create", self.fs.name, sv_name,
+                     "--mode=777")
+        try:
+            sv_path = self._fs_cmd("subvolume", "getpath",
+                                   self.fs.name, sv_name).strip()
+            rel = sv_path.lstrip("/")
+            subdir = os.path.join(rel, "mysubdir")
+            self.mount_a.run_shell(["mkdir", "-p", subdir])
+            self.mount_a.write_file(os.path.join(subdir, "file.txt"),
+                                    "subdir data")
+
+            self._quarantine_enable(subvol_name=sv_name)
+            time.sleep(2)
+
+            self.assert_blocked(
+                lambda: self.mount_a.read_file(
+                    os.path.join(subdir, "file.txt")),
+                msg="Read in subdir should be blocked")
+        finally:
+            try:
+                self._quarantine_disable(subvol_name=sv_name)
+            except Exception:
+                pass
+            try:
+                self._fs_cmd("subvolume", "rm", self.fs.name, sv_name,
+                             "--force")
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
