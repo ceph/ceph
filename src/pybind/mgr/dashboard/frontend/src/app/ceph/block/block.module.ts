@@ -362,7 +362,7 @@ const routes: Routes = [
               breadcrumbs: ActionLabels.CREATE,
               pageHeader: {
                 title: $localize`Create Gateway Group`,
-                description: $localize`A logical group of gateways that hosts will connect to.`
+                description: $localize`A logical group of NVMe gateways that hosts connect to for load-balanced access.`
               }
             }
           },
