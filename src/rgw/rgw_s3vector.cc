@@ -106,19 +106,21 @@ namespace rgw::s3vector {
 
   // utility functions for JSON encoding/decoding
 
-  void decode_json_obj(float& val, JSONObj *obj) {
-    std::string_view s = obj->get_data();
-    const char* start = s.data();
-    const char* end = start + s.length();
+  template <typename T>
+  void decode_from_chars(T& val, std::string_view sv) {
+    const char* start = sv.data();
+    const char* end = start + sv.length();
 
     const auto result = std::from_chars(start, end, val);
 
     if (result.ec == std::errc::invalid_argument) {
       throw JSONDecoder::err("failed to parse number");
     }
-
     if (result.ec == std::errc::result_out_of_range) {
       throw JSONDecoder::err("out of range number");
+    }
+    if (result.ptr != end) {
+      throw JSONDecoder::err("trailing characters after number");
     }
   }
 
@@ -131,7 +133,7 @@ namespace rgw::s3vector {
     auto arr_it = (*it)->find("float32");
     for (auto value_it = (*arr_it)->find_first(); !value_it.end(); ++value_it) {
       float value;
-      decode_json_obj(value, *value_it);
+      decode_from_chars(value, (*value_it)->get_data());
       data.push_back(value);
     }
   }
@@ -1349,11 +1351,14 @@ namespace rgw::s3vector {
               break;
             case FilterableMetadataType::NUMBER:
               try {
-                static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
-              } catch (const std::logic_error&) {
+                double val;
+                decode_from_chars(val, value_str);
+                static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(val).ok();
+              } catch (const JSONDecoder::err& err) {
                 ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                  << fb.name << "' for key: " << vector.key << " expected number but got: " << value_str << dendl;
-                errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected number"});
+                  << fb.name << "' for key: " << vector.key << " expected number but got:"  << value_str
+                  << ". error: " << err.what() << dendl;
+                errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), err.what()});
               }
               break;
             case FilterableMetadataType::BOOLEAN:
@@ -1382,11 +1387,14 @@ namespace rgw::s3vector {
               list_builder->Append().ok();
               for (const auto& v : values) {
                 try {
-                  value_builder->Append(std::stod(v)).ok();
-                } catch (const std::logic_error&) {
+                  double val;
+                  decode_from_chars(val, v);
+                  value_builder->Append(val).ok();
+                } catch (const JSONDecoder::err& err) {
                   ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                    << fb.name << "' for key: " << vector.key << " expected number in list but got: " << v << dendl;
-                  errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected number"});
+                    << fb.name << "' for key: " << vector.key << " expected number in list but got: " << v
+                    << ". error: " << err.what() << dendl;
+                  errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), err.what()});
                   break;
                 }
               }
@@ -1746,17 +1754,7 @@ namespace rgw::s3vector {
     }*/
 
     if (!next_token.empty()) {
-      const char* start = next_token.data();
-      const char* end = start + next_token.length();
-      const auto result = std::from_chars(start, end, offset);
-
-      if (result.ec == std::errc::invalid_argument) {
-        throw JSONDecoder::err("failed to parse next token as offset");
-      }
-
-      if (result.ec == std::errc::result_out_of_range) {
-        throw JSONDecoder::err("out of range offset in next token");
-      }
+      decode_from_chars(offset, next_token);
     }
 
     if (segment_count > 0) {
