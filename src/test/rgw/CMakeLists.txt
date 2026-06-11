@@ -474,6 +474,14 @@ target_include_directories(unittest_rgw_nsfs_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
 target_link_libraries(unittest_rgw_nsfs_driver ${UNITTEST_LIBS}
   ${rgw_libs} ${LMDB_LIBRARIES})
+
+# unittest_rgw_gpfs_xattr
+add_executable(unittest_rgw_gpfs_xattr
+	test_rgw_gpfs_xattr.cc)
+target_include_directories(unittest_rgw_gpfs_xattr
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_gpfs_xattr
+  ${UNITTEST_LIBS} ${CMAKE_DL_LIBS})
 endif(WITH_RADOSGW_NSFS)
 
 if(WITH_RADOSGW_RADOS)
