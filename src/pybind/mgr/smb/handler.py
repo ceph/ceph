@@ -759,6 +759,7 @@ def order_resources(
 @dataclasses.dataclass(frozen=True)
 class _ShareConf:
     resource: resources.Share
+    cluster: resources.Cluster
     resolver: PathResolver
     cephx_entity: str
     ceph_cluster: str
@@ -807,7 +808,13 @@ class _ClusterConf:
         return cls(
             change_group.cluster,
             [
-                _ShareConf(s, resolver, cephx_entity, ceph_cluster)
+                _ShareConf(
+                    s,
+                    change_group.cluster,
+                    resolver,
+                    cephx_entity,
+                    ceph_cluster,
+                )
                 for s in change_group.shares
             ],
             change_group,
@@ -847,7 +854,14 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         if conf.ceph_cluster
         else '/etc/ceph/ceph.conf'
     )
-    modules = ["acl_xattr", "ceph_snapshots"]
+    # Build VFS modules list based on cluster configuration
+    modules = []
+    # Add macOS support modules if enabled
+    if conf.cluster.is_macos_compatibility_enabled:
+        modules.extend(["fruit", "streams_xattr"])
+
+    # Add standard modules
+    modules.extend(["acl_xattr", "ceph_snapshots"])
 
     if qos := cephfs.qos:
         vfs_rl = "aio_ratelimit"

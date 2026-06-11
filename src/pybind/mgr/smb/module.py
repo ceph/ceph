@@ -31,6 +31,7 @@ from . import (
 from .cli import SMBCLICommand
 from .enums import (
     AuthMode,
+    ClientSupportMode,
     InputPasswordFilter,
     JoinSourceType,
     PasswordFilter,
@@ -223,6 +224,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         placement: Optional[str] = None,
         clustering: Optional[SMBClustering] = None,
         public_addrs: Optional[List[str]] = None,
+        client_compat: Optional[ClientSupportMode] = None,
         password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
         password_filter_out: Optional[PasswordFilter] = None,
     ) -> results.Result:
@@ -333,6 +335,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             placement=pspec,
             clustering=clustering,
             public_addrs=c_public_addrs,
+            client_compat=client_compat,
         )
         to_apply.append(cluster)
         return self._apply_res(
@@ -441,6 +444,75 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             rm_res,
             password_filter_out=password_filter,
         )
+
+    @SMBCLICommand('cluster update client-compat', perm='rw')
+    def cluster_update_client_compat(
+        self,
+        client_compat: ClientSupportMode,
+        cluster_id: str,
+    ) -> Simplified:
+        """Update client compatibility mode for an SMB cluster and all its shares"""
+        # Get the existing cluster
+        clusters = self._handler.matching_resources(
+            [f'ceph.smb.cluster.{cluster_id}']
+        )
+
+        active_clusters = [
+            c for c in clusters if isinstance(c, resources.Cluster)
+        ]
+
+        if not active_clusters:
+            raise ValueError(f"Cluster {cluster_id} not found")
+
+        if len(active_clusters) > 1:
+            raise ValueError(f"Multiple clusters found matching {cluster_id}")
+
+        cluster = active_clusters[0]
+
+        # Create updated cluster with new client_compat setting
+        updated_cluster = replace(cluster, client_compat=client_compat)
+
+        # Get all shares for this cluster
+        shares = self._handler.matching_resources(
+            [f'ceph.smb.share.{cluster_id}']
+        )
+
+        active_shares = [s for s in shares if isinstance(s, resources.Share)]
+
+        # Prepare resources to update: cluster + all shares
+        resources_to_update: List[resources.SMBResource] = [updated_cluster]
+        resources_to_update.extend(active_shares)
+
+        # Apply the updates
+        result_group = self._apply_res(resources_to_update)
+
+        # Process results
+        cluster_updated = False
+        successful_share_updates = []
+        failed_share_updates = []
+
+        for result in result_group:
+            if result.success:
+                if isinstance(result.src, resources.Cluster):
+                    cluster_updated = True
+                elif hasattr(result.src, 'share_id'):
+                    successful_share_updates.append(result.src.share_id)
+            else:
+                if isinstance(result.src, resources.Share) and hasattr(
+                    result.src, 'share_id'
+                ):
+                    failed_share_updates.append(
+                        {"share_id": result.src.share_id, "error": result.msg}
+                    )
+
+        return {
+            "cluster_id": cluster_id,
+            "client_compat": client_compat.value,
+            "cluster_updated": cluster_updated,
+            "successful_share_updates": successful_share_updates,
+            "failed_share_updates": failed_share_updates,
+            "total_shares": len(active_shares),
+        }
 
     @SMBCLICommand('cluster update cephfs qos', perm='rw')
     def cluster_update_qos(
