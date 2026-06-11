@@ -736,61 +736,110 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     return 0;
   }
 
-  /* batch GET_XATTR for all names in a single gpfs_fcntl call */
-  char get_buf[GPFS_MAX_FCNTL_LENGTH];
-  auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(get_buf);
-  memset(hdr, 0, sizeof(*hdr));
-  hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  /*
+   * Batch GET_XATTR with multi-round overflow.
+   *
+   * We start with a modest per-value buffer (4KB).  If a value is
+   * larger (ERR_BUFFER_TOO_SMALL), we retry that name alone with
+   * the full XATTR_MAX_VALUELEN.  When entries don't fit in the
+   * 64KB gpfs_fcntl buffer, we flush the current batch and start
+   * a new round with the remaining names.
+   */
+  static constexpr size_t DEFAULT_VAL_SPACE = 4096;
 
-  size_t off = sizeof(gpfsFcntlHeader_t);
+  char get_buf[GPFS_MAX_FCNTL_LENGTH];
   struct xattr_slot {
     size_t struct_off;
-    std::string name;
+    size_t name_idx;
   };
-  std::vector<xattr_slot> slots;
 
-  for (auto& name : names) {
-    size_t namelen = name.size() + 1;
-    size_t padded_name = align8(namelen);
-    size_t val_space = align8(GPFS_FCNTL_XATTR_MAX_VALUELEN);
-    size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + val_space;
+  size_t ni = 0;
+  while (ni < names.size()) {
+    auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(get_buf);
+    memset(hdr, 0, sizeof(*hdr));
+    hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
 
-    if (off + entry_size > sizeof(get_buf)) break;
+    size_t off = sizeof(gpfsFcntlHeader_t);
+    std::vector<xattr_slot> slots;
 
-    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + off);
-    memset(ea, 0, entry_size);
-    ea->structLen = entry_size;
-    ea->structType = GPFS_FCNTL_GET_XATTR;
-    ea->nameLen = namelen;
-    ea->bufferLen = padded_name + val_space;
-    ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
-    memcpy(ea->buffer, name.c_str(), namelen);
+    while (ni < names.size()) {
+      size_t namelen = names[ni].size() + 1;
+      size_t padded_name = align8(namelen);
+      size_t val_space = align8(DEFAULT_VAL_SPACE);
+      size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + val_space;
 
-    slots.push_back({off, name});
-    off += entry_size;
-  }
+      if (off + entry_size > sizeof(get_buf)) {
+        break;
+      }
 
-  hdr->totalLength = off;
-  ret = fn_fcntl(fd, get_buf);
-  if (ret < 0) {
-    int err = errno;
-    ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
-      << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
-  }
+      auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + off);
+      memset(ea, 0, entry_size);
+      ea->structLen = entry_size;
+      ea->structType = GPFS_FCNTL_GET_XATTR;
+      ea->nameLen = namelen;
+      ea->bufferLen = padded_name + val_space;
+      ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+      memcpy(ea->buffer, names[ni].c_str(), namelen);
 
-  for (auto& slot : slots) {
-    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + slot.struct_off);
-    if (ea->errReasonCode == 0 && ea->bufferLen > 0) {
-      size_t padded_name = align8(ea->nameLen);
-      char* valp = ea->buffer + padded_name;
-      attrs.emplace(std::move(slot.name),
-                    std::string(valp, ea->bufferLen));
+      slots.push_back({off, ni});
+      off += entry_size;
+      ni++;
+    }
+
+    if (slots.empty()) {
+      break;
+    }
+
+    hdr->totalLength = off;
+    ret = fn_fcntl(fd, get_buf);
+    if (ret < 0) {
+      int err = errno;
+      ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
+        << cpp_strerror(err) << ", falling back to POSIX" << dendl;
+      return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+    }
+
+    for (auto& slot : slots) {
+      auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(get_buf + slot.struct_off);
+      if (ea->errReasonCode == GPFS_FCNTL_ERR_BUFFER_TOO_SMALL) {
+        /* retry this name alone with full buffer */
+        char retry_buf[GPFS_MAX_FCNTL_LENGTH];
+        auto* rh = reinterpret_cast<gpfsFcntlHeader_t*>(retry_buf);
+        memset(rh, 0, sizeof(*rh));
+        rh->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+        auto& rname = names[slot.name_idx];
+        size_t rnamelen = rname.size() + 1;
+        size_t rpadded_name = align8(rnamelen);
+        size_t rval_space = align8(GPFS_FCNTL_XATTR_MAX_VALUELEN);
+        size_t rentry_size = sizeof(gpfsGetSetXAttr_t) + rpadded_name + rval_space;
+
+        auto* rea = reinterpret_cast<gpfsGetSetXAttr_t*>(retry_buf + sizeof(gpfsFcntlHeader_t));
+        memset(rea, 0, rentry_size);
+        rea->structLen = rentry_size;
+        rea->structType = GPFS_FCNTL_GET_XATTR;
+        rea->nameLen = rnamelen;
+        rea->bufferLen = rpadded_name + rval_space;
+        rea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+        memcpy(rea->buffer, rname.c_str(), rnamelen);
+
+        rh->totalLength = sizeof(gpfsFcntlHeader_t) + rentry_size;
+        int rret = fn_fcntl(fd, retry_buf);
+        if (rret == 0 && rea->errReasonCode == 0 && rea->bufferLen > 0) {
+          char* valp = rea->buffer + rpadded_name;
+          attrs.try_emplace(rname, std::string(valp, rea->bufferLen));
+        }
+      } else if (ea->errReasonCode == 0 && ea->bufferLen > 0) {
+        size_t padded_name = align8(ea->nameLen);
+        char* valp = ea->buffer + padded_name;
+        attrs.try_emplace(names[slot.name_idx],
+                          std::string(valp, ea->bufferLen));
+      }
     }
   }
 
   ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
-    << slots.size() << " xattrs" << dendl;
+    << attrs.size() << " xattrs" << dendl;
   return 0;
 }
 
