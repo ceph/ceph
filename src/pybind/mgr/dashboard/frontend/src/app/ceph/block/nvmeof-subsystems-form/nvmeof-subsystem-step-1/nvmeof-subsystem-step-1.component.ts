@@ -33,6 +33,10 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   };
 
   hosts: ListenerItem[] = [];
+  LISTENER_MODE = {
+    AUTO_FETCH: 'auto-fetch',
+    MANUAL: 'manual'
+  };
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -78,6 +82,8 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   createForm() {
     if (this.listenersOnly) {
       this.formGroup = new CdFormGroup({
+        listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        subnetMask: new UntypedFormControl(''),
         listeners: new UntypedFormControl([])
       });
     } else {
@@ -101,9 +107,31 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
             )
           ]
         }),
+        listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        subnetMask: new UntypedFormControl(''),
         listeners: new UntypedFormControl([])
       });
     }
+
+    // Subscribe to listener mode changes to update validators
+    this.formGroup.get('listenerMode')?.valueChanges.subscribe((mode) => {
+      const subnetMaskControl = this.formGroup.get('subnetMask');
+      const listenersControl = this.formGroup.get('listeners');
+
+      if (mode === this.LISTENER_MODE.AUTO_FETCH) {
+        subnetMaskControl?.setValidators([Validators.required]);
+        listenersControl?.clearValidators();
+      } else {
+        subnetMaskControl?.clearValidators();
+        listenersControl?.setValidators([Validators.required]);
+      }
+
+      subnetMaskControl?.updateValueAndValidity();
+      listenersControl?.updateValueAndValidity();
+    });
+
+    // Trigger initial validation
+    this.formGroup.get('listenerMode')?.updateValueAndValidity();
   }
 
   removeListener(index: number) {
