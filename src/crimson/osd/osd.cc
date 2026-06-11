@@ -494,6 +494,10 @@ seastar::future<> OSD::start()
         std::ref(store),
         std::ref(osd_states));
     });
+  }).then([this] {
+    return shard_services.invoke_on_all([this] (ShardServices &local_service) {
+      local_service.set_container(&shard_services);
+    });
   }).then([this, FNAME] {
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),

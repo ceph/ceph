@@ -135,3 +135,11 @@ target_link_libraries(
   unittest-crimson-scrub
   crimson-common
   crimson::gtest)
+
+add_executable(ceph_test_crimson_scrub_scheduling
+  test_crimson_scrub_scheduling.cc
+)
+target_link_libraries(ceph_test_crimson_scrub_scheduling
+  librados
+)
+install(TARGETS ceph_test_crimson_scrub_scheduling DESTINATION ${CMAKE_INSTALL_BINDIR})
