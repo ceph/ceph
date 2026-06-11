@@ -67,7 +67,9 @@ struct MDSCapSpec {
   MDSCapSpec() = default;
   MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
-      caps |= RWFPS | Q_PRIME;
+      caps |= RWFPS;
+    // Q and Q_PRIME are never implied by ALL — quarantine access
+    // must be granted explicitly to limit who can access compromised data.
   }
 
   bool allow_all() const {
