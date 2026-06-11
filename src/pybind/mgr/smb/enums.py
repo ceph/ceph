@@ -124,6 +124,19 @@ class ShowResults(_StrEnum):
     COLLAPSED = 'collapsed'
 
 
+class ClientSupportMode(_StrEnum):
+    """Determines if client-specific SMB features should be enabled.
+
+    - DEFAULT: Standard SMB behavior without client-specific optimizations
+    - MACOS: Enable macOS-specific features (AAPL extensions, fruit VFS, etc.)
+
+    Future values could include: WINDOWS_OPTIMIZED, LINUX_OPTIMIZED, etc.
+    """
+
+    DEFAULT = 'default'
+    MACOS = 'macos'
+
+
 class PasswordFilter(_StrEnum):
     """Filter type for password values."""
 
