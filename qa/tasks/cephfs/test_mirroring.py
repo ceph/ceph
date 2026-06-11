@@ -453,6 +453,80 @@ class TestMirroring(CephFSTestCase):
                 return cp
         return None
 
+    def assert_checkpoint_listed(self, fs_name, dir_path, snap_name):
+        res = self.checkpoint_list(fs_name, dir_path)
+        cp = self.find_checkpoint(res['checkpoints'], snap_name)
+        self.assertIsNotNone(cp, f'checkpoint {snap_name} should be listed')
+
+    def assert_checkpoint_not_listed(self, fs_name, dir_path, snap_name):
+        res = self.checkpoint_list(fs_name, dir_path)
+        cp = self.find_checkpoint(res['checkpoints'], snap_name)
+        self.assertIsNone(cp, f'checkpoint {snap_name} should not be listed')
+
+    def start_mirror_daemon(self):
+        self.mount_a.run_shell_payload(
+            'nohup cephfs-mirror --id mirror </dev/null >/dev/null 2>&1 &')
+
+        @retry_assert(timeout=60, interval=2)
+        def wait_ready():
+            self.mirror_daemon_command(
+                f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
+
+        wait_ready()
+
+    def stop_mirror_daemon(self, wait=5):
+        pid = self.get_mirror_daemon_pid()
+        log.debug(f'stopping cephfs-mirror (pid={pid})')
+        self.mount_a.run_shell_payload(f'kill -TERM {pid} || true')
+        time.sleep(wait)
+
+    def restart_mirror_daemon(self):
+        self.stop_mirror_daemon()
+        self.start_mirror_daemon()
+
+    def restart_mirroring_module(self, wait=10):
+        log.debug('restarting mirroring mgr module')
+        self.run_ceph_cmd("mgr", "module", "disable", self.MODULE_NAME)
+        time.sleep(2)
+        self.run_ceph_cmd("mgr", "module", "enable", self.MODULE_NAME)
+        time.sleep(wait)
+
+    def _setup_mirrored_directory(self, dir_path, peer_spec=None, mount_b=False):
+        """Enable mirroring and track a directory; optionally mount backup FS and add peer."""
+        if mount_b:
+            self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "-p", dir_path.lstrip('/')])
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
+        if peer_spec:
+            self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                          self.secondary_fs_name)
+
+    def _add_checkpoint_snapshot(self, dir_path, snap_name, verify_listed=False):
+        """Create a snapshot and add a checkpoint on it."""
+        self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
+        self.checkpoint_add(self.primary_fs_name, dir_path, snap_name)
+        if verify_listed:
+            self.assert_checkpoint_listed(self.primary_fs_name, dir_path, snap_name)
+
+    def _setup_checkpoint_dir(self, dir_path, snap_name, peer_spec=None, mount_b=True):
+        """Create a tracked directory with a checkpointed snapshot."""
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=mount_b)
+        self._add_checkpoint_snapshot(dir_path, snap_name, verify_listed=True)
+
+    def _teardown_checkpoint_dir(self, dir_path, snap_names, peer_spec=None):
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
+        if peer_spec:
+            self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        for snap_name in snap_names:
+            snap_path = f"{dir_path.lstrip('/')}/.snap/{snap_name}"
+            try:
+                self.mount_a.run_shell(["rmdir", snap_path])
+            except CommandFailedError:
+                pass
+        self.mount_a.run_shell(["rmdir", dir_path.lstrip('/')])
+
     @retry_assert(timeout=600, interval=10)
     def check_checkpoint_status(self, fs_name, dir_path, snap_name, expected_status):
         res = self.checkpoint_list(fs_name, dir_path)
@@ -461,6 +535,10 @@ class TestMirroring(CephFSTestCase):
             raise AssertionError(
                 f'checkpoint {snap_name}: expected status {expected_status}, '
                 f'got {None if cp is None else cp["status"]!r}')
+
+    def check_checkpoint_statuses(self, fs_name, dir_path, snap_names, expected_status):
+        for snap_name in snap_names:
+            self.check_checkpoint_status(fs_name, dir_path, snap_name, expected_status)
 
     @retry_assert(timeout=600, interval=10)
     def check_checkpoint_list_pruned(self, fs_name, dir_path, keep_count,
@@ -649,12 +727,8 @@ class TestMirroring(CephFSTestCase):
         snap0 = 'snap0'
         snap1 = 'snap1'
 
-        self.mount_a.run_shell(["mkdir", "-p", dir_path.lstrip('/')])
-        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.add_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
-
-        self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap0}"])
-        self.checkpoint_add(self.primary_fs_name, dir_path, snap0)
+        self._setup_mirrored_directory(dir_path)
+        self._add_checkpoint_snapshot(dir_path, snap0)
 
         res = self.checkpoint_list(self.primary_fs_name, dir_path)
         self.assertEqual(res['dir_root'], dir_path)
@@ -663,15 +737,6 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(cp['status'], 'created')
         self.assertTrue(cp['created_at'])
         self.assertTrue(cp['updated_at'])
-
-        try:
-            self.checkpoint_add(self.primary_fs_name, dir_path, snap0)
-        except CommandFailedError as ce:
-            if ce.exitstatus != errno.EEXIST:
-                raise RuntimeError(
-                    f'expected EEXIST when re-adding checkpoint, got {ce.exitstatus}')
-        else:
-            raise RuntimeError('expected checkpoint add to fail for duplicate')
 
         self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap1}"])
         out = self.checkpoint_now(self.primary_fs_name, dir_path)
@@ -689,11 +754,7 @@ class TestMirroring(CephFSTestCase):
         res = self.checkpoint_list(self.primary_fs_name, dir_path)
         self.assertEqual(res['checkpoints'], [])
 
-        self.remove_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
-        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.mount_a.run_shell(["rmdir", f"{dir_path.lstrip('/')}/.snap/{snap0}"])
-        self.mount_a.run_shell(["rmdir", f"{dir_path.lstrip('/')}/.snap/{snap1}"])
-        self.mount_a.run_shell(["rmdir", dir_path.lstrip('/')])
+        self._teardown_checkpoint_dir(dir_path, [snap0, snap1])
 
     def test_checkpoint_cli_errors(self):
         """Test checkpoint CLI validation errors."""
@@ -701,9 +762,7 @@ class TestMirroring(CephFSTestCase):
         tracked = '/cp_err/tracked'
         snap = 'snap0'
 
-        self.mount_a.run_shell(["mkdir", "-p", tracked.lstrip('/')])
-        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.add_directory(self.primary_fs_name, self.primary_fs_id, tracked)
+        self._setup_mirrored_directory(tracked)
         self.mount_a.run_shell(["mkdir", f"{tracked.lstrip('/')}/.snap/{snap}"])
 
         try:
@@ -724,6 +783,17 @@ class TestMirroring(CephFSTestCase):
         else:
             raise RuntimeError('expected checkpoint remove to fail')
 
+        self.checkpoint_add(self.primary_fs_name, tracked, snap)
+        try:
+            self.checkpoint_add(self.primary_fs_name, tracked, snap)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EEXIST:
+                raise RuntimeError(
+                    f'expected EEXIST when re-adding checkpoint, got {ce.exitstatus}')
+        else:
+            raise RuntimeError('expected checkpoint add to fail for duplicate')
+        self.checkpoint_remove(self.primary_fs_name, tracked, snap)
+
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         try:
             self.checkpoint_list(self.primary_fs_name, tracked)
@@ -735,58 +805,40 @@ class TestMirroring(CephFSTestCase):
             raise RuntimeError('expected checkpoint list to fail')
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.remove_directory(self.primary_fs_name, self.primary_fs_id, tracked)
-        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.mount_a.run_shell(["rmdir", f"{tracked.lstrip('/')}/.snap/{snap}"])
-        self.mount_a.run_shell(["rmdir", tracked.lstrip('/')])
+        self._teardown_checkpoint_dir(tracked, [snap])
 
     def test_checkpoint_sync_status_reaches_complete(self):
         """Test mirror daemon updates checkpoint status after snapshot sync."""
-        self.setup_mount_b(mds_perm='rw')
         dir_path = '/cp_sync'
         snap_name = 'snap0'
         peer_spec = "client.mirror_remote@ceph"
 
-        self.mount_a.run_shell(["mkdir", "-p", dir_path.lstrip('/')])
-        self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
-
-        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
-        self.add_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
-
-        self.checkpoint_add(self.primary_fs_name, dir_path, snap_name)
+        self._setup_mirrored_directory(dir_path, mount_b=True)
+        self._add_checkpoint_snapshot(dir_path, snap_name)
         self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'created')
 
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                peer_spec, dir_path, snap_name, 1)
         self.verify_snapshot(dir_path.lstrip('/'), snap_name)
         self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'complete')
 
-        self.remove_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
-        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec)
-        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.mount_a.run_shell(["rmdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
-        self.mount_a.run_shell(["rmdir", dir_path.lstrip('/')])
+        self._teardown_checkpoint_dir(dir_path, [snap_name], peer_spec)
 
     def test_checkpoint_cleanup_old_complete_checkpoints(self):
         """Test mirror daemon prunes oldest complete checkpoints, keeping the latest 10."""
         keep = self.CHECKPOINT_SYNCED_KEEP_COUNT
         num_snaps = keep + 1
-        self.setup_mount_b(mds_perm='rw')
         dir_path = '/cp_cleanup'
         peer_spec = "client.mirror_remote@ceph"
 
-        self.mount_a.run_shell(["mkdir", "-p", dir_path.lstrip('/')])
-        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
-        self.add_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
 
         snap_names = []
         for i in range(num_snaps):
             snap_name = f'snap{i:02d}'
             snap_names.append(snap_name)
-            self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
-            self.checkpoint_add(self.primary_fs_name, dir_path, snap_name)
+            self._add_checkpoint_snapshot(dir_path, snap_name)
 
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                peer_spec, dir_path, snap_names[-1], num_snaps)
@@ -797,12 +849,162 @@ class TestMirroring(CephFSTestCase):
             pruned_snap_names=[snap_names[0]],
             retained_snap_names=snap_names[1:])
 
-        self.remove_directory(self.primary_fs_name, self.primary_fs_id, dir_path)
-        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec)
-        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self._teardown_checkpoint_dir(dir_path, snap_names, peer_spec)
+
+    def test_checkpoint_deleted_snapshot_not_listed(self):
+        """Deleted checkpointed snapshots must not appear in checkpoint ls."""
+        dir_path = '/cp_del'
+        snap_name = 'snap0'
+
+        self._setup_mirrored_directory(dir_path)
+        self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 1)
+
+        self.mount_a.run_shell(["rmdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(res['checkpoints'], [])
+
+        self._teardown_checkpoint_dir(dir_path, [snap_name])
+
+    def test_checkpoint_renamed_snapshot_shows_new_name(self):
+        """Renamed checkpointed snapshots must appear under the new name in ls."""
+        dir_path = '/cp_rename'
+        old_name = 'snap0'
+        new_name = 'snap1'
+
+        self._setup_mirrored_directory(dir_path)
+        self._add_checkpoint_snapshot(dir_path, old_name)
+
+        self.mount_a.run_shell([
+            "mv",
+            f"{dir_path.lstrip('/')}/.snap/{old_name}",
+            f"{dir_path.lstrip('/')}/.snap/{new_name}",
+        ])
+
+        self.assert_checkpoint_not_listed(self.primary_fs_name, dir_path, old_name)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, new_name, 'created')
+
+        self._teardown_checkpoint_dir(dir_path, [new_name])
+
+    def test_checkpoint_add_after_rename_allows_same_snap_name(self):
+        """A new snapshot can reuse a name after the checkpointed one is renamed."""
+        dir_path = '/cp_reuse_name'
+        old_name = 'snap0'
+        new_name = 'snap1'
+
+        self._setup_mirrored_directory(dir_path)
+        self._add_checkpoint_snapshot(dir_path, old_name)
+
+        self.mount_a.run_shell([
+            "mv",
+            f"{dir_path.lstrip('/')}/.snap/{old_name}",
+            f"{dir_path.lstrip('/')}/.snap/{new_name}",
+        ])
+        self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{old_name}"])
+        self.checkpoint_add(self.primary_fs_name, dir_path, old_name)
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 2)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, old_name, 'created')
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, new_name, 'created')
+
+        self._teardown_checkpoint_dir(dir_path, [old_name, new_name])
+
+    def test_checkpoint_persisted_across_mirror_daemon_restart(self):
+        """Checkpoints survive mirror daemon restart and reach complete after sync."""
+        dir_path = '/cp_mirror_restart'
+        snap_name = 'snap0'
+        peer_spec = "client.mirror_remote@ceph"
+
+        self._setup_checkpoint_dir(dir_path, snap_name)
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 1)
+
+        self.restart_mirror_daemon()
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 1)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'created')
+
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_name, 1)
+        self.verify_snapshot(dir_path.lstrip('/'), snap_name)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'complete')
+
+        self._teardown_checkpoint_dir(dir_path, [snap_name], peer_spec)
+
+    def test_checkpoint_persisted_across_mgr_module_restart(self):
+        """Checkpoints survive mirroring mgr module restart and reach complete after sync."""
+        dir_path = '/cp_mgr_restart'
+        snap_name = 'snap0'
+        peer_spec = "client.mirror_remote@ceph"
+
+        self._setup_checkpoint_dir(dir_path, snap_name)
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 1)
+
+        self.restart_mirroring_module()
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        self.assertEqual(len(res['checkpoints']), 1)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'created')
+
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_name, 1)
+        self.verify_snapshot(dir_path.lstrip('/'), snap_name)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'complete')
+
+        self._teardown_checkpoint_dir(dir_path, [snap_name], peer_spec)
+
+    def test_checkpoint_add_on_already_synced_snapshot_is_complete(self):
+        """Checkpoint added after sync should be marked complete by the daemon."""
+        dir_path = '/cp_already_synced'
+        snap_name = 'snap0'
+        peer_spec = "client.mirror_remote@ceph"
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+        self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_name, 1)
+        self.verify_snapshot(dir_path.lstrip('/'), snap_name)
+
+        self.checkpoint_add(self.primary_fs_name, dir_path, snap_name)
+        self.check_checkpoint_status(self.primary_fs_name, dir_path, snap_name, 'complete')
+
+        self._teardown_checkpoint_dir(dir_path, [snap_name], peer_spec)
+
+    def test_checkpoint_on_synced_snaps_complete_after_daemon_restart(self):
+        """Checkpoints added on synced snaps while daemon is down reach complete after restart."""
+        dir_path = '/cp_daemon_down'
+        snap_names = [f'snap{i}' for i in range(5)]
+        checkpoint_snaps = ['snap0', 'snap2', 'snap4']
+        peer_spec = "client.mirror_remote@ceph"
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
         for snap_name in snap_names:
-            self.mount_a.run_shell(["rmdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
-        self.mount_a.run_shell(["rmdir", dir_path.lstrip('/')])
+            self.mount_a.run_shell(["mkdir", f"{dir_path.lstrip('/')}/.snap/{snap_name}"])
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_names[-1], len(snap_names))
+        self.verify_snapshot(dir_path.lstrip('/'), snap_names[-1])
+
+        self.stop_mirror_daemon()
+        for snap_name in checkpoint_snaps:
+            self.checkpoint_add(self.primary_fs_name, dir_path, snap_name)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, checkpoint_snaps, 'created')
+
+        self.restart_mirror_daemon()
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, checkpoint_snaps, 'complete')
+
+        self._teardown_checkpoint_dir(dir_path, snap_names, peer_spec)
 
     def test_add_relative_directory_path(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
