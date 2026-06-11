@@ -120,8 +120,8 @@ about Ceph, see our `Architecture`_ section.
    foundation
    ceph-volume/index
    crimson/crimson
-   releases/general
-   releases/index
+   Ceph Releases (general) <https://docs.ceph.com/en/latest/releases/general/>
+   Ceph Releases (index) <https://docs.ceph.com/en/latest/releases/>
    security/index
    hardware-monitoring/index
    Glossary <glossary>
