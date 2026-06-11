@@ -2776,7 +2776,7 @@ fi
 
 %preun osd-crimson
 if [ $1 -eq 0 ]; then
-    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-crimson
+    %{_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-crimson
 fi
 %endif
 
@@ -2786,7 +2786,7 @@ fi
 
 %preun osd-classic
 if [ $1 -eq 0 ]; then
-    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-classic
+    %{_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-classic
 fi
 
 %files volume
