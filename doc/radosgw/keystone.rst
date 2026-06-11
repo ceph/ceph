@@ -56,6 +56,44 @@ only use implicit tenants, and the other protocol will
 never use implicit tenants.  Some older versions of ceph
 only supported implicit tenants with swift.
 
+Project-scoped reader role
+--------------------------
+
+By default any Keystone user accepted by the gateway is granted full control
+over its project's object storage. ``rgw keystone accepted project reader
+roles`` designates one or more Keystone roles as *project-scoped readers*
+(the Swift ``project_reader_roles`` equivalent)::
+
+   rgw keystone accepted roles = member, objectstore_viewer
+   rgw keystone accepted project reader roles = objectstore_viewer
+   rgw keystone implicit tenants = true
+
+When the reader role is the only access-granting role a user holds, the user
+is capped to read-only within its Keystone project (its ``perm_mask`` is set
+to ``RGW_PERM_READ`` instead of ``RGW_PERM_FULL_CONTROL``). With
+``rgw keystone implicit tenants = true`` all users of a project share one RGW
+account, so a reader can list and read every bucket the project owns through
+the normal (owner-scoped) paths.
+
+Note the following:
+
+- **The reader role must also appear in** ``rgw keystone accepted roles``.
+  A role listed only in ``rgw keystone accepted project reader roles`` does
+  not by itself admit the user; without a role in ``rgw keystone accepted
+  roles`` the request is rejected before the cap is ever applied.
+
+- **The cap is a floor, not a hard ceiling.** A bucket policy that names the
+  user (via a ``keystone:userid`` / ``keystone:role`` condition or a principal
+  ARN) can still grant specific actions such as writes on specific buckets;
+  an explicit policy ``Deny`` can likewise remove access. Only bucket creation
+  and Swift account-metadata writes are refused up front regardless of policy.
+
+- **A role that grants more than read overrides the cap.** If the same user
+  also holds ``admin`` or any other role in ``rgw keystone accepted roles``
+  (for example ``member``), that role wins and the user receives full control.
+  To keep a user read-only, assign it *only* the reader role. Roles that are
+  in no accepted list at all are ignored and do not affect the cap.
+
 Ocata (and Later)
 -----------------
 

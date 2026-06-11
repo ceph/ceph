@@ -1301,6 +1301,15 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   if (s->identity->get_identity_type() == TYPE_ROLE)
     return false;
 
+  /* A project reader is read-only even on account-scoped ops that would
+   * otherwise default-allow below (CreateBucket, Swift account metadata,
+   * bulk-upload container creation). Enforce the mask before the empty-ACL
+   * shortcut. A bucket policy naming the reader is evaluated earlier in
+   * verify_user_permission() and is unaffected. */
+  if (is_keystone_project_reader(s->perm_mask, *s->identity) &&
+      (perm & (int)s->perm_mask) != perm)
+    return false;
+
   /* S3 doesn't support account ACLs, so user_acl will be uninitialized. */
   if (user_acl.get_owner().empty())
     return true;
@@ -1440,6 +1449,13 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
                                   session_policies, op, &s->granted_by_acl);
+}
+
+bool is_keystone_project_reader(uint32_t perm_mask,
+                                const rgw::auth::Identity& identity)
+{
+  return perm_mask == RGW_PERM_READ &&
+         identity.get_identity_type() == TYPE_KEYSTONE;
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,

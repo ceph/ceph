@@ -150,10 +150,15 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
   acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
   for (const auto& role : token.roles) {
     role_names.push_back(role.name);
-    if (role.is_admin && !role.is_reader) {
+    if (role.is_admin && !role.is_system_reader) {
       level = acct_privilege_t::IS_ADMIN_ACCT;
     }
   }
+
+  /* Project-reader cap: read-only when every granting role is a
+   * project_reader (see TokenEnvelope::is_project_reader_only). */
+  const uint32_t perm_mask = token.is_project_reader_only() ? RGW_PERM_READ
+                                                            : RGW_PERM_FULL_CONTROL;
 
   /* Build keystone scope info if ops logging is enabled */
   auto keystone_scope = rgw::keystone::build_scope_info(cct, token);
@@ -163,9 +168,9 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
-    /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
-     * the access rights through the perm_mask. At least at this layer. */
-    RGW_PERM_FULL_CONTROL,
+    /* Keystone doesn't support RGW's subuser concept, so perm_mask is FULL_CONTROL for
+     * regular users. The project_reader cap above is the sole exception. */
+    perm_mask,
     level,
     rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
@@ -219,7 +224,7 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
     }
 
     for (const auto& r : token_roles) {
-      if (r.is_reader) {
+      if (r.is_system_reader) {
         if (r.is_admin) {    /* system scope reader persona */
           /*
            * Because system reader defeats permissions,
@@ -250,7 +255,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -258,7 +264,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
-    std::vector<std::string> reader;
+    std::vector<std::string> system_reader;
+    std::vector<std::string> project_reader;
   } roles(cct);
 
   static const struct ServiceTokenRolesCacher {
@@ -360,7 +367,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (! t) {
     return result_t::deny(-EACCES);
   }
-  t->update_roles(roles.admin, roles.reader);
+  t->update_roles(roles.plain, roles.admin, roles.system_reader, roles.project_reader);
 
   /* Verify expiration. */
   if (t->expired()) {
@@ -661,12 +668,17 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
 
   /* Check whether the user has an admin status. */
   acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
-  for (const auto& admin_role : admin_roles) {
-    if (token.has_role(admin_role)) {
+  for (const auto& role : token.roles) {
+    if (role.is_admin && !role.is_system_reader) {
       level = acct_privilege_t::IS_ADMIN_ACCT;
       break;
     }
   }
+
+  /* Project-reader cap: read-only when every granting role is a
+   * project_reader (see TokenEnvelope::is_project_reader_only). */
+  const uint32_t perm_mask = token.is_project_reader_only() ? RGW_PERM_READ
+                                                            : RGW_PERM_FULL_CONTROL;
 
   /* Build keystone scope info if ops logging is enabled */
   auto keystone_scope = rgw::keystone::build_scope_info(cct, token);
@@ -681,9 +693,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
-    /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
-     * the access rights through the perm_mask. At least at this layer. */
-    RGW_PERM_FULL_CONTROL,
+    /* Keystone doesn't support RGW's subuser concept,perm_mask is FULL_CONTROL for
+     * regular users. The project_reader cap above is the sole exception. */
+    perm_mask,
     level,
     access_key_id,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
@@ -712,6 +724,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -719,6 +733,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
+    std::vector<std::string> system_reader;
+    std::vector<std::string> project_reader;
   } accepted_roles(cct);
 
   /* When we handle a HTTP OPTIONS call we must ignore the signature */
@@ -764,6 +780,11 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     ldpp_dout(dpp, 5) << "s3 keystone: validated token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expires: " << t->get_expires() << dendl;
+
+    t->update_roles(accepted_roles.plain,
+                    accepted_roles.admin,
+                    accepted_roles.system_reader,
+                    accepted_roles.project_reader);
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
