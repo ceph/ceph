@@ -50,39 +50,7 @@
 
         </div>
       </div>
-      <!-- Pool -->
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-select
-            label="Block pool"
-            helperText="An RBD application-enabled pool in which the gateway configuration can be managed."
-            labelInputID="pool"
-            id="pool"
-            formControlName="pool"
-            cdRequiredField="Block pool"
-            [invalid]="groupForm.controls.pool.invalid && groupForm.controls.pool.dirty"
-            [invalidText]="poolError"
-            i18n-label
-            i18n-helperText
-          >
-            <option *ngIf="poolsLoading"
-                    [ngValue]="null"
-                    i18n>Loading...</option>
-            <option *ngIf="!poolsLoading && pools.length === 0"
-                    [ngValue]="null"
-                    i18n>-- No block pools available --</option>
-            <option *ngFor="let pool of pools"
-                    [value]="pool.pool_name">{{ pool.pool_name }}</option>
-          </cds-select>
-          <ng-template #poolError>
-            <span class="invalid-feedback"
-                  *ngIf="groupForm.showError('pool', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </ng-template>
-        </div>
-      </div>
-
+      
       <!-- CDS Checkbox -->
       <div cdsRow
            class="form-item">
