@@ -533,6 +533,12 @@ public:
     return store;
   }
 
+  bool is_local_storage_full(store_index_t store_index) const {
+    const auto &shard_store =
+        local_state.b_store.f_store.get_sharded_store(store_index);
+    return shard_store.is_storage_full();
+  }
+
   struct shard_stats_t {
     double reactor_utilization;
   };
