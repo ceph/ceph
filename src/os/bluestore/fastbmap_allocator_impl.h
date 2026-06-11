@@ -550,6 +550,18 @@ public:
   static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
   static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
   void foreach_internal(std::function<void(uint64_t offset, uint64_t length)> notify);
+
+  // Range- and count-bounded counterpart to foreach_internal(). Enumerates free
+  // extents whose offsets (in L0 units, one bit per min_alloc_size) intersect
+  // [l0_pos_start, l0_pos_end), emitting at most max_count of them (0 ==
+  // unbounded). Each run is clipped to the window. Returns an L0 resume cursor:
+  // >= l0_pos_end once the window is exhausted, otherwise the first unit past
+  // the last emitted run (which may land in allocated space).
+  uint64_t get_free_extents_internal(
+    uint64_t l0_pos_start,
+    uint64_t l0_pos_end,
+    size_t max_count,
+    std::function<void(uint64_t offset, uint64_t length)> notify);
 };
 
 
@@ -639,6 +651,36 @@ public:
     std::lock_guard l(lock);
     l1.foreach_internal(multiply_by_alloc_size);
   }
+
+  uint64_t get_free_extents_internal(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    std::function<void(uint64_t offset, uint64_t length)> notify)
+  {
+    ceph_assert(range_begin <= range_end);
+    if (range_begin == range_end) {
+      return range_end;
+    }
+    const uint64_t alloc_size = get_min_alloc_size();
+    // Window expressed in L0 units (one bit per min_alloc_size).
+    const uint64_t l0_pos_start = range_begin / alloc_size;
+    const uint64_t l0_pos_end   = p2roundup(range_end, alloc_size) / alloc_size;
+
+    // Scale unit runs back to bytes, clipped to the exact byte window
+    // (free extents are alloc-unit aligned, so only the boundary units clip).
+    auto emit = [&](uint64_t off, uint64_t len) {
+      uint64_t lo = std::max(off * alloc_size, range_begin);
+      uint64_t hi = std::min((off + len) * alloc_size, range_end);
+      notify(lo, hi - lo);
+    };
+
+    std::lock_guard l(lock);
+    uint64_t cursor =
+      l1.get_free_extents_internal(l0_pos_start, l0_pos_end, max_count, emit);
+    return cursor >= l0_pos_end ? range_end : cursor * alloc_size;
+  }
+
   double get_fragmentation_internal() {
     std::lock_guard l(lock);
     return l1.get_fragmentation();
