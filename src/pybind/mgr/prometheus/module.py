@@ -2023,7 +2023,7 @@ class Module(MgrModule, OrchestratorClientMixin):
     @profile_method(True)
     def get_hardware_metrics(self) -> None:
         """Collect hardware metrics from node-proxy KV store"""
-        NODE_PROXY_CACHE_PREFIX = 'node_proxy'
+        NODE_PROXY_CACHE_PREFIX = 'mgr/cephadm/node_proxy'
 
         try:
             for key, value in self.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
