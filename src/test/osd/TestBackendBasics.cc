@@ -617,6 +617,13 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
   
   verify_object(obj_name, expected_data, 0, final_size);
   
+  // Step 4: Fail shard 1 (which received the write) and verify object can still be read
+  // For optimized EC, shard 1 is a data shard that received part of the write
+  simulate_multiple_osd_failures({1});
+  
+  // Verify the object can still be read correctly via EC reconstruction
+  verify_object(obj_name, expected_data, 0, final_size);
+  
   // Clean up
   auto* primary_listener = get_primary_listener();
   if (primary_listener) {

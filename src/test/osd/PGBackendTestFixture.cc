@@ -755,6 +755,124 @@ int PGBackendTestFixture::read_object(
   }
 }
 
+void PGBackendTestFixture::visualize_miscompare(
+  const std::string& obj_name,
+  const char* expected_buf,
+  const char* read_buf,
+  size_t size,
+  const std::string& phase)
+{
+  bool mismatch_found = false;
+  size_t first_mismatch = 0;
+  size_t last_mismatch = 0;
+  
+  // Find mismatches
+  for (size_t i = 0; i < size; i++) {
+    if (read_buf[i] != expected_buf[i]) {
+      if (!mismatch_found) {
+        first_mismatch = i;
+        mismatch_found = true;
+      }
+      last_mismatch = i;
+    }
+  }
+  
+  if (!mismatch_found) {
+    return;  // No mismatches to visualize
+  }
+  
+  std::cout << "\n=== MISCOMPARE DETECTED in " << phase << " ===" << std::endl;
+  std::cout << "Object: " << obj_name << std::endl;
+  if (pool_type == EC) {
+    std::cout << "Config: k=" << k << " m=" << m << " stripe_unit=" << stripe_unit << std::endl;
+  } else {
+    std::cout << "Config: Replicated pool, size=" << num_replicas << std::endl;
+  }
+  std::cout << "Miscompare range: [" << first_mismatch << ", " << last_mismatch << "]" << std::endl;
+  std::cout << "Total mismatches: " << (last_mismatch - first_mismatch + 1) << " bytes" << std::endl;
+  
+  // Show detailed hex+ASCII dump around first mismatch
+  size_t dump_start = (first_mismatch > 64) ? (first_mismatch - 64) : 0;
+  size_t dump_end = std::min(last_mismatch + 64, size);
+  
+  std::cout << "\nHex+ASCII dump around first mismatch [" << dump_start << ", " << dump_end << "):" << std::endl;
+  std::cout << "Offset   Hex                                              ASCII" << std::endl;
+  
+  std::string last_line_hex;
+  std::string last_line_ascii;
+  int repeat_count = 0;
+  
+  for (size_t i = dump_start; i < dump_end; i += 16) {
+    // Build hex representation
+    std::ostringstream hex_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      unsigned char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) hex_stream << "\033[1;31m";
+      hex_stream << std::setw(2) << std::setfill('0') << std::hex << (int)c;
+      if (mismatch) hex_stream << "\033[0m";
+      hex_stream << " ";
+    }
+    std::string hex_line = hex_stream.str();
+    
+    // Build ASCII representation
+    std::ostringstream ascii_stream;
+    for (size_t j = 0; j < 16 && (i + j) < dump_end; j++) {
+      char c = read_buf[i + j];
+      bool mismatch = (c != expected_buf[i + j]);
+      if (mismatch) ascii_stream << "\033[1;31m";
+      ascii_stream << (isprint(c) ? c : '.');
+      if (mismatch) ascii_stream << "\033[0m";
+    }
+    std::string ascii_line = ascii_stream.str();
+    
+    // Check if this line is identical to the last line
+    if (hex_line == last_line_hex && ascii_line == last_line_ascii && i > dump_start) {
+      repeat_count++;
+      continue;
+    }
+    
+    // Print any accumulated repeats
+    if (repeat_count > 0) {
+      std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+      repeat_count = 0;
+    }
+    
+    // Print current line
+    std::cout << std::setw(8) << std::setfill('0') << std::hex << i << " "
+              << std::setw(48) << std::left << hex_line << " " << ascii_line
+              << std::dec << std::endl;
+    
+    last_line_hex = hex_line;
+    last_line_ascii = ascii_line;
+  }
+  
+  // Print any remaining repeats
+  if (repeat_count > 0) {
+    std::cout << "         * " << repeat_count << " identical line(s) omitted *" << std::endl;
+  }
+  
+  // Show expected vs read comparison
+  std::cout << "\nExpected vs Read (first 128 bytes of miscompare):" << std::endl;
+  size_t compare_len = std::min(size_t(128), last_mismatch - first_mismatch + 1);
+  
+  std::cout << "Expected: ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = expected_buf[first_mismatch + i];
+    std::cout << (isprint(c) ? c : '.');
+  }
+  std::cout << std::endl;
+  
+  std::cout << "Read:     ";
+  for (size_t i = 0; i < compare_len; i++) {
+    char c = read_buf[first_mismatch + i];
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[1;31m";
+    std::cout << (isprint(c) ? c : '.');
+    if (c != expected_buf[first_mismatch + i]) std::cout << "\033[0m";
+  }
+  std::cout << std::endl;
+}
+
 void PGBackendTestFixture::verify_object(
   const std::string& obj_name,
   const std::string& expected_data,
@@ -768,8 +886,22 @@ void PGBackendTestFixture::verify_object(
   EXPECT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
   
   if (read_data.length() == expected_data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    EXPECT_EQ(read_string, expected_data) << "Data should match";
+    const char* read_buf = read_data.c_str();
+    const char* expected_buf = expected_data.c_str();
+    
+    // Check for mismatches
+    bool has_mismatch = false;
+    for (size_t i = 0; i < expected_data.length(); i++) {
+      if (read_buf[i] != expected_buf[i]) {
+        has_mismatch = true;
+        break;
+      }
+    }
+    
+    if (has_mismatch) {
+      visualize_miscompare(obj_name, expected_buf, read_buf, expected_data.length(), "verify_object");
+      FAIL() << "Data mismatch detected";
+    }
   }
 }
 

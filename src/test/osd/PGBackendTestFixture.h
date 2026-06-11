@@ -414,6 +414,22 @@ public:
    * @param offset Offset to read from (default: 0)
    * @param context_msg Optional context message to append to assertion messages
    */
+  /**
+   * Visualize data miscompare with hex+ASCII dump and line compression.
+   *
+   * @param obj_name Name of the object being compared
+   * @param expected_buf Expected data buffer
+   * @param read_buf Actual read data buffer
+   * @param size Size of both buffers
+   * @param phase Description of when the comparison occurred (e.g., "After shard 1 failure")
+   */
+  void visualize_miscompare(
+    const std::string& obj_name,
+    const char* expected_buf,
+    const char* read_buf,
+    size_t size,
+    const std::string& phase);
+
   void verify_object(
     const std::string& obj_name,
     const std::string& expected_data,
