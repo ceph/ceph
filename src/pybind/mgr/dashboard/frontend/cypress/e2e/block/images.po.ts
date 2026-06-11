@@ -56,7 +56,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('[data-testid=submitBtn] button').should('be.visible').click({ force: true });
 
     // Clicks trash tab
-    cy.contains('.nav-link', 'Trash').click();
+    cy.contains('cds-tab-headers button[role="tab"]', 'Trash').click();
     this.getFirstTableCell(name).should('exist');
   }
 
@@ -64,7 +64,7 @@ export class ImagesPageHelper extends PageHelper {
   // (could change name if new name is given)
   restoreImage(name: string, newName?: string) {
     // clicks on trash tab
-    cy.contains('.nav-link', 'Trash').click();
+    cy.contains('cds-tab-headers button[role="tab"]', 'Trash').click();
 
     // wait for table to load
     this.getFirstTableCell(name).click();
@@ -83,7 +83,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('[data-testid=submitBtn]').click();
 
     // clicks images tab
-    cy.contains('.nav-link', 'Images').click();
+    cy.contains('cds-tab-headers button[role="tab"]', 'Images').click();
 
     this.getFirstTableCell(newName).should('exist');
   }
@@ -92,7 +92,7 @@ export class ImagesPageHelper extends PageHelper {
   // Checks if Image is still in the table.
   purgeTrash(name: string, pool?: string) {
     // clicks trash tab
-    cy.contains('.nav-link', 'Trash').click();
+    cy.contains('cds-tab-headers button[role="tab"]', 'Trash').click();
     cy.contains('button', 'Purge Trash').click();
 
     // Check for visibility of modal container

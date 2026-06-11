@@ -8,9 +8,9 @@ export class DaemonsPageHelper extends PageHelper {
   getTableCell() {
     return cy
       .get('.tab-content')
-      .its(1)
+      .first()
       .find('cd-table')
-      .should('have.length', 1) // Only 1 table should be renderer
+      .should('have.length', 1)
       .find('[cdstabledata]');
   }
 
@@ -25,8 +25,8 @@ export class DaemonsPageHelper extends PageHelper {
     // click on performance counters tab and check table is loaded
     cy.contains('.nav-link', 'Performance Counters').click();
 
-    // check at least one field is present
-    this.getTableCell().should('be.visible').should('contain.text', 'objecter.op_r');
+    // check at least one field is present (objecter with any suffix)
+    this.getTableCell().should('be.visible').invoke('text').should('match', /objecter.*\.op_r/);
 
     // click on performance details tab
     cy.contains('.nav-link', 'Performance Details').click();

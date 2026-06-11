@@ -45,7 +45,7 @@ Then('I should not see the carbon modal', () => {
 
 And('I go to the {string} tab', (names: string) => {
   for (const name of names.split(', ')) {
-    cy.contains('.nav.nav-tabs a', name).click();
+    cy.contains('cds-tab-headers button[role="tab"], .nav.nav-tabs a', name).click();
   }
 });
 

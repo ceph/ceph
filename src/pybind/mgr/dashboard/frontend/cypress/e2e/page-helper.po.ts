@@ -88,7 +88,7 @@ export abstract class PageHelper {
   }
 
   getTabs() {
-    return cy.get('.nav.nav-tabs a');
+    return cy.get('cds-tab-headers button[role="tab"], .nav.nav-tabs a');
   }
 
   getTab(tabName: string) {
@@ -100,7 +100,8 @@ export abstract class PageHelper {
   }
 
   getTabText(index: number) {
-    return this.getTabs().its(index).text();
+    // Trim is needed for Carbon's internal whitespace
+    return this.getTabs().eq(index).invoke('text').then((text: string) => text.trim());
   }
 
   getTabsCount(): any {

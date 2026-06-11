@@ -1,18 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { PrometheusTabsComponent } from './prometheus-tabs.component';
+import { By } from '@angular/platform-browser';
 
 describe('PrometheusTabsComponent', () => {
   let component: PrometheusTabsComponent;
   let fixture: ComponentFixture<PrometheusTabsComponent>;
 
   configureTestBed({
-    imports: [RouterTestingModule, NgbNavModule],
+    imports: [RouterTestingModule],
     declarations: [PrometheusTabsComponent],
     providers: [{ provide: PrometheusAlertService, useValue: { alerts: [] } }]
   });
@@ -25,5 +24,10 @@ describe('PrometheusTabsComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should display three tabs', () => {
+    const tabs = fixture.debugElement.queryAll(By.css('cds-tab'));
+    expect(tabs.length).toBe(3);
   });
 });
