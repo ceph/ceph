@@ -1634,10 +1634,14 @@ public:
     const bool is_inindex =
       bucket_info.layout.logs.empty() ||
       bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
+    // suppress fifo bilog entries when sync is disabled.
+    // datasync_flag_enabled() reflects the bucket-info flag set by
+    // "bucket sync disable".
+    const bool fifo_sync_enabled = bucket_info.datasync_flag_enabled();
 
     if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
       // bilog-only variant: lambda receives only a bilog handler.
-      if (log_data && !is_inindex) {
+      if (log_data && !is_inindex && fifo_sync_enabled) {
         auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
         std::forward<F>(func)(batch);
       } else {
@@ -1652,13 +1656,15 @@ public:
         CLSRGWBucketModifyOpT op_issuer{log_data, std::forward<Args>(args)...};
         BILogNopHandler nop;
         return std::forward<F>(func)(op_issuer, nop);
-      } else if (log_data) {
-        // FIFO log: OpIssuer must not write in-index bilog. FIFO batch does it.
+      } else if (log_data && fifo_sync_enabled) {
+        // fifo log, sync enabled. OpIssuer must not write in-index bilog.
         CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
         auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
         return std::forward<F>(func)(op_issuer, batch);
       } else {
-        // logging disabled entirely.
+        // fifo log with logging disabled, or sync disabled: CLS op proceeds
+        // normally but no fifo entry is written.  op_issuer always gets
+        // log_op=false for fifo so the OSD never writes omap bilog entries.
         CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
         BILogNopHandler nop;
         return std::forward<F>(func)(op_issuer, nop);

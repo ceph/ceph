@@ -595,8 +595,8 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
       }
       mgr.to_string(&max_marker);
     }
-    // TODO: FIFO SYNCSTOP/START needs to be fixed
-    syncstopped = false;
+    // syncstopped reflects whether bucket sync disable is active.
+    syncstopped = !bucket->get_info().datasync_flag_enabled();
   } else {
     const auto& index = log_to_index_layout(last_log);
     ldpp_dout(s, 20) << __func__ << ": InIndex bucket, reading stats from"
