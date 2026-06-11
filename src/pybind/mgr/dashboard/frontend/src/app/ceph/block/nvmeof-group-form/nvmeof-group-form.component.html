@@ -10,7 +10,7 @@
     <div cdsCol
          [columnNumbers]="{sm: 4, md: 8}">
       <div cdsRow
-           class="form-heading form-item">
+           class="form-heading form-item cds-mt-5">
       <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
       <div cdsRow
@@ -21,7 +21,6 @@
             i18n
             i18n-helperText
             helperText="A unique name to identify this gateway group."
-            cdRequiredField="Gateway group name"
             [invalid]="groupName.isInvalid">
             Gateway group name
             <input
@@ -32,6 +31,7 @@
               #groupName="cdValidate"
               autofocus
               formControlName="groupName"
+              cdRequiredField="Gateway group name"
               [invalid]="groupName.isInvalid"
             />
           </cds-text-label>
