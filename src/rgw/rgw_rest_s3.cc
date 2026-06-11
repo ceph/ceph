@@ -4897,6 +4897,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     // the response body — this matches AWS S3 behaviour where the response
     // header has already been committed.
     // dump_start() was already called in send_response_begin().
+    set_req_state_err(s, op_ret);
     s->formatter->open_object_section("Error");
     s->formatter->dump_string("Code", s->err.err_code);
     s->formatter->dump_string("Message",
