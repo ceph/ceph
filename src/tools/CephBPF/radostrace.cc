@@ -593,31 +593,28 @@ int main(int argc, char **argv) {
 
   DwarfParser dwarfparser(rados_probes, probe_units);
 
-  // Use the new function to find library paths dynamically
-  string librbd_path = find_library_path("librbd.so.1", process_id);
-  string librados_path = find_library_path("librados.so.2", process_id);
+  // Since Tentacle (v20), Objecter.cc is compiled only into libceph-common
+  // (see 42f7383589c "CMakeLists.txt: do not compile {Objecter,Striper}.cc
+  // twice"), and librados/librbd link against it dynamically. Every
+  // librados-based client therefore maps libceph-common, and it is the only
+  // library that needs DWARF parsing and uprobe attachment.
   string libceph_common_path = find_library_path("libceph-common.so.2", process_id);
 
-  if (librbd_path.empty() || librados_path.empty() || libceph_common_path.empty()) {
-    cerr << "Error: Could not find one or more required Ceph libraries:" << std::endl;
-    if (librbd_path.empty()) cerr << "  - librbd.so.1 not found" << std::endl;
-    if (librados_path.empty()) cerr << "  - librados.so.2 not found" << std::endl;
-    if (libceph_common_path.empty()) cerr << "  - libceph-common.so.2 not found" << std::endl;
+  if (libceph_common_path.empty()) {
+    cerr << "Error: Could not find required Ceph library:" << std::endl;
+    cerr << "  - libceph-common.so.2 not found" << std::endl;
     return 1;
-  } else {
-    debug_print("Libraries to be traced: ", librbd_path, ", ", librados_path, ", ", libceph_common_path, "\n");
   }
+  debug_print("Library to be traced: ", libceph_common_path, "\n");
 
-  if (check_library_deleted(process_id, "librados")) {
-     cerr << "Error: librados library mismatch detected!" << std::endl;
+  if (check_library_deleted(process_id, "libceph-common")) {
+     cerr << "Error: libceph-common library mismatch detected!" << std::endl;
      cerr << "The ceph package has been upgraded on disk, but one or more processes are still using the old version in memory." << std::endl;
      cerr << "Please restart the affected processes to use the new version." << std::endl;
      return 1;
    }
 
   debug_print("Start to parse dwarf info\n");
-  dwarfparser.add_module(librbd_path);
-  dwarfparser.add_module(librados_path);
   dwarfparser.add_module(libceph_common_path);
   dwarfparser.parse();
 
@@ -656,11 +653,7 @@ int main(int argc, char **argv) {
 
   debug_print("BPF prog loaded\n");
 
-  attach_uprobe(skel, dwarfparser, librados_path, "Objecter::_send_op", process_id);
-  attach_uprobe(skel, dwarfparser, librbd_path, "Objecter::_send_op", process_id);
   attach_uprobe(skel, dwarfparser, libceph_common_path, "Objecter::_send_op", process_id);
-  attach_uprobe(skel, dwarfparser, librados_path, "Objecter::_finish_op", process_id);
-  attach_uprobe(skel, dwarfparser, librbd_path, "Objecter::_finish_op", process_id);
   attach_uprobe(skel, dwarfparser, libceph_common_path, "Objecter::_finish_op", process_id);
 
   debug_print("New a ring buffer\n");
