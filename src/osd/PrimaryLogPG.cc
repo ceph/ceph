@@ -10515,6 +10515,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
 
   if (cb->results->mirror_snapset) {
     ceph_assert(ctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
+    ctx->new_snapset = SnapSet();
     ctx->new_snapset.from_snap_set(cb->results->snapset, false);
   }
 
