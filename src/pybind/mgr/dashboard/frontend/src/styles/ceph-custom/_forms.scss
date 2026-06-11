@@ -143,6 +143,10 @@ form {
   margin-top: var(--cds-spacing-09);
 }
 
+.form-button-right {
+  text-align: end;
+}
+
 .form-item-append {
   display: flex;
   flex-direction: row;
