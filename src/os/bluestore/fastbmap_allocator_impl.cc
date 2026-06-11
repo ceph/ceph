@@ -620,6 +620,108 @@ void AllocatorLevel01Loose::foreach_internal(
     notify(off, len);
 }
 
+uint64_t AllocatorLevel01Loose::get_free_extents_internal(
+    uint64_t l0_pos_start,
+    uint64_t l0_pos_end,
+    size_t max_count,
+    std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  const bool unbounded = (max_count == 0);
+  // Never scan past the physical bitmap.
+  const uint64_t scan_end =
+    std::min<uint64_t>(l0_pos_end, (uint64_t)l0.size() * bits_per_slot);
+  if (l0_pos_start >= scan_end) {
+    return l0_pos_end;
+  }
+
+  uint64_t off = 0;     // start of the open free run, in L0 units (bits)
+  uint64_t len = 0;     // length of the open free run; 0 == no run open
+  size_t   count = 0;   // extents emitted so far
+
+  // Emit the open run, remember where to resume, reset it. Returns true when
+  // the per-batch cap is reached and the walk must stop.
+  uint64_t resume = 0;
+  auto close_run = [&]() -> bool {
+    resume = off + len;
+    notify(off, len);
+    len = 0;
+    return !unbounded && (++count == max_count);
+  };
+
+  const uint64_t l1_idx_start = l0_pos_start / bits_per_slotset;
+  const uint64_t l1_idx_end =
+    (scan_end + bits_per_slotset - 1) / bits_per_slotset;   // ceil, exclusive
+
+  for (uint64_t l1_idx = l1_idx_start; l1_idx < l1_idx_end; ++l1_idx) {
+    const uint64_t ss_begin = l1_idx * bits_per_slotset;
+    const uint64_t win_lo = std::max(ss_begin, l0_pos_start);
+    const uint64_t win_hi = std::min(ss_begin + bits_per_slotset, scan_end);
+
+    // Decode this slotset's 2-bit L1 entry.
+    const size_t l1_word  = l1_idx / L1_ENTRIES_PER_SLOT;
+    const size_t l1_shift = (l1_idx % L1_ENTRIES_PER_SLOT) * L1_ENTRY_WIDTH;
+    const slot_t w = (l1[l1_word] >> l1_shift) & L1_ENTRY_MASK;
+
+    if (w == L1_ENTRY_FULL) {
+      // Whole slotset allocated: a run, if any, ends here.
+      if (len && close_run()) {
+        return resume;
+      }
+    } else if (w == L1_ENTRY_FREE) {
+      // Whole slotset free: start or extend the run over the window slice.
+      if (len == 0) {
+        off = win_lo;
+      }
+      len += win_hi - win_lo;
+    } else {
+      // L1_ENTRY_PARTIAL: scan the L0 bitmap, restricted to [win_lo, win_hi).
+      const uint64_t slot0 = l1_idx * slots_per_slotset;   // first L0 word
+      for (uint64_t t = 0; t < slots_per_slotset; ++t) {
+        const uint64_t word_base = (slot0 + t) * bits_per_slot;
+        const uint64_t lo = std::max(win_lo, word_base);
+        const uint64_t hi = std::min(win_hi, word_base + bits_per_slot);
+        if (lo >= hi) {
+          continue;                     // this L0 word is outside the window
+        }
+        size_t p     = lo - word_base;  // first in-window bit of this word
+        size_t p_end = hi - word_base;  // one past the last in-window bit
+        const slot_t pattern = l0[slot0 + t];
+
+        while (p < p_end) {
+          if (len == 0) {
+            // Skip allocated (0) bits, then open a run on the free (1) bits.
+            p += count_0s(pattern, p);
+            if (p >= p_end) {
+              break;
+            }
+            size_t free_count =
+              std::min<size_t>(count_1s(pattern, p), p_end - p);
+            off = word_base + p;
+            len = free_count;
+            p += free_count;
+          } else if (count_1s(pattern, p) == 0) {
+            // Allocated bit ends the open run.
+            if (close_run()) {
+              return resume;
+            }
+          } else {
+            size_t free_count =
+              std::min<size_t>(count_1s(pattern, p), p_end - p);
+            len += free_count;
+            p += free_count;
+          }
+        }
+      }
+    }
+  }
+
+  // Window fully enumerated; flush a still-open run.
+  if (len) {
+    notify(off, len);
+  }
+  return l0_pos_end;
+}
+
 uint64_t AllocatorLevel01Loose::_claim_free_to_left_l0(int64_t l0_pos_start)
 {
   int64_t d0 = L0_ENTRIES_PER_SLOT;
