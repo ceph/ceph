@@ -50,6 +50,11 @@ export type InitiatorRequest = NvmeofRequest & {
   dhchap_key?: string;
 };
 
+export type SubsystemInitiatorRequest = NvmeofRequest & {
+  hosts: Array<{ dhchap_key: string; host_nqn: string }>;
+  allow_all: boolean;
+};
+
 export type NamespaceInitiatorRequest = InitiatorRequest & {
   subsystem_nqn: string;
 };
@@ -189,16 +194,20 @@ export class NvmeofService {
 
   createSubsystem(request: {
     nqn: string;
-    enable_ha: boolean;
     gw_group: string;
     dhchap_key: string;
+    network_mask?: string[];
   }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 
   deleteSubsystem(subsystemNQN: string, group: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`, {
-      observe: 'response'
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
+      observe: 'response',
+      params: {
+        gw_group: group,
+        force: 'true'
+      }
     });
   }
 
@@ -206,7 +215,9 @@ export class NvmeofService {
     return this.getSubsystem(subsystemNqn, group).pipe(
       mapTo(true),
       catchError((e) => {
-        e?.preventDefault();
+        if (_.isFunction(e?.preventDefault)) {
+          e.preventDefault();
+        }
         return observableOf(false);
       })
     );
@@ -217,7 +228,7 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addSubsystemInitiators(subsystemNQN: string, request: SubsystemInitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });

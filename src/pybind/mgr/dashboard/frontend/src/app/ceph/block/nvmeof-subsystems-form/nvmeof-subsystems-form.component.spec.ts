@@ -3,9 +3,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
-import { ToastrModule } from 'ngx-toastr';
-
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -17,14 +14,16 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
 import {
   ComboBoxModule,
+  FileUploaderModule,
   GridModule,
   InputModule,
   RadioModule,
   TagModule
 } from 'carbon-components-angular';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
-import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
+import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
 import { of } from 'rxjs';
 
 describe('NvmeofSubsystemsFormComponent', () => {
@@ -39,7 +38,9 @@ describe('NvmeofSubsystemsFormComponent', () => {
     subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
     addedHosts: [],
     hostType: HOST_TYPE.ALL,
-    listeners: []
+    listeners: [],
+    hostDchapKeyList: [],
+    authType: AUTHENTICATION.Bidirectional
   };
 
   beforeEach(async () => {
@@ -49,7 +50,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
         NvmeofSubsystemsFormComponent,
         NvmeofSubsystemsStepOneComponent,
         NvmeofSubsystemsStepThreeComponent,
-        NvmeofSubsystemsStepTwoComponent
+        NvmeofSubsystemsStepTwoComponent,
+        NvmeofSubsystemsStepFourComponent
       ],
       providers: [
         NgbActiveModal,
@@ -70,7 +72,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
         GridModule,
         RadioModule,
         TagModule,
-        ToastrModule.forRoot(),
+        FileUploaderModule,
         ComboBoxModule
       ]
     }).compileComponents();
@@ -89,7 +91,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
-      spyOn(nvmeofService, 'addInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'createListeners').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -99,9 +102,101 @@ describe('NvmeofSubsystemsFormComponent', () => {
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
         gw_group: mockGroupName,
-        enable_ha: true,
         dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
       });
+    });
+
+    it('should include network_mask in createSubsystem request when listenerMode is auto-fetch and subnetMask is set', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        subnetMask: '192.168.1.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: '',
+        network_mask: ['192.168.1.0/24']
+      });
+    });
+
+    it('should not include network_mask in createSubsystem request when listenerMode is manual', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'manual',
+        subnetMask: '192.168.1.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: ''
+      });
+    });
+
+    it('should call createListeners when listenerMode is manual and listeners are provided', () => {
+      const listeners = [{ content: 'host1', addr: '10.0.0.1' }];
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners,
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'manual'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createListeners).toHaveBeenCalledWith(
+        'test-nqn.default',
+        mockGroupName,
+        listeners
+      );
+    });
+
+    it('should not call createListeners when listenerMode is auto-fetch', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [{ content: 'host1', addr: '10.0.0.1' }],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        subnetMask: '10.0.0.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createListeners).not.toHaveBeenCalled();
     });
 
     it('should add initiators with wildcard when hostType is ALL', () => {
@@ -111,14 +206,17 @@ describe('NvmeofSubsystemsFormComponent', () => {
         addedHosts: [],
         hostType: HOST_TYPE.ALL,
         subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
-        listeners: []
+        listeners: [],
+        authType: AUTHENTICATION.Bidirectional,
+        hostDchapKeyList: []
       };
 
       component.group = mockGroupName;
       component.onSubmit(payload);
 
-      expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
-        host_nqn: '*',
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith('test-nqn.default', {
+        allow_all: true,
+        hosts: [],
         gw_group: mockGroupName
       });
     });
