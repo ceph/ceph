@@ -409,15 +409,16 @@ TEST(MDSAuthCaps, QuarantineParseGood) {
   }
 }
 
-TEST(MDSAuthCaps, QuarantineAllowStarIncludesQPrime) {
-  // Verify that 'allow *' automatically includes Q_PRIME (access to all quarantined dirs)
+TEST(MDSAuthCaps, QuarantineAllowStarExcludesQPrime) {
+  // 'allow *' must NOT grant quarantine access — quarantine access
+  // must be explicitly granted via q or Q flags to limit who can
+  // access compromised data after a security incident.
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow *", NULL));
   
-  // 'allow *' should grant quarantine access to any path
-  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
-  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "any/path/here"));
-  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "/"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "any/path/here"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "/"));
 }
 
 TEST(MDSAuthCaps, QuarantineQPrimeFlag) {
