@@ -49,9 +49,9 @@ def spec_backup_key(cluster_id: str) -> EntryKey:
     return (cluster_id, 'spec.smb')
 
 
-def rgw_credentials_key(cluster_id: str, share_id: str) -> EntryKey:
-    """Return key identifying RGW credentials for a share in an external store."""
-    return (cluster_id, f'rgw-creds.{share_id}.json')
+def rgw_config_key(cluster_id: str) -> EntryKey:
+    """Return key for the RGW credential stub in the private store."""
+    return (cluster_id, 'config.smb.rgw')
 
 
 def tls_credential_key(

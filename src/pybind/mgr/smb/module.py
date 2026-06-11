@@ -100,6 +100,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_store=self._public_store,
             path_resolver=path_resolver,
             authorizer=authorizer,
+            mon_cmd_issuer=self,
             orch=self._orch_backend(enable_orch=uo),
             earmark_resolver=earmark_resolver,
             tool_execer=self,
@@ -630,12 +631,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Create an SMB share backed by RGW"""
         try:
             # Pass 'self' which conforms to ToolExecer protocol
-            (
-                fetched_user_id,
-                access_key,
-                secret_key,
-            ) = rgw.fetch_rgw_credentials(self, bucket, user_id)
+            fetched_user_id = rgw.fetch_rgw_credentials(
+                self, bucket, user_id
+            )[0]
 
+            # Create share with user credentials
+            # The staging layer will auto-create the credential if needed
             share = resources.Share(
                 cluster_id=cluster_id,
                 share_id=share_id,
@@ -644,11 +645,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 rgw=resources.RGWStorage(
                     bucket=bucket,
                     user_id=fetched_user_id,
-                    access_key_id=access_key,
-                    secret_access_key=secret_key,
                 ),
             )
-            return self._apply_res([share], create_only=True).one()
+
+            # Apply share resource (staging may create credential too)
+            return self._apply_res([share], create_only=True).squash(share)
         except ValueError as e:
             # Create a minimal share resource for error reporting
             error_share = resources.Share(

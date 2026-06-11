@@ -30,6 +30,7 @@ from .internal import (
     ClusterEntry,
     JoinAuthEntry,
     ResourceEntry,
+    RGWCredentialEntry,
     ShareEntry,
     TLSCredentialEntry,
     UsersAndGroupsEntry,
@@ -127,6 +128,18 @@ class Staging:
             self.destination_store, ug_id
         ).get_users_and_groups()
 
+    def get_rgw_credential(
+        self, rgw_credential_id: str
+    ) -> resources.RGWCredential:
+        ekey = (str(RGWCredentialEntry.namespace), rgw_credential_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.RGWCredential)
+            return res
+        return RGWCredentialEntry.from_store(
+            self.destination_store, rgw_credential_id
+        ).get_rgw_credential()
+
     def save(self) -> ResultGroup:
         results = ResultGroup()
         for res in self.deleted.values():
@@ -167,6 +180,7 @@ class Staging:
         self._prune(cids, JoinAuthEntry, resources.JoinAuth)
         self._prune(cids, UsersAndGroupsEntry, resources.UsersAndGroups)
         self._prune(cids, TLSCredentialEntry, resources.TLSCredential)
+        self._prune(cids, RGWCredentialEntry, resources.RGWCredential)
 
 
 def auth_refs(cluster: resources.Cluster) -> Collection[str]:
@@ -360,27 +374,12 @@ def _check_share_resource(
             status={"cluster_id": share.cluster_id},
         )
 
-    # Handle RGW shares - validate bucket existence and auto-fetch credentials
+    # Handle RGW shares
     if share.rgw is not None:
-        # Validate bucket exists
-        if not rgw.validate_rgw_bucket(
-            staging._tool_execer, share.rgw.bucket
-        ):
-            raise ErrorResult(
-                share,
-                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
-            )
-
-        # Auto-fetch credentials if not provided
-        if (
-            not share.rgw.user_id
-            or not share.rgw.access_key_id
-            or not share.rgw.secret_access_key
-        ):
+        # If credential_ref is not provided, auto-create credential
+        if not share.rgw.credential_ref:
+            # Fetch credentials from RGW
             try:
-                log.debug(
-                    f"Auto-fetching RGW credentials for bucket {share.rgw.bucket}"
-                )
                 (
                     fetched_user_id,
                     access_key,
@@ -390,21 +389,80 @@ def _check_share_resource(
                     share.rgw.bucket,
                     share.rgw.user_id or '',
                 )
-                # Update the share's RGW storage with fetched credentials
-                share.rgw = resources.RGWStorage(
-                    bucket=share.rgw.bucket,
-                    user_id=fetched_user_id,
-                    access_key_id=access_key,
-                    secret_access_key=secret_key,
-                )
-                log.debug(
-                    f"Successfully fetched credentials for user {fetched_user_id}"
-                )
             except ValueError as e:
                 raise ErrorResult(
                     share,
                     msg=f"Failed to fetch RGW credentials: {str(e)}",
                 )
+
+            # Create credential resource automatically
+            # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
+            credential_id = fetched_user_id
+
+            # Check if credential already exists
+            try:
+                cred = staging.get_rgw_credential(credential_id)
+                # Credential exists, validate it's linked to correct cluster
+                if (
+                    cred.linked_to_cluster
+                    and cred.linked_to_cluster != share.cluster_id
+                ):
+                    raise ErrorResult(
+                        share,
+                        msg='RGW credential is linked to a different cluster',
+                        status={
+                            'credential_ref': credential_id,
+                            'other_cluster_id': cred.linked_to_cluster,
+                        },
+                    )
+            except KeyError:
+                # Credential doesn't exist, create it
+                cred = resources.RGWCredential(
+                    rgw_credential_id=credential_id,
+                    user_id=fetched_user_id,
+                    access_key_id=access_key,
+                    secret_access_key=secret_key,
+                    linked_to_cluster=share.cluster_id,
+                )
+                # Stage the credential
+                staging.stage(cred)
+
+            # Update share to use credential_ref
+            share.rgw = resources.RGWStorage(
+                bucket=share.rgw.bucket,
+                credential_ref=credential_id,
+            )
+        else:
+            # Validate existing credential_ref
+            try:
+                cred = staging.get_rgw_credential(share.rgw.credential_ref)
+            except KeyError:
+                raise ErrorResult(
+                    share,
+                    msg=f"RGW credential '{share.rgw.credential_ref}' not found",
+                    status={"credential_ref": share.rgw.credential_ref},
+                )
+
+            if (
+                cred.linked_to_cluster
+                and cred.linked_to_cluster != share.cluster_id
+            ):
+                raise ErrorResult(
+                    share,
+                    msg='RGW credential is linked to a different cluster',
+                    status={
+                        'credential_ref': share.rgw.credential_ref,
+                        'other_cluster_id': cred.linked_to_cluster,
+                    },
+                )
+        # Validate bucket exists
+        if not rgw.validate_rgw_bucket(
+            staging._tool_execer, share.rgw.bucket
+        ):
+            raise ErrorResult(
+                share,
+                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+            )
 
         name_used_by = _share_name_in_use(staging, share)
         if name_used_by:
@@ -678,6 +736,59 @@ def _check_tls_credential_present(
 
 
 @cross_check_resource.register
+def _check_rgw_credential_resource(
+    resource: resources.RGWCredential, staging: Staging, **_kw: Any
+) -> None:
+    """Check that the RGW credential resource can be updated."""
+    if resource.intent == Intent.PRESENT:
+        return _check_rgw_credential_present(resource, staging)
+    return _check_rgw_credential_removed(resource, staging)
+
+
+def _check_rgw_credential_removed(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> None:
+    refs_in_use: Dict[str, List[str]] = {}
+    for cid, sid in ShareEntry.ids(staging):
+        try:
+            share = ShareEntry.from_store(
+                staging.destination_store, cid, sid
+            ).get_share()
+        except KeyError:
+            continue
+        if (
+            share.rgw
+            and share.rgw.credential_ref == rgw_cred.rgw_credential_id
+        ):
+            refs_in_use.setdefault(rgw_cred.rgw_credential_id, []).append(
+                f'{cid}.{sid}'
+            )
+    if rgw_cred.rgw_credential_id in refs_in_use:
+        raise ErrorResult(
+            rgw_cred,
+            msg='RGW credential resource in use by shares',
+            status={
+                'shares': refs_in_use[rgw_cred.rgw_credential_id],
+            },
+        )
+
+
+def _check_rgw_credential_present(
+    rgw_cred: resources.RGWCredential, staging: Staging
+) -> None:
+    if rgw_cred.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if rgw_cred.linked_to_cluster not in cids:
+            raise ErrorResult(
+                rgw_cred,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': rgw_cred.linked_to_cluster,
+                },
+            )
+
+
+@cross_check_resource.register
 def _check_external_ceph_cluster_resource(
     ext_cluster: resources.ExternalCephCluster, staging: Staging, **_: Any
 ) -> None:
@@ -751,6 +862,17 @@ def ext_cluster_refs(cluster: resources.Cluster) -> Collection[str]:
 
 def tls_refs(cluster: resources.Cluster) -> Collection[str]:
     return _remotectl_tls_refs(cluster) | _keybridge_tls_refs(cluster)
+
+
+def rgw_credential_refs(
+    shares: List[resources.Share],
+) -> Collection[str]:
+    """Return all credential_ref IDs used by RGW-backed shares."""
+    return {
+        share.rgw.credential_ref
+        for share in shares
+        if share.rgw is not None and share.rgw.credential_ref
+    }
 
 
 def _keybridge_ids(

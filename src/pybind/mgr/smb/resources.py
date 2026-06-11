@@ -406,8 +406,7 @@ class RGWStorage(_RBase):
 
     bucket: str
     user_id: Optional[str] = None
-    access_key_id: Optional[str] = None
-    secret_access_key: Optional[str] = None
+    credential_ref: Optional[str] = None
 
     def validate(self) -> None:
         if not self.bucket:
@@ -418,23 +417,12 @@ class RGWStorage(_RBase):
         return self.__class__(
             bucket=self.bucket,
             user_id=self.user_id,
-            access_key_id=(
-                _password_convert(self.access_key_id, operation)
-                if self.access_key_id
-                else None
-            ),
-            secret_access_key=(
-                _password_convert(self.secret_access_key, operation)
-                if self.secret_access_key
-                else None
-            ),
+            credential_ref=self.credential_ref,
         )
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.user_id.quiet = True
-        rc.access_key_id.quiet = True
-        rc.secret_access_key.quiet = True
         return rc
 
 
@@ -1199,6 +1187,52 @@ class TLSCredential(_RBase):
         return self
 
 
+@resourcelib.resource('ceph.smb.rgw.credential')
+class RGWCredential(_RBase):
+    """Contains RGW user credentials that can be referenced by multiple
+    SMB shares backed by RGW buckets.
+    """
+
+    rgw_credential_id: str
+    user_id: str
+    access_key_id: str
+    secret_access_key: str
+    intent: Intent = Intent.PRESENT
+    linked_to_cluster: Optional[str] = None
+
+    def validate(self) -> None:
+        if not self.rgw_credential_id:
+            raise ValueError('rgw_credential_id requires a value')
+        validation.check_id(self.rgw_credential_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+        if self.intent is Intent.PRESENT:
+            if not self.user_id:
+                raise ValueError('user_id must be specified')
+            if not self.access_key_id:
+                raise ValueError('access_key_id must be specified')
+            if not self.secret_access_key:
+                raise ValueError('secret_access_key must be specified')
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
+        return rc
+
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            rgw_credential_id=self.rgw_credential_id,
+            intent=self.intent,
+            user_id=self.user_id,
+            access_key_id=_password_convert(self.access_key_id, operation),
+            secret_access_key=_password_convert(
+                self.secret_access_key, operation
+            ),
+            linked_to_cluster=self.linked_to_cluster,
+        )
+
+
 @resourcelib.component()
 class CephUserKey(_RBase):
     """A Ceph User Key name and value pair."""
@@ -1243,6 +1277,7 @@ SMBResource = Union[
     Share,
     UsersAndGroups,
     TLSCredential,
+    RGWCredential,
     ExternalCephCluster,
 ]
 
