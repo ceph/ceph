@@ -343,6 +343,390 @@ TEST_F(GPFSXattrTest, GetBatch)
   }
 }
 
+/* SET then LIST on same fd — reproduces the RGW write_attrs pattern */
+TEST_F(GPFSXattrTest, SetThenListSameFd)
+{
+  const std::string n1 = "user.stl_1";
+  const std::string n2 = "user.stl_2";
+  const std::string n3 = "user.stl_3";
+
+  /* batch SET 3 xattrs */
+  {
+    char buf[GPFS_MAX_FCNTL_LENGTH];
+    auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(buf);
+    memset(hdr, 0, sizeof(*hdr));
+    hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+    size_t off = sizeof(gpfsFcntlHeader_t);
+    for (auto& name : {n1, n2, n3}) {
+      std::string value = "val_" + name;
+      size_t namelen = name.size() + 1;
+      size_t padded_name = align8(namelen);
+      size_t padded_value = align8(value.size());
+      size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + padded_value;
+
+      auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(buf + off);
+      memset(ea, 0, entry_size);
+      ea->structLen = entry_size;
+      ea->structType = GPFS_FCNTL_SET_XATTR;
+      ea->nameLen = namelen;
+      ea->bufferLen = value.size();
+      ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+      memcpy(ea->buffer, name.c_str(), namelen);
+      memcpy(ea->buffer + padded_name, value.data(), value.size());
+      off += entry_size;
+    }
+    hdr->totalLength = off;
+    int ret = fn_fcntl(fd, buf);
+    ASSERT_EQ(ret, 0) << "batch SET failed: " << strerror(errno);
+  }
+
+  /* immediately LIST on the same fd — no close/reopen */
+  struct {
+    gpfsFcntlHeader_t hdr;
+    gpfsListXAttr_t list;
+    char buf[4096];
+  } arg;
+  memset(&arg, 0, sizeof(arg));
+  arg.hdr.totalLength = sizeof(arg);
+  arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  arg.list.structLen = sizeof(arg.list) + sizeof(arg.buf);
+  arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  arg.list.bufferLen = sizeof(arg.buf);
+
+  int ret = fn_fcntl(fd, &arg);
+  ASSERT_EQ(ret, 0) << "LIST_XATTR failed: " << strerror(errno);
+
+  std::vector<std::string> names;
+  char* p = arg.list.buffer;
+  int remaining = arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (verbose) {
+    for (auto& n : names) {
+      std::cerr << "  SetThenList listed: " << n << std::endl;
+    }
+  }
+
+  bool f1 = false, f2 = false, f3 = false;
+  for (auto& n : names) {
+    if (n == n1) f1 = true;
+    if (n == n2) f2 = true;
+    if (n == n3) f3 = true;
+  }
+  EXPECT_TRUE(f1) << n1 << " not found after batch SET + LIST on same fd";
+  EXPECT_TRUE(f2) << n2 << " not found after batch SET + LIST on same fd";
+  EXPECT_TRUE(f3) << n3 << " not found after batch SET + LIST on same fd";
+}
+
+/* Reproduce RGW's exact xattr pattern on a directory fd */
+TEST_F(GPFSXattrTest, DirectoryMultiXattr)
+{
+  std::string dir_path = gpfs_test_dir + "/xattr_dir_multi";
+  sf::create_directories(dir_path);
+
+  int dir_fd = open(dir_path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  ASSERT_GE(dir_fd, 0) << "open dir: " << strerror(errno);
+
+  /* these match RGW's create_bucket xattr names */
+  struct xattr_entry {
+    std::string name;
+    std::string value;
+  };
+  std::vector<xattr_entry> entries = {
+    {"user.nsfs.bucket_info", std::string(291, 'I')},
+    {"user.nsfs.object_type", std::string(10, 'T')},
+    {"user.nsfs.rgw.acl", std::string(147, 'A')},
+  };
+
+  /* SET via POSIX first */
+  for (auto& e : entries) {
+    ASSERT_EQ(fsetxattr(dir_fd, e.name.c_str(), e.value.data(), e.value.size(), 0), 0)
+        << e.name << ": " << strerror(errno);
+  }
+
+  /* LIST via gpfs_fcntl */
+  struct {
+    gpfsFcntlHeader_t hdr;
+    gpfsListXAttr_t list;
+    char buf[4096];
+  } arg;
+  memset(&arg, 0, sizeof(arg));
+  arg.hdr.totalLength = sizeof(arg);
+  arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  arg.list.structLen = sizeof(arg.list) + sizeof(arg.buf);
+  arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  arg.list.bufferLen = sizeof(arg.buf);
+
+  int ret = fn_fcntl(dir_fd, &arg);
+  ASSERT_EQ(ret, 0) << "LIST_XATTR failed: " << strerror(errno);
+
+  std::vector<std::string> names;
+  char* p = arg.list.buffer;
+  int remaining = arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (verbose) {
+    std::cerr << "DirectoryMultiXattr: bufferLen=" << arg.list.bufferLen
+              << " found " << names.size() << " xattrs" << std::endl;
+    for (auto& n : names) {
+      std::cerr << "  listed: " << n << std::endl;
+    }
+  }
+
+  for (auto& e : entries) {
+    bool found = false;
+    for (auto& n : names) {
+      if (n == e.name) { found = true; break; }
+    }
+    EXPECT_TRUE(found) << e.name << " not found in LIST_XATTR on directory";
+  }
+
+  /* now add a 4th xattr (like put_cors) and re-list */
+  std::string cors_name = "user.nsfs.rgw.cors";
+  std::string cors_val(55, 'C');
+  ASSERT_EQ(fsetxattr(dir_fd, cors_name.c_str(), cors_val.data(), cors_val.size(), 0), 0);
+
+  memset(&arg, 0, sizeof(arg));
+  arg.hdr.totalLength = sizeof(arg);
+  arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  arg.list.structLen = sizeof(arg.list) + sizeof(arg.buf);
+  arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  arg.list.bufferLen = sizeof(arg.buf);
+
+  ret = fn_fcntl(dir_fd, &arg);
+  ASSERT_EQ(ret, 0) << "LIST_XATTR after add failed: " << strerror(errno);
+
+  names.clear();
+  p = arg.list.buffer;
+  remaining = arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (verbose) {
+    std::cerr << "DirectoryMultiXattr after add: bufferLen=" << arg.list.bufferLen
+              << " found " << names.size() << " xattrs" << std::endl;
+    for (auto& n : names) {
+      std::cerr << "  listed: " << n << std::endl;
+    }
+  }
+
+  bool found_cors = false;
+  for (auto& n : names) {
+    if (n == cors_name) { found_cors = true; break; }
+  }
+  EXPECT_TRUE(found_cors) << cors_name << " not found after add + re-list";
+
+  /* also try: SET via batch, then LIST via batch on same dir fd */
+  std::string batch_name = "user.nsfs.rgw.tagging";
+  std::string batch_val(30, 'G');
+
+  {
+    size_t namelen = batch_name.size() + 1;
+    size_t padded_name = align8(namelen);
+    size_t padded_value = align8(batch_val.size());
+    size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + padded_value;
+    size_t total = sizeof(gpfsFcntlHeader_t) + entry_size;
+    std::vector<char> sbuf(total, 0);
+
+    auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(sbuf.data());
+    hdr->totalLength = total;
+    hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+    auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(sbuf.data() + sizeof(gpfsFcntlHeader_t));
+    ea->structLen = entry_size;
+    ea->structType = GPFS_FCNTL_SET_XATTR;
+    ea->nameLen = namelen;
+    ea->bufferLen = batch_val.size();
+    ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+    memcpy(ea->buffer, batch_name.c_str(), namelen);
+    memcpy(ea->buffer + padded_name, batch_val.data(), batch_val.size());
+
+    ret = fn_fcntl(dir_fd, sbuf.data());
+    ASSERT_EQ(ret, 0) << "batch SET on dir failed: " << strerror(errno);
+  }
+
+  /* LIST again */
+  memset(&arg, 0, sizeof(arg));
+  arg.hdr.totalLength = sizeof(arg);
+  arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  arg.list.structLen = sizeof(arg.list) + sizeof(arg.buf);
+  arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  arg.list.bufferLen = sizeof(arg.buf);
+
+  ret = fn_fcntl(dir_fd, &arg);
+  ASSERT_EQ(ret, 0) << "LIST_XATTR after batch SET failed: " << strerror(errno);
+
+  names.clear();
+  p = arg.list.buffer;
+  remaining = arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (verbose) {
+    std::cerr << "DirectoryMultiXattr after batch SET: bufferLen=" << arg.list.bufferLen
+              << " found " << names.size() << " xattrs" << std::endl;
+    for (auto& n : names) {
+      std::cerr << "  listed: " << n << std::endl;
+    }
+  }
+
+  bool found_tag = false;
+  for (auto& n : names) {
+    if (n == batch_name) { found_tag = true; break; }
+  }
+  EXPECT_TRUE(found_tag) << batch_name << " not found after batch SET + LIST on dir";
+
+  close(dir_fd);
+  sf::remove_all(dir_path);
+}
+
+/* Two fds: write on fd1, list on fd2 — reproduces RGW cross-request pattern */
+TEST_F(GPFSXattrTest, TwoFdDirectoryList)
+{
+  std::string dir_path = gpfs_test_dir + "/xattr_dir_twofd";
+  sf::create_directories(dir_path);
+
+  int fd1 = open(dir_path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  ASSERT_GE(fd1, 0) << "open fd1: " << strerror(errno);
+
+  /* SET via batch on fd1 */
+  std::vector<std::pair<std::string, std::string>> entries = {
+    {"user.nsfs.bucket_info", std::string(291, 'I')},
+    {"user.nsfs.object_type", std::string(10, 'T')},
+    {"user.nsfs.rgw.acl", std::string(147, 'A')},
+  };
+
+  {
+    char buf[GPFS_MAX_FCNTL_LENGTH];
+    auto* hdr = reinterpret_cast<gpfsFcntlHeader_t*>(buf);
+    memset(hdr, 0, sizeof(*hdr));
+    hdr->fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+
+    size_t off = sizeof(gpfsFcntlHeader_t);
+    for (auto& [name, value] : entries) {
+      size_t namelen = name.size() + 1;
+      size_t padded_name = align8(namelen);
+      size_t padded_value = align8(value.size());
+      size_t entry_size = sizeof(gpfsGetSetXAttr_t) + padded_name + padded_value;
+
+      auto* ea = reinterpret_cast<gpfsGetSetXAttr_t*>(buf + off);
+      memset(ea, 0, entry_size);
+      ea->structLen = entry_size;
+      ea->structType = GPFS_FCNTL_SET_XATTR;
+      ea->nameLen = namelen;
+      ea->bufferLen = value.size();
+      ea->flags = GPFS_FCNTL_XATTRFLAG_NONE;
+      memcpy(ea->buffer, name.c_str(), namelen);
+      memcpy(ea->buffer + padded_name, value.data(), value.size());
+      off += entry_size;
+    }
+    hdr->totalLength = off;
+    int ret = fn_fcntl(fd1, buf);
+    ASSERT_EQ(ret, 0) << "batch SET on fd1 failed: " << strerror(errno);
+  }
+
+  /* verify: POSIX fgetxattr on fd1 sees them */
+  for (auto& [name, value] : entries) {
+    char vbuf[1];
+    ssize_t sz = fgetxattr(fd1, name.c_str(), vbuf, 0);
+    ASSERT_GE(sz, 0) << name << " not found via POSIX on fd1: " << strerror(errno);
+  }
+
+  /* open a SECOND fd on the same directory */
+  int fd2 = open(dir_path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  ASSERT_GE(fd2, 0) << "open fd2: " << strerror(errno);
+  ASSERT_NE(fd1, fd2);
+
+  /* LIST via gpfs_fcntl on fd2 */
+  struct {
+    gpfsFcntlHeader_t hdr;
+    gpfsListXAttr_t list;
+    char buf[4096];
+  } arg;
+  memset(&arg, 0, sizeof(arg));
+  arg.hdr.totalLength = sizeof(arg);
+  arg.hdr.fcntlVersion = GPFS_FCNTL_CURRENT_VERSION;
+  arg.list.structLen = sizeof(arg.list) + sizeof(arg.buf);
+  arg.list.structType = GPFS_FCNTL_LIST_XATTR;
+  arg.list.bufferLen = sizeof(arg.buf);
+
+  int ret = fn_fcntl(fd2, &arg);
+  ASSERT_EQ(ret, 0) << "LIST_XATTR on fd2 failed: " << strerror(errno);
+
+  std::vector<std::string> names;
+  char* p = arg.list.buffer;
+  int remaining = arg.list.bufferLen;
+  while (remaining > 0 && *p != '\0') {
+    uint8_t namelen = static_cast<uint8_t>(*p);
+    p++; remaining--;
+    if (namelen > remaining) break;
+    names.emplace_back(p, namelen);
+    p += namelen; remaining -= namelen;
+  }
+
+  if (verbose) {
+    std::cerr << "TwoFd: fd1=" << fd1 << " fd2=" << fd2
+              << " listed " << names.size() << " xattrs on fd2" << std::endl;
+    for (auto& n : names) {
+      std::cerr << "  listed: " << n << std::endl;
+    }
+  }
+
+  for (auto& [name, _] : entries) {
+    bool found = false;
+    for (auto& n : names) {
+      if (n == name) { found = true; break; }
+    }
+    EXPECT_TRUE(found) << name << " not found via LIST on fd2 (written on fd1)";
+  }
+
+  /* also try POSIX flistxattr on fd2 for comparison */
+  {
+    char lbuf[4096];
+    ssize_t sz = flistxattr(fd2, lbuf, sizeof(lbuf));
+    ASSERT_GE(sz, 0) << "flistxattr on fd2: " << strerror(errno);
+    std::vector<std::string> posix_names;
+    char* pp = lbuf;
+    while (pp < lbuf + sz) {
+      posix_names.emplace_back(pp);
+      pp += strlen(pp) + 1;
+    }
+    if (verbose) {
+      std::cerr << "TwoFd POSIX: listed " << posix_names.size() << " on fd2" << std::endl;
+      for (auto& n : posix_names) {
+        std::cerr << "  posix: " << n << std::endl;
+      }
+    }
+  }
+
+  close(fd1);
+  close(fd2);
+  sf::remove_all(dir_path);
+}
+
 /* LIST with max-size buffer — reproduces RGW's get_xattrs layout */
 TEST_F(GPFSXattrTest, ListMaxBuffer)
 {
