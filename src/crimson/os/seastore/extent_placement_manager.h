@@ -562,6 +562,11 @@ public:
     background_process.release_projected_usage(usage);
   }
 
+  bool is_storage_full() const {
+    auto *cleaner = background_process.get_main_cleaner();
+    return cleaner ? cleaner->is_storage_full() : false;
+  }
+
   backend_type_t get_main_backend_type() const {
     if (!background_process.is_no_background()) {
       return background_process.get_main_backend_type();
@@ -887,6 +892,10 @@ private:
 
     bool is_no_background() const {
       return !trimmer || !main_cleaner;
+    }
+
+    const AsyncCleaner* get_main_cleaner() const {
+      return main_cleaner.get();
     }
 
   protected:

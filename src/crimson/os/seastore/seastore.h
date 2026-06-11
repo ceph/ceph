@@ -202,6 +202,9 @@ public:
       return 256;
     }
 
+    bool is_storage_full() const override final {
+      return transaction_manager ? transaction_manager->is_storage_full() : false;
+    }
     omap_root_t select_log_omap_root(Onode& onode) const;
 
   // only exposed to SeaStore
