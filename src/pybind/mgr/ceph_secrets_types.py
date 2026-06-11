@@ -196,6 +196,11 @@ def parse_secret_uri(uri: str) -> SecretRef:
         if not isinstance(uri, str):
             raise CephSecretException('secret uri must be a string')
 
+        if uri != uri.strip():
+            raise CephSecretException(
+                f'Invalid secret uri {uri!r}: leading/trailing whitespace is not allowed'
+            )
+
         parsed = urlparse(uri)
         if parsed.scheme != SECRET_SCHEME:
             raise CephSecretException(f'Not a secret uri: {uri!r}')
@@ -288,6 +293,11 @@ def parse_secret_path(path: str) -> SecretRef:
     """
     if not isinstance(path, str):
         raise CephSecretException('secret path must be a string')
+
+    if path != path.strip():
+        raise CephSecretException(
+            f'Invalid secret path {path!r}: leading/trailing whitespace is not allowed'
+        )
 
     p = path.strip()
     if not p:

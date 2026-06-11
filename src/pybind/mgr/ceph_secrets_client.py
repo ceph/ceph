@@ -249,8 +249,9 @@ class CephSecretsClient:
                        rather than automatically by a Ceph component.  Defaults
                        to True; set to False for programmatically generated
                        secrets.
-            editable:  Whether the secret may be updated or removed by
-                       automated tooling.  Defaults to True.
+            editable:  Whether the secret may be updated by automated
+                       tooling.  Deletion is always permitted regardless of
+                       this flag.  Defaults to True.
 
         Returns:
             A dict containing the written record's ``metadata`` object.  The
