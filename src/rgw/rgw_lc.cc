@@ -707,8 +707,9 @@ static void send_notification(const DoutPrefixProvider* dpp,
   }
 }
 
-// Op name used in journal records for LC-driven deletions.
+// Op names used in records for LC-driven actions.
 static const std::string lifecycle_delete_object_op = "LIFECYCLE.DELETE.OBJECT";
+static const std::string lifecycle_delete_upload_op = "LIFECYCLE.DELETE.UPLOAD";
 
 // LC has no req_state, so the source bucket's owner stands in as the
 // identity for the log-bucket write permission check.
@@ -720,7 +721,8 @@ static void send_log_record(const DoutPrefixProvider* dpp,
                             const std::string& etag,
                             uint64_t size,
                             const std::string& version_id,
-                            const std::string& op_name) {
+                            const std::string& op_name,
+                            rgw::bucketlogging::LoggingType logging_type) {
   rgw::bucketlogging::record_input input;
   input.bucket = bucket;
   input.user_or_account = to_string(bucket->get_owner());
@@ -729,7 +731,7 @@ static void send_log_record(const DoutPrefixProvider* dpp,
 
   const int ret = rgw::bucketlogging::log_record(
       driver,
-      rgw::bucketlogging::LoggingType::Journal,
+      logging_type,
       obj, input, op_name, etag, size, dpp, y,
       /*async_completion=*/true,
       /*log_source_bucket=*/false);
@@ -836,7 +838,8 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     }
     if (log_op_name) {
       send_log_record(dpp, y, driver, obj.get(), oc.bucket, etag, size,
-                      version_id, *log_op_name);
+                      version_id, *log_op_name,
+                      rgw::bucketlogging::LoggingType::Journal);
     }
   }
 
@@ -1001,6 +1004,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
         send_notification(this, y, driver, sal_obj.get(), target, etag, size,
                           obj.key.instance, {event_type});
+        send_log_record(this, y, driver, sal_obj.get(), target, etag, size,
+                        obj.key.instance, lifecycle_delete_upload_op,
+                        rgw::bucketlogging::LoggingType::Standard);
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }

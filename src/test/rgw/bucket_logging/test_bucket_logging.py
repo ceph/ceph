@@ -381,6 +381,28 @@ def read_journal_records(s3_client, log_bucket, source_bucket, prefix=None, sett
     return records
 
 
+def wait_for_mpu_gone(s3_client, bucket, upload_id, timeout=30, interval=1):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        resp = s3_client.list_multipart_uploads(Bucket=bucket)
+        if not any(u.get('UploadId') == upload_id for u in resp.get('Uploads', [])):
+            return True
+        time.sleep(interval)
+    return False
+
+
+def abort_pending_mpus(s3_client, bucket):
+    try:
+        resp = s3_client.list_multipart_uploads(Bucket=bucket)
+    except ClientError:
+        return
+    for u in resp.get('Uploads', []):
+        try:
+            s3_client.abort_multipart_upload(Bucket=bucket, Key=u['Key'], UploadId=u['UploadId'])
+        except ClientError:
+            pass
+
+
 @pytest.fixture
 def lc_fast():
     set_lc_debug_interval(5)
@@ -1012,6 +1034,46 @@ def test_lc_current_expiration_dm_branch_does_not_log(s3_client, logging_type, l
 
     finally:
         cleanup_versioned_bucket(s3_client, source)
+        cleanup_bucket(s3_client, log_bucket)
+
+
+@pytest.mark.basic_test
+def test_lc_abort_mpu_logs_standard_record(s3_client, logging_type, lc_fast):
+    """LC AbortIncompleteMultipartUpload emits a Standard-mode LIFECYCLE.DELETE.UPLOAD record."""
+    if logging_type != 'Standard':
+        pytest.skip("AbortIncompleteMultipartUpload logging is Standard-mode-only")
+    source = gen_bucket_name("lc-mpu-source")
+    log_bucket = gen_bucket_name("lc-mpu-log")
+    key = 'incomplete-mpu.bin'
+
+    try:
+        assert create_bucket_with_logging(s3_client, source, log_bucket)
+        apply_lc_config(s3_client, source, [
+            make_lc_rule(AbortIncompleteMultipartUpload={'DaysAfterInitiation': 1})
+        ])
+
+        upload_id = s3_client.create_multipart_upload(Bucket=source, Key=key)['UploadId']
+
+        time.sleep(lc_fast + 2)
+        trigger_lc_processing()
+        assert wait_for_mpu_gone(s3_client, source, upload_id), "LC did not abort the incomplete multipart upload"
+
+        time.sleep(5)
+        admin(['bucket', 'logging', 'flush', '--bucket', source])
+        resp = s3_client.list_objects_v2(Bucket=log_bucket, Prefix=f'{source}/')
+        log_keys = [obj['Key'] for obj in resp.get('Contents', [])]
+        assert log_keys, "no log object emitted for MPU abort"
+
+        bodies = []
+        for log_key in log_keys:
+            body = s3_client.get_object(Bucket=log_bucket, Key=log_key)['Body'].read().decode('utf-8')
+            bodies.append(body)
+        joined = '\n'.join(bodies)
+        assert 'LIFECYCLE.DELETE.UPLOAD' in joined, f"LIFECYCLE.DELETE.UPLOAD not found in log: {joined!r}"
+
+    finally:
+        abort_pending_mpus(s3_client, source)
+        cleanup_bucket(s3_client, source)
         cleanup_bucket(s3_client, log_bucket)
 
 
