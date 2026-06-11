@@ -33,6 +33,11 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   };
 
   hosts: ListenerItem[] = [];
+  LISTENER_MODE = {
+    AUTO_FETCH: 'auto-fetch',
+    MANUAL: 'manual'
+  };
+  listenerMode: string = this.LISTENER_MODE.AUTO_FETCH;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -76,9 +81,18 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   }
 
   createForm() {
+    const subnetMaskValidators = [
+      CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.AUTO_FETCH }, [Validators.required])
+    ];
+    const listenersValidators = [
+      CdValidators.composeIf({ listenerMode: this.LISTENER_MODE.MANUAL }, [Validators.required])
+    ];
+
     if (this.listenersOnly) {
       this.formGroup = new CdFormGroup({
-        listeners: new UntypedFormControl([])
+        listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        subnetMask: new UntypedFormControl('', subnetMaskValidators),
+        listeners: new UntypedFormControl([], listenersValidators)
       });
     } else {
       this.formGroup = new CdFormGroup({
@@ -101,9 +115,15 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
             )
           ]
         }),
-        listeners: new UntypedFormControl([])
+        listenerMode: new UntypedFormControl(this.LISTENER_MODE.AUTO_FETCH),
+        subnetMask: new UntypedFormControl('', subnetMaskValidators),
+        listeners: new UntypedFormControl([], listenersValidators)
       });
     }
+
+    this.formGroup.get('listenerMode').valueChanges.subscribe((mode: string) => {
+      this.listenerMode = mode;
+    });
   }
 
   removeListener(index: number) {
