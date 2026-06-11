@@ -432,7 +432,55 @@ int RGWSI_BILog_RADOS_FIFO::log_start(
     const rgw::bucket_log_layout_generation& log_layout,
     int shard_id)
 {
-  return 0; // FIFO has no pause/resume state
+  // push a CLS_RGW_OP_RESYNC entry to each shard to
+  // clear the syncstopped state and resume sync.
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
+  if (r < 0) {
+    return r;
+  }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
+
+  const auto& fifo_layout = log_layout.layout.fifo;
+  const std::string& bucket_id = bucket_info.bucket.bucket_id;
+  const uint64_t log_gen = log_layout.gen;
+
+  const int first = (shard_id >= 0) ? shard_id : 0;
+  const int last  = (shard_id >= 0) ? shard_id
+                                     : static_cast<int>(fifo_layout.num_shards) - 1;
+
+  rgw_bi_log_entry entry;
+  entry.op = CLS_RGW_OP_RESYNC;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.timestamp = ceph::real_clock::now();
+  ceph::buffer::list bl;
+  encode(entry, bl);
+
+  int ret = 0;
+  for (int sid = first; sid <= last; ++sid) {
+    const std::string fifo_oid = bilog_fifo_oid(bucket_id, log_gen, sid);
+    LazyFIFO lf(*rados_neo, fifo_oid, neo_loc);
+    try {
+      if (y) {
+        lf.push(dpp, bl, y.get_yield_context());
+      } else {
+        maybe_warn_about_blocking(dpp);
+        asio::spawn(
+            rados_neo->get_executor(),
+            [&](asio::yield_context inner_y) {
+              lf.push(dpp, bl, inner_y);
+            },
+            ceph::async::use_blocked);
+      }
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(dpp, 1) << __func__ << ": FIFO push RESYNC on " << fifo_oid
+                        << " shard=" << sid << " failed: " << e.what() << dendl;
+      ret = ceph::from_error_code(e.code());
+    }
+  }
+  return ret;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_stop(
@@ -441,7 +489,55 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(
     const rgw::bucket_log_layout_generation& log_layout,
     int shard_id)
 {
-  return 0; // FIFO has no explicit cleanup
+  // push a CLS_RGW_OP_SYNCSTOP control entry to each shard
+  // to detect the stop and transition to StateStopped.
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
+  if (r < 0) {
+    return r;
+  }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
+
+  const auto& fifo_layout = log_layout.layout.fifo;
+  const std::string& bucket_id = bucket_info.bucket.bucket_id;
+  const uint64_t log_gen = log_layout.gen;
+
+  const int first = (shard_id >= 0) ? shard_id : 0;
+  const int last  = (shard_id >= 0) ? shard_id
+                                     : static_cast<int>(fifo_layout.num_shards) - 1;
+
+  rgw_bi_log_entry entry;
+  entry.op = CLS_RGW_OP_SYNCSTOP;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.timestamp = ceph::real_clock::now();
+  ceph::buffer::list bl;
+  encode(entry, bl);
+
+  int ret = 0;
+  for (int sid = first; sid <= last; ++sid) {
+    const std::string fifo_oid = bilog_fifo_oid(bucket_id, log_gen, sid);
+    LazyFIFO lf(*rados_neo, fifo_oid, neo_loc);
+    try {
+      if (y) {
+        lf.push(dpp, bl, y.get_yield_context());
+      } else {
+        maybe_warn_about_blocking(dpp);
+        asio::spawn(
+            rados_neo->get_executor(),
+            [&](asio::yield_context inner_y) {
+              lf.push(dpp, bl, inner_y);
+            },
+            ceph::async::use_blocked);
+      }
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(dpp, 1) << __func__ << ": FIFO push SYNCSTOP on " << fifo_oid
+                        << " shard=" << sid << " failed: " << e.what() << dendl;
+      ret = ceph::from_error_code(e.code());
+    }
+  }
+  return ret;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_trim(
