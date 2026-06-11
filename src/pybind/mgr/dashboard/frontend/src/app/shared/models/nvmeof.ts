@@ -181,4 +181,6 @@ export type AuthStepType = {
 export type DetailsStepType = {
   nqn: string;
   listeners: Array<string>;
+  listenerMode?: string;
+  subnetMask?: string;
 };
