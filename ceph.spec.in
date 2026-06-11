@@ -1255,6 +1255,8 @@ Group:		System/Filesystems
 %endif
 Requires:   ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:  ceph-osd < %{_epoch_prefix}%{version}-%{release}
+Requires(posttrans): %{_sbindir}/update-alternatives
+Requires(preun): %{_sbindir}/update-alternatives
 %description osd-classic
 classic-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -1275,6 +1277,8 @@ Requires:	binutils
 Requires:	c-ares%{?_isa} >= %{c_ares_min_version}
 %endif
 Requires:	protobuf
+Requires(posttrans): %{_sbindir}/update-alternatives
+Requires(preun): %{_sbindir}/update-alternatives
 %description osd-crimson
 crimson-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
