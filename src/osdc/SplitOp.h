@@ -308,10 +308,15 @@ class SplitOp {
   virtual void init_reference_sub_read() = 0;
   void init(OSDOp &op, int ops_index);
 
+  std::map<shard_id_t, eversion_t> decode_internal_versions(
+      const bufferlist& bl,
+      bool use_versioned_format) const;
+
   Objecter::Op *orig_op;
   Objecter &objecter;
   mini_flat_map<int, SubRead> sub_reads;
   CephContext *cct;
+  bool supports_internal_versions_versioning;
   
   /**
    * Abort flag pattern for split operation creation:
@@ -352,7 +357,10 @@ class SplitOp {
   * @param cct CephContext for logging and configuration
   * @param count Number of sub-operations to create
   */
- SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
+ SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : 
+    orig_op(op), objecter(objecter), sub_reads(count), cct(cct),
+    supports_internal_versions_versioning(
+      objecter.supports_internal_versions_versioning.load()) {}
  
  virtual ~SplitOp() = default;
  
