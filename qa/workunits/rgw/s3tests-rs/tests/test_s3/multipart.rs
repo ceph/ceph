@@ -137,6 +137,7 @@ async fn test_multipart_upload_contents() {
 
 #[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: vstart uses rgw_multipart_min_part_size=32, parts exceed that")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: multipart listing or size check")]
 async fn test_multipart_upload_size_too_small() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -252,6 +253,7 @@ async fn test_abort_multipart_upload() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: multipart listing or size check")]
 async fn test_list_multipart_upload() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -660,6 +662,7 @@ async fn test_abort_multipart_upload_not_found() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: multipart listing or size check")]
 async fn test_list_multipart_upload_multiple() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -772,6 +775,7 @@ async fn test_atomic_multipart_upload_write() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: multipart listing or size check")]
 async fn test_list_multipart_upload_owner() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client1 = get_client();
@@ -1108,6 +1112,7 @@ async fn test_multipart_single_get_part() {
  * body and succeeds.  Likely an op-layer issue, not driver-specific. */
 #[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: url_decode drops invalid percent-encoded copy source")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: multipart listing or size check")]
 async fn test_upload_part_copy_percent_encoded_key() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();

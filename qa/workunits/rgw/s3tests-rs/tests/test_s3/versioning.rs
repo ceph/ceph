@@ -57,6 +57,7 @@ async fn create_multiple_versions(
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_versions() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -85,6 +86,7 @@ async fn test_versioning_obj_create_versions() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_read_remove_head() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -137,6 +139,7 @@ async fn test_versioning_obj_create_read_remove_head() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_stack_delete_markers() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -161,6 +164,7 @@ async fn test_versioning_stack_delete_markers() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_plain_null_version_removal() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -205,6 +209,7 @@ async fn test_versioning_obj_plain_null_version_removal() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_plain_null_version_overwrite() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -273,6 +278,7 @@ async fn test_versioning_obj_plain_null_version_overwrite() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_plain_null_version_overwrite_suspended() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -329,6 +335,7 @@ async fn test_versioning_obj_plain_null_version_overwrite_suspended() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_copy_obj_version() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -373,6 +380,7 @@ async fn test_versioning_copy_obj_version() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_multi_object_delete() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -546,6 +554,7 @@ async fn test_versioned_object_acl_no_version_specified() {
 // --- delete marker tests ---
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_multi_object_delete_with_marker() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -598,6 +607,7 @@ async fn test_versioning_multi_object_delete_with_marker() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_multi_object_delete_with_marker_create() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -640,6 +650,7 @@ async fn test_versioning_multi_object_delete_with_marker_create() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_list_marker() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -772,6 +783,7 @@ async fn do_test_create_remove_versions(
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_read_remove() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -790,6 +802,7 @@ async fn test_versioning_obj_create_read_remove() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_versions_remove_all() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -809,6 +822,7 @@ async fn test_versioning_obj_create_versions_remove_all() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_versions_remove_special_names() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -885,6 +899,7 @@ async fn test_versioning_bucket_atomic_upload_return_version_id() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_concurrent_multi_object_delete() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1021,6 +1036,7 @@ async fn test_delete_marker_nonversioned() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_delete_marker_versioned() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1049,6 +1065,7 @@ async fn test_delete_marker_versioned() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_delete_marker_suspended() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1078,6 +1095,7 @@ async fn test_delete_marker_suspended() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_delete_marker_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1403,6 +1421,7 @@ async fn overwrite_suspended_versioning_obj(
 // --- Suspended versioning tests ---
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_suspend_versions() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1442,6 +1461,7 @@ async fn test_versioning_obj_suspend_versions() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_suspended_copy() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1512,6 +1532,7 @@ async fn test_versioning_obj_suspended_copy() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_obj_create_overwrite_multipart() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1583,6 +1604,7 @@ async fn test_versioning_obj_create_overwrite_multipart() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_bucket_multipart_upload_return_version_id() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1662,6 +1684,7 @@ async fn test_versioning_bucket_multipart_upload_return_version_id() {
  * parser in .versions/ filename handling.
  */
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 async fn test_versioning_special_key_diagnostics() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();

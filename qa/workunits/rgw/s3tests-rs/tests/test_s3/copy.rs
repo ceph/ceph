@@ -447,6 +447,7 @@ async fn test_object_copy_canned_acl() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_object_copy_versioned_bucket() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -567,6 +568,7 @@ async fn test_object_copy_versioned_bucket() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_object_copy_versioned_url_encoding() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();

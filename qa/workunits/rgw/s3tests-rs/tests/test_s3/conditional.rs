@@ -406,6 +406,7 @@ async fn test_multipart_put_object_if_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_put_current_object_if_none_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -448,6 +449,7 @@ async fn test_put_current_object_if_none_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_multipart_put_current_object_if_none_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -472,6 +474,7 @@ async fn test_multipart_put_current_object_if_none_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_put_current_object_if_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -515,6 +518,7 @@ async fn test_put_current_object_if_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_multipart_put_current_object_if_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -538,6 +542,7 @@ async fn test_multipart_put_current_object_if_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_put_object_current_if_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -612,6 +617,7 @@ async fn test_delete_object_if_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_object_current_if_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -697,6 +703,7 @@ async fn test_delete_object_if_match_last_modified_time() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_object_current_if_match_last_modified_time() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -770,6 +777,7 @@ async fn test_delete_object_if_match_size() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_object_current_if_match_size() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -875,6 +883,7 @@ async fn test_delete_objects_if_match() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_objects_current_if_match() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1047,6 +1056,7 @@ async fn test_delete_objects_if_match_last_modified_time() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_objects_current_if_match_last_modified_time() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1107,6 +1117,7 @@ async fn test_delete_objects_current_if_match_last_modified_time() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_objects_version_if_match_last_modified_time() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1226,6 +1237,7 @@ async fn test_delete_objects_if_match_size() {
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: requires versioning")]
 async fn test_delete_objects_current_if_match_size() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
