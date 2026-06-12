@@ -42,6 +42,8 @@ def install_kafka(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing Kafka...')
 
+    kerberos = getattr(ctx, 'kerberos', None)
+
     # programmatically find a nearby mirror so as not to hammer archive.apache.org
     apache_mirror_cmd="curl 'https://www.apache.org/dyn/closer.cgi' 2>/dev/null | " \
         "grep -o '<strong>[^<]*</strong>' | sed 's/<[^>]*>//g' | head -n 1"
@@ -101,7 +103,8 @@ def install_kafka(ctx, config):
             args=['sudo', 'chmod', 'o+rx', '/home/ubuntu'],
         )
 
-        broker_conf(ctx, client, kafka_dir)
+        client_kerberos = kerberos.get(client) if kerberos else None
+        broker_conf(ctx, client, kafka_dir, client_kerberos)
 
     try:
         yield
@@ -123,7 +126,7 @@ def install_kafka(ctx, config):
             )
 
 
-def broker_conf(ctx, client, kafka_dir):
+def broker_conf(ctx, client, kafka_dir, kerberos):
     """writing a custom server.properties config file"""
     (remote,) = ctx.cluster.only(client).remotes.keys()
     ip = remote.ip_address
@@ -170,8 +173,9 @@ def broker_conf(ctx, client, kafka_dir):
         "listener.name.mtls.ssl.truststore.location={tdir}/server.truststore.jks\n"
         "listener.name.mtls.ssl.truststore.password=mypassword\n"
         # SASL mechanisms
-        "sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512\n"
+        "sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,GSSAPI\n"
         "sasl.mechanism.inter.broker.protocol=PLAIN\n"
+        "sasl.kerberos.service.name={service_name}\n"
         'listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret" \\\n'
@@ -182,6 +186,11 @@ def broker_conf(ctx, client, kafka_dir):
         'listener.name.sasl_ssl.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret";\n'
+        'listener.name.sasl_ssl.gssapi.sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \\\n'
+        '  useKeyTab=true \\\n'
+        '  storeKey=true \\\n'
+        '  keyTab="{keytab}" \\\n'
+        '  principal="{principal}";\n'
         'listener.name.sasl_plaintext.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret" \\\n'
@@ -192,6 +201,11 @@ def broker_conf(ctx, client, kafka_dir):
         'listener.name.sasl_plaintext.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret";\n'
+        'listener.name.sasl_plaintext.gssapi.sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \\\n'
+        '  useKeyTab=true \\\n'
+        '  storeKey=true \\\n'
+        '  keyTab="{keytab}" \\\n'
+        '  principal="{principal}";\n'
     ).format(
         tdir=kafka_dir,
         ip=ip,
@@ -200,6 +214,9 @@ def broker_conf(ctx, client, kafka_dir):
         sasl_ssl=KAFKA_PORTS['SASL_SSL'],
         sasl_plaintext=KAFKA_PORTS['SASL_PLAINTEXT'],
         mtls=KAFKA_PORTS['MTLS'],
+        service_name=kerberos['service_name'] if kerberos else '',
+        keytab=kerberos['kafka_keytab'] if kerberos else '',
+        principal=kerberos['kafka_principal'] if kerberos else '',
     )
     file_name = 'server.properties'
     log.info("kafka conf file: %s", file_name)
