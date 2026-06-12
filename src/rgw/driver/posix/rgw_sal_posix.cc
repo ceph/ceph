@@ -3769,11 +3769,21 @@ int POSIXObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key
 
 int POSIXObject::set_cur_version(const DoutPrefixProvider *dpp)
 {
+  if (!ent) {
+    int ret = open(dpp, true, false);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  if (ent->get_type() != ObjectType::VERSIONED) {
+    return -EINVAL;
+  }
   VersionedDirectory* vdir = static_cast<VersionedDirectory*>(ent.get());
   std::unique_ptr<FSEnt> child;
   int ret = vdir->get_ent(dpp, null_yield, get_fname(true), std::string(), child);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   ret = vdir->set_cur_version_ent(dpp, child.get());
   return ret;
