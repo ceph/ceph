@@ -1723,7 +1723,7 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
     auto end = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end - start).count();
     co_await seastar::when_all_succeed(cleanup_futures.begin(), cleanup_futures.end());
-    co_return co_await seastar::make_ready_future<double>(elapsed);
+    co_return elapsed;
 }
 
 seastar::future<> OSD::update_heartbeat_peers()
