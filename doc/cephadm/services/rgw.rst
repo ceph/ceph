@@ -107,7 +107,7 @@ Adding a second port to accept HTTP traffic
 
 The RGW service specification can be used to configure a second port on the frontend by
 using the ``rgw_frontend_secondary_port`` parameter. This port is defined as an integer
-value and can only be used to accept HTTP traffic and HTTPS traffic is enabled.
+value and can only be used to accept HTTP traffic when HTTPS traffic is enabled.
 
 Example spec file:
 
