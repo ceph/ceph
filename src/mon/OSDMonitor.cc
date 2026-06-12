@@ -15365,6 +15365,10 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       return false;
     }
   }
+  dout(0) << "BILL: pool " << m->pool << " flags: " << pool->get_flags_string() << dendl;
+  if (pending_inc.new_pools.count(m->pool)) {
+    dout(0) << "BILL: pending_inc " << m->pool << " flags: " << pending_inc.new_pools[m->pool].get_flags_string() << dendl;
+  }
 
   switch (m->op) {
     case POOL_OP_CREATE_SNAP:
@@ -15392,6 +15396,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       // we won't allow removal of an unmanaged snapshot from a pool
       // not in unmanaged snaps mode.
       if (!pool->is_unmanaged_snaps_mode()) {
+        dout(0) << "BILL: failing DELETE_UNMANAGED_SNAP with ENOTSUP" << dendl;
         _pool_op_reply(op, -ENOTSUP, osdmap.get_epoch());
         return false;
       }
