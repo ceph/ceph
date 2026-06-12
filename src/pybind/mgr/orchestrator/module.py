@@ -2623,7 +2623,8 @@ Usage:
                        limit: Optional[int] = None,
                        ceph_version: Optional[str] = None,
                        crush_bucket_type: Optional[str] = None,
-                       crush_bucket_name: Optional[str] = None) -> HandleCommandResult:
+                       crush_bucket_name: Optional[str] = None, 
+                       unset_mon_flags: bool = False)  -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
 
