@@ -1,4 +1,6 @@
 tasks:
+- kerberos:
+    client.0:
 - kafka:
     client.0:
       kafka_version: 3.9.2
