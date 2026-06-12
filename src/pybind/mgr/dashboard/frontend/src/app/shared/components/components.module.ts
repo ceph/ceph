@@ -140,6 +140,7 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
 @NgModule({
   imports: [
     CommonModule,
+    ProductiveCardComponent,
     FormsModule,
     ReactiveFormsModule,
     NgbAlertModule,
@@ -276,8 +277,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     DetailsCardComponent,
     SidePanelComponent,
     SidebarLayoutComponent,
-    ToastComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    ToastComponent
   ]
 })
 export class ComponentsModule {

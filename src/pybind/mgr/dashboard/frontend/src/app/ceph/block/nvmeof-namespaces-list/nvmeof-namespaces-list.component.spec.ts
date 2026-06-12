@@ -148,28 +148,20 @@ describe('NvmeofNamespacesListComponent', () => {
       done();
     });
 
-    component.listNamespaces();
+    component.fetchData();
   });
 
-  it('should default to first group and keep default placeholder when groups exist', () => {
-    component.group = null;
-    component.gwGroups = [{ content: 'g1', selected: false }] as any;
-
-    component.updateGroupSelectionState();
-
-    expect(component.group).toBe('g1');
-    expect(component.gwGroupsEmpty).toBe(false);
-    expect(component.gwGroupPlaceholder).toBe('Enter group name');
-  });
-
-  it('should set error placeholder and call preventDefault on group fetch failure', () => {
-    const preventDefault = jasmine.createSpy('preventDefault');
-
-    component.handleGatewayGroupsError({ preventDefault });
-
-    expect(component.gwGroups).toEqual([]);
-    expect(component.gwGroupsEmpty).toBe(true);
-    expect(component.gwGroupPlaceholder).toBe('Unable to fetch Gateway groups');
-    expect(preventDefault).toHaveBeenCalled();
+  it('should reload namespaces when group changes', (done) => {
+    component.group = 'g1';
+    component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
+      expect(namespaces).toEqual(
+        mockNamespaces.map((ns) => ({
+          ...ns,
+          unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
+        }))
+      );
+      done();
+    });
+    component.onGroupChange('g1');
   });
 });
