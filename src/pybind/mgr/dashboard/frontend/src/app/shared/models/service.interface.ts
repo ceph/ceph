@@ -108,6 +108,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  enable_mtls: boolean;
   qat: QatSepcs;
 }
 

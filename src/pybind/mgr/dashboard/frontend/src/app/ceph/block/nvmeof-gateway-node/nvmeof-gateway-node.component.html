@@ -47,7 +47,8 @@
              let-value="data.value" 
              let-row="data.row">
   @if (value) {
-  <div [cdsStack]="'horizontal'" [gap]="4">
+  <div [cdsStack]="'horizontal'" 
+       [gap]="4">
     @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
     <cd-icon type="success"></cd-icon>
     } @else {

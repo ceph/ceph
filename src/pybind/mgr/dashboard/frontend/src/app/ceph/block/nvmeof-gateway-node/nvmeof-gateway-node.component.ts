@@ -32,6 +32,7 @@ import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
+import { NvmeofGatewayGroupEditModalComponent } from '../nvmeof-gateway-group-edit-modal/nvmeof-gateway-group-edit-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -359,7 +360,21 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     this.hostsLoaded.emit(this.count);
   }
 
-  onEditGateway(): void {}
+  onEditGateway(): void {
+    if (!this.serviceSpec) {
+      return;
+    }
+
+    const modalRef = this.modalService.show(NvmeofGatewayGroupEditModalComponent, {
+      gatewayGroup: this.serviceSpec
+    });
+
+    modalRef.componentInstance.groupUpdated.subscribe(() => {
+      if (this.tableContext) {
+        this.getHosts(this.tableContext);
+      }
+    });
+  }
 
   private buildGatewayDetails(
     serviceSpec: CephServiceSpec,

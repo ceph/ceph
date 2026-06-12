@@ -1,0 +1,83 @@
+<cds-modal
+  [open]="open"
+  (overlaySelected)="closeModal()"
+  [size]="'md'">
+  <cds-modal-header
+    (closeSelect)="closeModal()">
+    <h4
+      class="cds--type-heading-04 cds-ml-3"
+      i18n>
+      Edit gateways group
+    </h4>
+    <p
+      class="cds--type-body-compact-01 cds-ml-3"
+      i18n>
+      Lorem ipsum dolor sit lorem a amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.
+    </p>
+  </cds-modal-header>
+  <section cdsModalContent>
+    <form
+      [formGroup]="editForm"
+      novalidate>
+      <div class="cds-mt-5">
+        <div cdsStack="vertical" [gap]="5">
+          <!-- Gateway Name (Read-only) -->
+          <div>
+            <cds-text-label
+              labelInputID="groupName"
+              i18n
+              i18n-helperText
+              helperText="The name of the gateway group."
+              [invalid]="false">
+              Gateway name
+              <input
+                cdsText
+                type="text"
+                id="groupName"
+                formControlName="groupName"
+                readonly
+              />
+            </cds-text-label>
+          </div>
+
+          <!-- Enable Encryption Checkbox -->
+          <div>
+            <cds-checkbox
+              id="enableEncryption"
+              formControlName="enableEncryption">
+              <span i18n>Enable encryption</span>
+              <cds-tag
+                type="green"
+                class="cds-ml-3"
+                i18n>Recommended</cds-tag>
+            </cds-checkbox>
+            <p class="cds--type-helper-text-01 cds-mt-2" i18n>
+              Secures group metadata and unlocks advanced authentication features.
+            </p>
+          </div>
+
+          <!-- Enable Mutual TLS Checkbox -->
+          <div>
+            <cds-checkbox
+              id="enableMtls"
+              formControlName="enableMtls">
+              <span i18n>Enable Mutual TLS (mTLS)</span>
+            </cds-checkbox>
+            <p class="cds--type-helper-text-01 cds-mt-2" i18n>
+              Use mutual TLS (mTLS) to encrypt control and monitoring commands exchanged with NVMe-oF gateways.
+            </p>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+  <cd-form-button-panel
+    [modalForm]="true"
+    [showSubmit]="true"
+    submitText="Save changes"
+    i18n-submitText
+    [disabled]="editForm.invalid"
+    (submitActionEvent)="onSubmit()"
+    (backActionEvent)="closeModal()">
+  </cd-form-button-panel>
+</cds-modal>

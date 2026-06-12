@@ -115,14 +115,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
 
-    const editAction: CdTableAction = {
-      permission: 'update',
-      icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(this.selection.first()?.name),
-      name: this.actionLabels.EDIT,
-      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
-    };
-
     const viewAction: CdTableAction = {
       permission: 'read',
       icon: Icons.eye,
@@ -139,7 +131,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
 
-    this.tableActions = [createAction, editAction, viewAction, deleteAction];
+    this.tableActions = [createAction, viewAction, deleteAction];
 
     this.gatewayGroup$ = this.subject.pipe(
       switchMap(() =>
@@ -281,14 +273,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       return;
     }
     this.router.navigate([this.viewUrl, groupName]);
-  }
-
-  editSelectedGatewayGroup(): void {
-    const selectedGroup = this.selection.first();
-    if (!selectedGroup) {
-      return;
-    }
-    this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
   }
 
   private buildGatewayDetails(selectedGroup: any): DetailItem[] {

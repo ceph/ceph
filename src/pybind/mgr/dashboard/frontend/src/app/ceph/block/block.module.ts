@@ -55,6 +55,7 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
 import { NvmeofGroupFormComponent } from './nvmeof-group-form/nvmeof-group-form.component';
 import { NvmeofEditHostKeyModalComponent } from './nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
+import { NvmeofGatewayGroupEditModalComponent } from './nvmeof-gateway-group-edit-modal/nvmeof-gateway-group-edit-modal.component';
 
 import {
   ButtonModule,
@@ -196,7 +197,8 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
-    NvmeofTabsComponent
+    NvmeofTabsComponent,
+    NvmeofGatewayGroupEditModalComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]

@@ -1,14 +1,15 @@
 <cd-productive-card>
   <ng-template #header>
-    @if (cardTitle) {
+    @if (cardTitle || showEditButton) {
     <div class="details-card-header">
+      @if (cardTitle) {
       <h3 class="cds--type-heading-03" i18n>{{ cardTitle }}</h3>
+      }
       <div class="header-actions">
         @if (showEditButton) {
         <button
           cdsButton="ghost"
           size="sm"
-          [disabled]="true"
           (click)="onEditClick()"
           [attr.aria-label]="editButtonLabel"
         >
