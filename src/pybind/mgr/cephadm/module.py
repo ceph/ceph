@@ -18,6 +18,7 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from .utils import get_default_ssh_config
+from cephadm.cephadm_secrets import CephadmSecrets
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 from ceph.deployment.tls_utils import (
     SSLConfigException,
@@ -759,6 +760,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         service_registry.init_services(self)
         self._init_cert_mgr()
+        self._init_cephadm_secrets()
 
         self.migration = Migrations(self)
 
@@ -839,6 +841,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             )
 
         self.cert_mgr.init_tlsobject_store()
+
+    def _init_cephadm_secrets(self) -> None:
+        # Secrets are owned by the dedicated 'secrets' mgr module.
+        # cephadm uses a thin proxy client (SecretMgr) that forwards requests via `remote(...)`.
+        #
+        # The proxy performs a best-effort migration of any existing cephadm-local
+        # secret_store/v1/* entries into the secrets module namespace.
+        self.cephadm_secrets = CephadmSecrets(self)
 
     def _get_mgr_ips(self) -> List[str]:
         return [self.inventory.get_addr(d.hostname)
@@ -4589,6 +4599,56 @@ Then run the following:
             results.append(self._plan(cast(ServiceSpec, spec)))
         return results
 
+    # Fields that never flow into daemon final_config and therefore cannot
+    # have secret:/ refs resolved at deploy time.
+    # Fields known never to reach daemon final_config.
+    _SECRET_UNSUPPORTED_FIELDS = (
+        'extra_container_args',
+        'extra_entrypoint_args',
+        'ssl_cert',
+        'ssl_key',
+        'ssl_ca_cert',
+    )
+
+    def _check_secrets_refs(self, spec: ServiceSpec) -> None:
+        """Pre-apply validation of secret:/ refs in a ServiceSpec.
+
+        In v1, secret:/ refs are only supported in custom_configs content.
+        Those fields are merged into daemon final_config before resolve_object
+        runs, so they are guaranteed to be substituted at deploy time.
+        Refs anywhere else are rejected here with a clear error.
+        """
+        if not self.cephadm_secrets._has_secret_refs(spec.to_json()):
+            return
+
+        # Reject refs in fields that are known never to reach final_config.
+        # These get a specific error message before the generic whitelist check.
+        for field in self._SECRET_UNSUPPORTED_FIELDS:
+            val = getattr(spec, field, None)
+            if val and self.cephadm_secrets._has_secret_refs(val):
+                raise OrchestratorError(
+                    f"secret:/ refs are not supported in '{field}'. "
+                    f"In v1, secret refs are only supported in custom_configs content."
+                )
+
+        # Whitelist: reject any secret:/ ref outside custom_configs.
+        spec_json = spec.to_json()
+        spec_without_custom = {k: v for k, v in spec_json.items()
+                               if k != 'custom_configs'}
+        if self.cephadm_secrets._has_secret_refs(spec_without_custom):
+            raise OrchestratorError(
+                "secret:/ refs found outside custom_configs. "
+                "In v1, secret refs are only supported in custom_configs content."
+            )
+
+        # Verify all secret:/ refs in custom_configs exist in the store.
+        custom_configs = spec_json.get('custom_configs')
+        unresolved = self.cephadm_secrets.find_unresolved_secrets(custom_configs)
+        if unresolved:
+            raise OrchestratorError(
+                "Found unresolved secrets:\n  - " + "\n  - ".join(sorted(unresolved))
+            )
+
     def _check_cert_source(self, spec: ServiceSpec) -> str:
         cert_warning = ''
         # Warn the user when certificate_source is changing, as this will
@@ -4790,6 +4850,7 @@ Then run the following:
         max_count = self.max_count_per_host
 
         self._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
+        self._check_secrets_refs(spec)
         cert_warning = self._check_cert_source(spec)
 
         if spec.service_type == 'nvmeof':
