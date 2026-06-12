@@ -17,7 +17,7 @@ from ..constants import DEFAULT_IMAGE
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
-from ..call_wrappers import call, call_throws
+from ..call_wrappers import call, call_throws, CallVerbosity
 from ..file_utils import (
     make_run_dir,
     pathify,
