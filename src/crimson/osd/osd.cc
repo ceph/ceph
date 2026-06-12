@@ -344,7 +344,6 @@ seastar::future<> OSD::mkfs(
   co_await store.umount();
 
   co_await store.stop();
-  co_return;
 }
 
 seastar::future<> OSD::_write_superblock(
@@ -712,7 +711,7 @@ seastar::future<> OSD::_send_boot()
   if (ret == 0) {
     m->metadata["osd_objectstore"] = type;
   }
-  co_return co_await monc->send_message(std::move(m));
+  co_await monc->send_message(std::move(m));
 }
 
 seastar::future<> OSD::_add_device_class()
@@ -744,8 +743,6 @@ seastar::future<> OSD::_add_device_class()
   } else {
     INFO("device_class was set: {}", message);
   }
-
-  co_return;
 }
 
 seastar::future<> OSD::_add_me_to_crush()
