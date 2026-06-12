@@ -45,6 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -186,7 +187,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     TagModule,
     LinkModule,
     LayerModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
