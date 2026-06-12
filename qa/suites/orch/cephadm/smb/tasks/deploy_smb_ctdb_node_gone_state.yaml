@@ -54,7 +54,7 @@ tasks:
     service: smb.modusr1
 
 # verify CTDB is healthy, cluster well formed
-- cephadm.exec:
+- template.exec:
     host.a:
       - sleep 30
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.modusr1\")))[-1].name' > /tmp/svcname"
@@ -82,7 +82,7 @@ tasks:
     service: smb.modusr1
 
 # verify CTDB status doesn't include the node that was removed
-- cephadm.exec:
+- template.exec:
     host.a:
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.modusr1\")))[-1].name' > /tmp/svcname"
       - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb listnodes > /tmp/ctdb_listnodes"
