@@ -153,9 +153,7 @@ public:
     OP_COLL_SET_BITS = 42, // cid, bits
 
     OP_MERGE_COLLECTION = 43, // cid, destination
-#ifdef WITH_CRIMSON
     OP_TOUCH_TEMP = 44, // cid, temp_oid, target_oid
-#endif
   };
 
   // Transaction hint type
@@ -442,9 +440,7 @@ public:
       op->oid = om[op->oid];
       break;
 
-#ifdef WITH_CRIMSON
     case OP_TOUCH_TEMP:
-#endif
     case OP_CLONERANGE2:
     case OP_CLONE:
       ceph_assert(op->cid < cm.size());
@@ -862,7 +858,6 @@ public:
     _op->oid = _get_object_id(oid);
     data.ops = data.ops + 1;
   }
-#ifdef WITH_CRIMSON
   /**
    * touch_temp
    *
@@ -884,7 +879,7 @@ public:
     _op->dest_oid = _get_object_id(target_oid);
     data.ops = data.ops + 1;
   }
-#endif
+
   /**
    * Write data to an offset within an object. If the object is too
    * small, it is expanded as needed.  It is possible to specify an
