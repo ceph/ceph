@@ -1,6 +1,19 @@
 <cd-nvmeof-tabs></cd-nvmeof-tabs>
 
 <ng-container *ngIf="gatewayGroup$ | async as gateways">
+  <!-- Details Card Section -->
+  <ng-container *ngIf="selection.hasSelection">
+    <cd-details-card
+      cardTitle="Details"
+      i18n-cardTitle
+      [details]="selectedGatewayDetails"
+      [showEditButton]="true"
+      [editButtonLabel]="actionLabels.EDIT"
+      [columns]="4"
+      (editClicked)="editSelectedGatewayGroup()">
+    </cd-details-card>
+  </ng-container>
+
   <cd-table
     #table
     [data]="gateways"
@@ -14,11 +27,14 @@
     i18n-emptyStateTitle
     emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
     i18n-emptyStateMessage>
-  <cd-table-actions class="table-actions"
-                    [permission]="permission"
-                    [selection]="selection"
-                    [tableActions]="tableActions">
-  </cd-table-actions>
+
+    <div class="table-actions">
+      <cd-table-actions [permission]="permission"
+                        [selection]="selection"
+                        class="btn-group"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </cd-table>
 </ng-container>
 
@@ -39,7 +55,7 @@
 <ng-template #gatewayStatusTpl
              let-gateway="data.value">
   <div [cdsStack]="'horizontal'"
-       gap="4">
+       [gap]="4">
 
     @if (gateway.running > 0) {
     <span [ngClass]="gateway.error > 0 ? 'cds-mr-3' : ''">

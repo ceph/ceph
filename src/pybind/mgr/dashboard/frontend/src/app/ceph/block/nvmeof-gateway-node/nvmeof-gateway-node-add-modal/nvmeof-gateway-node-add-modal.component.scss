@@ -1,7 +1,50 @@
-cds-modal-header {
-  border-bottom: 1px solid var(--cds-ui-03, #e0e0e0);
-}
+// Scoped to this component (ViewEncapsulation.None)
+cd-nvmeof-gateway-node-add-modal {
+  // Increase modal container height
+  .cds--modal-container {
+    height: 80vh;
+    max-height: 80vh;
+  }
 
-.status-cell {
-  align-items: center;
+  // Header area: white background, no bottom border
+  .cds--modal-header {
+    background-color: var(--cds-layer, #fff);
+    border-bottom: none;
+    padding-bottom: var(--cds-spacing-05);
+  }
+
+  // Entire modal content pane: gray background
+  .cds--modal-content {
+    background-color: var(--cds-background, #f4f4f4);
+    padding: 0;
+  }
+
+  // "Select gateway nodes" label section — sits directly on the gray background
+  .nodes-section-header {
+    padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-04);
+    background-color: transparent; // inherits gray from .cds--modal-content
+  }
+
+  // Table wrapper: white card sitting on the gray content area
+  .cds--table-toolbar,
+  .cds--data-table-header,
+  ngx-datatable,
+  .ngx-datatable,
+  .datatable-header,
+  .datatable-body,
+  .datatable-footer {
+    background-color: var(--cds-layer, #fff);
+  }
+
+  // Wrap the search + table in white
+  cd-table {
+    display: block;
+    background-color: var(--cds-layer, #fff);
+    border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+    margin: 0 var(--cds-spacing-05) var(--cds-spacing-05);
+  }
+
+  .status-cell {
+    align-items: center;
+  }
 }

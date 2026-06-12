@@ -23,16 +23,14 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
   standalone: false
 })
 export class NvmeofGroupFormComponent extends CdForm implements OnInit {
-  @ViewChild(NvmeofGatewayNodeComponent) gatewayNodeComponent: NvmeofGatewayNodeComponent;
+  @ViewChild(NvmeofGatewayNodeComponent) gatewayNodeComponent!: NvmeofGatewayNodeComponent;
 
   permission: Permission;
-  groupForm: CdFormGroup;
-  action: string;
+  groupForm!: CdFormGroup;
+  action!: string;
   resource: string;
-  group: string;
   pools: Pool[] = [];
   poolsLoading = false;
-  pageURL: string;
   hasAvailableNodes = true;
 
   constructor(
