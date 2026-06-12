@@ -933,6 +933,17 @@ int md_config_t::set_val(ConfigValues& values,
 
   string k(ConfFile::normalize_key_name(key));
 
+  if (k == "bluestore_compression_min_blob_size" ||
+      k == "bluestore_compression_max_blob_size" ||
+      k == "bluestore_csum_min_block" ||
+      k == "bluestore_csum_max_block") {
+    std::string err;
+    int64_t n = strict_si_cast<int64_t>(v, &err);
+    if (!err.empty() || n < 0 || (n > 0 && (n & (n - 1)) != 0)) {
+      return -EINVAL;
+    }
+  }
+
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
