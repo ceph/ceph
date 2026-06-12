@@ -20,7 +20,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayGroup, NvmeofSubsystem } from '~/app/shared/models/nvmeof';
+import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -48,31 +48,31 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   @ViewChild(TableComponent, { static: true })
-  table: TableComponent;
+  table!: TableComponent;
 
   @ViewChild('dateTpl', { static: true })
-  dateTpl: TemplateRef<any>;
+  dateTpl!: TemplateRef<any>;
 
   @ViewChild('customTableItemTemplate', { static: true })
-  customTableItemTemplate: TemplateRef<any>;
+  customTableItemTemplate!: TemplateRef<any>;
 
   @ViewChild('deleteTpl', { static: true })
-  deleteTpl: TemplateRef<any>;
+  deleteTpl!: TemplateRef<any>;
 
   @ViewChild('gatewayStatusTpl', { static: true })
-  gatewayStatusTpl: TemplateRef<any>;
+  gatewayStatusTpl!: TemplateRef<any>;
 
-  permission: Permission;
-  tableActions: CdTableAction[];
+  permission!: Permission;
+  tableActions: CdTableAction[] = [];
   nodesAvailable = false;
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  gatewayGroup$: Observable<CephServiceSpec[]>;
+  gatewayGroup$: Observable<CephServiceSpec[]> = of([]);
   subject = new BehaviorSubject<CephServiceSpec[]>([]);
-  context: CdTableFetchDataContext;
-  gatewayGroupName: string;
-  subsystemCount: number;
-  gatewayCount: number;
+  context!: CdTableFetchDataContext;
+  gatewayGroupName = '';
+  subsystemCount = 0;
+  gatewayCount = 0;
   private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
@@ -130,9 +130,9 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     const viewAction: CdTableAction = {
       permission: 'read',
       icon: Icons.eye,
-      click: () => this.getViewDetails(),
+      routerLink: () => `${this.viewUrl}/${this.selection.first()?.name}`,
       name: $localize`View details`,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
     };
 
     const deleteAction: CdTableAction = {
@@ -154,7 +154,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
               return of([]);
             }
             return forkJoin(
-              groups.map((group: NvmeofGatewayGroup) => {
+              groups.map((group: CephServiceSpec) => {
                 const isRunning = (group.status?.running ?? 0) > 0;
                 const subsystemsObservable = isRunning
                   ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
@@ -226,7 +226,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.nvmeofService
       .listSubsystems(group)
       .pipe(catchError(() => of([])))
-      .subscribe((subsystems: NvmeofSubsystem[]) => {
+      .subscribe((subsystems: any) => {
         let subsList: NvmeofSubsystem[] = [];
         if (subsystems) {
           const rawList = Array.isArray(subsystems) ? subsystems : [subsystems];
@@ -312,7 +312,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       }
     );
   }
-
   getViewDetails() {
     const selectedGroup = this.selection.first();
     if (!selectedGroup) {
