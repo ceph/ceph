@@ -38,6 +38,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -70,6 +71,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
   hasAvailableHosts = false;
+  gatewayDetails: DetailItem[] = [];
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -325,9 +327,39 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       } else {
         this.hosts = [];
       }
+
+      this.gatewayDetails = this.buildGatewayDetails(this.serviceSpec, this.hosts.length);
     }
 
     this.count = this.hosts.length;
     this.hostsLoaded.emit(this.count);
+  }
+
+  private buildGatewayDetails(
+    serviceSpec: CephServiceSpec,
+    gatewayNodeCount: number
+  ): DetailItem[] {
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: serviceSpec.spec?.group || this.groupName || '-'
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: gatewayNodeCount
+      },
+      {
+        label: $localize`Encryption`,
+        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status',
+        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+      },
+      {
+        label: $localize`mTLS`,
+        value: $localize`Disabled`,
+        type: 'status',
+        statusIcon: 'error'
+      }
+    ];
   }
 }

@@ -39,10 +39,6 @@ describe('NvmeofGatewayGroupComponent', () => {
         provideToastr(),
         { provide: NvmeofService, useValue: nvmeofServiceSpy },
         {
-          provide: Router,
-          useValue: { navigate: jest.fn() }
-        },
-        {
           provide: ModalCdsService,
           useValue: { show: jest.fn() }
         },
@@ -268,6 +264,25 @@ describe('NvmeofGatewayGroupComponent', () => {
     component.gatewayGroup$.subscribe((data) => {
       expect(data).toEqual(mockData);
       done();
+    });
+  });
+
+  describe('View details action', () => {
+    it('should use routerLink and navigate to the resource page for the selected group', () => {
+      component.selection.first = jest.fn().mockReturnValue({ name: 'default' });
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      expect(viewAction).toBeTruthy();
+      expect(viewAction!.click).toBeUndefined();
+      const link = (viewAction!.routerLink as Function)();
+      expect(link).toBe('/block/nvmeof/gateways/view/default');
+    });
+
+    it('should set canBePrimary true for single selection only', () => {
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      const single = { hasSingleSelection: true } as any;
+      const multi = { hasSingleSelection: false } as any;
+      expect((viewAction!.canBePrimary as Function)(single)).toBe(true);
+      expect((viewAction!.canBePrimary as Function)(multi)).toBe(false);
     });
   });
 

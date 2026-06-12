@@ -22,7 +22,6 @@
         <cds-text-label
           i18n
           [invalid]="nqnRef.isInvalid"
-          [invalidText]="nqnInvalidTemplate"
           helperText="A unique identifier for the subsystem."
           i18n-helperText>
           Subsystem NQN (NVMe Qualified Name)
@@ -36,6 +35,11 @@
                  formControlName="nqn"
                  [invalid]="nqnRef.isInvalid">
         </cds-text-label>
+        @if (nqnRef.isInvalid) {
+          @for (err of formGroup.get('nqn')?.errors | keyvalue; track err.key) {
+            <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+          }
+        }
       </div>
       <div cdsRow
            class="form-item">
