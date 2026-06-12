@@ -3972,13 +3972,13 @@ class SSLParameters:
         if not self.enabled:
             return
         missing: list[Any] = []
-        if not self.ssl_cert:
-            missing.append("ssl_cert")
-        if not self.ssl_key:
-            missing.append("ssl_key")
-        if component == "ssl" and not self.certificate_source:
+        if not self.certificate_source:
             missing.append("certificate_source")
-
+        if self.certificate_source == 'inline':
+            if not self.ssl_cert:
+                missing.append("ssl_cert")
+            if not self.ssl_key:
+                missing.append("ssl_key")
         if missing:
             raise ValueError(
                 f"[{component}] SSL is enabled "
@@ -4175,34 +4175,22 @@ class SMBSpec(ServiceSpec):
         if service_type != self.service_type:
             raise ValueError(f'invalid service_type: {service_type!r}')
 
-        self.ssl_certificates = {}
-        if ssl_certificates:
-            # ssl_certificates can be applied from smb mgr module
-            ssl_keys = ['enabled', 'ssl_cert', 'ssl_key', 'certificate_source']
-            if any(key in ssl_certificates for key in ssl_keys):
-                self.ssl_certificates['ssl'] = SSLParameters.from_dict(ssl_certificates)
-            else:
-                self.ssl_certificates = {
-                    name: (
-                        value
-                        if isinstance(value, SSLParameters)
-                        else SSLParameters.from_dict(value)
-                    )
-                    for name, value in ssl_certificates.items()
-                }
-        self.ssl_certificates.setdefault('ssl', SSLParameters.from_dict({}))
-        ssl_def = self.ssl_certificates['ssl']
+        self.ssl_certificates = {
+            name: (
+                value
+                if isinstance(value, SSLParameters)
+                else SSLParameters.from_dict(value)
+            )
+            for name, value in (ssl_certificates or {}).items()
+        }
+        any_ssl = any(p.enabled for p in self.ssl_certificates.values())
         super().__init__(
             self.service_type,
             service_id=service_id,
             placement=placement,
             count=count,
             config=config,
-            ssl=ssl_def.enabled if ssl_def else False,
-            ssl_cert=ssl_def.ssl_cert,
-            ssl_key=ssl_def.ssl_key,
-            ssl_ca_cert=ssl_def.ssl_ca_cert,
-            certificate_source=ssl_def.certificate_source,
+            ssl=any_ssl,
             unmanaged=unmanaged,
             preview_only=preview_only,
             networks=networks,
@@ -4224,6 +4212,12 @@ class SMBSpec(ServiceSpec):
         )
         self.custom_ports = custom_ports
         self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
+        self.remote_control_ssl_cert = remote_control_ssl_cert
+        self.remote_control_ssl_key = remote_control_ssl_key
+        self.remote_control_ca_cert = remote_control_ca_cert
+        self.keybridge_kmip_ssl_cert = keybridge_kmip_ssl_cert
+        self.keybridge_kmip_ssl_key = keybridge_kmip_ssl_key
+        self.keybridge_kmip_ca_cert = keybridge_kmip_ca_cert
         self.ceph_cluster_configs = SMBExternalCephCluster.convert_list(
             ceph_cluster_configs
         )
@@ -4268,20 +4262,8 @@ class SMBSpec(ServiceSpec):
             if key not in self._valid_service_names:
                 raise ValueError(f'{key} is not a valid service name')
         # TLS certificate validation
-        ssl_def = self.ssl_certificates.get('ssl')
-        if ssl_def and ssl_def.enabled and not ssl_def.certificate_source:
-            raise ValueError('If SSL is enabled, a certificate_source must be provided.')
-
-        if ssl_def and ssl_def.enabled and ssl_def.certificate_source == 'inline':
-            required_fields = ['ssl_cert', 'ssl_key']
-            missing = [
-                field for field in required_fields
-                if not getattr(ssl_def, field)
-            ]
-            if missing:
-                raise ValueError(
-                    f'For inline SSL, TLS field Missing:: {", ".join(missing)}'
-                )
+        for feature_name, ssl_params in self.ssl_certificates.items():
+            ssl_params.validate(component=feature_name)
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
         if not uri.startswith(('rados://', 'mem:')):
@@ -4335,7 +4317,7 @@ class SMBSpec(ServiceSpec):
             spec['ceph_cluster_configs'] = [
                 c.to_json() for c in spec['ceph_cluster_configs']
             ]
-        if self.ssl_certificates and spec:
+        if spec and spec.get('ssl_certificates'):
             spec['ssl_certificates'] = {
                 k: v.to_json() for k, v in self.ssl_certificates.items()
             }

@@ -1,6 +1,7 @@
 import json
 from unittest.mock import patch
 
+from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
@@ -159,7 +160,9 @@ class TestSMB:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_smb_tls_with_certmgr_validation(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_smb_tls_feature_cert_in_config_blobs(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test', addr='1.2.3.7'):
@@ -173,67 +176,31 @@ class TestSMB:
                 service_id='foo',
                 config_uri='rados://.smb/foxtrot/config2.json',
                 placement=PlacementSpec(hosts=['test']),
+                features=[REMOTE_CONTROL],
                 ssl_certificates={
-                    'enabled': True,
-                    'ssl_cert': ceph_generated_cert,
-                    'ssl_key': ceph_generated_key,
-                    'ssl_ca_cert': cephadm_root_ca,
-                    'certificate_source': 'inline',
+                    'remote_control': {
+                        'enabled': True,
+                        'ssl_cert': ceph_generated_cert,
+                        'ssl_key': ceph_generated_key,
+                        'ssl_ca_cert': cephadm_root_ca,
+                        'certificate_source': 'inline',
+                    },
                 },
             )
             service_name = smb_spec.service_name()
 
             with with_service(cephadm_module, smb_spec):
-                assert cephadm_module.cert_mgr.cert_store.tlsobject_exists('smb_ssl_cert')
-                assert cephadm_module.cert_mgr.key_store.tlsobject_exists('smb_ssl_key')
-                assert cephadm_module.cert_mgr.cert_store.tlsobject_exists('smb_ssl_ca_cert')
-
-                smb_generated_conf, _ = service_registry.get_service('smb').generate_config(
+                smb_conf, _ = service_registry.get_service('smb').generate_config(
                     CephadmDaemonDeploySpec(
                         host='test',
                         daemon_id='foo.test.0',
                         service_name=service_name,
                     )
                 )
-                assert cephadm_module.cert_mgr.get_cert(
-                    'smb_ssl_cert', service_name=service_name
-                ) == ceph_generated_cert
-                assert cephadm_module.cert_mgr.get_key(
-                    'smb_ssl_key', service_name=service_name
-                ) == ceph_generated_key
-                assert cephadm_module.cert_mgr.get_cert(
-                    'smb_ssl_ca_cert', service_name=service_name
-                ) == cephadm_root_ca
-
-                cert_list = cephadm_module.cert_mgr.cert_ls(include_details=True)
-                assert cert_list['smb_ssl_cert']['scope'] == 'service'
-                assert service_name in cert_list['smb_ssl_cert']['certificates']
-                assert cert_list['smb_ssl_ca_cert']['scope'] == 'service'
-                assert service_name in cert_list['smb_ssl_ca_cert']['certificates']
-
-                key_list = cephadm_module.cert_mgr.key_ls()
-                assert key_list['smb_ssl_key']['scope'] == 'service'
-                assert service_name in key_list['smb_ssl_key']['keys']
-
-                assert cephadm_module.cert_mgr.rm_cert(
-                    'smb_ssl_cert', service_name=service_name
-                ) is True
-                assert cephadm_module.cert_mgr.rm_key(
-                    'smb_ssl_key', service_name=service_name
-                ) is True
-                assert cephadm_module.cert_mgr.rm_cert(
-                    'smb_ssl_ca_cert', service_name=service_name
-                ) is True
-
-                assert cephadm_module.cert_mgr.get_cert(
-                    'smb_ssl_cert', service_name=service_name
-                ) is None
-                assert cephadm_module.cert_mgr.get_key(
-                    'smb_ssl_key', service_name=service_name
-                ) is None
-                assert cephadm_module.cert_mgr.get_cert(
-                    'smb_ssl_ca_cert', service_name=service_name
-                ) is None
+                files = smb_conf.get('files', {})
+                assert files.get('remote_control.ssl.crt') == ceph_generated_cert
+                assert files.get('remote_control.ssl.key') == ceph_generated_key
+                assert files.get('remote_control.ca.crt') == cephadm_root_ca
 
 
 def test_smb_get_dependencies(cephadm_module):

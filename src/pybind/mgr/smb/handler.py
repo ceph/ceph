@@ -21,7 +21,6 @@ import time
 
 import ceph.smb.constants
 from ceph.deployment.service_spec import (
-    CertificateSource,
     SMBExternalCephCluster,
     SMBSpec,
     SSLParameters,
@@ -40,7 +39,6 @@ from .enums import (
     LoginAccess,
     LoginCategory,
     State,
-    TLSCredentialType,
     UserGroupSourceType,
 )
 from .internal import (
@@ -629,17 +627,6 @@ class ClusterConfigHandler:
             chg_cluster_ids.update(ClusterEntry.ids(self.internal_store))
         return chg_cluster_ids
 
-    def _is_ssl_cert_key_set(self, change_group: ClusterChangeGroup) -> bool:
-        has_cert = any(
-            tc.credential_type == TLSCredentialType.CERT
-            for tc in change_group.tls_credentials
-        )
-        has_key = any(
-            tc.credential_type == TLSCredentialType.KEY
-            for tc in change_group.tls_credentials
-        )
-        return has_cert and has_key
-
     def _save_cluster_settings(
         self, change_group: ClusterChangeGroup
     ) -> None:
@@ -708,22 +695,6 @@ class ClusterConfigHandler:
             assert len(change_group.ext_ceph_clusters) == 1
             ext_ceph_cluster = change_group.ext_ceph_clusters[0]
 
-        if self._is_ssl_cert_key_set(change_group):
-            cert = key = ca_cert = None
-            for tc in change_group.tls_credentials:
-                if tc.credential_type == TLSCredentialType.CERT:
-                    cert = tc.value
-                elif tc.credential_type == TLSCredentialType.KEY:
-                    key = tc.value
-                elif tc.credential_type == TLSCredentialType.CA_CERT:
-                    ca_cert = tc.value
-            ssl_certificates['ssl'] = SSLParameters(
-                enabled=bool(cert and key),
-                ssl_cert=cert,
-                ssl_key=key,
-                ssl_ca_cert=ca_cert,
-                certificate_source=CertificateSource.INLINE.value,
-            )
         smb_spec = _generate_smb_service_spec(
             cluster,
             config_entries=config_entries,
