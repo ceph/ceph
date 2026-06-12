@@ -346,6 +346,11 @@ class CephadmService(metaclass=ABCMeta):
         if spec.ssl_ca_cert:
             deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
 
+        # Scan for secrets (secret:// uris) refs in the spec and add them as dependencies
+        # TODO(redo): extend this call to other services by using their "parent" deps
+        if spec is not None:
+            deps = deps.extend(mgr.cephadm_secrets.deps_for_spec(spec))
+
         return sorted(deps)
 
     @classmethod
