@@ -71,6 +71,10 @@ if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
 
+if(WITH_CRIMSON)
+  target_compile_options(crimson-alienstore PRIVATE -DWITH_CRIMSON_OBJECTSTORE)
+endif()
+
 # For crimson-alienstore WITH_CRIMSON is not defined
 target_link_libraries(crimson-alienstore
   PRIVATE

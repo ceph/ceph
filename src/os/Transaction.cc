@@ -87,7 +87,7 @@ void Transaction::dump(ceph::Formatter *f)
       }
       break;
 
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
     case Transaction::OP_TOUCH_TEMP:
       {
         coll_t cid = i.get_cid(op->cid);
