@@ -34,6 +34,7 @@ fails_on_rgw = []
 fails_on_aws = []
 fails_on_dbstore = []
 fails_on_nsfs = []
+fails_on_posix = []
 
 [dev-dependencies]
 rstest = "0.24"

@@ -562,6 +562,8 @@ async fn put_bucket_encryption_s3(client: &aws_sdk_s3::Client, bucket: &str) {
 // Tests
 // ══════════════════════════════════════════════════════════════════
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging() {
     let _guard = TestGuard::setup();
@@ -644,6 +646,8 @@ async fn test_put_bucket_logging() {
     let _ = cfg;
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mtime() {
     let _guard = TestGuard::setup();
@@ -710,6 +714,8 @@ async fn test_bucket_logging_mtime() {
     assert!(mtime4 > mtime3, "mtime should increase after disable/enable");
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_rm_bucket_logging() {
     let _guard = TestGuard::setup();
@@ -738,6 +744,8 @@ async fn test_rm_bucket_logging() {
     assert!(resp.logging_enabled().is_none());
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_owner() {
     let _guard = TestGuard::setup();
@@ -786,6 +794,8 @@ async fn test_bucket_logging_owner() {
     assert_s3_err!(result, 403, "AccessDenied");
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_errors() {
     let _guard = TestGuard::setup();
@@ -989,6 +999,8 @@ async fn test_put_bucket_logging_errors() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_extensions() {
     let _guard = TestGuard::setup();
@@ -1020,6 +1032,8 @@ async fn test_put_bucket_logging_extensions() {
     assert!(xml.contains("<SimplePrefix"));
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_permissions() {
     let _guard = TestGuard::setup();
@@ -1176,6 +1190,8 @@ async fn bucket_logging_object_name(key_format: &str, prefix: &str) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_simple_key() {
     let _guard = TestGuard::setup();
@@ -1184,6 +1200,8 @@ async fn test_bucket_logging_simple_key() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_partitioned_key() {
     let _guard = TestGuard::setup();
@@ -1194,6 +1212,8 @@ async fn test_bucket_logging_partitioned_key() {
 // ── ACL-related logging tests ──
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_bucket_acl_required() {
     let _guard = TestGuard::setup();
@@ -1258,6 +1278,8 @@ async fn test_bucket_logging_bucket_acl_required() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_object_acl_required() {
     let _guard = TestGuard::setup();
@@ -1323,6 +1345,8 @@ async fn test_bucket_logging_object_acl_required() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_bucket_auth_type() {
     let _guard = TestGuard::setup();
@@ -1509,6 +1533,8 @@ async fn bucket_logging_flush(logging_type: &str, single_prefix: bool, concurren
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_flush_empty() {
     let _guard = TestGuard::setup();
@@ -1516,6 +1542,8 @@ async fn test_bucket_logging_flush_empty() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_flush_j() {
     let _guard = TestGuard::setup();
@@ -1525,6 +1553,8 @@ async fn test_bucket_logging_flush_j() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_flush_s() {
     let _guard = TestGuard::setup();
@@ -1533,6 +1563,8 @@ async fn test_bucket_logging_flush_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_flush_j_single() {
     let _guard = TestGuard::setup();
@@ -1541,6 +1573,8 @@ async fn test_bucket_logging_flush_j_single() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_flush_s_single() {
     let _guard = TestGuard::setup();
@@ -1549,6 +1583,8 @@ async fn test_bucket_logging_flush_s_single() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_concurrent_flush_j() {
     let _guard = TestGuard::setup();
@@ -1558,6 +1594,8 @@ async fn test_bucket_logging_concurrent_flush_j() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_concurrent_flush_s() {
     let _guard = TestGuard::setup();
@@ -1566,6 +1604,8 @@ async fn test_bucket_logging_concurrent_flush_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_concurrent_flush_j_single() {
     let _guard = TestGuard::setup();
@@ -1575,6 +1615,8 @@ async fn test_bucket_logging_concurrent_flush_j_single() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_concurrent_flush_s_single() {
     let _guard = TestGuard::setup();
@@ -1668,6 +1710,8 @@ async fn bucket_logging_put_objects(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_put_objects() {
     let _guard = TestGuard::setup();
@@ -1675,6 +1719,8 @@ async fn test_bucket_logging_put_objects() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_put_objects_versioned() {
     let _guard = TestGuard::setup();
@@ -1682,6 +1728,8 @@ async fn test_bucket_logging_put_objects_versioned() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_put_concurrency() {
     let _guard = TestGuard::setup();
@@ -1793,6 +1841,8 @@ async fn bucket_logging_delete_objects(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_delete_objects() {
     let _guard = TestGuard::setup();
@@ -1800,6 +1850,8 @@ async fn test_bucket_logging_delete_objects() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_delete_objects_versioned() {
     let _guard = TestGuard::setup();
@@ -1859,6 +1911,8 @@ async fn bucket_logging_get_objects(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_get_objects() {
     let _guard = TestGuard::setup();
@@ -1866,6 +1920,8 @@ async fn test_bucket_logging_get_objects() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_get_objects_versioned() {
     let _guard = TestGuard::setup();
@@ -1933,6 +1989,8 @@ async fn bucket_logging_copy_objects(versioned: bool, another_bucket: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_copy_objects() {
     let _guard = TestGuard::setup();
@@ -1940,6 +1998,8 @@ async fn test_bucket_logging_copy_objects() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_copy_objects_versioned() {
     let _guard = TestGuard::setup();
@@ -1947,6 +2007,8 @@ async fn test_bucket_logging_copy_objects_versioned() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_copy_objects_bucket() {
     let _guard = TestGuard::setup();
@@ -1954,6 +2016,8 @@ async fn test_bucket_logging_copy_objects_bucket() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_copy_objects_bucket_versioned() {
     let _guard = TestGuard::setup();
@@ -2009,6 +2073,8 @@ async fn bucket_logging_head_objects(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_head_objects() {
     let _guard = TestGuard::setup();
@@ -2016,6 +2082,8 @@ async fn test_bucket_logging_head_objects() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_head_objects_versioned() {
     let _guard = TestGuard::setup();
@@ -2083,6 +2151,8 @@ async fn bucket_logging_mpu(versioned: bool, record_type: &str) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_s() {
     let _guard = TestGuard::setup();
@@ -2090,6 +2160,8 @@ async fn test_bucket_logging_mpu_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_versioned_s() {
     let _guard = TestGuard::setup();
@@ -2097,6 +2169,8 @@ async fn test_bucket_logging_mpu_versioned_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_j() {
     let _guard = TestGuard::setup();
@@ -2105,6 +2179,8 @@ async fn test_bucket_logging_mpu_j() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_versioned_j() {
     let _guard = TestGuard::setup();
@@ -2175,6 +2251,8 @@ async fn bucket_logging_mpu_copy(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_copy() {
     let _guard = TestGuard::setup();
@@ -2182,6 +2260,8 @@ async fn test_bucket_logging_mpu_copy() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_mpu_copy_versioned() {
     let _guard = TestGuard::setup();
@@ -2256,6 +2336,8 @@ async fn bucket_logging_multi_delete(versioned: bool) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_multi_delete() {
     let _guard = TestGuard::setup();
@@ -2263,6 +2345,8 @@ async fn test_bucket_logging_multi_delete() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_multi_delete_versioned() {
     let _guard = TestGuard::setup();
@@ -2316,6 +2400,8 @@ async fn bucket_logging_type(logging_type: &str) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_event_type_j() {
     let _guard = TestGuard::setup();
@@ -2323,6 +2409,8 @@ async fn test_bucket_logging_event_type_j() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_event_type_s() {
     let _guard = TestGuard::setup();
@@ -2332,6 +2420,8 @@ async fn test_bucket_logging_event_type_s() {
 // ── multi-prefix tests ──
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_multiple_prefixes() {
     let _guard = TestGuard::setup();
@@ -2397,6 +2487,8 @@ async fn test_bucket_logging_multiple_prefixes() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_single_prefix() {
     let _guard = TestGuard::setup();
@@ -2453,6 +2545,8 @@ async fn test_bucket_logging_single_prefix() {
 // ══════════════════════════════════════════════════════════════════
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 #[ignore = "VERIFY: automatic rollover timing is unreliable — Python also skips (requires SDK extensions)"]
 async fn test_bucket_logging_roll_time() {
@@ -2533,6 +2627,8 @@ async fn test_bucket_logging_roll_time() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_put_and_flush() {
     let _guard = TestGuard::setup();
@@ -2589,6 +2685,8 @@ async fn test_bucket_logging_put_and_flush() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_object_meta() {
     let _guard = TestGuard::setup();
@@ -2770,6 +2868,8 @@ async fn bucket_logging_permission_change(logging_type: &str) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_permission_change_s() {
     let _guard = TestGuard::setup();
@@ -2777,6 +2877,8 @@ async fn test_bucket_logging_permission_change_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_bucket_logging_permission_change_j() {
     let _guard = TestGuard::setup();
@@ -2787,6 +2889,8 @@ async fn test_bucket_logging_permission_change_j() {
 // ── policy wildcard with objects test ──
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_policy_wildcard_objects() {
     let _guard = TestGuard::setup();
@@ -3093,6 +3197,8 @@ async fn put_bucket_logging_tenant(log_type: &str) {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_tenant_s() {
     let _guard = TestGuard::setup();
@@ -3100,6 +3206,8 @@ async fn test_put_bucket_logging_tenant_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_tenant_j() {
     let _guard = TestGuard::setup();
@@ -3369,6 +3477,8 @@ async fn bucket_logging_cleanup(
 macro_rules! cleanup_test {
     ($name:ident, $ct:expr, $lt:expr, $sp:expr, $cc:expr) => {
         #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
         #[tokio::test]
         async fn $name() {
             let _guard = TestGuard::setup();
@@ -3556,6 +3666,8 @@ async fn bucket_logging_partial_cleanup(
 macro_rules! partial_cleanup_test {
     ($name:ident, $ct:expr, $lt:expr, $cc:expr) => {
         #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
         #[tokio::test]
         async fn $name() {
             let _guard = TestGuard::setup();
@@ -3705,6 +3817,8 @@ async fn bucket_logging_conf_update(
 macro_rules! conf_update_test {
     ($name:ident, $lt:expr, $uv:expr, $cc:expr) => {
         #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
         #[tokio::test]
         async fn $name() {
             let _guard = TestGuard::setup();
@@ -3723,6 +3837,8 @@ conf_update_test!(test_bucket_logging_conf_concurrent_updating_pfx_s, "Standard"
 conf_update_test!(test_bucket_logging_conf_concurrent_updating_pfx_j, "Journal", "prefix", true);
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_account_s() {
     let _guard = TestGuard::setup();
@@ -3730,6 +3846,8 @@ async fn test_put_bucket_logging_account_s() {
 }
 
 #[cfg(not(feature = "fails_on_aws"))]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: bucket logging not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: bucket logging not implemented")]
 #[tokio::test]
 async fn test_put_bucket_logging_account_j() {
     let _guard = TestGuard::setup();

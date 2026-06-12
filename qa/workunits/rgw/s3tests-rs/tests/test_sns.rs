@@ -35,6 +35,8 @@ fn get_topic_prefix() -> String {
     cfg.bucket_prefix.replace("{random}", "").trim_matches('-').to_string()
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_account_topic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -87,6 +89,8 @@ async fn test_account_topic() {
     nuke_topics(&sns, &get_topic_prefix()).await;
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_cross_account_topic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -124,6 +128,8 @@ async fn test_cross_account_topic() {
     nuke_topics(&sns_alt, &get_topic_prefix()).await;
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_account_topic_publish() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -158,6 +164,8 @@ async fn test_account_topic_publish() {
     nuke_topics(&sns, &get_topic_prefix()).await;
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_cross_account_topic_publish() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
