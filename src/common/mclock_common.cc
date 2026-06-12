@@ -34,23 +34,29 @@ namespace dmc = crimson::dmclock;
 
 std::ostream &operator<<(std::ostream &lhs, const SchedulerClass &c)
 {
-  lhs << static_cast<size_t>(c);
+  lhs << static_cast<size_t>(c) << " (";
   switch (c) {
   case SchedulerClass::background_best_effort:
-    return lhs << "background_best_effort";
+    lhs << "background_best_effort";
+    break;
   case SchedulerClass::background_recovery:
-    return lhs << "background_recovery";
+    lhs << "background_recovery";
+    break;
   case SchedulerClass::client:
-    return lhs << "client";
+    lhs << "client";
+    break;
 #ifdef WITH_CRIMSON
   case SchedulerClass::repop:
-    return lhs << "repop";
+    lhs << "repop";
+    break;
 #endif
   case SchedulerClass::immediate:
-    return lhs << "immediate";
+    lhs << "immediate";
+    break;
   default:
-    return lhs;
+    lhs << "unknown";
   }
+  return lhs << ")";
 }
 
 std::ostream& operator<<(std::ostream& out,
@@ -242,6 +248,7 @@ void MclockConfig::init_logger()
   PerfCountersBuilder m(cct, "mclock-shard-queue-" + std::to_string(shard_id),
                         l_mclock_first, l_mclock_last);
 
+  // scheduler class queue lengths
   m.add_u64_counter(l_mclock_immediate_queue_len, "mclock_immediate_queue_len",
                     "high_priority op count in mclock queue");
   m.add_u64_counter(l_mclock_client_queue_len, "mclock_client_queue_len",
@@ -252,6 +259,38 @@ void MclockConfig::init_logger()
                     "background_best_effort type op count in mclock queue");
   m.add_u64_counter(l_mclock_all_type_queue_len, "mclock_all_type_queue_len",
                     "all type op count in mclock queue");
+  // op specific counters
+  // peering
+  m.add_time_avg(l_mclock_peering_lat, "mclock_peering_lat",
+                 "peering op average latency in mclock high queue");
+  m.add_u64_counter(l_mclock_peering_len, "mclock_peering_len",
+                    "peering op count in mclock high queue");
+  // client op
+  m.add_time_avg(l_mclock_client_lat, "mclock_client_lat",
+                 "client op average latency in mclock queue");
+  // ec reads
+  m.add_u64_counter(l_mclock_ec_r_ops, "mclock_ec_r_ops",
+                    "ec read operations in mclock high queue");
+  m.add_time_avg(l_mclock_ec_r_lat, "mclock_ec_r_lat",
+                 "ec read latency in mclock high queue");
+  m.add_u64(l_mclock_ec_r_len, "mclock_ec_r_len",
+            "ec reads outstanding in mclock high queue");
+  // ec writes
+  m.add_u64_counter(l_mclock_ec_w_ops, "mclock_ec_w_ops",
+                    "ec write operations in mclock high queue");
+  m.add_time_avg(l_mclock_ec_w_lat, "mclock_ec_w_lat",
+                 "ec write latency in mclock high queue");
+  m.add_u64(l_mclock_ec_w_len, "mclock_ec_w_len",
+            "ec writes outstanding in mclock high queue");
+  // ec recovery reads
+  m.add_u64_counter(l_mclock_ec_rec_r_ops, "mclock_ec_rec_r_ops",
+                    "ec recovery read operations in mclock queue");
+  m.add_u64_counter(l_mclock_ec_rec_r_outb, "mclock_ec_rec_r_outb",
+                    "ec recovery read bytes", NULL, 0, unit_t(UNIT_BYTES));
+  m.add_time_avg(l_mclock_ec_rec_r_lat, "mclock_ec_rec_r_lat",
+                 "ec recovery read latency in mclock queue");
+  m.add_u64(l_mclock_ec_rec_r_len, "mclock_ec_rec_r_len",
+            "ec recovery reads outstanding in mclock queue");
 
   logger = m.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -261,9 +300,23 @@ void MclockConfig::init_logger()
   logger->set(l_mclock_recovery_queue_len, 0);
   logger->set(l_mclock_best_effort_queue_len, 0);
   logger->set(l_mclock_all_type_queue_len, 0);
+  logger->set(l_mclock_peering_lat, 0);
+  logger->set(l_mclock_peering_len, 0);
+  logger->set(l_mclock_client_lat, 0);
+  logger->set(l_mclock_ec_r_ops, 0);
+  logger->set(l_mclock_ec_r_lat, 0);
+  logger->set(l_mclock_ec_r_len, 0);
+  logger->set(l_mclock_ec_w_ops, 0);
+  logger->set(l_mclock_ec_w_lat, 0);
+  logger->set(l_mclock_ec_w_len, 0);
+  logger->set(l_mclock_ec_rec_r_ops, 0);
+  logger->set(l_mclock_ec_rec_r_outb, 0);
+  logger->set(l_mclock_ec_rec_r_lat, 0);
+  logger->set(l_mclock_ec_rec_r_len, 0);
 }
 
-void MclockConfig::get_mclock_counter(scheduler_id_t id)
+void MclockConfig::get_mclock_counter(scheduler_id_t id,
+  scheduler_op_type_t op_type, uint64_t cost)
 {
   if (!logger) {
     return;
@@ -273,47 +326,84 @@ void MclockConfig::get_mclock_counter(scheduler_id_t id)
   logger->inc(l_mclock_all_type_queue_len);
 
   switch (id.class_id) {
-  case SchedulerClass::immediate:
+  case SchedulerClass::immediate: {
     logger->inc(l_mclock_immediate_queue_len);
+    if (op_type == scheduler_op_type_t::ec_read_op) {
+      logger->inc(l_mclock_ec_r_ops);
+      logger->inc(l_mclock_ec_r_len);
+    } else if (op_type == scheduler_op_type_t::ec_write_op) {
+      logger->inc(l_mclock_ec_w_ops);
+      logger->inc(l_mclock_ec_w_len);
+    } else if (op_type == scheduler_op_type_t::peering_op) {
+      logger->inc(l_mclock_peering_len);
+    }
     break;
+  }
   case SchedulerClass::client:
     logger->inc(l_mclock_client_queue_len);
     break;
   case SchedulerClass::background_recovery:
     logger->inc(l_mclock_recovery_queue_len);
     break;
-  case SchedulerClass::background_best_effort:
+  case SchedulerClass::background_best_effort: {
     logger->inc(l_mclock_best_effort_queue_len);
+    if (op_type == scheduler_op_type_t::ec_rec_read_op) {
+      logger->inc(l_mclock_ec_rec_r_ops);
+      logger->inc(l_mclock_ec_rec_r_outb, cost);
+      logger->inc(l_mclock_ec_rec_r_len);
+    }
     break;
-   default:
+  }
+  default:
     derr << __func__ << " unknown class_id=" << id.class_id
          << " unknown id=" << id << dendl;
     break;
   }
 }
 
-void MclockConfig::put_mclock_counter(scheduler_id_t id)
+void MclockConfig::put_mclock_counter(scheduler_id_t id,
+  scheduler_op_type_t op_type, utime_t time_queued)
 {
   if (!logger) {
     return;
   }
 
+  auto latency = ceph_clock_now() - time_queued;
+
   /* op leave mclock queue will -1 */
   logger->dec(l_mclock_all_type_queue_len);
 
   switch (id.class_id) {
-  case SchedulerClass::immediate:
+  case SchedulerClass::immediate: {
     logger->dec(l_mclock_immediate_queue_len);
+    if (op_type == scheduler_op_type_t::ec_read_op) {
+      logger->dec(l_mclock_ec_r_len);
+      logger->tinc(l_mclock_ec_r_lat, latency);
+    } else if (op_type == scheduler_op_type_t::ec_write_op) {
+      logger->dec(l_mclock_ec_w_len);
+      logger->tinc(l_mclock_ec_w_lat, latency);
+    } else if (op_type == scheduler_op_type_t::peering_op) {
+      logger->dec(l_mclock_peering_len);
+      logger->tinc(l_mclock_peering_lat, latency);
+    }
     break;
-  case SchedulerClass::client:
+  }
+  case SchedulerClass::client: {
     logger->dec(l_mclock_client_queue_len);
+    logger->tinc(l_mclock_client_lat, latency);
     break;
+  }
   case SchedulerClass::background_recovery:
     logger->dec(l_mclock_recovery_queue_len);
     break;
-  case SchedulerClass::background_best_effort:
+  case SchedulerClass::background_best_effort: {
     logger->dec(l_mclock_best_effort_queue_len);
+    if (op_type == scheduler_op_type_t::ec_rec_read_op) {
+      logger->dec(l_mclock_ec_rec_r_len);
+      logger->tinc(l_mclock_ec_rec_r_lat, latency);
+    }
     break;
+   }
    default:
     derr << __func__ << " unknown class_id=" << id.class_id
          << " unknown id=" << id << dendl;

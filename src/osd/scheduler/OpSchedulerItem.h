@@ -74,6 +74,9 @@ public:
 
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual SchedulerClass get_scheduler_class() const = 0;
+    virtual utime_t get_time_queued() const {
+      return utime_t();
+    }
 
     virtual ~OpQueueable() {}
     friend std::ostream& operator<<(std::ostream& out, const OpQueueable& q) {
@@ -166,6 +169,10 @@ public:
     qos_cost = scaled_cost;
   }
 
+  utime_t get_time_queued() const {
+    return qitem ? qitem->get_time_queued() : utime_t();
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
     out << "OpSchedulerItem("
         << item.get_ordering_token() << " " << *item.qitem;
@@ -220,10 +227,12 @@ public:
 };
 
 class PGOpItem : public PGOpQueueable {
+  utime_t time_queued;
   OpRequestRef op;
 
 public:
-  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
+  PGOpItem(spg_t pg, OpRequestRef op)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), op(std::move(op)) {}
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
@@ -237,23 +246,64 @@ public:
     return op;
   }
 
-   SchedulerClass get_scheduler_class() const final {
-    auto type = op->get_req()->get_type();
-    if (type == CEPH_MSG_OSD_OP ||
-	type == CEPH_MSG_OSD_BACKOFF) {
+  SchedulerClass get_scheduler_class() const final {
+    switch (op->get_req()->get_type()) {
+    case CEPH_MSG_OSD_OP:
+    case CEPH_MSG_OSD_BACKOFF:
       return SchedulerClass::client;
-    } else {
+    /**
+     * EC SubOp reads for mClock are now classed based on their priority.
+     * The primary reason is to prevent subOps from overwhelming the
+     * 'immediate' queue during OSD events like failures, removal,
+     * reweight and any operation that trigger recovery/backfills. A sudden
+     * and long enough sustained burst of subOps in the 'immediate' could
+     * result in slow ops since client ops are preempted due to ops in the
+     * higher priority 'immediate' queue.
+     *
+     * The new classification described below improves the scheduling
+     * of client and other classes of operation during recovery/backfill as
+     * they are no longer preempted by recovery EC subOps in the 'immediate'
+     * queue. EC SubOps are now handled as follows:
+     *
+     *  - EC SubOp reads generated during recovery will either go into the
+     *    'background_recovery' or 'background_best_effort' class based on
+     *    the recovery priority set for the op. EC SubOp reads generated due
+     *    to client will continue to be classified as 'immediate'.
+     *
+     *  - EC SubOp writes generated as a result of client operations will
+     *    continue to be classified as 'immediate'.
+     *
+     *  - EC SubOp replies are considered high priority and therefore
+     *    continue to be classed as 'immediate'.
+     *
+     *  Note: The 'cost' for EC subOp read operation is set according to
+     *  the amount of data to be read/written.
+     */
+    case MSG_OSD_EC_READ: {
+      auto prio = op->get_req()->get_priority();
+      if (prio <= PeeringState::recovery_msg_priority_t::FORCED) {
+        return priority_to_scheduler_class(prio);
+      }
+      [[fallthrough]];
+    }
+    default:
       return SchedulerClass::immediate;
     }
+  }
+
+  utime_t get_time_queued() const final{
+    return time_queued;
   }
 
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
 };
 
 class PGPeeringItem : public PGOpQueueable {
+  utime_t time_queued;
   PGPeeringEventRef evt;
 public:
-  PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
+  PGPeeringItem(spg_t pg, PGPeeringEventRef e)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), evt(e) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
@@ -272,6 +322,9 @@ public:
   }
   SchedulerClass get_scheduler_class() const final {
     return SchedulerClass::immediate;
+  }
+  utime_t get_time_queued() const final{
+    return time_queued;
   }
 };
 
@@ -502,6 +555,9 @@ public:
   uint64_t get_reserved_pushes() const final {
     return reserved_pushes;
   }
+  utime_t get_time_queued() const final {
+    return time_queued;
+  }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   SchedulerClass get_scheduler_class() const final {
@@ -529,6 +585,9 @@ public:
   std::string print() const final {
     return fmt::format(
 	"PGRecoveryContext(pgid={} c={} epoch={})", get_pgid(), (void*)c.get(), epoch);
+  }
+  utime_t get_time_queued() const final {
+    return time_queued;
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
@@ -597,6 +656,10 @@ public:
 
   SchedulerClass get_scheduler_class() const final {
     return priority_to_scheduler_class(op->get_req()->get_priority());
+  }
+
+  utime_t get_time_queued() const final {
+    return time_queued;
   }
 
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle)
