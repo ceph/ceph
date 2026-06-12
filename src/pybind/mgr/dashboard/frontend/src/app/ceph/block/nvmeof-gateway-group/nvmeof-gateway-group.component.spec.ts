@@ -6,7 +6,6 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { Observable, of, Subject } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
-import { Router } from '@angular/router';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
@@ -34,10 +33,6 @@ describe('NvmeofGatewayGroupComponent', () => {
       declarations: [NvmeofGatewayGroupComponent],
       providers: [
         { provide: NvmeofService, useValue: nvmeofServiceSpy },
-        {
-          provide: Router,
-          useValue: { navigate: jest.fn() }
-        },
         {
           provide: ModalCdsService,
           useValue: { show: jest.fn() }
@@ -264,6 +259,25 @@ describe('NvmeofGatewayGroupComponent', () => {
     component.gatewayGroup$.subscribe((data) => {
       expect(data).toEqual(mockData);
       done();
+    });
+  });
+
+  describe('View details action', () => {
+    it('should use routerLink and navigate to the resource page for the selected group', () => {
+      component.selection.first = jest.fn().mockReturnValue({ name: 'default' });
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      expect(viewAction).toBeTruthy();
+      expect(viewAction!.click).toBeUndefined();
+      const link = (viewAction!.routerLink as Function)();
+      expect(link).toBe('/block/nvmeof/gateways/view/default');
+    });
+
+    it('should set canBePrimary true for single selection only', () => {
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      const single = { hasSingleSelection: true } as any;
+      const multi = { hasSingleSelection: false } as any;
+      expect((viewAction!.canBePrimary as Function)(single)).toBe(true);
+      expect((viewAction!.canBePrimary as Function)(multi)).toBe(false);
     });
   });
 
