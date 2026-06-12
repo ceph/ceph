@@ -39,8 +39,10 @@ parameters:
   - dnf.conf.tpl
   - load-podman-image.sh
   - initial-ceph.conf
+  - authorized_keys
  cmds:
  # updating the dnf.conf to make the dnf faster
+ - cat /root/authorized_keys >> /root/.ssh/authorized_keys
  - cp /root/dnf.conf.tpl /etc/dnf/dnf.conf
  - dnf -y install python3 chrony lvm2 podman
  # setting up an insecure podman registry and then loading the ceph image to all hosts
