@@ -45,6 +45,8 @@
 #include <filesystem>
 #include <type_traits>
 
+#include "include/concepts.h"
+
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
  template <typename ...Args>
@@ -70,11 +72,58 @@ extern transaction_handle make_transaction(database_handle dbh);
 
 } // namespace ceph::libfdb
 
-// MOAR forward declarations-- "pay no attention to that man behind the curtain": 
-namespace ceph::libfdb::detail {
+namespace ceph::libfdb::concepts {
 
 template <typename T, typename ...Ts>
-concept is_any_of = (std::is_same_v<T, Ts> || ...);
+concept is_any_of = (std::same_as<T, Ts> || ...);
+
+// Note that "stringlikes" are not all "stringview-likes", such as when they can be
+// written to:
+template <typename StringViewLikeT>
+concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
+
+template <typename IteratorT>
+concept key_value_iterator =
+ std::input_iterator<IteratorT> and
+ requires(const std::iter_value_t<IteratorT>& kv) {
+  kv.first;
+  kv.second;
+ };
+
+template <typename OutIterT>
+concept string_key_value_output_iterator =
+ std::output_iterator<OutIterT, std::pair<std::string, std::string>>;
+
+template <typename OutContainerT>
+concept string_key_value_output_container =
+ ceph::concepts::can_append<OutContainerT, std::pair<std::string, std::string>>;
+
+template <typename FnT>
+concept value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>>;
+
+template <typename T>
+concept value_output =
+ !value_callback<std::remove_reference_t<T>> &&
+ std::is_lvalue_reference_v<T>;
+
+template <typename T>
+concept storable_invocation_result =
+ !std::is_void_v<T> && !std::is_reference_v<T>;
+
+template <typename T>
+concept supported_invocation_result =
+ std::is_void_v<T> || storable_invocation_result<T>;
+
+// There's a high likelihood that we're going to get more sophisticated selectors, 
+// so this is doing a more important job than it may appear to be:
+template <typename T>
+concept selector = is_any_of<T, ceph::libfdb::select>;
+
+} // namespace ceph::libfdb::concepts
+
+// MOAR forward declarations-- "pay no attention to that man behind the curtain":
+namespace ceph::libfdb::detail {
 
 struct future_value;
 
@@ -97,49 +146,10 @@ inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::lib
 
 // Stores a successively-generated of kv pair results to an iterator:
 template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+requires ceph::libfdb::concepts::string_key_value_output_iterator<OutIterT>
 inline bool get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT out_iter);
 
 } // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb::concepts {
-
-// Note that "stringlikes" are not all "stringview-likes", such as when they can be
-// written to:
-template <typename StringViewLikeT>
-concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
-
-template <typename IteratorT>
-concept key_value_iterator =
- std::input_iterator<IteratorT> and
- requires(const std::iter_value_t<IteratorT>& kv) {
-  kv.first;
-  kv.second;
- };
-
-template <typename FnT>
-concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
-
-template <typename T>
-concept value_output =
- !value_callback<std::remove_reference_t<T>> &&
- std::is_lvalue_reference_v<T>;
-
-template <typename T>
-concept storable_invocation_result =
- !std::is_void_v<T> && !std::is_reference_v<T>;
-
-template <typename T>
-concept supported_invocation_result =
- std::is_void_v<T> || storable_invocation_result<T>;
-
-// There's a high likelihood that we're going to get more sophisticated selectors, 
-// so this is doing a more important job than it may appear to be:
-template <typename T>
-concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
-
-} // namespace ceph::libfdb::concepts
 
 // libfdb_exception: How to deal, when Bad Things(TM) happen:
 namespace ceph::libfdb {
@@ -576,7 +586,7 @@ class transaction final
  // JFW: it's not as easy to wedge an output_range into here as it appears, perhaps
  // needs to be revisited; I'm binding it to what's actually used in practice for now:
  template <typename OutIterT>
- requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+ requires concepts::string_key_value_output_iterator<OutIterT>
  bool get(const ceph::libfdb::select& key_range, OutIterT out_iter) {
     return ceph::libfdb::detail::get_value_range_from_transaction(*this, key_range, out_iter);
  }
@@ -623,7 +633,10 @@ class transaction final
                         std::string_view,
                         OutputTargetOrFnT&&,
                         const commit_after_op);
- friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
+ friend inline bool get(ceph::libfdb::transaction_handle,
+                        const ceph::libfdb::select&,
+                        concepts::string_key_value_output_iterator auto,
+                        const commit_after_op);
 
  friend inline void erase(ceph::libfdb::transaction_handle, std::string_view, const commit_after_op);
  friend inline void erase(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, const commit_after_op);
@@ -892,7 +905,7 @@ inline query_window_result<AssocT> materialize_query_window(transaction& txn, se
 }
 
 template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+requires concepts::string_key_value_output_iterator<OutIterT>
 inline bool get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT out_iter)
 {
  auto flattened = detail::generate_FDB_pairs(txn, key_range) | std::views::join;

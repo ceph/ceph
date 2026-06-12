@@ -1060,6 +1060,8 @@ add_ceph_unittest(unittest_weighted_shuffle)
 
 add_executable(unittest_intarith test_intarith.cc)
 add_ceph_unittest(unittest_intarith)
+
+add_catch2_test(concepts)
 #make check ends here
 
 # test_nvmeof_mon_encoding
@@ -1109,4 +1111,3 @@ add_executable(test_nvmeof_gw_utils
 target_link_libraries(test_nvmeof_gw_utils
   mon ceph-common global-static
   )
-

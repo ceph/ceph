@@ -272,7 +272,8 @@ namespace ceph::libfdb {
 // JFW: Satisfying output_iterator is not as straightforward as it appears, I need to look at this mechanism again; meanwhile, the template doesn't
 // /prevent/ future type narrowing, but I'm forcing it to std::string for now:
 inline bool get(ceph::libfdb::transaction_handle txn,
-                const ceph::libfdb::select& key_range, auto out_iter,
+                const ceph::libfdb::select& key_range,
+                concepts::string_key_value_output_iterator auto out_iter,
                 const ceph::libfdb::commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
@@ -282,13 +283,15 @@ inline bool get(ceph::libfdb::transaction_handle txn,
 }
 
 inline bool get(ceph::libfdb::transaction_handle txn,
-                const ceph::libfdb::select& key_range, auto out_iter)
+                const ceph::libfdb::select& key_range,
+                concepts::string_key_value_output_iterator auto out_iter)
 { 
  return get(txn, key_range, out_iter, commit_after_op::no_commit);
 }
 
 inline bool get(ceph::libfdb::database_handle dbh,
-                const ceph::libfdb::select& key_range, auto out_iter)
+                const ceph::libfdb::select& key_range,
+                concepts::string_key_value_output_iterator auto out_iter)
 {
  return detail::maybe_retry(ceph::libfdb::make_transaction(dbh),
           [&key_range, out_iter](transaction_handle& txn) {
@@ -432,6 +435,41 @@ inline auto pair_generator(ceph::libfdb::transaction_handle txn, ceph::libfdb::s
                     | std::views::transform(ceph::libfdb::detail::to_decoded_kv_pair<ValueT>);
 
  co_yield std::ranges::elements_of(decoded_pairs);
+}
+
+template <concepts::string_key_value_output_container OutContainerT>
+inline bool get(ceph::libfdb::transaction_handle txn,
+                const ceph::libfdb::select& key_range,
+                OutContainerT& out_container,
+                const ceph::libfdb::commit_after_op commit_after)
+{
+ return detail::commit_noreplay(txn, commit_after,
+          [&key_range, &out_container](const transaction_handle& txn) {
+            for (auto&& p : pair_generator(txn, key_range)) {
+              ceph::util::push_back(out_container, std::move(p));
+            }
+
+            return true;
+          });
+}
+
+template <concepts::string_key_value_output_container OutContainerT>
+inline bool get(ceph::libfdb::transaction_handle txn,
+                const ceph::libfdb::select& key_range,
+                OutContainerT& out_container)
+{
+ return get(txn, key_range, out_container, commit_after_op::no_commit);
+}
+
+template <concepts::string_key_value_output_container OutContainerT>
+inline bool get(ceph::libfdb::database_handle dbh,
+                const ceph::libfdb::select& key_range,
+                OutContainerT& out_container)
+{
+ return detail::maybe_retry(ceph::libfdb::make_transaction(dbh),
+          [&key_range, &out_container](transaction_handle& txn) {
+            return get(txn, key_range, out_container, commit_after_op::no_commit);
+          });
 }
 
 // Note: block_generator() uses split planning to tackle large sets; use pair_generator() for
