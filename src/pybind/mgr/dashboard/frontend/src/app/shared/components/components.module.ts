@@ -125,10 +125,12 @@ import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
 import Warning16 from '@carbon/icons/es/warning/16';
 import Deploy16 from '@carbon/icons/es/deploy/16';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
     CommonModule,
+    ProductiveCardComponent,
     FormsModule,
     ReactiveFormsModule,
     NgbAlertModule,
@@ -265,7 +267,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {
