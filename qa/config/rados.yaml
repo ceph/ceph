@@ -12,3 +12,4 @@ overrides:
         osd mclock skip benchmark: true
       mon:
         mon scrub interval: 300
+        debug mon: 30
