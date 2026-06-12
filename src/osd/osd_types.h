@@ -6883,6 +6883,36 @@ struct obj_list_watch_response_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)
 
+/**
+ * get internal versions response format
+ *
+ */
+struct internal_versions_v2_response_t {
+  std::map<shard_id_t, eversion_t> shard_versions;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(shard_versions, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(shard_versions, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    Formatter::ArraySection svs_section(*f, "shard_versions");
+    for (const auto& [key, value] : shard_versions) {
+      Formatter::ObjectSection sv_section(*f, "shard_version");
+      key.dump(f);
+      value.dump(f);
+    }
+  }
+};
+WRITE_CLASS_ENCODER(internal_versions_v2_response_t)
+
 struct clone_info {
   snapid_t cloneid;
   std::vector<snapid_t> snaps;  // ascending

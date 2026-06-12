@@ -1511,9 +1511,15 @@ struct ObjectOperation {
   }
 
   void get_internal_versions(boost::system::error_code* ec,
-		buffer::list *pbl) {
-  	ceph::buffer::list bl;
+                             buffer::list *pbl) {
   	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	out_bl.back() = pbl;
+  	out_ec.back() = ec;
+  }
+
+  void get_internal_versions_v2(boost::system::error_code* ec,
+                                buffer::list *pbl) {
+  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS_V2);
   	out_bl.back() = pbl;
   	out_ec.back() = ec;
   }
