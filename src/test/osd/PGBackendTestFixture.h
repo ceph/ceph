@@ -15,11 +15,7 @@
 
 #pragma once
 
-#include <filesystem>
 #include <memory>
-#include <random>
-#include <sstream>
-#include <iomanip>
 #include <utility>
 #include <gtest/gtest.h>
 #include "common/errno.h"
@@ -109,10 +105,7 @@ public:
     ceph_assert(stripe_unit != 0);
   }
   
-  ~PGBackendTestFixture() {
-    // Ensure cleanup happens even if TearDown() wasn't called or failed
-    cleanup_data_dir();
-  }
+  ~PGBackendTestFixture() = default;
   
   void SetUp() override {
     ceph::logging::Log::set_prefix_hook(&EventLoop::get_log_prefix);
@@ -160,14 +153,12 @@ public:
       ec_impl.reset();
     }
 
-    cleanup_data_dir();
     ceph::logging::Log::set_prefix_hook(nullptr);
   }
   
 private:
   void setup_ec_pool();
   void setup_replicated_pool();
-  void cleanup_data_dir();
 
 protected:
   /**

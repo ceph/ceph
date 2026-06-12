@@ -172,7 +172,7 @@ void ECPeeringTestFixture::ensure_osd_fixture_exists(int osd) {
   // Create a new store for this OSD
   osd_fixture->store = MockStore::create(g_ceph_context, osd);
   ceph_assert(osd_fixture->store);
-  osd_fixture->data_dir = osd_fixture->store->get_path();
+  osd_fixture->data_dir = "";
   
   // Create collection for this shard
   spg_t shard_spgid(pgid, shard_id_t(osd));

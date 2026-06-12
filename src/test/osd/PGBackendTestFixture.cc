@@ -123,7 +123,7 @@ void PGBackendTestFixture::setup_ec_pool()
     // Create a new store for this OSD
     osd_fixture->store = MockStore::create(g_ceph_context, i);
     ASSERT_TRUE(osd_fixture->store);
-    osd_fixture->data_dir = osd_fixture->store->get_path();
+    osd_fixture->data_dir = "";
     
     // Create collection for this shard
     spg_t shard_spgid(pgid, shard_id_t(i));
@@ -299,7 +299,7 @@ void PGBackendTestFixture::setup_replicated_pool()
     // Create a new store for this OSD
     osd_fixture->store = MockStore::create(g_ceph_context, i);
     ASSERT_TRUE(osd_fixture->store);
-    osd_fixture->data_dir = osd_fixture->store->get_path();
+    osd_fixture->data_dir = "";
     
     // Create collection for this replica
     coll_t replica_coll(replica_spgid);
@@ -994,17 +994,6 @@ void PGBackendTestFixture::update_osdmap(
   event_loop->run_until_idle();
 }
 
-void PGBackendTestFixture::cleanup_data_dir()
-{
-  // Clean up per-OSD data directories
-  for (auto& [osd_id, osd_fixture] : osd_fixtures) {
-    if (!osd_fixture->data_dir.empty() && std::filesystem::exists(osd_fixture->data_dir)) {
-      std::error_code ec;
-      std::filesystem::remove_all(osd_fixture->data_dir, ec);
-      // Silently ignore errors during cleanup - we tried our best
-    }
-  }
-}
 
 // Helper function for write_attribute implementation
 void PGBackendTestFixture::do_write_attribute_impl(

@@ -44,15 +44,10 @@ public:
   ~MockStore() override = default;
 
   /**
-   * Get the data directory path for this store.
-   */
-  const std::string& get_path() const { return path; }
-
-  /**
-   * Factory method to create a new MockStore instance with a unique data directory.
+   * Factory method to create a new MockStore instance in memory-only mode.
    *
    * @param cct CephContext to use for store creation
-   * @param osd_id OSD ID to include in the data directory name (for uniqueness)
+   * @param osd_id OSD ID (for identification purposes)
    * @return Shared pointer to a new MockStore instance
    */
   static std::shared_ptr<MockStore> create(CephContext *cct, int osd_id);
