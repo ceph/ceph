@@ -757,6 +757,24 @@ void Client::_finish_init()
     plb.add_time_avg(l_c_fscrypt_dec_lat, "fscrypt_dec_lat", "Decryption time");
     plb.add_time_avg(l_c_fscrypt_rd_lat, "fscrypt_rd_lat", "Overall fscrypt read latency");
     plb.add_time_avg(l_c_fscrypt_wr_lat, "fscrypt_wr_lat", "Overall fscrypt write latency");
+    plb.add_time_avg(l_c_lat_getattr, "lat_getattr", "Network latency for GETATTR operations");
+    plb.add_time_avg(l_c_lat_lookup, "lat_lookup", "Network latency for LOOKUP operations");
+    plb.add_time_avg(l_c_lat_readdir, "lat_readdir", "Network latency for READDIR operations");
+    plb.add_time_avg(l_c_lat_open, "lat_open", "Network latency for OPEN operations");
+    plb.add_time_avg(l_c_lat_create, "lat_create", "Network latency for CREATE operations");
+    plb.add_time_avg(l_c_lat_mkdir, "lat_mkdir", "Network latency for MKDIR operations");
+    plb.add_time_avg(l_c_lat_unlink, "lat_unlink", "Network latency for UNLINK operations");
+    plb.add_time_avg(l_c_lat_rmdir, "lat_rmdir", "Network latency for RMDIR operations");
+    plb.add_time_avg(l_c_lat_rename, "lat_rename", "Network latency for RENAME operations");
+    plb.add_time_avg(l_c_lat_setattr, "lat_setattr", "Network latency for SETATTR operations");
+    plb.add_time_avg(l_c_mds_rtt, "mds_rtt", "MDS round-trip time from send to reply");
+    plb.add_u64(l_c_dentry_count, "dentry_count", "Number of dentries in the metadata cache");
+    plb.add_u64(l_c_caps_flushing, "caps_flushing", "Number of inodes with caps currently being flushed to MDS");
+    plb.add_time_avg(l_c_cap_wait_lat, "cap_wait_lat", "Latency waiting for caps to become available");
+    plb.add_u64(l_c_unsafe_reqs, "unsafe_reqs", "Number of in-flight metadata requests not yet committed on MDS");
+    plb.add_u64_counter(l_c_lock_ops, "lock_ops", "Total fcntl/flock file locking operations");
+    plb.add_time_avg(l_c_lock_lat, "lock_lat", "Latency of fcntl/flock file locking operations");
+    plb.add_time_avg(l_c_catchall_lat, "catchall_lat", "Average latency across all MDS operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -969,6 +987,8 @@ void Client::trim_cache(bool trim_kernel_dcache)
 
   if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
+  
+  logger->set(l_c_dentry_count, lru.lru_get_size());//set the counter after every trim pass NEW!!
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->get_nref() == 1 && inode_map.size() == 1 + root_parents.size()) {
@@ -2408,6 +2428,7 @@ int Client::make_request(MetaRequest *request,
       break;
     }
 
+    utime_t mds_rtt_start = mono_clock_now();
     // send request.
     send_request(request, session.get());
 
@@ -2423,6 +2444,20 @@ int Client::make_request(MetaRequest *request,
     });
     l.release();
     request->caller_cond = nullptr;
+
+    // calculate MDS round-trip time
+    utime_t mds_rtt = mono_clock_now();
+    mds_rtt -= mds_rtt_start;
+    
+    // log MDS round-trip time with context
+    ldout(cct, 20) << "make_request tid " << tid << " mds." << mds
+                   << " op " << ceph_mds_op_name(request->get_op())
+                   << " mds_rtt " << mds_rtt << dendl;
+    
+    // update performance counter
+    if (logger) {
+      logger->tinc(l_c_mds_rtt, mds_rtt);
+    }
 
     // did we get a reply?
     if (request->reply)
@@ -2458,12 +2493,36 @@ int Client::make_request(MetaRequest *request,
     *pdirbl = reply->get_extra_bl();
 
   // -- log times --
-  utime_t lat = mono_clock_now();
-  lat -= request->sent_stamp;
+  utime_t lat = ceph_clock_now();
+  lat -= request->op_stamp; 
   ldout(cct, 20) << "lat " << lat << dendl;
 
   ++nr_metadata_request;
   update_io_stat_metadata(lat);
+  logger->tinc(l_c_catchall_lat, lat);
+  switch (request->get_op()) {
+    case CEPH_MDS_OP_CREATE:
+      logger->tinc(l_c_lat_create, lat);
+      break;
+    case CEPH_MDS_OP_MKDIR:
+      logger->tinc(l_c_lat_mkdir, lat);
+      break;
+    case CEPH_MDS_OP_UNLINK:
+      logger->tinc(l_c_lat_unlink, lat);
+      break;
+    case CEPH_MDS_OP_RMDIR:
+      logger->tinc(l_c_lat_rmdir, lat);
+      break;
+    case CEPH_MDS_OP_RENAME:
+      logger->tinc(l_c_lat_rename, lat);
+      break;
+    case CEPH_MDS_OP_SETATTR:
+      logger->tinc(l_c_lat_setattr, lat);
+      break;
+    default:
+      break;
+}
+
 
   put_request(request);
   return r;
@@ -3179,6 +3238,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   if (!is_safe) {
     request->got_unsafe = true;
     session->unsafe_requests.push_back(&request->unsafe_item);
+    logger->inc(l_c_unsafe_reqs); //inc counter when request transitions to unsafe
     if (is_dir_operation(request)) {
       Inode *dir = request->inode();
       ceph_assert(dir);
@@ -3216,6 +3276,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     // the filesystem change is committed to disk
     // we're done, clean up
     if (request->got_unsafe) {
+      logger->dec(l_c_unsafe_reqs); // When the mds commit a unsafe requst.
       request->unsafe_item.remove_myself();
       request->unsafe_dir_item.remove_myself();
       request->unsafe_target_item.remove_myself();
@@ -4163,9 +4224,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	in->flags &= ~I_CAP_DROPPED;
     }
 
-    if (waitfor_caps)
-      wait_on_context_list(in->waitfor_caps);
-    else if (waitfor_commit)
+    if (waitfor_caps) {
+      utime_t cap_wait_start = ceph_clock_now(); // gather current start time
+      wait_on_context_list(in->waitfor_caps); // The wait block potential to take seconds to ms
+      logger->tinc(l_c_cap_wait_lat, ceph_clock_now() - cap_wait_start); //subtract start from end for total time
+    } else if (waitfor_commit)
       wait_on_context_list(in->waitfor_commit);
   }
 }
@@ -5317,6 +5380,7 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
   if (!in->flushing_caps) {
     ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
     num_flushing_caps++;
+    logger->inc(l_c_caps_flushing); //When a new inode enters flushing stat
   } else {
     ldout(cct, 10) << __func__ << " (more) " << ccap_string(flushing) << " " << *in << dendl;
   }
@@ -6041,6 +6105,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
       if (in->flushing_caps == 0) {
 	ldout(cct, 10) << " " << *in << " !flushing" << dendl;
 	num_flushing_caps--;
+  logger->dec(l_c_caps_flushing); //when the inode finishes flushing the caps
        if (in->flushing_cap_tids.empty())
 	  in->flushing_cap_item.remove_myself();
       }
@@ -13895,6 +13960,8 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 
   int ret;
   bufferlist bl;
+  utime_t lock_start = ceph_clock_now(); // Start tracking time for lock ops 
+
 
   if (sleep && switch_interrupt_cb) {
     // enable interrupt
@@ -13958,6 +14025,10 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       }
     } else
       ceph_abort();
+  }
+  if (op == CEPH_MDS_OP_SETFILELOCK) { // Check if op is not in queue, and checks if locks is aquaire/realease operation
+    logger->inc(l_c_lock_ops); // inc lock operations
+    logger->tinc(l_c_lock_lat, ceph_clock_now() - lock_start); //time inc ceph clock now.
   }
   return ret;
 }
