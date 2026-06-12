@@ -699,8 +699,6 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_aio_ops, "aio_ops", "Total async IO operations");
     plb.add_u64_counter(l_c_aio_completions, "aio_completions", "Total async IO completions");
     plb.add_u64(l_c_aio_in_flight, "aio_in_flight", "Async IO operations in flight");
-    plb.add_u64_counter(l_c_osdc_hit, "osdc_hit", "OSDC cache hits");
-    plb.add_u64_counter(l_c_osdc_miss, "osdc_miss", "OSDC cache misses");
     plb.add_u64(l_c_osdc_dirty, "osdc_dirty", "OSDC dirty buffer size");
     plb.add_u64_counter(l_c_mds_req, "mds_req", "Total MDS requests");
     plb.add_u64_counter(l_c_mds_req_lookup, "mds_req_lookup", "MDS lookup requests");
@@ -751,13 +749,30 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_caps_grant, "caps_grant", "Capability grants");
     plb.add_u64_counter(l_c_caps_revoke, "caps_revoke", "Capability revokes");
     plb.add_u64_counter(l_c_caps_release, "caps_release", "Capability releases");
-    plb.add_u64_avg(l_c_fscrypt_wr_amp, "fscrypt_wr_amp",
-		    "Average fscrypt write amplification ratio (x100)");
+    plb.add_u64_avg(l_c_fscrypt_wr_amp, "fscrypt_wr_amp","Average fscrypt write amplification ratio (x100)");
     plb.add_u64_counter(l_c_fscrypt_rd_amp, "fscrypt_rd_amp", "Extra bytes read due to block alignment");
     plb.add_time_avg(l_c_fscrypt_enc_lat, "fscrypt_enc_lat", "Encryption time");
     plb.add_time_avg(l_c_fscrypt_dec_lat, "fscrypt_dec_lat", "Decryption time");
     plb.add_time_avg(l_c_fscrypt_rd_lat, "fscrypt_rd_lat", "Overall fscrypt read latency");
     plb.add_time_avg(l_c_fscrypt_wr_lat, "fscrypt_wr_lat", "Overall fscrypt write latency");
+    plb.add_time_avg(l_c_lat_getattr, "lat_getattr", "Network latency for GETATTR operations");
+    plb.add_time_avg(l_c_lat_lookup, "lat_lookup", "Network latency for LOOKUP operations");
+    plb.add_time_avg(l_c_lat_readdir, "lat_readdir", "Network latency for READDIR operations");
+    plb.add_time_avg(l_c_lat_open, "lat_open", "Network latency for OPEN operations");
+    plb.add_time_avg(l_c_lat_create, "lat_create", "Network latency for CREATE operations");
+    plb.add_time_avg(l_c_lat_mkdir, "lat_mkdir", "Network latency for MKDIR operations");
+    plb.add_time_avg(l_c_lat_unlink, "lat_unlink", "Network latency for UNLINK operations");
+    plb.add_time_avg(l_c_lat_rmdir, "lat_rmdir", "Network latency for RMDIR operations");
+    plb.add_time_avg(l_c_lat_rename, "lat_rename", "Network latency for RENAME operations");
+    plb.add_time_avg(l_c_lat_setattr, "lat_setattr", "Network latency for SETATTR operations");
+    plb.add_time_avg(l_c_mds_rtt, "mds_rtt", "MDS round-trip time from send to reply");
+    plb.add_u64(l_c_dentry_count, "dentry_count", "Number of dentries in the metadata cache");
+    plb.add_u64(l_c_caps_flushing, "caps_flushing", "Number of inodes with caps currently being flushed to MDS");
+    plb.add_time_avg(l_c_cap_wait_lat, "cap_wait_lat", "Latency waiting for caps to become available");
+    plb.add_u64(l_c_unsafe_reqs, "unsafe_reqs", "Number of in-flight metadata requests not yet committed on MDS");
+    plb.add_u64_counter(l_c_fcntl_lock_ops, "lock_ops", "Total fcntl/flock file locking operations");
+    plb.add_time_avg(l_c_fcntl_lock_lat, "lock_lat", "Latency of fcntl/flock file locking operations");
+    plb.add_time_avg(l_c_catchall_lat, "catchall_lat", "Average latency across all MDS operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -970,6 +985,8 @@ void Client::trim_cache(bool trim_kernel_dcache)
 
   if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
+  
+  logger->set(l_c_dentry_count, lru.lru_get_size());//set the counter after every trim pass NEW!!
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->get_nref() == 1 && inode_map.size() == 1 + root_parents.size()) {
@@ -2409,6 +2426,7 @@ int Client::make_request(MetaRequest *request,
       break;
     }
 
+    utime_t mds_rtt_start = mono_clock_now();
     // send request.
     send_request(request, session.get());
 
@@ -2424,6 +2442,20 @@ int Client::make_request(MetaRequest *request,
     });
     l.release();
     request->caller_cond = nullptr;
+
+    // calculate MDS round-trip time
+    utime_t mds_rtt = mono_clock_now();
+    mds_rtt -= mds_rtt_start;
+    
+    // log MDS round-trip time with context
+    ldout(cct, 20) << "make_request tid " << tid << " mds." << mds
+                   << " op " << ceph_mds_op_name(request->get_op())
+                   << " mds_rtt " << mds_rtt << dendl;
+    
+    // update performance counter
+    if (logger) {
+      logger->tinc(l_c_mds_rtt, mds_rtt);
+    }
 
     // did we get a reply?
     if (request->reply)
@@ -2459,12 +2491,36 @@ int Client::make_request(MetaRequest *request,
     *pdirbl = reply->get_extra_bl();
 
   // -- log times --
-  utime_t lat = mono_clock_now();
-  lat -= request->sent_stamp;
+  utime_t lat = ceph_clock_now();
+  lat -= request->op_stamp; 
   ldout(cct, 20) << "lat " << lat << dendl;
 
   ++nr_metadata_request;
   update_io_stat_metadata(lat);
+  logger->tinc(l_c_catchall_lat, lat);
+  switch (request->get_op()) {
+    case CEPH_MDS_OP_CREATE:
+      logger->tinc(l_c_lat_create, lat);
+      break;
+    case CEPH_MDS_OP_MKDIR:
+      logger->tinc(l_c_lat_mkdir, lat);
+      break;
+    case CEPH_MDS_OP_UNLINK:
+      logger->tinc(l_c_lat_unlink, lat);
+      break;
+    case CEPH_MDS_OP_RMDIR:
+      logger->tinc(l_c_lat_rmdir, lat);
+      break;
+    case CEPH_MDS_OP_RENAME:
+      logger->tinc(l_c_lat_rename, lat);
+      break;
+    case CEPH_MDS_OP_SETATTR:
+      logger->tinc(l_c_lat_setattr, lat);
+      break;
+    default:
+      break;
+}
+
 
   put_request(request);
   return r;
@@ -3180,6 +3236,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   if (!is_safe) {
     request->got_unsafe = true;
     session->unsafe_requests.push_back(&request->unsafe_item);
+    logger->inc(l_c_unsafe_reqs); // inc counter when request are unsafe
     if (is_dir_operation(request)) {
       Inode *dir = request->inode();
       ceph_assert(dir);
@@ -3217,6 +3274,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     // the filesystem change is committed to disk
     // we're done, clean up
     if (request->got_unsafe) {
+      logger->dec(l_c_unsafe_reqs); // When the mds commit a unsafe requst.
       request->unsafe_item.remove_myself();
       request->unsafe_dir_item.remove_myself();
       request->unsafe_target_item.remove_myself();
@@ -4174,9 +4232,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	in->flags &= ~I_CAP_DROPPED;
     }
 
-    if (waitfor_caps)
-      wait_on_context_list(in->waitfor_caps);
-    else if (waitfor_commit)
+    if (waitfor_caps) {
+      utime_t cap_wait_start = ceph_clock_now(); // gather current start time
+      wait_on_context_list(in->waitfor_caps); //  this can take anywhere from seconds to ms
+      logger->tinc(l_c_cap_wait_lat, ceph_clock_now() - cap_wait_start); //subtract start from end for total time
+    } else if (waitfor_commit)
       wait_on_context_list(in->waitfor_commit);
   }
 }
@@ -5328,6 +5388,7 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
   if (!in->flushing_caps) {
     ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
     num_flushing_caps++;
+    logger->inc(l_c_caps_flushing); // When a new inode enters flushing stat
   } else {
     ldout(cct, 10) << __func__ << " (more) " << ccap_string(flushing) << " " << *in << dendl;
   }
@@ -6052,6 +6113,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
       if (in->flushing_caps == 0) {
 	ldout(cct, 10) << " " << *in << " !flushing" << dendl;
 	num_flushing_caps--;
+  logger->dec(l_c_caps_flushing); //when the inode finishes flushing the caps
        if (in->flushing_cap_tids.empty())
 	  in->flushing_cap_item.remove_myself();
       }
@@ -8833,12 +8895,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       auto target_len = std::min(read_len, stx->stx_size - offset);
       r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                      read_start, target_len, &bl, 0, &holes, io_finish.get());
-
-      if (r > 0) {
-        logger->inc(l_c_osdc_hit);
-      } else if (r == 0) {
-        logger->inc(l_c_osdc_miss);
-      }
 
       if (r == 0) {
         client_lock.unlock();
@@ -12000,11 +12056,6 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
       int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				       readahead_extent.first, readahead_extent.second,
 				       NULL, 0, onfinish2);
-      if (r2 > 0) {
-	logger->inc(l_c_osdc_hit);
-      } else if (r2 == 0) {
-	logger->inc(l_c_osdc_miss);
-      }
 
       if (r2 == 0) {
 	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
@@ -12130,11 +12181,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   std::vector<ObjectCacher::ObjHole> holes;
   r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                  read_start, read_len, bl, 0, &holes, io_finish.get());
-  if (r > 0) {
-    logger->inc(l_c_osdc_hit);
-  } else if (r == 0) {
-    logger->inc(l_c_osdc_miss);
-  }
 
   if (onfinish != nullptr) {
     // put the cap ref since we're releasing C_Read_Async_Finisher
@@ -13918,6 +13964,8 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 
   int ret;
   bufferlist bl;
+  utime_t lock_start = ceph_clock_now(); // Start tracking time for lock ops 
+
 
   if (sleep && switch_interrupt_cb) {
     // enable interrupt
@@ -13981,6 +14029,10 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       }
     } else
       ceph_abort();
+  }
+  if (op == CEPH_MDS_OP_SETFILELOCK) { // Check if the op is not a getfilelock
+    logger->inc(l_c_fcntl_lock_ops); // inc lock operations
+    logger->tinc(l_c_fcntl_lock_lat, ceph_clock_now() - lock_start); // the time we are waiting for the lock, time we received the lock - the timestamp we requested
   }
   return ret;
 }
