@@ -1436,7 +1436,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # Store in secret store (phase 1)
         self.cephadm_secrets.set(name='registry_credentials',
                                  data=registry_json,
-                                 secret_type='registry-credentials',
                                  user_made=True, editable=True)
         # distribute new login info to all hosts
         self.cache.distribute_new_registry_login_info()
@@ -3444,9 +3443,15 @@ Then run the following:
             raise
 
     def _get_alertmanager_credentials(self) -> Tuple[str, str]:
-        creds = self.cephadm_secrets._load_basic_auth_secret(AlertmanagerService.BASIC_AUTH_CREDS, target=AlertmanagerService.TYPE)
+        # ValueError means the secret exists but is corrupt -- fail closed.
+        creds = self.cephadm_secrets._load_basic_auth_secret(
+            AlertmanagerService.BASIC_AUTH_CREDS,
+            scope=SecretScope.SERVICE,
+            target=AlertmanagerService.TYPE,
+        )
         if creds is None:
-            creds = self.cephadm_secrets._load_basic_auth_legacy(AlertmanagerService.USER_CFG_KEY, AlertmanagerService.PASS_CFG_KEY)
+            creds = self.cephadm_secrets._load_basic_auth_legacy(
+                AlertmanagerService.USER_CFG_KEY, AlertmanagerService.PASS_CFG_KEY)
             if creds is None:
                 creds = {'username': 'admin', 'password': 'admin'}
             # only persist if not coming from secret store
@@ -3454,16 +3459,21 @@ Then run the following:
                                      scope=SecretScope.SERVICE,
                                      target=AlertmanagerService.TYPE,
                                      data=creds,
-                                     secret_type='basic-auth',
                                      user_made=True,
                                      editable=True)
 
         return (creds['username'], creds['password'])
 
     def _get_prometheus_credentials(self) -> Tuple[str, str]:
-        creds = self.cephadm_secrets._load_basic_auth_secret(PrometheusService.BASIC_AUTH_CREDS, target=PrometheusService.TYPE)
+        # ValueError means the secret exists but is corrupt -- fail closed.
+        creds = self.cephadm_secrets._load_basic_auth_secret(
+            PrometheusService.BASIC_AUTH_CREDS,
+            scope=SecretScope.SERVICE,
+            target=PrometheusService.TYPE,
+        )
         if creds is None:
-            creds = self.cephadm_secrets._load_basic_auth_legacy(PrometheusService.USER_CFG_KEY, PrometheusService.PASS_CFG_KEY)
+            creds = self.cephadm_secrets._load_basic_auth_legacy(
+                PrometheusService.USER_CFG_KEY, PrometheusService.PASS_CFG_KEY)
             if creds is None:
                 creds = {'username': 'admin', 'password': 'admin'}
             # only persist if not coming from secret store
@@ -3471,7 +3481,6 @@ Then run the following:
                                      scope=SecretScope.SERVICE,
                                      target=PrometheusService.TYPE,
                                      data=creds,
-                                     secret_type='basic-auth',
                                      user_made=True,
                                      editable=True)
 
@@ -3500,7 +3509,6 @@ Then run the following:
                                  scope=SecretScope.SERVICE,
                                  data={'username': user, 'password': password},
                                  target=PrometheusService.TYPE,
-                                 secret_type='basic-auth',
                                  user_made=True,
                                  editable=True)
         return 'prometheus credentials updated correctly'
@@ -3612,7 +3620,6 @@ Then run the following:
                                  scope=SecretScope.SERVICE,
                                  data={'username': user, 'password': password},
                                  target=AlertmanagerService.TYPE,
-                                 secret_type='basic-auth',
                                  user_made=True,
                                  editable=True)
         return 'alertmanager credentials updated correctly'
@@ -4042,12 +4049,54 @@ Then run the following:
             results.append(self._plan(cast(ServiceSpec, spec)))
         return results
 
+    # Fields that never flow into daemon final_config and therefore cannot
+    # have secret:/ refs resolved at deploy time.
+    # Fields known never to reach daemon final_config.
+    _SECRET_UNSUPPORTED_FIELDS = (
+        'extra_container_args',
+        'extra_entrypoint_args',
+        'ssl_cert',
+        'ssl_key',
+        'ssl_ca_cert',
+    )
+
     def _check_secrets_refs(self, spec: ServiceSpec) -> None:
-        unresolved_secrets = self.cephadm_secrets.find_unresolved_secrets(spec.to_json())
-        if unresolved_secrets:
-            unresovled_uris = sorted(ref.to_uri() for ref in unresolved_secrets)
+        """Pre-apply validation of secret:/ refs in a ServiceSpec.
+
+        In v1, secret:/ refs are only supported in custom_configs content.
+        Those fields are merged into daemon final_config before resolve_object
+        runs, so they are guaranteed to be substituted at deploy time.
+        Refs anywhere else are rejected here with a clear error.
+        """
+        if not self.cephadm_secrets._has_secret_refs(spec.to_json()):
+            return
+
+        # Reject refs in fields that are known never to reach final_config.
+        # These get a specific error message before the generic whitelist check.
+        for field in self._SECRET_UNSUPPORTED_FIELDS:
+            val = getattr(spec, field, None)
+            if val and self.cephadm_secrets._has_secret_refs(val):
+                raise OrchestratorError(
+                    f"secret:/ refs are not supported in '{field}'. "
+                    f"In v1, secret refs are only supported in custom_configs content."
+                )
+
+        # Whitelist: reject any secret:/ ref outside custom_configs.
+        spec_json = spec.to_json()
+        spec_without_custom = {k: v for k, v in spec_json.items()
+                               if k != 'custom_configs'}
+        if self.cephadm_secrets._has_secret_refs(spec_without_custom):
             raise OrchestratorError(
-                "Found unresolved secrets:\n  - " + "\n  - ".join(unresovled_uris)
+                "secret:/ refs found outside custom_configs. "
+                "In v1, secret refs are only supported in custom_configs content."
+            )
+
+        # Verify all secret:/ refs in custom_configs exist in the store.
+        custom_configs = spec_json.get('custom_configs')
+        unresolved = self.cephadm_secrets.find_unresolved_secrets(custom_configs)
+        if unresolved:
+            raise OrchestratorError(
+                "Found unresolved secrets:\n  - " + "\n  - ".join(sorted(unresolved))
             )
 
     def _check_cert_source(self, spec: ServiceSpec) -> str:

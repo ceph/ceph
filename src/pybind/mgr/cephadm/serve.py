@@ -1482,6 +1482,11 @@ class CephadmServe:
                     daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
                 daemon_spec.final_config = self.mgr.cephadm_secrets.resolve_object(daemon_spec.final_config)
+                # Enforce the resolution contract: if any secret:/ URI survived
+                # resolve_object it means the ref was in a field that does not
+                # flow into final_config.  Fail the deploy rather than ship an
+                # unresolved URI into the daemon configuration.
+                self.mgr.cephadm_secrets.assert_no_unresolved_refs(daemon_spec.final_config)
 
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,

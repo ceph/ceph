@@ -341,7 +341,6 @@ class Migrations:
             # Store in secret store (phase 1) as well
             try:
                 self.mgr.cephadm_secrets.set(name='registry_credentials', data=registry_credentials,
-                                             secret_type='registry-credentials',
                                              user_made=True, editable=True)
             except Exception:
                 pass
