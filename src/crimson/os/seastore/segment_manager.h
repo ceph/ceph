@@ -57,6 +57,9 @@ struct block_sm_superblock_t {
   }
 
   void validate() const {
+    if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+      ceph_assert(shard_num == seastar::smp::count);
+    }
     ceph_assert(block_size > 0);
     ceph_assert(segment_size > 0 &&
                 segment_size % block_size == 0);
