@@ -47,5 +47,6 @@ sensible.
     MDS Autoscaler module <mds_autoscaler>
     NFS module <nfs>
     SMB module <smb>
+    Secrets module <ceph_secrets>
     Progress Module <progress>
     CLI API Commands module <cli_api>

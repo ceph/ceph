@@ -2297,6 +2297,8 @@ fi
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
 %{_datadir}/ceph/mgr/object_format.*
+%{_datadir}/ceph/mgr/ceph_secrets_client.*
+%{_datadir}/ceph/mgr/ceph_secrets_types.*
 %{_datadir}/ceph/mgr/cherrypy_mgr.*
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
