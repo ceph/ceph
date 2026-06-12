@@ -325,7 +325,15 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
     if (queued.contains(fg))
       continue;
     CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
-    if (!dir->is_auth()) {
+    if (mds->damage_table.is_dirfrag_damaged(dir)) {
+      /* N.B.: we are cowardly (and ironically) not looking at dirfrags we've
+       * noted as damaged already. The state of the dirfrag will be missing an
+       * omap (or object) or the fnode is corrupt. Neither situation the MDS
+       * presently knows how to recover from. So skip it for now.
+       */
+      dout(5) << __func__ << ": not scrubbing damaged dirfrag: " << *dir << dendl;
+      continue;
+    } else if (!dir->is_auth()) {
       if (dir->is_ambiguous_auth()) {
 	dout(20) << __func__ << " ambiguous auth " << *dir  << dendl;
 	dir->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather.new_sub());
