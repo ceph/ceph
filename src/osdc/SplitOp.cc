@@ -206,7 +206,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       break;
     }
   }
-  bool primary_required = count > 1 || orig_op->objver || has_non_read_ops;
+  bool primary_required = orig_op->objver || has_non_read_ops ||
+                          (count > 1 &&
+                           strategy == InternalVersionStrategy::FromPrimaryShard);
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -425,9 +427,23 @@ int SplitOp::assemble_rc() const {
  *
  * @return true if versions mismatch, false if consistent
  */
-bool ECSplitOp::version_mismatch() const {
+bool SplitOp::version_mismatch() const {
+  ceph_assert(!sub_reads.empty());
+
+  switch(strategy) {
+    case InternalVersionStrategy::FromParticipatingShards:
+      return version_mismatch_v2();
+    case InternalVersionStrategy::FromPrimaryShard:
+      return legacy_version_mismatch();
+    default:
+      ceph_abort_msg("Unknown internal version strategy used");
+  }
+}
+
+bool ECSplitOp::legacy_version_mismatch() const {
   // First we need to decode the version list from the reference.
   ceph_assert(reference_sub_read != -1);
+  ceph_assert(sub_reads.contains(reference_sub_read));
   ceph_assert(sub_reads.at(reference_sub_read).internal_version.has_value());
 
   std::map<shard_id_t, eversion_t> ref_vers;
@@ -465,6 +481,64 @@ bool ECSplitOp::version_mismatch() const {
   return false;
 }
 
+bool ECSplitOp::version_mismatch_v2() const {
+  // Our reference shard needs to be the newest shard
+  std::map<shard_id_t, std::map<shard_id_t, eversion_t>> shard_to_shard_vers_map;
+  int ref_shard_index = -1;
+  std::optional<eversion_t> latest_version;
+  for (auto & [shard_index, sub_read] : sub_reads) {
+    ceph_assert(sub_read.internal_version.has_value());
+
+    shard_id_t shard_id(shard_index);
+    internal_versions_v2_response_t response;
+    decode(response, sub_read.internal_version->bl);
+    std::map<shard_id_t, eversion_t>& shard_versions
+      = shard_to_shard_vers_map[shard_id];
+    shard_versions = std::move(response.shard_versions);
+
+    if(!shard_versions.contains(shard_id)) {
+      ldout(cct, DBG_LVL) << __func__ << ": "
+         << "Shard version missing, failing split op." << dendl;
+      return true;
+    }
+
+    if (!latest_version || latest_version < shard_versions.at(shard_id)) {
+      latest_version = shard_versions.at(shard_id);
+      ref_shard_index = shard_index;
+    }
+  }
+
+  ceph_assert(latest_version);
+
+  const std::map<shard_id_t, eversion_t>& reference_shard_versions
+    = shard_to_shard_vers_map.at(shard_id_t(ref_shard_index));
+
+  for (auto & [shard_index, sub_read] : sub_reads) {
+    // Reference shard can't be different to itself.
+    if (shard_index == ref_shard_index) {
+      continue;
+    }
+
+    shard_id_t shard_id(shard_index);
+    const std::map<shard_id_t, eversion_t>& shard_versions =
+      shard_to_shard_vers_map.at(shard_id);
+
+    if (!reference_shard_versions.contains(shard_id)) {
+      ldout(cct, DBG_LVL) << __func__ << ": "
+         << "Reference shard version missing, failing split op." << dendl;
+      return true;
+    }
+    if (reference_shard_versions.at(shard_id) != shard_versions.at(shard_id)) {
+      ldout(cct, DBG_LVL) << __func__ << ": "
+               << "Primary version (" << reference_shard_versions.at(shard_id)
+               << ") != " << "shard version (" << shard_versions.at(shard_id)
+               << ") " << "for shard " << shard_id << dendl;
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * @brief Check for version mismatches across replicas.
  *
@@ -474,24 +548,59 @@ bool ECSplitOp::version_mismatch() const {
  *
  * @return true if versions mismatch, false if consistent
  */
-bool ReplicaSplitOp::version_mismatch() const {
+bool ReplicaSplitOp::legacy_version_mismatch() const {
   std::optional<eversion_t> ref_version;
-  constexpr shard_id_t NO_SHARD(-1);
 
   for (const auto& [acting_index, sub_read] : sub_reads) {
     ceph_assert(sub_read.internal_version.has_value());
+
     std::map<shard_id_t, eversion_t> shard_vers;
     decode(shard_vers, sub_read.internal_version->bl);
 
-    if (!shard_vers.contains(NO_SHARD)) {
+    if (!shard_vers.contains(shard_id_t::NO_SHARD)) {
       ldout(cct, DBG_LVL) << __func__ << ": "
         << "Replica version missing for acting index, failing split op." << dendl;
       return true;
     }
 
     if (!ref_version) {
-      ref_version = shard_vers.at(NO_SHARD);
-    } else if (*ref_version != shard_vers.at(NO_SHARD)) {
+      ref_version = shard_vers.at(shard_id_t::NO_SHARD);
+    } else if (*ref_version != shard_vers.at(shard_id_t::NO_SHARD)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * @brief Check for version mismatches across replicas.
+ *
+ * For replicated pools, checks that all replicas returned the same version.
+ * No single replica maintains a reference version list, so the first replica's
+ * version becomes the reference for comparison.
+ *
+ * @return true if versions mismatch, false if consistent
+ */
+bool ReplicaSplitOp::version_mismatch_v2() const {
+  std::optional<eversion_t> reference_version;
+
+  for (const auto& [acting_index, sub_read] : sub_reads) {
+    ceph_assert(sub_read.internal_version.has_value());
+
+    internal_versions_v2_response_t response;
+    decode(response, sub_read.internal_version->bl);
+    std::map<shard_id_t, eversion_t> shard_versions = response.shard_versions;
+
+    if (!shard_versions.contains(shard_id_t::NO_SHARD)) {
+      ldout(cct, DBG_LVL) << __func__ << ": "
+        << "Replica version missing for acting index, failing split op." << dendl;
+      return true;
+    }
+
+    if (!reference_version) {
+      reference_version = shard_versions.at(shard_id_t::NO_SHARD);
+    } else if (*reference_version != shard_versions.at(shard_id_t::NO_SHARD)) {
       return true;
     }
   }
@@ -621,10 +730,20 @@ void SplitOp::protect_torn_reads() {
   // guarantee this, so instead read the version along with the data and if they
   // are different, then repeat the read to the primary. Such version mismatches
   // should be rare enough that this is not a significant performance impact.
+
   for (auto&& [index, sr] : sub_reads) {
     auto &internal_version = sr.internal_version;
     internal_version = std::make_optional<InternalVersion>();
-    sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl);
+    switch(strategy) {
+      case InternalVersionStrategy::FromParticipatingShards:
+        sr.rd.get_internal_versions_v2(&internal_version->ec, &internal_version->bl);
+        break;
+      case InternalVersionStrategy::FromPrimaryShard:
+        sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl);
+        break;
+      default:
+        ceph_abort_msg("Unknown internal version strategy used");
+    }
   }
 }
 
@@ -1026,9 +1145,14 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
+  split_read->strategy
+    = (objecter.osdmap->require_osd_release > ceph_release_t::umbrella) ?
+    InternalVersionStrategy::FromParticipatingShards :
+    InternalVersionStrategy::FromPrimaryShard;
+
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
-    split_read->init( op->ops[i], i);
+    split_read->init(op->ops[i], i);
     if (split_read->abort) {
       break;
     }

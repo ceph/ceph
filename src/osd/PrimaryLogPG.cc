@@ -6701,6 +6701,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     }
     break;
 
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS_V2: {
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions_v2(soid, &out);
+      if (result >= 0) {
+        internal_versions_v2_response_t response{out};
+        encode(response, osd_op.outdata);
+      }
+    }
+    break;
+
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
       {
@@ -16312,6 +16322,27 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
     }
   } else {
     (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
+}
+
+int PrimaryLogPG::get_internal_versions_v2(const hobject_t& soid,
+                                           std::map<shard_id_t, eversion_t>* out) {
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc || !obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (pool.info.is_erasure()) {
+    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
+      (*out)[shard_id_t(i)] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[shard_id_t::NO_SHARD] = obc->obs.oi.version;
   }
   return 0;
 }
