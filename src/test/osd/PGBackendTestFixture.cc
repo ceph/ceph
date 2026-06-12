@@ -1138,11 +1138,73 @@ object_info_t PGBackendTestFixture::read_shard_object_info(
 }
 
 
+void PGBackendTestFixture::scrub_all_objects()
+{
+  if (!scrub_listener || !snap_reader) {
+    initialize_scrub_infra();
+  }
+
+  // Collect all objects from the primary OSD's store
+  std::set<std::string> all_object_names;
+  
+  TestPG* primary_pg = get_primary_test_pg();
+  if (!primary_pg) {
+    std::cerr << "WARNING: No primary PG found during teardown scrub" << std::endl;
+    return;
+  }
+  
+  int primary_osd = primary_pg->pg_whoami.osd;
+  OsdTestFixture* primary_fixture = get_osd_fixture(primary_osd);
+  if (!primary_fixture || !primary_fixture->ch) {
+    std::cerr << "WARNING: No primary fixture or collection handle during teardown scrub" << std::endl;
+    return;
+  }
+
+  // List all objects in the collection
+  ghobject_t next;
+  while (true) {
+    std::vector<ghobject_t> objects;
+    int r = primary_fixture->store->collection_list(
+      primary_fixture->ch,
+      next,
+      ghobject_t::get_max(),
+      primary_fixture->store->get_ideal_list_max(),
+      &objects,
+      &next);
+    
+    if (r < 0) {
+      std::cerr << "WARNING: collection_list failed during teardown scrub: "
+                << cpp_strerror(r) << std::endl;
+      break;
+    }
+    
+    if (objects.empty()) {
+      break;
+    }
+    
+    // Extract object names from hobject_t
+    for (const auto& ghobj : objects) {
+      const hobject_t& hobj = ghobj.hobj;
+      // Only scrub objects in our pool
+      if (hobj.pool == pool_id && !hobj.is_max()) {
+        all_object_names.insert(hobj.oid.name);
+      }
+    }
+  }
+
+  // Scrub each object found
+  for (const auto& obj_name : all_object_names) {
+    bool corrupted = scrub_object(obj_name);
+    EXPECT_FALSE(corrupted)
+      << "Object '" << obj_name << "' found to be corrupted during teardown scrub";
+  }
+}
+
 bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
 {
   hobject_t hoid = make_test_object(obj_name);
 
-  int total_shards = k + m;
+  int total_shards = pool_type == EC ? (k + m) : num_replicas;
   std::map<pg_shard_t, ScrubMap> scrub_maps;
 
   // Scan each shard within its PG context using run_in_pg
