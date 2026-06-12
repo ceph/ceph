@@ -763,6 +763,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
         # register haproxy monitor ssl cert and key
         self.cert_mgr.register_cert_key_pair('ingress', 'haproxy_monitor_ssl_cert', 'haproxy_monitor_ssl_key', TLSObjectScope.SERVICE)
+        # register per-feature SMB TLS cert names
+        for _smb_feature in ['remote_control', 'keybridge']:
+            self.cert_mgr.register_cert_key_pair(
+                'smb',
+                f'smb_{_smb_feature}_ssl_cert',
+                f'smb_{_smb_feature}_ssl_key',
+                TLSObjectScope.SERVICE,
+                f'smb_{_smb_feature}_ca_cert',
+            )
 
         self.cert_mgr.init_tlsobject_store()
 
