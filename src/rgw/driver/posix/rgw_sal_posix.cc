@@ -27,7 +27,32 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+template <typename T>
+static bool decode_raw_attr(rgw::sal::Attrs& attrs, const char* name, T& val) {
+  auto it = attrs.find(name);
+  if (it == attrs.end()) {
+    return false;
+  }
+  bufferlist bl = it->second;
+  try {
+    auto it = bl.cbegin();
+    decode(val, it);
+  } catch (buffer::error&) {
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+static void encode_attr(rgw::sal::Attrs& attrs, const char* name, const T& val) {
+  bufferlist bl;
+  encode(val, bl);
+  attrs[name] = std::move(bl);
+}
+
 namespace rgw { namespace sal {
+
+using namespace posix;
 
 const int64_t READ_SIZE = 128 * 1024;
 const std::string ATTR_PREFIX = "user.X-RGW-";
@@ -35,7 +60,8 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
-#define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
+#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
+#define RGW_POSIX_ATTR_MULTIPART_PART_SIZES "POSIX-Multipart-Part-Sizes"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -72,6 +98,8 @@ struct POSIXOwner {
 };
 WRITE_CLASS_ENCODER(POSIXOwner);
 
+namespace posix {
+
 std::string get_key_fname(rgw_obj_key& key, bool use_version)
 {
   std::string oid;
@@ -89,6 +117,8 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
 
   return fname;
 }
+
+} // namespace posix
 
 static inline std::string gen_rand_instance_name()
 {
@@ -144,6 +174,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 
   return true;
 }
+
 
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
@@ -368,6 +399,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   return 0;
 }
 
+namespace posix {
+
 int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 {
   if (force) {
@@ -405,6 +438,18 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   ObjectType type{get_type()};
   type.encode(type_bl);
   attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = type_bl;
+
+  /* Remove xattrs that are on disk but no longer in the attrs map */
+  Attrs old_attrs;
+  ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
+  if (ret >= 0) {
+    for (auto& it : old_attrs) {
+      if (attrs.find(it.first) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, it.first, get_name());
+      }
+    }
+  }
 
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
@@ -1064,13 +1109,13 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     Attrs attrs;
 
     tmpfd = openat(get_fd(), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    if (tmpfd > 0) {
+    if (tmpfd >= 0) {
       ret = get_x_attrs(y, dpp, tmpfd, attrs, name);
       if (ret >= 0) {
         decode_attr(attrs, RGW_POSIX_ATTR_OBJECT_TYPE, type);
       }
+      ::close(tmpfd);
     }
-    ::close(tmpfd);
     switch (type.type) {
     case ObjectType::VERSIONED:
       nent = std::make_unique<VersionedDirectory>(name, this, instance, nstx, ctx);
@@ -1842,6 +1887,8 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
   return 0;
 }
 
+} // namespace posix
+
 bool POSIXZoneGroup::placement_target_exists(std::string& target) const {
   return !!group->placement_targets.count(target);
 }
@@ -2219,7 +2266,10 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-
+  if (_head_obj->get_bucket()->get_info().versioning_enabled() &&
+      !_head_obj->have_instance()) {
+    _head_obj->gen_rand_obj_instance_name();
+  }
   return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
@@ -3196,6 +3246,10 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
+  if (db->get_info().versioning_enabled() &&
+      !dest_object->have_instance()) {
+    dest_object->gen_rand_obj_instance_name();
+  }
   bool has_instance = !get_key().instance.empty();
 
   // Source must exist, and we need to know if it's a shadow obj
@@ -3291,7 +3345,34 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    bool* truncated, list_parts_each_t&& each_func,
 			    optional_yield y)
 {
-  return -EOPNOTSUPP;
+  *truncated = false;
+
+  std::vector<uint64_t> part_sizes;
+  if (!decode_raw_attr(state.attrset, RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes)) {
+    return 0;
+  }
+
+  int nparts = part_sizes.size();
+  int start = marker;
+  int emitted = 0;
+
+  for (int i = start; i < nparts; ++i) {
+    if (emitted >= max_parts) {
+      *truncated = true;
+      break;
+    }
+    Part part;
+    part.part_number = i + 1;
+    part.part_size = part_sizes[i];
+    int ret = each_func(part);
+    if (ret < 0) {
+      return ret;
+    }
+    *next_marker = i + 1;
+    ++emitted;
+  }
+
+  return 0;
 }
 
 bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
@@ -3532,11 +3613,21 @@ int POSIXObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key
 
 int POSIXObject::set_cur_version(const DoutPrefixProvider *dpp)
 {
+  if (!ent) {
+    int ret = open(dpp, true, false);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  if (ent->get_type() != ObjectType::VERSIONED) {
+    return -EINVAL;
+  }
   VersionedDirectory* vdir = static_cast<VersionedDirectory*>(ent.get());
   std::unique_ptr<FSEnt> child;
   int ret = vdir->get_ent(dpp, null_yield, get_fname(true), std::string(), child);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   ret = vdir->set_cur_version_ent(dpp, child.get());
   return ret;
@@ -3754,17 +3845,32 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
-  buffer::list manifest_bl;
-  if (source->get_attr(RGW_POSIX_ATTR_MANIFEST, manifest_bl)) {
-    POSIXManifest manifest;
-    auto iter = manifest_bl.cbegin();
-    try {
-      manifest.decode(iter);
-      if (manifest.multipart_part_count > 0) {
-        params.parts_count = manifest.multipart_part_count;
+  {
+    uint16_t pc = 0;
+    if (decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc) && pc > 0) {
+      params.parts_count = pc;
+    }
+  }
+
+  if (params.part_num) {
+    int pn = *params.part_num;
+    std::vector<uint64_t> part_sizes;
+    if (!decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes)) {
+      if (pn == 1) {
+        params.parts_count = 1;
+      } else {
+        return -ERR_INVALID_PART;
       }
-    } catch (buffer::error& err) {
-      // pass
+    } else {
+      if (pn < 1 || pn > (int)part_sizes.size()) {
+        return -ERR_INVALID_PART;
+      }
+      int64_t ofs = 0;
+      for (int i = 0; i < pn - 1; ++i) {
+        ofs += part_sizes[i];
+      }
+      part_ofs = ofs;
+      source->set_obj_size(part_sizes[pn - 1]);
     }
   }
 
@@ -3837,7 +3943,7 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
 int POSIXObject::POSIXReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return source->read(ofs, end + 1, bl, dpp, y);
+  return source->read(ofs + part_ofs, end + 1, bl, dpp, y);
 }
 
 int POSIXObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -3912,7 +4018,8 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
   int64_t left;
-  int64_t cur_ofs = ofs;
+  int64_t cur_ofs = ofs + part_ofs;
+  end += part_ofs;
 
   if (end < 0)
     left = 0;
@@ -3964,6 +4071,51 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
+  bool has_cond = params.if_match ||
+    !real_clock::is_zero(params.last_mod_time_match) ||
+    params.size_match.has_value();
+
+  if (has_cond) {
+    int ret = source->stat(dpp);
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (params.if_match && strcmp(params.if_match, "*") != 0) {
+      auto it = source->get_attrs().find(RGW_ATTR_ETAG);
+      if (it == source->get_attrs().end()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+      bufferlist& bl = it->second;
+      std::string if_match_str = rgw_string_unquote(params.if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+
+    if (!real_clock::is_zero(params.last_mod_time_match)) {
+      if (params.last_mod_time_match_precise) {
+        if (params.last_mod_time_match != source->get_mtime()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        if (real_clock::to_time_t(params.last_mod_time_match) !=
+            real_clock::to_time_t(source->get_mtime())) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+
+    if (params.size_match.has_value()) {
+      if (*params.size_match != source->get_size()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
   return source->delete_object(dpp, y, flags, nullptr, nullptr);
 }
 
@@ -4046,14 +4198,15 @@ std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
   load(nullptr);
 
   if (!shadow) {
-    // This upload doesn't exist, but the API doesn't check this until it calls
-    // on the *serializer*. So make a fake object in the parent bucket that
-    // doesn't exist.  Put it in the MP namespace just in case.
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+  } else {
+    meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
   }
-  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 
   auto posix_meta_obj = static_cast<POSIXObject*>(meta_obj.get());
+  if (shadow) {
+    posix_meta_obj->pin_bucket(shadow->clone());
+  }
   rgw::sal::Attrs attrs;
   if (obj_retention) {
     buffer::list obj_retention_bl;
@@ -4197,6 +4350,10 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
+  if (bucket->get_info().versioning_enabled() &&
+      !target_obj->have_instance()) {
+    target_obj->gen_rand_obj_instance_name();
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -4211,6 +4368,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
+  std::vector<uint64_t> part_sizes;
 
   ofs = accounted_size = 0;
 
@@ -4294,6 +4452,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 #endif
 
+      part_sizes.push_back(part->get_size());
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
@@ -4317,15 +4476,54 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   {
-    POSIXManifest manifest;
-    manifest.multipart_part_count = total_parts;
-    buffer::list manifest_bl;
-    manifest.encode(manifest_bl);
-    attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
+    uint16_t pc = total_parts;
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc);
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes);
 
     ret = shadow->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
       return ret;
+    }
+  }
+
+  /* conditional write checks against existing target object */
+  if (if_match || if_nomatch) {
+    POSIXObject *tobj = static_cast<POSIXObject*>(target_obj);
+    bool target_exists = tobj->check_exists(dpp);
+
+    if (if_match) {
+      if (strcmp(if_match, "*") == 0) {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+      } else {
+        if (!target_exists) {
+          return -ENOENT;
+        }
+        bufferlist bl;
+        if (!get_attr(tobj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+        std::string if_match_str = rgw_string_unquote(if_match);
+        if (if_match_str != bl.to_str()) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        if (target_exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else if (target_exists) {
+        bufferlist bl;
+        if (get_attr(tobj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+          std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+          if (if_nomatch_str == bl.to_str()) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        }
+      }
     }
   }
 
@@ -4560,33 +4758,35 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
-      // test the object is existing
       if (!exists) {
-	return -ERR_PRECONDITION_FAILED;
+	return -ENOENT;
       }
     } else {
+      if (!exists) {
+	return -ENOENT;
+      }
       bufferlist bl;
       if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+      std::string if_match_str = rgw_string_unquote(if_match);
+      if (if_match_str.compare(0, bl.length(), bl.c_str(), bl.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
   }
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
-      // test the object is not existing
-      if (!exists) {
+      if (exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        if (if_nomatch_str.compare(0, bl.length(), bl.c_str(), bl.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }

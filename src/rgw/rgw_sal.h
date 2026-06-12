@@ -1195,6 +1195,7 @@ class Object {
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time last_mod_time_match;
+        bool last_mod_time_match_precise{false};
         ceph::real_time mtime;
         std::optional<uint64_t> size_match;
         const char *if_match{nullptr};

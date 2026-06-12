@@ -14,6 +14,7 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include <filesystem>
+#include <boost/container/flat_map.hpp>
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
 #include "common/cohort_lru.h"
@@ -76,12 +77,9 @@ public:
 
   virtual ~BucketCacheEntry()
   {
-    /* XXX depends on safe_link -- but I think on balance, built-in safe_link
-     * is preferable to a custom mechanism with likely the same cost */
     if (name_hook.is_linked()) {
-      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
     }
-    mdb_dbi_close(*env, dbi); // return db handle
   }
 
   inline bool deleted() const {
@@ -169,14 +167,15 @@ public:
 	  abort();
 	}
 
-	/* discard lmdb data associated with this bucket */
-	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0);
-	txn->commit();
-	/* LMDB applications don't "normally" close database handles,
-	 * but doing so (atomically) is supported, and we must as
-	 * we continually recycle them */
-	mdb_dbi_close(*env, dbi); // return db handle
+	/* remove from AVL tree; if the evicted entry is in the same
+	 * partition as the incoming insert, the latch is already held */
+	if (bc->cache.is_same_partition(hk, factory->hk)) {
+	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+	} else {
+	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+	}
+
+	env.reset();
       } /* ! deleted */
     }
     return true;
@@ -219,16 +218,23 @@ struct BucketCache : public Notifiable
   {
     std::string database_root;
     uint8_t lmdb_count;
-    std::vector<std::shared_ptr<LMDBSafe::MDBEnv>> envs;
+    MDB_dbi max_dbs_per_partition;
+
+    struct Partition {
+      std::shared_ptr<LMDBSafe::MDBEnv> env;
+      boost::container::flat_map<std::string, LMDBSafe::MDBDbi> dbi_map;
+      std::mutex mtx;
+    };
+    std::vector<Partition> parts;
     sf::path dbp;
 
   public:
-    Lmdbs(std::string& database_root, uint8_t lmdb_count)
+    Lmdbs(std::string& database_root, uint8_t lmdb_count,
+	  uint32_t max_buckets)
       : database_root(database_root), lmdb_count(lmdb_count),
-        dbp(database_root) {
+        max_dbs_per_partition((max_buckets / lmdb_count) * 5 / 4 + 16),
+        parts(lmdb_count), dbp(database_root) {
 
-      /* create a root for lmdb directory partitions (if it doesn't
-       * exist already) */
       sf::path safe_root_path{dbp / fmt::format("rgw_posix_lmdbs")};
       sf::create_directory(safe_root_path);
 
@@ -241,17 +247,72 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
-	auto env = LMDBSafe::getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
-	envs.push_back(env);
+	parts[ix].env = LMDBSafe::getMDBEnv(
+	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
       }
     }
 
+    uint8_t partition_ix(BucketCacheEntry<D, B>* bucket) {
+      return bucket->hk % lmdb_count;
+    }
+
     inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
-      return envs[(bucket->hk % lmdb_count)];
+      return parts[partition_ix(bucket)].env;
     }
 
     inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
       return *(get_sp_env(bucket));
+    }
+
+    /* look up or create a dbi for the given bucket name in its
+     * partition; if all dbi slots are exhausted, evict the LRU
+     * entry from the dbi map via mdb_drop(del=1) */
+    std::optional<LMDBSafe::MDBDbi> get_dbi(
+      BucketCacheEntry<D, B>* bucket,
+      std::function<LMDBSafe::MDBDbi()> open_fn)
+    {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+
+      auto it = part.dbi_map.find(bucket->name);
+      if (it != part.dbi_map.end()) {
+        return it->second;
+      }
+
+      try {
+        auto dbi = open_fn();
+        part.dbi_map.emplace(bucket->name, dbi);
+        return dbi;
+      } catch (const LMDBSafe::LMDBError&) {
+        /* MDB_DBS_FULL — evict the oldest entry to free a slot */
+        if (part.dbi_map.empty()) {
+          return std::nullopt;
+        }
+        auto victim = part.dbi_map.begin();
+        try {
+          auto txn = part.env->getRWTransaction();
+          txn->drop(victim->second);
+          txn->commit();
+        } catch (const LMDBSafe::LMDBError&) {
+          return std::nullopt;
+        }
+        part.dbi_map.erase(victim);
+
+        try {
+          auto dbi = open_fn();
+          part.dbi_map.emplace(bucket->name, dbi);
+          return dbi;
+        } catch (const LMDBSafe::LMDBError&) {
+          return std::nullopt;
+        }
+      }
+    }
+
+    /* remove a dbi from the map (called when a bucket is deleted) */
+    void remove_dbi(BucketCacheEntry<D, B>* bucket) {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+      part.dbi_map.erase(bucket->name);
     }
 
     const std::string& get_root() const { return database_root; }
@@ -267,7 +328,7 @@ public:
       lru(max_lanes, max_buckets/max_lanes),
       cache(max_lanes, max_buckets/max_partitions),
       rp(bucket_root),
-      lmdbs(database_root, lmdb_count),
+      lmdbs(database_root, lmdb_count, max_buckets),
       un(Notify::factory(this, bucket_root))
     {
       if (! (sf::exists(rp) && sf::is_directory(rp))) {
@@ -352,8 +413,18 @@ public:
 
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
 	  auto& env = lmdbs.get_sp_env(b);
-	  auto dbi = env->openDB(b->name, MDB_CREATE);
-	  b->set_env(env, dbi);
+	  auto cmp = B::lmdb_cmp();
+	  auto dbi_opt = lmdbs.get_dbi(b, [&]() {
+	    return cmp
+	      ? env->openDB(b->name, MDB_CREATE, cmp)
+	      : env->openDB(b->name, MDB_CREATE);
+	  });
+	  if (!dbi_opt) {
+	    b->mtx.unlock();
+	    lat.lock->unlock();
+	    return result;
+	  }
+	  b->set_env(env, *dbi_opt);
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
 	    /* inserts at cached insert iterator, releasing latch */
@@ -381,8 +452,9 @@ public:
 
   static inline std::string concat_key(const rgw_obj_index_key& k) {
     std::string k_str;
-    k_str.reserve(k.name.size() + k.instance.size());
+    k_str.reserve(k.name.size() + 1 + k.instance.size());
     k_str += k.name;
+    k_str += '\0';
     k_str += k.instance;
     return k_str;
   }
@@ -391,6 +463,9 @@ public:
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
       auto txn = bucket->env->getRWTransaction();
+
+      /* clear stale data from a prior hiwat eviction before repopulating */
+      mdb_drop(*txn, bucket->dbi, 0);
 
       /* instruct the bucket provider to enumerate all entries,
        * in any order */

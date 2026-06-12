@@ -30,6 +30,8 @@ class POSIXDriver;
 class POSIXBucket;
 class POSIXObject;
 
+namespace posix {
+
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
 
 /* integration w/bucket listing cache */
@@ -353,6 +355,8 @@ public:
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
+} // namespace posix
+
 class POSIXZoneGroup : public StoreZoneGroup {
   POSIXDriver* store;
   std::unique_ptr<RGWZoneGroup> group;
@@ -478,9 +482,9 @@ protected:
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
   std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
   POSIXZone zone;
-  std::unique_ptr<BucketCache> bucket_cache;
+  std::unique_ptr<posix::BucketCache> bucket_cache;
   std::string base_path;
-  std::unique_ptr<Directory> root_dir;
+  std::unique_ptr<posix::Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
@@ -782,11 +786,11 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
-  Directory* get_root_dir() { return root_dir.get(); }
+  posix::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
-  BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  posix::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
 
-  /* called by BucketCache layer when a new object is discovered
+  /* called by posix::BucketCache layer when a new object is discovered
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
@@ -849,18 +853,18 @@ private:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
   std::optional<std::string> ns{std::nullopt};
-  std::unique_ptr<Directory> dir;
+  std::unique_ptr<posix::Directory> dir;
 
 public:
-  POSIXBucket(POSIXDriver *_dr, Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  POSIXBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
     ns(_ns),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
-  POSIXBucket(POSIXDriver *_dr, std::unique_ptr<Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+  POSIXBucket(POSIXDriver *_dr, std::unique_ptr<posix::Directory> _this_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
     acls(),
@@ -868,12 +872,12 @@ public:
     dir(std::move(_this_dir))
     { }
 
-  POSIXBucket(POSIXDriver *_dr, Directory* _p_dir, const RGWBucketInfo& _i)
+  POSIXBucket(POSIXDriver *_dr, posix::Directory* _p_dir, const RGWBucketInfo& _i)
     : StoreBucket(_i),
     driver(_dr),
     acls(),
     ns(),
-    dir(std::make_unique<Directory>(get_fname(), _p_dir, _dr->ctx()))
+    dir(std::make_unique<posix::Directory>(get_fname(), _p_dir, _dr->ctx()))
     { }
 
   POSIXBucket(const POSIXBucket& _b) :
@@ -960,7 +964,7 @@ public:
 
   /* Internal APIs */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
-  Directory* get_dir() { return dir.get(); }
+  posix::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
   std::string get_fname();
@@ -968,40 +972,28 @@ public:
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 
   /* enumerate all entries by callback, in any order */
-  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb);
-  
+  int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
+
+  static MDB_cmp_func* lmdb_cmp() { return nullptr; }
+
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 }; /* POSIXBucket */
 
-struct POSIXManifest {
-  int64_t  multipart_part_count{-1};
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(multipart_part_count, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(multipart_part_count, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(POSIXManifest);
 
 class POSIXObject : public StoreObject {
 public:
 private:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
-  std::unique_ptr<FSEnt> ent;
+  std::unique_ptr<posix::FSEnt> ent;
   std::map<std::string, int64_t> parts;
+  std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
 
 public:
   struct POSIXReadOp : ReadOp {
     POSIXObject* source;
+    int64_t part_ofs{0};
 
     POSIXReadOp(POSIXObject* _source) :
       source(_source) {}
@@ -1044,6 +1036,11 @@ public:
   {}
 
   virtual ~POSIXObject() { close(); }
+
+  void pin_bucket(std::unique_ptr<rgw::sal::Bucket> b) {
+    pinned_bucket = std::move(b);
+    set_bucket(pinned_bucket.get());
+  }
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
@@ -1132,7 +1129,7 @@ public:
     return std::unique_ptr<Object>(new POSIXObject(*this));
   }
 
-  FSEnt* get_fsent() { return ent.get(); }
+  posix::FSEnt* get_fsent() { return ent.get(); }
   int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
@@ -1144,10 +1141,10 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, POSIXBucket *sb,
            POSIXBucket *db, POSIXObject *dobj);
-  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb);
+  int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, posix::fill_cache_cb_t& cb);
   int set_cur_version(const DoutPrefixProvider *dpp);
   int stat(const DoutPrefixProvider *dpp);
-  int make_ent(ObjectType type);
+  int make_ent(posix::ObjectType type);
   bool versioned() { return bucket->versioned(); }
 
 protected:
@@ -1170,7 +1167,7 @@ struct POSIXMPObj {
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
-    } else if (!from_meta(_oid, _owner)) {
+    } else {
       init_gen(driver, _oid, _owner);
     }
   }
@@ -1257,7 +1254,7 @@ class POSIXMultipartPart : public StoreMultipartPart {
 protected:
   POSIXUploadPartInfo info;
   POSIXMultipartUpload* upload;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<posix::File> part_file;
 
 public:
   POSIXMultipartPart(POSIXMultipartUpload* _upload) :
@@ -1387,8 +1384,8 @@ private:
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
-  std::unique_ptr<Directory> upload_dir;
-  std::unique_ptr<File> part_file;
+  std::unique_ptr<posix::Directory> upload_dir;
+  std::unique_ptr<posix::File> part_file;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1405,7 +1402,7 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
-    part_file(std::make_unique<File>(get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
+    part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx()))
   { upload_dir->open(dpp); }
   virtual ~POSIXMultipartWriter() = default;
 
