@@ -87,7 +87,7 @@ public:
    * This is similar to TestECFailover::simulate_osd_failure but handles
    * multiple failures at once.
    */
-  void simulate_multiple_osd_failures(const std::vector<int>& failed_osds) {
+  void simulate_multiple_osd_failures(const std::set<int>& failed_osds) {
     auto new_osdmap = std::make_shared<OSDMap>();
     new_osdmap->deepish_copy_from(*osdmap);
 
@@ -96,7 +96,7 @@ public:
     int total_osds = (num_zones > 0) ? (num_zones * (k + m)) : (k + m);
 
     for (int i = 0; i < total_osds; i++) {
-      bool is_failed = std::find(failed_osds.begin(), failed_osds.end(), i) != failed_osds.end();
+      bool is_failed = failed_osds.contains(i);
       new_acting.push_back(is_failed ? CRUSH_ITEM_NONE : i);
     }
 
@@ -513,9 +513,9 @@ TEST_P(TestBackendBasics, MultiZoneFailover) {
   int osds_to_fail = total_osds / 2;
 
   // Build list of OSDs to fail (first half)
-  std::vector<int> failed_osds;
+  std::set<int> failed_osds;
   for (int i = 0; i < osds_to_fail; i++) {
-    failed_osds.push_back(i);
+    failed_osds.insert(i);
   }
 
   // Simulate failure of first half of OSDs
@@ -526,14 +526,7 @@ TEST_P(TestBackendBasics, MultiZoneFailover) {
   ASSERT_TRUE(new_primary_listener != nullptr) << "Should have a primary after failover";
 
   // The new primary should not be one of the failed OSDs
-  bool primary_is_valid = true;
-  for (auto& [instance_id, listener] : listeners) {
-    if (listener.get() == new_primary_listener) {
-      primary_is_valid = (std::find(failed_osds.begin(), failed_osds.end(), instance_id) == failed_osds.end());
-      break;
-    }
-  }
-  EXPECT_TRUE(primary_is_valid) << "New primary should not be a failed OSD";
+  ASSERT_FALSE(failed_osds.contains(new_primary_listener->whoami_shard().osd));
 
   // Perform degraded read after failover and verify data integrity
   verify_object(obj_name, test_data, 0, test_data.size());

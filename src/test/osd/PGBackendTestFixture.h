@@ -188,7 +188,7 @@ public:
   }
   
   int get_instance_count() const {
-    return pool_type == EC ? (k + m) : num_replicas;
+    return pool_type == EC ? (num_zones * (k + m)) : num_replicas;
   }
   
   int get_data_chunk_count() const {

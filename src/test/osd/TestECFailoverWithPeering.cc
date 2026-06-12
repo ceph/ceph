@@ -113,7 +113,7 @@ public:
     int current_primary = get_primary_shard_from_osdmap();
     ASSERT_GE(current_primary, 0) << "Should have a valid primary";
 
-    auto primary_ps = get_peering_state(current_primary);
+    auto primary_ps = get_primary_test_pg()->get_peering_state();
 
     // Ensure the PG is active before checking peer_missing
     ASSERT_TRUE(primary_ps->is_active())
@@ -160,7 +160,7 @@ public:
 
     // Use the fixture helper to run recovery and verify callbacks
     // This will recover the object to all missing OSDs in the first zone
-    run_recovery_and_verify_callbacks(obj_name, first_missing_osd, pattern_b);
+    run_recovery(obj_name, first_missing_osd == 0, pattern_b);
 
     // Step 6: Verify data is readable after recovery
     std::cout << "Step 6: Verifying data after recovery" << std::endl;
@@ -464,7 +464,7 @@ TEST_P(TestECFailoverWithPeering, MultiZoneFailoverWithPeering) {
   ASSERT_GE(new_primary_shard, k + m)
     << "New primary should be from the second zone (>= k+m)";
 
-  auto* primary_ps = get_peering_state(new_primary_shard);
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
   for (int failed_osd : failed_osds) {
     ASSERT_TRUE(primary_ps->get_acting_recovery_backfill().count(
       pg_shard_t(failed_osd, shard_id_t(failed_osd))) == 0)
@@ -1111,6 +1111,9 @@ TEST_P(
   event_loop->run_until_idle();
 
   run_recovery(obj_name, false, pattern_p1);
+}
+
+/**
  * ECZoneRecoveryTest - Test zone-level EC recovery scenario (zone 0 fails first)
  *
  * This test verifies the EC recovery mechanism at the zone level by:
@@ -1252,7 +1255,7 @@ TEST_P(TestECFailoverWithPeering, ECMinAvailableTest) {
   int current_primary = get_primary_shard_from_osdmap();
   ASSERT_GE(current_primary, 0) << "Should have a valid primary";
 
-  auto primary_ps = get_peering_state(current_primary);
+  auto primary_ps = get_primary_test_pg()->get_peering_state();
 
   // The PG might be active now with k shards available
   // But we need to check if recovery is scheduled
@@ -1420,7 +1423,7 @@ TEST_P(TestECFailoverWithPeering, OSD0DownAddNewOSDRecovery) {
   ASSERT_TRUE(all_shards_active()) << "PG should be active after OSD 0 failure";
   
   // Add a new OSD (k+m) to the cluster and assign it to shard 0
-  int new_osd_id = k + m;
+  int new_osd_id = (k + m) * num_zones;
   auto new_osdmap = std::make_shared<OSDMap>();
   new_osdmap->deepish_copy_from(*osdmap);
   OSDMapTestHelpers::new_osd_up(*new_osdmap, new_osd_id, pgid, 0);

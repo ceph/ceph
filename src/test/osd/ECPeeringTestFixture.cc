@@ -57,7 +57,7 @@ void ECPeeringTestFixture::SetUp() {
   // to have shard == osd.
   {
     std::vector<int> initial_acting;
-    for (int i = 0; i < k + m; ++i) {
+    for (int i = 0; i < get_instance_count(); ++i) {
       initial_acting.push_back(i);
     }
     OSDMap::Incremental inc(osdmap->get_epoch() + 1);
