@@ -1329,7 +1329,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                           root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
                           serve_from_sub_path = true
                         [snapshots]
@@ -1490,7 +1490,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                           root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
                           serve_from_sub_path = true
                         [snapshots]
@@ -1590,7 +1590,7 @@ class TestMonitoring:
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
                           http_port = 3000
-                          http_addr = 
+                          http_addr = ::
                         [snapshots]
                           external_enabled = false
                         [security]
@@ -1681,6 +1681,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
     def test_grafana_initial_admin_pw(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
@@ -1705,7 +1706,7 @@ class TestMonitoring:
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
                                     '  http_port = 3000\n'
-                                    '  http_addr = \n'
+                                    '  http_addr = 0.0.0.0\n'
                                     '[snapshots]\n'
                                     '  external_enabled = false\n'
                                     '[security]\n'
@@ -1750,6 +1751,33 @@ class TestMonitoring:
                             }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
+    def test_grafana_http_addr_binds_all_by_default_ipv4(self, cephadm_module: CephadmOrchestrator):
+        grafana_svc = service_registry.get_service('grafana')
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, GrafanaSpec()):
+                ini = grafana_svc.generate_grafana_ini(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'),
+                    mgmt_gw_enabled=False,
+                    oauth2_enabled=False,
+                )
+                assert 'http_addr = 0.0.0.0' in ini
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
+    def test_grafana_http_addr_binds_all_by_default_ipv6(self, cephadm_module: CephadmOrchestrator):
+        grafana_svc = service_registry.get_service('grafana')
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, GrafanaSpec()):
+                ini = grafana_svc.generate_grafana_ini(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'),
+                    mgmt_gw_enabled=False,
+                    oauth2_enabled=False,
+                )
+                assert 'http_addr = ::' in ini
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
     def test_grafana_no_anon_access(self, cephadm_module: CephadmOrchestrator):
         # with anonymous_access set to False, expecting the [auth.anonymous] section
         # to not be present in the grafana config. Note that we require an initial_admin_password
@@ -1774,7 +1802,7 @@ class TestMonitoring:
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
                                     '  http_port = 3000\n'
-                                    '  http_addr = \n'
+                                    '  http_addr = 0.0.0.0\n'
                                     '[snapshots]\n'
                                     '  external_enabled = false\n'
                                     '[security]\n'
