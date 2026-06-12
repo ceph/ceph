@@ -34,4 +34,21 @@ inline std::string binstrprint(std::string_view sv, size_t maxlen=0)
   return s;
 }
 
+inline std::string get_trimmed_path_str(const std::string& path)
+{
+  // index of '/' before 10th component (count from end of the path).
+  size_t n = 0;
+
+  for (int i = 1; i <= 10; ++i) {
+    n = path.rfind("/", n - 1);
+    if (n == std::string::npos) {
+      // path doesn't contain 10 components, return path as it is.
+      return path;
+      break;
+    }
+  }
+
+  return std::string("..." + path.substr(n, -1));
+}
+
 #endif
