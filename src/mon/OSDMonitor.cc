@@ -54,6 +54,7 @@
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGStopMerge.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MRoute.h"
@@ -2771,6 +2772,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_pg_created(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return preprocess_pg_ready_to_merge(op);
+  case MSG_OSD_PG_STOP_MERGE:
+    return preprocess_pg_stop_merge(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -2817,6 +2820,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_pgtemp(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return prepare_pg_ready_to_merge(op);
+  case MSG_OSD_PG_STOP_MERGE:
+    return prepare_pg_stop_merge(op);
   case MSG_OSD_BEACON:
     return prepare_beacon(op);
 
@@ -4078,7 +4083,19 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
     return false; /* nothing to propose, yet */
   }
 
-  if (m->ready) {
+  bool allow_merge = true;
+  if (m->ready && p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+      allow_merge = false;
+      mon.clog->warn() << "blocking crimson pg merge for " << m->pgid
+                       << " (pool '" << osdmap.get_pool_name(m->pgid.pool())
+                       << "') because pool flag 'crimson_allow_pg_merge' is not set";
+      dout(1) << __func__ << " blocking crimson pg merge for " << m->pgid
+              << " because pool flag crimson_allow_pg_merge is not set" << dendl;
+    }
+  }
+
+  if (m->ready && allow_merge) {
     p.dec_pg_num(m->pgid,
 		 pending_inc.epoch,
 		 m->source_version,
@@ -4088,6 +4105,16 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
     p.last_change = pending_inc.epoch;
   } else {
     // back off the merge attempt!
+    if (!m->ready && !p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      mon.clog->warn() << "osd." << m->get_orig_source().num()
+                       << " reported pg " << m->pgid
+                       << " not ready to merge; backing off pg_num decrease"
+                       << " for pool '"
+                       << osdmap.get_pool_name(m->pgid.pool()) << "'";
+      dout(1) << __func__ << " osd." << m->get_orig_source().num()
+              << " pg " << m->pgid << " not ready to merge, backing off"
+              << dendl;
+    }
     p.set_pg_num_pending(p.get_pg_num());
   }
 
@@ -4117,6 +4144,79 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
   return true;
 }
 
+bool OSDMonitor::preprocess_pg_stop_merge(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MOSDPGStopMerge>();
+  dout(10) << __func__ << " " << *m << dendl;
+  auto session = op->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    goto ignore;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    goto ignore;
+  }
+  if (!osdmap.get_pg_pool(m->pool)) {
+    derr << __func__ << " pool " << m->pool << " dne" << dendl;
+    goto ignore;
+  }
+  return false;
+
+ ignore:
+  mon.no_reply(op);
+  return true;
+}
+
+bool OSDMonitor::prepare_pg_stop_merge(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MOSDPGStopMerge>();
+  dout(10) << __func__ << " " << *m << dendl;
+
+  pg_pool_t p;
+  if (pending_inc.new_pools.count(m->pool))
+    p = pending_inc.new_pools[m->pool];
+  else
+    p = *osdmap.get_pg_pool(m->pool);
+
+  if (!p.is_crimson()) {
+    dout(10) << __func__ << " pool " << m->pool << " is not crimson, ignoring"
+	     << dendl;
+    wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+    return false;
+  }
+
+  const char *reason_str = "unknown";
+  if (m->reason == MOSDPGStopMerge::REASON_CROSS_SHARD) {
+    reason_str = "cross-shard PG merge not supported on Seastore";
+  }
+
+  mon.clog->warn() << "osd." << m->get_orig_source().num()
+                   << " stopped PG merge for pool '"
+                   << osdmap.get_pool_name(m->pool)
+                   << "' (" << reason_str << ", source pg " << m->pgid
+                   << "); no further pg_num decrease will be attempted";
+
+  // Cancel any in-flight shrink; keep current pg_num as-is.
+  p.set_pg_num_pending(p.get_pg_num());
+  if (p.get_pg_num_target() < p.get_pg_num()) {
+    p.set_pg_num_target(p.get_pg_num());
+  }
+  if (p.get_pgp_num_target() < p.get_pgp_num()) {
+    p.set_pgp_num_target(p.get_pgp_num());
+  }
+  p.unset_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE);
+  p.last_pg_merge_meta = pg_merge_meta_t{};
+  p.last_change = pending_inc.epoch;
+  p.last_force_op_resend_prenautilus = pending_inc.epoch;
+
+  pending_inc.new_pools[m->pool] = p;
+  wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  return true;
+}
 
 // -------------
 // pg_temp changes
@@ -8742,11 +8842,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pg_num()) {
-        ss << "crimson-osd does not support decreasing pg_num_actual (shrinking)";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pg_num_actual (shrinking) "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pg_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pg_num_actual increase denied";
@@ -8805,11 +8908,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pg_num_target()) {
-        ss << "crimson-osd does not support decreasing pg_num";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pg_num "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pg_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pg_num increase denied for crimson pool";
@@ -8886,11 +8992,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pgp_num()) {
-        ss << "crimson-osd does not support decreasing pgp_num_actual";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pgp_num_actual "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pgp_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pgp_num_actual increase denied";
@@ -8921,11 +9030,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pgp_num_target()) {
-        ss << "crimson-osd does not support decreasing pgp_num";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pgp_num "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pgp_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pgp_num increase denied";
@@ -8978,7 +9090,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
-	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk") {
+	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk" ||
+	     var == "crimson_allow_pg_merge") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
