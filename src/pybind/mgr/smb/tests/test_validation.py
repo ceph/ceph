@@ -117,9 +117,9 @@ def test_clean_custom_options():
     [
         ("tim", True, ""),
         ("britons\\arthur", True, ""),
-        ("lance a lot", False, "spaces, tabs, or newlines"),
-        ("tabs\ta\tlot", False, "spaces, tabs, or newlines"),
-        ("bed\nivere", False, "spaces, tabs, or newlines"),
+        ("lance a lot", True, ""),
+        ("tabs\ta\tlot", False, "tabs or newlines"),
+        ("bed\nivere", False, "tabs or newlines"),
         ("runawa" + ("y" * 122), True, ""),
         ("runawa" + ("y" * 123), False, "128"),
     ],
