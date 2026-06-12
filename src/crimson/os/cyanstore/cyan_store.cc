@@ -225,7 +225,8 @@ CyanStore::list_collections()
 seastar::future<std::string>
 CyanStore::get_default_device_class()
 {
-  return seastar::make_ready_future<std::string>("");
+  // in the classical world `MemStore` would say `is_rotational() == true`.
+  return seastar::make_ready_future<std::string>("hdd");
 }
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
