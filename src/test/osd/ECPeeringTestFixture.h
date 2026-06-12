@@ -294,5 +294,9 @@ private:
    * This mimics what PrimaryLogPG::start_recovery_ops() does when recovery completes.
    */
   void check_recovery_completion_impl(int osd_id);
+
+private:
+  // Save initial config state for restoration in TearDown()
+  ConfigValues initial_config_values_;
 };
 
