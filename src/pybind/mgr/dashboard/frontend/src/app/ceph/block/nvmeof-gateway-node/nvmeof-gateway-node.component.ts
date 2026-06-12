@@ -32,12 +32,14 @@ import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
+import { NvmeofGatewayGroupEditModalComponent } from '../nvmeof-gateway-group-edit-modal/nvmeof-gateway-group-edit-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -70,6 +72,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
   hasAvailableHosts = false;
+  gatewayDetails: DetailItem[] = [];
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -349,9 +352,53 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       } else {
         this.hosts = [];
       }
+
+      this.gatewayDetails = this.buildGatewayDetails(this.serviceSpec, this.hosts.length);
     }
 
     this.count = this.hosts.length;
     this.hostsLoaded.emit(this.count);
+  }
+
+  onEditGateway(): void {
+    if (!this.serviceSpec) {
+      return;
+    }
+
+    const modalRef = this.modalService.show(NvmeofGatewayGroupEditModalComponent, {
+      gatewayGroup: this.serviceSpec
+    });
+
+    modalRef.componentInstance.groupUpdated.subscribe(() => {
+      if (this.tableContext) {
+        this.getHosts(this.tableContext);
+      }
+    });
+  }
+
+  private buildGatewayDetails(
+    serviceSpec: CephServiceSpec,
+    gatewayNodeCount: number
+  ): DetailItem[] {
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: serviceSpec.spec?.group || this.groupName || '-'
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: gatewayNodeCount
+      },
+      {
+        label: $localize`Encryption`,
+        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      },
+      {
+        label: $localize`mTLS`,
+        value: $localize`Disabled`,
+        type: 'status'
+      }
+    ];
   }
 }

@@ -55,6 +55,7 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
 import { NvmeofGroupFormComponent } from './nvmeof-group-form/nvmeof-group-form.component';
 import { NvmeofEditHostKeyModalComponent } from './nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
+import { NvmeofGatewayGroupEditModalComponent } from './nvmeof-gateway-group-edit-modal/nvmeof-gateway-group-edit-modal.component';
 
 import {
   ButtonModule,
@@ -96,6 +97,7 @@ import Datastore from '@carbon/icons/es/datastore/16';
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+// import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
 import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
@@ -142,6 +144,7 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     SideNavModule,
     LayoutModule,
     ThemeModule
+    // ProductiveCardComponent
   ],
   declarations: [
     RbdListComponent,
@@ -194,7 +197,8 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
-    NvmeofTabsComponent
+    NvmeofTabsComponent,
+    NvmeofGatewayGroupEditModalComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -379,7 +383,7 @@ const routes: Routes = [
               {
                 path: 'nodes',
                 component: NvmeofGatewayNodeComponent,
-                data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+                data: { breadcrumbs: $localize`Overview`, mode: NvmeofGatewayNodeMode.DETAILS }
               },
               {
                 path: 'subsystems',

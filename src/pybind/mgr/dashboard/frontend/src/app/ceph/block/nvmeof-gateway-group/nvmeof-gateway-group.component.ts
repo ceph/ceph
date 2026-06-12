@@ -13,12 +13,12 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -37,31 +37,32 @@ const BASE_URL = 'block/nvmeof/gateways';
 })
 export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild(TableComponent, { static: true })
-  table: TableComponent;
+  table!: TableComponent;
 
   @ViewChild('dateTpl', { static: true })
-  dateTpl: TemplateRef<any>;
+  dateTpl!: TemplateRef<any>;
 
   @ViewChild('customTableItemTemplate', { static: true })
-  customTableItemTemplate: TemplateRef<any>;
+  customTableItemTemplate!: TemplateRef<any>;
 
   @ViewChild('deleteTpl', { static: true })
-  deleteTpl: TemplateRef<any>;
+  deleteTpl!: TemplateRef<any>;
 
   @ViewChild('gatewayStatusTpl', { static: true })
-  gatewayStatusTpl: TemplateRef<any>;
+  gatewayStatusTpl!: TemplateRef<any>;
 
-  permission: Permission;
-  tableActions: CdTableAction[];
+  permission!: Permission;
+  tableActions: CdTableAction[] = [];
   nodesAvailable = false;
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  gatewayGroup$: Observable<CephServiceSpec[]>;
+  gatewayGroup$: Observable<CephServiceSpec[]> = of([]);
   subject = new BehaviorSubject<CephServiceSpec[]>([]);
-  context: CdTableFetchDataContext;
-  gatewayGroupName: string;
-  subsystemCount: number;
-  gatewayCount: number;
+  context?: CdTableFetchDataContext;
+  gatewayGroupName = '';
+  subsystemCount = 0;
+  gatewayCount = 0;
+  selectedGatewayDetails: DetailItem[] = [];
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
@@ -141,7 +142,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
               return of([]);
             }
             return forkJoin(
-              groups.map((group: NvmeofGatewayGroup) => {
+              groups.map((group: CephServiceSpec) => {
                 const isRunning = (group.status?.running ?? 0) > 0;
                 const subsystemsObservable = isRunning
                   ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
@@ -182,6 +183,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
+    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {
@@ -271,5 +273,36 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       return;
     }
     this.router.navigate([this.viewUrl, groupName]);
+  }
+
+  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
+    if (!selectedGroup) {
+      return [];
+    }
+
+    const runningGateways = selectedGroup.statusCount?.running ?? 0;
+    const errorGateways = selectedGroup.statusCount?.error ?? 0;
+    const totalGateways = runningGateways + errorGateways;
+
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: selectedGroup.name
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: totalGateways
+      },
+      {
+        label: $localize`Encryption`,
+        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      },
+      {
+        label: $localize`mTLS`,
+        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      }
+    ];
   }
 }
