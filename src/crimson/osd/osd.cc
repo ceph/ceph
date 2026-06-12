@@ -1187,11 +1187,8 @@ seastar::future<> OSD::handle_osd_map(Ref<MOSDMap> m)
   * See https://tracker.ceph.com/issues/59165
   */
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return handle_osd_map_lock.lock().then([this, m] {
-    return _handle_osd_map(m);
-  }).finally([this] {
-    return handle_osd_map_lock.unlock();
-  });
+  const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+  co_await _handle_osd_map(m);
 }
 
 seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
