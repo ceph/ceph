@@ -62,34 +62,34 @@
         </div>
       </div>
 
-      <!-- CDS Input (shown when checkbox is checked) -->
+      <!-- Encryption Configuration (shown when checkbox is checked) -->
       @if (groupForm.controls.enableEncryption.value) {
       <div cdsRow
            class="form-item">
         <div cdsCol>
           <cds-textarea-label
-            labelInputID="cdsInput"
+            labelInputID="encryptionConfig"
             helperText="Provide the encryption configuration details."
+            cdRequiredField="Encryption configuration"
             i18n
-            i18n-helperText>Encryption configuration
+            i18n-helperText
+            [invalid]="encryptionConfigRef.isInvalid">Encryption configuration
             <textarea cdsTextArea
-                      id="cdsInput"
+                      id="encryptionConfig"
                       cdValidate
-                      #encryptionConfig="cdValidate"
-                      [invalid]="encryptionConfig.invalid"
-                      [invalidText]="encryptionConfigError"
+                      #encryptionConfigRef="cdValidate"
+                      [invalid]="encryptionConfigRef.isInvalid"
                       formControlName="encryptionConfig"
                       cols="100"
                       rows="4">
             </textarea>
           </cds-textarea-label>
+          <span
+            class="invalid-feedback"
+            *ngIf="groupForm.showError('encryptionConfig', formDir, 'required')"
+            i18n>This field is required.</span>
         </div>
       </div>
-      <ng-template #encryptionConfigError>
-        <span *ngIf="groupForm.controls.encryptionConfig.hasError('required')"
-              class="invalid-feedback"
-              i18n>This field is required.</span>
-      </ng-template>
       }
       <!-- Target Nodes Selection -->
       <div

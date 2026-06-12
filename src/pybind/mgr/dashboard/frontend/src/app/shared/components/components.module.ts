@@ -137,10 +137,12 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
 import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
     CommonModule,
+    ProductiveCardComponent,
     FormsModule,
     ReactiveFormsModule,
     NgbAlertModule,
@@ -279,7 +281,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TearsheetStepComponent,
     PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent
+    NumberWithUnitComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {
