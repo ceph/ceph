@@ -38,7 +38,7 @@ namespace rgw::dedup {
 
   // Those are the correct values for production system
   const work_shard_t MAX_WORK_SHARD = 255;
-  const md5_shard_t  MAX_MD5_SHARD  = 512;
+  const md5_shard_t  MAX_MD5_SHARD  = 2048;
 
   const work_shard_t NULL_WORK_SHARD = 0xFFFF;
   const md5_shard_t  NULL_MD5_SHARD  = 0xFFFF;
