@@ -1,32 +1,13 @@
 @if (title) {
-<<<<<<< HEAD
-  <header class="sidebar-header">
-    <h2 class="cds--type-heading-05">{{ title }}</h2>
-  </header>
-}
-<div class="sidebar-layout-container">
-  <div class="sidebar-layout-shell">
-    <cds-sidenav
-      [expanded]="true"
-      class="sidebar-layout-nav"
-    >
-      @for (item of items; track item.label) {
-        <cds-sidenav-item
-          [route]="item.route"
-          [routeExtras]="item.routeExtras"
-          [useRouter]="true"
-          [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }"
-        >
-          <span class="cds--type-heading-compact-01">{{ item.label }}</span>
-        </cds-sidenav-item>
-=======
 <header class="sidebar-header">
   <h2 class="cds--type-heading-05">{{ title }}</h2>
 </header>
 }
-<div class="sidebar-layout-container">
+<div class="sidebar-layout-container sidebar-layout--full">
   <div class="sidebar-layout-shell">
-    <cds-sidenav [expanded]="true">
+    <cds-sidenav
+      [expanded]="true"
+      class="sidebar-layout-nav cds--side-nav--fixed">
       @for (item of items; track item.label) {
       <cds-sidenav-item
         [route]="item.route"
@@ -35,7 +16,6 @@
         [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }">
         <span class="cds--type-heading-compact-01">{{ item.label }}</span>
       </cds-sidenav-item>
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
       }
     </cds-sidenav>
 

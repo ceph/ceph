@@ -160,4 +160,12 @@ describe('NvmeofSubsystemsComponent', () => {
   it('should set first group as default initially', () => {
     expect(component.group).toBe('default');
   });
+
+  it('should clear selected group and stop fetching subsystems', () => {
+    component.group = 'default';
+
+    component.onGroupChange(null);
+
+    expect(component.group).toBeNull();
+  });
 });

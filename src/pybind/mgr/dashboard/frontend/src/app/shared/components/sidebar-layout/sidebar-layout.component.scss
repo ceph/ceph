@@ -2,35 +2,35 @@
 @use '@carbon/colors';
 @use '@carbon/layout';
 
+.sidebar-layout--full {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 .sidebar-layout-container {
-<<<<<<< HEAD
-  background-color: var(--cds-background);
   min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
-=======
-  min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
-  background-color: var(--cds-background);
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
   padding-right: var(--cds-spacing-07);
+  background-color: var(--cds-background);
 }
 
 .sidebar-layout-shell {
-<<<<<<< HEAD
-  height: 100vh;
-  position: relative;
   transform: translate(0);
+  position: relative;
+  height: 100vh;
 }
 
 .sidebar-layout-nav {
   background-color: var(--cds-layer-03);
-=======
-  transform: translate(0);
-  position: relative;
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
+
+  .cds--side-nav__icon:not(.cds--side-nav__submenu-chevron) {
+    display: none;
+  }
 }
 
 .sidebar-layout-main {
   margin-left: layout.rem(272px);
-<<<<<<< HEAD
 
   .cds--table-toolbar {
     background-color: var(--cds-layer-03);
@@ -43,8 +43,6 @@
   .cds--pagination {
     background-color: var(--cds-layer-03);
   }
-=======
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
 }
 
 .sidebar-header {
