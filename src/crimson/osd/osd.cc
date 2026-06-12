@@ -610,13 +610,15 @@ seastar::future<> OSD::start()
     return _add_me_to_crush();
   }).then([this] {
     return _add_device_class();
-   }).then([this] {
+   }).then([this, FNAME] {
     if (is_rotational.has_value()) {
       return shard_services.invoke_on_all([this](auto &local_service) {
         local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
       });
     } else {
-      throw std::runtime_error("No device class is set");
+      WARN("no device class set, defaulting is_rotational to false");
+      is_rotational = false;
+      return seastar::now();
     }
    }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
