@@ -1141,15 +1141,16 @@ class CephadmServe:
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
+                force_delete_data = False
+                if dd.service_name() in self.mgr.spec_store.spec_deleted:
+                    _, force_delete_data = self.mgr.spec_store.spec_deleted[dd.service_name()]
                 self.log.info('Removing orphan daemon %s...' % dd.name())
-                self._remove_daemon(dd.name(), dd.hostname)
-
-            # ignore unmanaged services
-            if spec and spec.unmanaged:
+                self._remove_daemon(dd.name(), dd.hostname, force_delete_data=force_delete_data)
+                # This daemon was removed from cache; skip any additional checks
+                # in this iteration to avoid looking up stale daemon entries.
                 continue
 
-            # ignore daemons for deleted services
-            if dd.service_name() in self.mgr.spec_store.spec_deleted:
+            if spec and spec.unmanaged:
                 continue
 
             if dd.daemon_type == 'agent':
@@ -1618,7 +1619,7 @@ class CephadmServe:
             ic_params.append(ic.to_json(flatten_args=True))
         return ic_meta
 
-    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
+    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False, force_delete_data: bool = False) -> str:
         """
         Remove a daemon
         """
@@ -1637,10 +1638,11 @@ class CephadmServe:
             service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
+            args = ['--name', name, '--force']
+            if force_delete_data:
+                args.append('--force-delete-data')
             if dd.ports:
-                args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
-            else:
-                args = ['--name', name, '--force']
+                args.extend(['--tcp-ports', ' '.join(map(str, dd.ports))])
 
             self.log.info('Removing daemon %s from %s -- ports %s' % (name, host, dd.ports))
             with self.mgr.async_timeout_handler(host, f'cephadm rm-daemon (daemon {name})'):
