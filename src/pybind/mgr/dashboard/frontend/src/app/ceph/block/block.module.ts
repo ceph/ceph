@@ -96,6 +96,7 @@ import Datastore from '@carbon/icons/es/datastore/16';
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+// import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
 import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
@@ -142,6 +143,7 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     SideNavModule,
     LayoutModule,
     ThemeModule
+    // ProductiveCardComponent
   ],
   declarations: [
     RbdListComponent,
@@ -379,7 +381,7 @@ const routes: Routes = [
               {
                 path: 'nodes',
                 component: NvmeofGatewayNodeComponent,
-                data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+                data: { breadcrumbs: $localize`Overview`, mode: NvmeofGatewayNodeMode.DETAILS }
               },
               {
                 path: 'subsystems',

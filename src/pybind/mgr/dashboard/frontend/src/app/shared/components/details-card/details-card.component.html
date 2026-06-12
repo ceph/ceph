@@ -1,14 +1,68 @@
-<cds-tile>
-@if (cardTitle) {
-  <div class="details-card-header">
-    <span class="cds--type-heading-03"
-          i18n>{{ cardTitle }}</span>
-  </div>
-}
+<cd-productive-card>
+  <ng-template #header>
+    @if (cardTitle) {
+    <div class="details-card-header">
+      <h3 class="cds--type-heading-03" i18n>{{ cardTitle }}</h3>
+      <div class="header-actions">
+        @if (showEditButton) {
+        <button
+          cdsButton="ghost"
+          size="sm"
+          [disabled]="true"
+          (click)="onEditClick()"
+          [attr.aria-label]="editButtonLabel"
+        >
+          {{ editButtonLabel }}
+          <cd-icon type="edit"></cd-icon>
+        </button>
+        }
+        <ng-content select=".header-actions"></ng-content>
+      </div>
+    </div>
+    }
+  </ng-template>
 
   <div class="details-card-body">
-    <div cdsRow>
-      <ng-content select=".details-body-content"></ng-content>
+    @if (details && details.length > 0) {
+    <div class="details-grid"
+         [ngStyle]="{ 'grid-template-columns': getGridTemplateColumns() }">
+      @for (detail of getVisibleDetails(); track detail.label) {
+      <div class="detail-item">
+        <label class="cds--label">{{ detail.label }}</label>
+        <div class="detail-value cds--type-body-compact-01">
+          @switch (detail.type) {
+            @case ('status') {
+              <div class="status-value">
+                <cd-icon [type]="getStatusIcon(detail)"></cd-icon>
+                <span>{{ getDisplayValue(detail.value) }}</span>
+              </div>
+            }
+            @case ('badge') {
+              <cds-tag [type]="detail.badgeType || 'gray'">
+                {{ getDisplayValue(detail.value) }}
+              </cds-tag>
+            }
+            @case ('custom') {
+              @if (detail.customTemplate) {
+                <ng-container *ngTemplateOutlet="detail.customTemplate; context: getDetailContext(detail)"></ng-container>
+              } @else {
+                <span>{{ getDisplayValue(detail.value) }}</span>
+              }
+            }
+            @default {
+              <span>{{ getDisplayValue(detail.value) }}</span>
+            }
+          }
+        </div>
+      </div>
+      }
     </div>
+    }
+
+    @if (!details || details.length === 0) {
+    <ng-content select=".details-body-content"></ng-content>
+    }
+    
+    <ng-content></ng-content>
   </div>
-</cds-tile>
+</cd-productive-card>
