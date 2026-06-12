@@ -1371,32 +1371,26 @@ class Module(MgrModule):
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
-        # -- Dashboard UI metrics --
+        # -- Dashboard metrics --
         try:
-            import json as _json
+            r, outb, outs = self.mon_command({
+                'prefix': 'config-key get',
+                'key': 'mgr/dashboard/telemetry/metrics/protocols_enabled'
+            })
 
-            def _read_key(key):
-                r, outb, outs = self.mon_command({
-                    'prefix': 'config-key get',
-                    'key': key
-                })
-                return outb.strip() if r == 0 and outb else None
+            protocols_raw = outb.strip() if r == 0 and outb else None
 
             report['dashboard'] = {
-                'protocols_enabled': _json.loads(
-                    _read_key(
-                        'mgr/dashboard/ui_metrics/protocols_enabled'
-                    ) or '{}'
-                ),
+                'protocols_enabled': json.loads(protocols_raw or '{}'),
             }
 
         except Exception as e:  # pylint: disable=broad-except
             self.log.warning(
-                'ui_metrics: failed to attach dashboard section: %s',
+                'telemetry: failed to attach dashboard section: %s',
                 e
             )
 
-        # -- End Dashboard UI metrics --
+        # -- End Dashboard metrics --
 
         return report
 
