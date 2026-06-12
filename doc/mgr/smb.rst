@@ -55,7 +55,7 @@ Create Cluster
 
 .. prompt:: bash #
 
-   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
+   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--client-compat={default|macos}] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
 Create a new logical cluster, identified by the cluster ID value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -100,12 +100,23 @@ clustering
     enables clustering regardless of the placement count. A value of ``never``
     disables clustering regardless of the placement count. If unspecified,
     ``default`` is assumed.
+client_compat
+    Optional. One of ``default`` or ``macos``. Controls client-specific SMB
+    features and optimizations. The ``default`` mode provides standard SMB
+    behavior with broad compatibility. The ``macos`` mode enables macOS-specific
+    optimized settings for macOS clients. If unspecified, ``default`` is assumed.
 public_addrs
     Optional. A string in the form of <ipaddress/prefixlength>[%<destination address>].
     Supported only when using Samba's clustering. Assign "virtual" IP addresses
     that will be managed by the clustering subsystem and may automatically move
     between nodes running Samba containers.  Can be specified multiple times to
     assign more than one public address to the SMB cluster.
+client_compat
+    Optional. One of ``default`` or ``macos``. Controls client-specific SMB
+    features and optimizations. The ``default`` mode provides standard SMB
+    behavior with broad compatibility. The ``macos`` mode enables macOS-specific
+    features including Samba's fruit VFS module for proper handling of macOS and
+    optimized settings for macOS clients. If unspecified, ``default`` is assumed.
 password_filter
     Optional.  One of ``none`` or ``base64``. If the filter is ``none`` the
     password values on the command line are assumed to be plain text. If the
@@ -165,6 +176,15 @@ previous example. Set three CTDB public address values and a custom placement:
         --public-address=192.168.76.112/24 \
         --placement="3 label:smb"
 
+Create a cluster for macOS clients with user authentication:
+
+.. prompt:: bash #
+
+    ceph smb cluster create mac_cluster user \
+        --define-user-pass=macuser%Passw0rd1 \
+        --client-compat=macos \
+        --placement="label:smb"
+
 
 Update Cluster QoS
 ++++++++++++++++++
@@ -214,6 +234,53 @@ Disable QoS for all shares in a cluster:
      --write-iops-limit=0 \
      --read-bw-limit=0 \
      --write-bw-limit=0
+
+
+
+Update Cluster Client Compatibility
+++++++++++++++++++++++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb cluster update client-compat {default|macos} <cluster_id>
+
+Update the client compatibility mode for an SMB cluster. This setting controls whether client-specific SMB features and optimizations are enabled.
+
+The client compatibility mode determines how the Samba server is configured to optimize for specific client types:
+
+- ``default``: Standard SMB behavior without client-specific optimizations. This is the default mode and provides broad compatibility with all SMB clients.
+- ``macos``: Enable macOS-specific features including the Samba's fruit VFS module for proper handling of macOS metadata and optimized settings for macOS clients.
+
+When ``macos`` mode is enabled, the following features are automatically configured:
+
+- Fruit VFS module for proper handling of macOS-specific file attributes
+- Streams_xattr VFS module for extended attribute support
+
+Options:
+
+client_compat
+    One of ``default`` or ``macos``
+cluster_id
+    A short string uniquely identifying the cluster
+
+Examples
+~~~~~~~~
+
+Enable macOS compatibility mode for a cluster:
+
+.. prompt:: bash #
+
+   ceph smb cluster update client-compat macos mycluster
+
+Revert to default (standard) compatibility mode:
+
+.. prompt:: bash #
+
+   ceph smb cluster update client-compat default mycluster
+
+.. note::
+   The ``macos`` compatibility mode is recommended when the primary clients accessing the SMB shares are macOS systems. Otherwise default mode is recommended.
+
 
 
 Remove Cluster
@@ -976,6 +1043,20 @@ The following is an example of a cluster configured for standalone operation:
     placement:
       hosts:
         - node6.mycluster.sink.test
+
+The following is an example of a cluster optimized for macOS clients:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.cluster
+    cluster_id: macshare
+    auth_mode: user
+    client_compat: macos
+    user_group_settings:
+      - source_type: resource
+        ref: ug1
+    placement:
+      count: 1
 
 An example cluster resource with intent to remove:
 
