@@ -208,7 +208,8 @@ public:
     assemble_buffer_sparse_read(int) const override { return {}; }
   void assemble_buffer_read(bufferlist &, int) const override {}
   void init_read(OSDOp &, bool, int, bool) override {}
-  bool version_mismatch() const override { return false; }
+  bool legacy_version_mismatch() const override { return false; }
+  bool version_mismatch_v2() const override { return false; }
   void init_reference_sub_read() override {}
 
 private:
