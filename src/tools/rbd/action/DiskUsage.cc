@@ -103,7 +103,7 @@ void format_image_disk_usage(const std::string& name,
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
                          const char *from_snapname, bool exact, Formatter *f,
-                         bool merge_snap) {
+                         bool merge_snap, bool all_snap) {
   std::vector<librbd::image_spec_t> images;
   int r = rbd.list2(io_ctx, &images);
   if (r == -ENOENT) {
@@ -172,10 +172,12 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       continue;
     }
 
-    snap_list.erase(remove_if(snap_list.begin(),
-                              snap_list.end(),
-                              boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
-                    snap_list.end());
+    if (!all_snap) {
+      snap_list.erase(remove_if(snap_list.begin(),
+                                snap_list.end(),
+                                boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
+                      snap_list.end());
+    }
 
     bool found_from_snap = (from_snapname == nullptr);
     bool found_snap = (snapname == nullptr);
@@ -218,19 +220,19 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
-      librbd::Image snap_image;
-      r = rbd.open_read_only(io_ctx, snap_image, image_spec.name.c_str(),
-                             snap->name.c_str());
+      r = image.snap_set_by_id(snap->id);
       if (r < 0) {
-        std::cerr << "rbd: error opening snapshot " << image_spec.name << "@"
-                  << snap->name << ": " << cpp_strerror(r) << std::endl;
+        std::cerr << "rbd: error setting image "
+                  << image_spec.name << "@" << snap->name
+                  << " to snap id " << snap->id
+                  << ": " << cpp_strerror(r) << std::endl;
         goto out;
       }
 
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
 
-        r = get_image_disk_usage(image_spec.name, snap->name, last_snap_name, snap_image, exact, snap->size, &used_size);
+        r = get_image_disk_usage(image_spec.name, snap->name, last_snap_name, image, exact, snap->size, &used_size);
         if (r < 0) {
           goto out;
         }
@@ -259,6 +261,12 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     if (snapname == NULL) {
+      r = image.snap_set_by_id(CEPH_NOSNAP);
+      if (r < 0) {
+        std::cerr << "rbd: error setting image " << image_spec.name
+                 << " to head: " << cpp_strerror(r) << std::endl;
+        goto out;
+      }
       r = get_image_disk_usage(image_spec.name, "", last_snap_name, image, exact, info.size, &used_size);
       if (r < 0) {
         goto out;
@@ -316,7 +324,10 @@ void get_arguments(po::options_description *positional,
      "snapshot starting point")
     ("exact", po::bool_switch(), "compute exact disk usage (slow)")
     ("merge-snapshots", po::bool_switch(),
-     "merge snapshot sizes with its image");
+     "merge snapshot sizes with its image")
+    ("all-snapshots", po::bool_switch(),
+     "allow inspecting the disk usage of all snapshots, "
+     "like group/trash/mirror snapshots");
 }
 
 int execute(const po::variables_map &vm,
@@ -360,7 +371,8 @@ int execute(const po::variables_map &vm,
                     snap_name.empty() ? nullptr : snap_name.c_str(),
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                     vm["exact"].as<bool>(), formatter.get(),
-                    vm["merge-snapshots"].as<bool>());
+                    vm["merge-snapshots"].as<bool>(),
+                    vm["all-snapshots"].as<bool>());
   if (r < 0) {
     std::cerr << "rbd: du failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -368,7 +380,7 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"exact", "merge-snapshots"});
+Shell::SwitchArguments switched_arguments({"exact", "merge-snapshots", "all-snapshots"});
 Shell::Action action(
   {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot.",
   "", &get_arguments, &execute);
