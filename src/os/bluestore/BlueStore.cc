@@ -16226,7 +16226,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     // these operations implicity create the object
     bool create = false;
     if (op->op == Transaction::OP_TOUCH ||
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
         op->op == Transaction::OP_TOUCH_TEMP ||
 #endif
 	op->op == Transaction::OP_CREATE ||
@@ -16252,7 +16252,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     switch (op->op) {
     case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
     case Transaction::OP_TOUCH_TEMP:
 #endif
       r = _touch(txc, c, o);

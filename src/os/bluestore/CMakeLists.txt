@@ -40,3 +40,7 @@ if(WITH_BLUEFS)
   target_link_libraries(bluefs global)
   install(TARGETS bluefs DESTINATION lib)
 endif()
+
+if(WITH_CRIMSON)
+  target_compile_options(bluestore PRIVATE -DWITH_CRIMSON_OBJECTSTORE)
+endif()

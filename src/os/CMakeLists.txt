@@ -11,6 +11,10 @@ add_subdirectory(memstore)
 target_link_libraries(os
   PRIVATE memstore)
 
+if(WITH_CRIMSON)
+  target_compile_options(os PRIVATE -DWITH_CRIMSON_OBJECTSTORE)
+endif()
+
 if(WITH_BLUESTORE)
   add_subdirectory(bluestore)
   target_link_libraries(os

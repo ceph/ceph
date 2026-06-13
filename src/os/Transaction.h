@@ -153,7 +153,7 @@ public:
     OP_COLL_SET_BITS = 42, // cid, bits
 
     OP_MERGE_COLLECTION = 43, // cid, destination
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
     OP_TOUCH_TEMP = 44, // cid, temp_oid, target_oid
 #endif
   };
@@ -442,7 +442,7 @@ public:
       op->oid = om[op->oid];
       break;
 
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
     case OP_TOUCH_TEMP:
 #endif
     case OP_CLONERANGE2:
@@ -862,7 +862,7 @@ public:
     _op->oid = _get_object_id(oid);
     data.ops = data.ops + 1;
   }
-#ifdef WITH_CRIMSON
+#if defined(WITH_CRIMSON) || defined(WITH_CRIMSON_OBJECTSTORE)
   /**
    * touch_temp
    *
