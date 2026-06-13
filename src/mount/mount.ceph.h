@@ -26,6 +26,11 @@ extern "C" {
 
 #define CLUSTER_FSID_LEN        37
 
+enum {
+  CEPH_FLAG_BALANCE_READS =  0x0100,
+  CEPH_FLAG_LOCALIZE_READS = 0x2000,
+};
+
 void mount_ceph_debug(const char *fmt, ...);
 
 struct ceph_config_info {

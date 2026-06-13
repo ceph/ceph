@@ -1812,3 +1812,15 @@ options:
   min: 30
   services:
   - mds
+- name: mds_read_from_replica
+  type: str
+  level: advanced
+  desc: read from the nearest replica
+  long_desc: set read from replica preference - no/balance/localize
+  default: 'no'
+  enum_values:
+  - 'no'
+  - 'balance'
+  - 'localize'
+  services:
+  - mds
