@@ -15,7 +15,7 @@ from cephadm.inventory import (
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
-from cephadm.utils import SpecialHostLabels
+from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
     from typing import List
@@ -2301,9 +2301,9 @@ class TestCephadm(object):
     @mock.patch("cephadm.ssh.SSHManager._remote_connection")
     @mock.patch("cephadm.ssh.SSHManager._execute_command")
     @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
-    @mock.patch("cephadm.ssh.SSHManager._write_remote_file")
-    def test_etc_ceph(self, _write_file, check_execute_command, execute_command, remote_connection, cephadm_module):
-        _write_file.side_effect = async_side_effect(None)
+    @mock.patch("cephadm.serve.CephadmServe._deploy_file_via_cephadm", new_callable=mock.AsyncMock)
+    def test_etc_ceph(self, _deploy_file_via_cephadm, check_execute_command, execute_command, remote_connection, cephadm_module):
+        _deploy_file_via_cephadm.side_effect = async_side_effect(None)
         check_execute_command.side_effect = async_side_effect('')
         execute_command.side_effect = async_side_effect(('{}', '', 0))
         remote_connection.side_effect = async_side_effect(mock.Mock())
@@ -2320,11 +2320,26 @@ class TestCephadm(object):
 
             CephadmServe(cephadm_module)._write_all_client_files()
             # Make sure both ceph conf locations (default and per fsid) are called
-            _write_file.assert_has_calls([mock.call('test', '/etc/ceph/ceph.conf', b'',
-                                          0o644, 0, 0, None),
-                                         mock.call('test', '/var/lib/ceph/fsid/config/ceph.conf', b'',
-                                          0o644, 0, 0, None)]
-                                         )
+            _deploy_file_via_cephadm.assert_has_calls(
+                [
+                    mock.call(
+                        'test',
+                        '/etc/ceph/ceph.conf',
+                        b'',
+                        0o644,
+                        0,
+                        0,
+                    ),
+                    mock.call(
+                        'test',
+                        '/var/lib/ceph/fsid/config/ceph.conf',
+                        b'',
+                        0o644,
+                        0,
+                        0,
+                    ),
+                ],
+            )
             ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
             assert len(ceph_conf_files) == 2
             assert '/etc/ceph/ceph.conf' in ceph_conf_files
@@ -2333,12 +2348,26 @@ class TestCephadm(object):
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._write_all_client_files()
-            _write_file.assert_has_calls([mock.call('test',
-                                                    '/etc/ceph/ceph.conf',
-                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None),
-                                          mock.call('test',
-                                                    '/var/lib/ceph/fsid/config/ceph.conf',
-                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None)])
+            _deploy_file_via_cephadm.assert_has_calls(
+                [
+                    mock.call(
+                        'test',
+                        '/etc/ceph/ceph.conf',
+                        b'[mon]\nk=v\n',
+                        0o644,
+                        0,
+                        0,
+                    ),
+                    mock.call(
+                        'test',
+                        '/var/lib/ceph/fsid/config/ceph.conf',
+                        b'[mon]\nk=v\n',
+                        0o644,
+                        0,
+                        0,
+                    ),
+                ],
+            )
             # reload
             cephadm_module.cache.last_client_files = {}
             cephadm_module.cache.load()
@@ -2361,6 +2390,33 @@ class TestCephadm(object):
                 'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
             assert f1_before_digest != f1_after_digest
             assert f2_before_digest != f2_after_digest
+
+    @mock.patch('cephadm.ssh.SSHManager._deploy_cephadm_binary_via_invoker',
+                new_callable=mock.AsyncMock)
+    @mock.patch('cephadm.ssh.SSHManager._write_remote_file', new_callable=mock.AsyncMock)
+    def test_deploy_cephadm_binary_uses_write_remote_file_without_sudo_hardening(
+            self, _write_remote_file, _deploy_via_invoker, cephadm_module):
+        """Without sudo hardening, the mgr stages the cephadm binary via _write_remote_file."""
+        cephadm_module.sudo_hardening = False
+        cephadm_module.invoker_path = ''
+        cephadm_module.cephadm_binary_path = (
+            f'/var/lib/ceph/{cephadm_module._cluster_fsid}/cephadm.deadbeef')
+        fake_bin = b'#!/usr/bin/fake-cephadm\n'
+        cephadm_module._cephadm = fake_bin
+
+        _write_remote_file.side_effect = async_side_effect(None)
+        cephadm_module.wait_async(
+            CephadmServe(cephadm_module)._deploy_cephadm_binary('testhost'))
+
+        _write_remote_file.assert_called_once()
+        _write_remote_file.assert_called_with(
+            'testhost',
+            cephadm_module.cephadm_binary_path,
+            fake_bin,
+            addr=None,
+            mode=0o744,
+        )
+        _deploy_via_invoker.assert_not_called()
 
     @mock.patch("cephadm.inventory.HostCache.get_host_client_files")
     def test_dont_write_client_files_to_unreachable_hosts(self, _get_client_files, cephadm_module):
@@ -2389,6 +2445,20 @@ class TestCephadm(object):
         # having been raised
         CephadmServe(cephadm_module)._write_client_files({}, 'host2')
         CephadmServe(cephadm_module)._write_client_files({}, 'host3')
+
+    @mock.patch('cephadm.serve.CephadmServe._run_cephadm', new_callable=mock.AsyncMock)
+    def test_write_client_files_remove_calls_cephadm_remove_file(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = ([''], [''], 0)
+        cephadm_module.inventory.add_host(HostSpec('host1', '10.0.0.1'))
+        cephadm_module.cache.prime_empty_host('host1')
+        stale = '/var/lib/ceph/fsid/config/foo.keyring'
+        cephadm_module.cache.update_client_file('host1', stale, 'digest', 0o600, 0, 0)
+        CephadmServe(cephadm_module)._write_client_files({'host1': {}}, 'host1')
+        _run_cephadm.assert_called_once()
+        pos_args = _run_cephadm.call_args[0]
+        # Bound method mock: call_args do not include self.
+        assert pos_args[0:4] == ('host1', cephadmNoImage, 'remove-file', ['--path', stale])
+        assert stale not in cephadm_module.cache.get_host_client_files('host1')
 
     @mock.patch('cephadm.CephadmOrchestrator.mon_command')
     @mock.patch("cephadm.inventory.HostCache.get_host_client_files")

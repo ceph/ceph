@@ -3,7 +3,8 @@ from typing import Dict, List, TYPE_CHECKING
 from ceph.utils import datetime_now
 from .schedule import HostAssignment
 from ceph.deployment.service_spec import ServiceSpec, TunedProfileSpec
-from . import ssh
+from .serve import CephadmServe
+from .utils import cephadmNoImage
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -12,12 +13,32 @@ logger = logging.getLogger(__name__)
 
 SYSCTL_DIR = '/etc/sysctl.d'
 
-SYSCTL_SYSTEM_CMD = ssh.RemoteCommand(ssh.Executables.SYSCTL, ['--system'])
+SYSCTL_DIR_CEPHADM_CMD = ['_orch', 'sysctl-dir']
 
 
 class TunedProfileUtils():
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
+
+    def _sysctl_dir_list(self, host: str) -> str:
+        with self.mgr.async_timeout_handler(host, 'cephadm _orch sysctl-dir --list'):
+            out, _err, _code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                host,
+                cephadmNoImage,
+                SYSCTL_DIR_CEPHADM_CMD,
+                ['--list'],
+                log_output=self.mgr.log_refresh_metadata,
+            ))
+        return ''.join(out)
+
+    def _sysctl_dir_apply_system(self, host: str) -> None:
+        with self.mgr.async_timeout_handler(host, 'cephadm _orch sysctl-dir --apply-system'):
+            self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                host,
+                cephadmNoImage,
+                SYSCTL_DIR_CEPHADM_CMD,
+                ['--apply-system'],
+            ))
 
     def _profile_to_str(self, p: TunedProfileSpec) -> str:
         p_str = f'# created by cephadm\n# tuned profile "{p.profile_name}"\n\n'
@@ -72,8 +93,7 @@ class TunedProfileUtils():
         """
         if self.mgr.cache.is_host_unreachable(host):
             return
-        cmd = ssh.RemoteCommand(ssh.Executables.LS, [SYSCTL_DIR])
-        found_files = self.mgr.ssh.check_execute_command(host, cmd, log_command=self.mgr.log_refresh_metadata).split('\n')
+        found_files = self._sysctl_dir_list(host).split('\n')
         found_files = [s.strip() for s in found_files]
         profile_names: List[str] = sum([[*p] for p in profiles], [])  # extract all profiles names
         profile_names = list(set(profile_names))  # remove duplicates
@@ -84,11 +104,13 @@ class TunedProfileUtils():
                 continue
             if file not in expected_files:
                 logger.info(f'Removing stray tuned profile file {file}')
-                cmd = ssh.RemoteCommand(ssh.Executables.RM, ['-f', f'{SYSCTL_DIR}/{file}'])
-                self.mgr.ssh.check_execute_command(host, cmd)
+                path = f'{SYSCTL_DIR}/{file}'
+                with self.mgr.async_timeout_handler(host, f'cephadm remove-file ({path})'):
+                    self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                        host, cephadmNoImage, 'remove-file', ['--path', path]))
                 updated = True
         if updated:
-            self.mgr.ssh.check_execute_command(host, SYSCTL_SYSTEM_CMD)
+            self._sysctl_dir_apply_system(host)
 
     def _write_tuned_profiles(self, host: str, profiles: List[Dict[str, str]]) -> None:
         if self.mgr.cache.is_host_unreachable(host):
@@ -98,9 +120,13 @@ class TunedProfileUtils():
             for profile_name, content in p.items():
                 if self.mgr.cache.host_needs_tuned_profile_update(host, profile_name):
                     logger.info(f'Writing tuned profile {profile_name} to host {host}')
-                    profile_filename: str = f'{SYSCTL_DIR}/{profile_name}-cephadm-tuned-profile.conf'
-                    self.mgr.ssh.write_remote_file(host, profile_filename, content.encode('utf-8'))
+                    profile_filename: str = (
+                        f'{SYSCTL_DIR}/{profile_name}-cephadm-tuned-profile.conf')
+                    with self.mgr.async_timeout_handler(host, f'cephadm deploy-file ({profile_filename})'):
+                        self.mgr.wait_async(
+                            CephadmServe(self.mgr)._deploy_file_via_cephadm(
+                                host, profile_filename, content.encode('utf-8')))
                     updated = True
         if updated:
-            self.mgr.ssh.check_execute_command(host, SYSCTL_SYSTEM_CMD)
+            self._sysctl_dir_apply_system(host)
         self.mgr.cache.last_tuned_profile_update[host] = datetime_now()

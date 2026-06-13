@@ -24,6 +24,7 @@ def write_new(
     owner: Optional[Tuple[int, int]] = None,
     perms: Optional[int] = DEFAULT_MODE,
     encoding: Optional[str] = None,
+    binary: bool = False,
 ) -> Generator[IO, None, None]:
     """Write a new file in a robust manner, optionally specifying the owner,
     permissions, or encoding. This function takes care to never leave a file in
@@ -38,8 +39,9 @@ def write_new(
     open_kwargs: Dict[str, Any] = {}
     if encoding:
         open_kwargs['encoding'] = encoding
+    file_mode = 'wb' if binary else 'w'
     try:
-        with open(tempname, 'w', **open_kwargs) as fh:
+        with open(tempname, file_mode, **open_kwargs) as fh:
             yield fh
             fh.flush()
             os.fsync(fh.fileno())
