@@ -253,7 +253,17 @@ In order to use ``fio`` to test ``crimson-store-nbd``, perform the below steps.
 
 CBT
 ---
-We can use `cbt`_ for performance tests::
+We can use `cbt`_ for performance tests. Benchmark workloads are checked in under
+``src/test/crimson/cbt/`` as teuthology-style YAML files. Before ``run-cbt.sh``
+invokes CBT, ``t2c.py`` translates the teuthology ``tasks`` list into a
+CBT-ready configuration: it extracts the ``cbt`` task, fills in cluster paths
+(``ceph.conf``, ``ceph``/``rados`` binaries, PID directory), and writes the
+result to a temporary YAML file consumed by ``cbt.py``.
+
+Unit tests for the translator live in ``src/test/crimson/cbt/test_t2c.py`` and
+are registered with ``make check`` via ``add_ceph_test``.
+
+::
 
   $ git checkout main
   $ make crimson-osd
