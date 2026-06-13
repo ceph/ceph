@@ -135,6 +135,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Display search field inside tool header?
   @Input()
   searchField? = true;
+  // Limit toolbar search width (e.g. when a prefix filter is shown).
+  @Input()
+  compactSearchField? = false;
   // Display the table header?
   @Input()
   header? = true;
