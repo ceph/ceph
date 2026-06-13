@@ -82,6 +82,10 @@ describe('RoleFormComponent', () => {
       expect(component.mode).toBeUndefined();
     });
 
+    it('should set submit action to Create Role', () => {
+      expect(component.submitAction).toBe('Create Role');
+    });
+
     it('should submit', () => {
       const role: RoleFormModel = {
         name: 'role1',
@@ -136,6 +140,10 @@ describe('RoleFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBe('editing');
+    });
+
+    it('should set submit action to Save changes', () => {
+      expect(component.submitAction).toBe('Save changes');
     });
 
     it('should submit', () => {
