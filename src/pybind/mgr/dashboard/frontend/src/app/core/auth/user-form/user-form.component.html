@@ -43,6 +43,7 @@
       <div class="form-item">
         <cds-password-label labelInputID="password"
                             label="Password..."
+                            [cdRequiredField]="mode !== userFormMode.editing ? 'Password' : ''"
                             [invalid]="!userForm.controls.password.valid && userForm.controls.password.dirty"
                             [invalidText]="passwordError"
                             i18n>Password
@@ -77,6 +78,7 @@
       <div class="form-item">
         <cds-password-label labelInputID="confirmpassword"
                             label="Confirm password..."
+                            [cdRequiredField]="mode !== userFormMode.editing ? 'Confirm password' : ''"
                             [invalid]="!userForm.controls.confirmpassword.valid && userForm.controls.confirmpassword.dirty"
                             [invalidText]="confirmpasswordError"
                             i18n> Confirm password
@@ -170,9 +172,17 @@
                        [appendInline]="true"
                        [items]="allRoles"
                        itemValueKey="name"
+                       [cdRequiredField]="'Roles'"
+                       [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
+                       [invalidText]="rolesError"
                        i18n>
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
+        <ng-template #rolesError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('roles', formDir, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
       </div>
       <!-- Enabled -->
       <div class="form-item"
