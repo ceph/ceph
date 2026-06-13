@@ -707,6 +707,7 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
+  rgw::store::POSIXAccountDB* get_account_db() { return accountDB.get(); }
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }

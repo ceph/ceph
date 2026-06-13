@@ -230,6 +230,7 @@ enum GetAccount {
   MaxGroups,
   AccountMaxBuckets,
   MaxAccessKeys,
+  AccountAttrs,
 };
 
 enum GetUser {
@@ -391,6 +392,8 @@ static int list_account(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
   op.account.info.max_groups = sqlite3_column_int(stmt, MaxGroups);
   op.account.info.max_buckets = sqlite3_column_int(stmt, AccountMaxBuckets);
   op.account.info.max_access_keys = sqlite3_column_int(stmt, MaxAccessKeys);
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, AccountAttrs, op.account.account_attrs, sdb);
 
   return 0;
 }
@@ -1206,6 +1209,9 @@ int SQLInsertAccount::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.account.max_access_keys, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.account.info.max_access_keys, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.account.account_attrs, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.account.account_attrs, sdb);
 
 out:
   return rc;

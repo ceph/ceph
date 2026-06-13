@@ -5890,6 +5890,11 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
     return nullptr;
   }
 
+  if ((ret = driver->get_account_db()->Initialize("", -1)) < 0) {
+    ldout(cct, 0) << "Account DB initialization failed for tenant("<<tenant<<")" << dendl;
+    return nullptr;
+  }
+
   driver->set_context(cct);
 
   return driver;
