@@ -1356,7 +1356,7 @@ public:
     if (poolit->second.is_erasure()) {
       for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == *primary) {
-	  *out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
+	  *out = spg_t(pgid, shard_id_t(i));
 	  return true;
 	}
       }
