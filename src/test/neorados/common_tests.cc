@@ -73,3 +73,13 @@ asio::awaitable<void> NeoRadosECTest::clean_pool() {
 			       asio::use_awaitable);
   co_return;
 }
+
+asio::awaitable<uint64_t> NeoRadosFastECTest::create_pool() {
+  co_return co_await ::create_fast_ec_pool(rados(), pool_name(),
+					    asio::use_awaitable);
+}
+
+asio::awaitable<void> NeoRadosFastECTest::clean_pool() {
+  co_return co_await ::delete_fast_ec_pool(rados(), pool().get_pool(),
+					    pool_name(), asio::use_awaitable);
+}
