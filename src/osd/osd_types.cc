@@ -1584,7 +1584,8 @@ ostream& operator<<(ostream& out, const pool_opts_t& opts)
 
 // -- pg_pool_t --
 
-void pg_pool_t::dump(Formatter *f) const
+void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
+                     bool show_rule_names) const
 {
   f->dump_stream("create_time") << get_create_time();
   f->dump_unsigned("flags", get_flags());
@@ -1592,7 +1593,11 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
-  f->dump_int("crush_rule", get_crush_rule());
+  const int rule_id = get_crush_rule();
+  f->dump_int("crush_rule", rule_id);
+  if (show_rule_names && crush && crush->rule_exists(rule_id)) {
+    f->dump_string("crush_rule_name", crush->get_rule_name(rule_id));
+  }
   f->dump_int("peering_crush_bucket_count", peering_crush_bucket_count);
   f->dump_int("peering_crush_bucket_target", peering_crush_bucket_target);
   f->dump_int("peering_crush_bucket_barrier", peering_crush_bucket_barrier);
@@ -2448,18 +2453,25 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   return o;
 }
 
-ostream& operator<<(ostream& out, const pg_pool_t& p)
+void pg_pool_t::print(ostream& out, const CrushWrapper *crush) const
 {
+  const pg_pool_t& p = *this;
   out << p.get_type_name();
   if (p.get_type_name() == "erasure") {
     out << " profile " << p.erasure_code_profile;
     out << " ec_data_shard_count " << p.ec_data_shard_count.value_or(0);
     out << " ec_coding_shard_count " << p.ec_coding_shard_count.value_or(0);
   }
+  const int rule_id = p.get_crush_rule();
   out << " size " << p.get_size()
       << " min_size " << p.get_min_size()
-      << " crush_rule " << p.get_crush_rule()
-      << " object_hash " << p.get_object_hash_name()
+      << " crush_rule ";
+  if (crush && crush->rule_exists(rule_id)) {
+    out << crush->get_rule_name(rule_id);
+  } else {
+    out << rule_id;
+  }
+  out << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num();
   if (p.get_pg_num_target() != p.get_pg_num()) {
@@ -2529,6 +2541,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       out << it->first;
     }
   }
+}
+
+ostream& operator<<(ostream& out, const pg_pool_t& p)
+{
+  p.print(out);
   return out;
 }
 
