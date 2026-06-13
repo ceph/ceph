@@ -82,10 +82,16 @@ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_co
 
 #ifdef WITH_RADOSGW_RADOS
 std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
+make_neorados(
+    CephContext* cct,
+    boost::asio::io_context& io_context,
+    std::optional<std::string> objecter_admin_socket_name)
+{
   try {
     auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
                                                    io_context,
+                                                   std::move(
+                                                       objecter_admin_socket_name),
                                                    ceph::async::use_blocked);
     return neorados;
   } catch (const std::exception& e) {
