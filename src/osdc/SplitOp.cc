@@ -206,7 +206,8 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       break;
     }
   }
-  bool primary_required = count > 1 || orig_op->objver || has_non_read_ops;
+  bool primary_required = orig_op->objver || has_non_read_ops ||
+                          (count > 1 && !supports_internal_versions_versioning);
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -426,22 +427,57 @@ int SplitOp::assemble_rc() const {
  * @return true if versions mismatch, false if consistent
  */
 bool ECSplitOp::version_mismatch() const {
-  // First we need to decode the version list from the reference.
-  ceph_assert(reference_sub_read != -1);
-  ceph_assert(sub_reads.at(reference_sub_read).internal_version.has_value());
+  // Find the newest shard to use as reference.
+  // Legacy mode always uses the primary as reference.
+
+  if (!supports_internal_versions_versioning) {
+    // Without internal versions versioning, we use the primary as the newest
+    // We need to guarentee we have the primary to do this
+    ceph_assert(reference_sub_read != -1);
+    ceph_assert(sub_reads.at(reference_sub_read).internal_version.has_value());
+  }
 
   std::map<shard_id_t, eversion_t> ref_vers;
-  decode(ref_vers, sub_reads.at(reference_sub_read).internal_version->bl);
+  int ref_shard_index = -1;
+  ceph_assert(!sub_reads.empty());
+  if (!supports_internal_versions_versioning) {
+    decode(ref_vers, sub_reads.at(reference_sub_read).internal_version->bl);
+  } else {
+    std::optional<eversion_t> latest_version;
+    for (auto & [shard_index, sub_read] : sub_reads) {
+      shard_id_t shard_id(shard_index);
+      std::map<shard_id_t, eversion_t> shard_versions =
+        decode_internal_versions(sub_read.internal_version->bl,
+                                 supports_internal_versions_versioning);
+
+      ceph_assert(shard_versions.contains(shard_id));
+
+      if (!latest_version || latest_version < shard_versions.at(shard_id)) {
+        latest_version = shard_versions.at(shard_id);
+        ref_vers = shard_versions;
+        ref_shard_index = shard_index;
+      }
+    }
+
+    ceph_assert(latest_version);
+  }
 
   for (auto & [shard_index, sub_read] : sub_reads) {
       // Reference shard can't be different to itself.
-    if (shard_index == reference_sub_read) {
-      continue;
+    if (supports_internal_versions_versioning) {
+      if (shard_index == ref_shard_index) {
+        continue;
+      }
+    } else {
+      if (shard_index == reference_sub_read) {
+        continue;
+      }
     }
 
     ceph_assert(sub_read.internal_version.has_value());
-    std::map<shard_id_t, eversion_t> shard_vers;
-    decode(shard_vers, sub_read.internal_version->bl);
+    std::map<shard_id_t, eversion_t> shard_vers =
+      decode_internal_versions(sub_read.internal_version->bl,
+                               supports_internal_versions_versioning);
 
     shard_id_t shard(shard_index);
     if (!ref_vers.contains(shard)) {
@@ -480,8 +516,9 @@ bool ReplicaSplitOp::version_mismatch() const {
 
   for (const auto& [acting_index, sub_read] : sub_reads) {
     ceph_assert(sub_read.internal_version.has_value());
-    std::map<shard_id_t, eversion_t> shard_vers;
-    decode(shard_vers, sub_read.internal_version->bl);
+    std::map<shard_id_t, eversion_t> shard_vers =
+      decode_internal_versions(sub_read.internal_version->bl,
+                               supports_internal_versions_versioning);
 
     if (!shard_vers.contains(NO_SHARD)) {
       ldout(cct, DBG_LVL) << __func__ << ": "
@@ -497,6 +534,28 @@ bool ReplicaSplitOp::version_mismatch() const {
   }
 
   return false;
+}
+
+/**
+ * @brief Helper function to decode internal versions from a bufferlist.
+ *
+ * Decodes internal version information from the provided buffer, selecting between
+ * versioned and legacy formats based on cluster feature support.
+ *
+ * @param bl Buffer containing encoded version data
+ * @param use_versioned_format True for versioned format, false for legacy format
+ * @return Map of shard IDs to their versions
+ */
+std::map<shard_id_t, eversion_t> SplitOp::decode_internal_versions(
+    const bufferlist& bl,
+    bool use_versioned_format) const {
+  internal_versions_response_t response;
+  if (use_versioned_format) {
+    decode(response, bl);
+  } else {
+    internal_versions_response_t::decode_legacy(response, bl);
+  }
+  return response.shard_versions;
 }
 
 /**
@@ -621,10 +680,12 @@ void SplitOp::protect_torn_reads() {
   // guarantee this, so instead read the version along with the data and if they
   // are different, then repeat the read to the primary. Such version mismatches
   // should be rare enough that this is not a significant performance impact.
+  
+  uint8_t version = supports_internal_versions_versioning ? 1 : 0;
   for (auto&& [index, sr] : sub_reads) {
     auto &internal_version = sr.internal_version;
     internal_version = std::make_optional<InternalVersion>();
-    sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl);
+    sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl, version);
   }
 }
 

@@ -1366,6 +1366,13 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
   }
 
+  // Code exists to support both methods of version so relaxed memory ordering
+  // is sufficient for this change here.
+  supports_internal_versions_versioning.store(
+      HAVE_FEATURE(osdmap->get_up_osd_features(),
+                   INTERVAL_VERSIONS_VERSIONING),
+      std::memory_order_relaxed);
+
   // make sure need_resend targets reflect latest map
   for (auto p = need_resend.begin(); p != need_resend.end(); ) {
     Op *op = p->second;
