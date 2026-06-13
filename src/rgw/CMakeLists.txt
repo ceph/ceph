@@ -534,6 +534,7 @@ target_link_libraries(radosgw PRIVATE
   ${rgw_libs}
   rgw_schedulers
   kmip
+  heap_profiler
   ${ALLOC_LIBS})
 
 install(TARGETS radosgw DESTINATION bin)
@@ -644,6 +645,7 @@ target_link_libraries(rgw
   ${rgw_libs}
   rgw_schedulers
   kmip
+  heap_profiler
   librados
   cls_rgw_client
   cls_otp_client

@@ -10,6 +10,7 @@ tasks:
     clients:
        client.0:
            - rgw/test_rgw_orphan_list.sh
+           - rgw/test_rgw_heap_profiler.sh
 overrides:
   ceph:
     conf:
