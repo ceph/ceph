@@ -626,6 +626,17 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   return 0;
 }
 
+static int list_user_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWUserInfo dummy;
+  dummy.user_id.id = std::to_string(sqlite3_column_int(stmt, 0));
+  op.user.list_entries.push_back(dummy);
+
+  return 0;
+}
+
 static int list_bucket(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
@@ -829,6 +840,8 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertGroupUser = make_shared<SQLInsertGroupUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveGroupUser = make_shared<SQLRemoveGroupUser>(&this->db, this->getDBname(), cct);
   dbops.ListGroupUsers = make_shared<SQLListGroupUsers>(&this->db, this->getDBname(), cct);
+  dbops.GetAccountUser = make_shared<SQLGetAccountUser>(&this->db, this->getDBname(), cct);
+  dbops.ListAccountUsers = make_shared<SQLListAccountUsers>(&this->db, this->getDBname(), cct);
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
   dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
@@ -2293,6 +2306,85 @@ out:
   return ret;
 }
 
+int SQLGetAccountUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetAccountUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetAccountUser");
+out:
+  return ret;
+}
+
+int SQLGetAccountUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLGetAccountUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_user);
+out:
+  return ret;
+}
+
+int SQLListAccountUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListAccountUsers - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "count") {
+    SQL_PREPARE(dpp, p_params, sdb, count_stmt, ret, "PrepareListAccountUsers");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListAccountUsers");
+  }
+out:
+  return ret;
+}
+
+int SQLListAccountUsers::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "count") {
+    SQL_BIND_INDEX(dpp, count_stmt, index, p_params.op.user.account_id, sdb);
+    SQL_BIND_TEXT(dpp, count_stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLListAccountUsers::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "count") {
+    SQL_EXECUTE(dpp, params, count_stmt, list_user_count);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_user);
+  }
+out:
+  return ret;
+}
+
 int SQLInsertUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int ret = -1;
@@ -2397,6 +2489,9 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.mfa_ids, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);

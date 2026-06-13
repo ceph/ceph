@@ -1778,6 +1778,62 @@ TEST_F(DBStoreTest, RemoveGroup) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, InsertAccountUser) {
+  struct DBOpParams params = GlobalParams;
+  params.op.user.uinfo.user_id.id = "acct-user1";
+  params.op.user.uinfo.display_name = "AcctUser1";
+  params.op.user.uinfo.user_email = "acctuser1@test.com";
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  RGWAccessKey key("acctkey1", "acctsecret1");
+  params.op.user.uinfo.access_keys["acctkey1"] = key;
+
+  ret = db->ProcessOp(dpp, "InsertUser", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetAccountUserByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  params.op.user.uinfo.display_name = "AcctUser1";
+
+  ret = db->ProcessOp(dpp, "GetAccountUser", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.user.uinfo.user_id.id, "acct-user1");
+  ASSERT_EQ(params.op.user.uinfo.user_email, "acctuser1@test.com");
+}
+
+TEST_F(DBStoreTest, ListAccountUsers) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.user.uinfo.user_id.id = "acct-user2";
+  params2.op.user.uinfo.display_name = "AcctUser2";
+  params2.op.user.uinfo.user_email = "acctuser2@test.com";
+  params2.op.user.uinfo.account_id = "ACCT00000000000000099";
+  RGWAccessKey key("acctkey2", "acctsecret2");
+  params2.op.user.uinfo.access_keys["acctkey2"] = key;
+  ret = db->ProcessOp(dpp, "InsertUser", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  list_params.op.user.uinfo.display_name = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListAccountUsers", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.user.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, CountAccountUsers) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "count";
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+
+  ret = db->ProcessOp(dpp, "ListAccountUsers", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.user.list_entries.size(), 1u);
+  ASSERT_EQ(std::stoi(params.op.user.list_entries.front().user_id.id), 2);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;
