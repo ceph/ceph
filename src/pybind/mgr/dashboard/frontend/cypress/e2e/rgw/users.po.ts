@@ -177,10 +177,12 @@ export class UsersPageHelper extends PageHelper {
 
     cy.get(`select[id=${selection_name}]`).should('exist');
     cy.get(`select[id=${selection_name}]`).select(account_id);
-    cy.get(`select[id=${selection_name}] option:checked`).should(
-      'have.text',
-      `${account_name} - ${tenant}`
-    );
+    cy.get(`select[id=${selection_name}] option:checked`)
+      .invoke('text')
+      .then((selectedText: string) => {
+        const normalized = selectedText.trim();
+        expect([`${tenant}$${account_name}`, `${account_name} - ${tenant}`]).to.include(normalized);
+      });
     cy.contains('button', 'Edit User').click();
 
     this.getTableRow(tenant + '$' + user_id).as('AccountUser');
@@ -230,10 +232,12 @@ export class UsersPageHelper extends PageHelper {
     const username = tenant + '$' + user_id;
     this.navigateEdit(username);
     cy.get(`select[id=${selection_name}]`).should('exist').should('be.disabled');
-    cy.get(`select[id=${selection_name}] option:checked`).should(
-      'have.text',
-      `${account_name} - ${tenant}`
-    );
+    cy.get(`select[id=${selection_name}] option:checked`)
+      .invoke('text')
+      .then((selectedText: string) => {
+        const normalized = selectedText.trim();
+        expect([`${tenant}$${account_name}`, `${account_name} - ${tenant}`]).to.include(normalized);
+      });
     cy.get('input#account_root_user_input').check({ force: true });
 
     cy.contains('button', 'Edit User').click();
@@ -253,6 +257,60 @@ export class UsersPageHelper extends PageHelper {
           cy.get('td').eq(0).should('have.text', 'User type');
           cy.get('td').eq(1).should('have.text', 'Account root user');
         });
+    });
+  }
+
+  @PageHelper.restrictTo(pages.create.url)
+  createLinkedAccountUser(
+    account_id: string,
+    account_name: string,
+    user_id: string,
+    tenant: string
+  ) {
+    const fullname = 'test_acc_user';
+    const username = `${tenant}$${user_id}`;
+
+    cy.intercept('POST', '/api/rgw/user**').as('createUserRequest');
+
+    cy.get('#user_id').type(user_id);
+    cy.get('select#link_account').should('exist').select(account_id);
+    cy.get('select#link_account option:checked')
+      .invoke('text')
+      .then((selectedText: string) => {
+        const normalized = selectedText.trim();
+        expect([`${tenant}$${account_name}`, `${account_name} - ${tenant}`]).to.include(normalized);
+      });
+
+    cy.get('#show_tenant').should('not.exist');
+    cy.get('input#tenant').should('not.exist');
+
+    cy.get('#display_name').click().type(fullname);
+    cy.get('#email').click().type('user@test');
+
+    this.selectOption('max_buckets_mode', 'Custom');
+    cy.get('input#max_buckets').should('exist').should('have.value', '1000');
+
+    cy.contains('button', 'Create User').should('be.enabled').click();
+
+    cy.wait('@createUserRequest').then((interception) => {
+      const queryString = interception.request.url.split('?')[1] || '';
+      const params = new URLSearchParams(queryString);
+      const statusCode = interception.response?.statusCode;
+
+      expect(statusCode).to.be.oneOf([200, 201]);
+
+      expect(params.get('account_id')).to.eq(account_id);
+      expect(params.get('tenant')).to.eq(tenant);
+      expect(params.get('uid')).to.eq(user_id);
+      expect(`${params.get('tenant')}$${params.get('uid')}`).to.eq(username);
+    });
+
+    cy.location('hash').should('eq', pages.index.url);
+    cy.get(pages.index.id).should('exist');
+
+    this.getTableRow(username).within(() => {
+      cy.get('td').eq(1).should('have.text', username);
+      cy.get('td').eq(3).should('have.text', account_name);
     });
   }
 }

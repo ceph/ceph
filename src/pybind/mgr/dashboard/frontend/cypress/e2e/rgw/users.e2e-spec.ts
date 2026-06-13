@@ -96,4 +96,50 @@ describe('RGW users page', () => {
       accounts.delete(account.name, null, null, true, false, false, false);
     });
   });
+
+  describe('create user linked to tenanted account test', () => {
+    const account = {
+      name: `test_account`,
+      email: `test@test`,
+      tenant: `tenanted_acc`
+    };
+    const user_id = `tenanted_account_user`;
+
+    it('should create user linked to account in create form and pass tenant', () => {
+      accounts.navigateTo();
+
+      cy.get('cd-table').then(($table) => {
+        const hasExistingAccount = $table
+          .find('tbody tr td')
+          .toArray()
+          .some((cell) => cell.textContent?.trim() === account.name);
+
+        if (hasExistingAccount) {
+          accounts.delete(account.name, null, null, true, false, false, false);
+          accounts.navigateTo();
+        }
+      });
+
+      accounts.navigateTo('create');
+      accounts.create(account);
+
+      accounts.navigateTo();
+      accounts
+        .getTableRow(account.name)
+        .find('td')
+        .eq(3)
+        .invoke('text')
+        .then((account_id: string) => {
+          const trimmedAccountId = account_id.trim();
+          users.navigateTo();
+          users.navigateTo('create');
+          users.createLinkedAccountUser(trimmedAccountId, account.name, user_id, account.tenant);
+        });
+
+      users.navigateTo();
+      users.delete(`${account.tenant}$${user_id}`, null, null, true, false, false, true);
+      accounts.navigateTo();
+      accounts.delete(account.name, null, null, true, false, false, false);
+    });
+  });
 });
