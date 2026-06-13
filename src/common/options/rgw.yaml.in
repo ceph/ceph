@@ -3688,6 +3688,32 @@ options:
   - rgw_dynamic_resharding
   - rgw_max_objs_per_shard
   min: 1
+- name: rgw_create_bucket_max_shards
+  type: uint
+  level: advanced
+  desc: Maximum shard count allowed in a CreateBucket request
+  long_desc: This is the maximum number of bucket index shards that a CreateBucket
+    request may set via BucketIndex/NumShards. A value of 0 means unlimited.
+  default: 1999
+  services:
+  - rgw
+  see_also:
+  - rgw_max_dynamic_shards
+  min: 0
+- name: rgw_dynamic_resharding_work_time
+  type: str
+  level: advanced
+  desc: Dynamic resharding allowed work time
+  long_desc: Local time window in which the dynamic resharding maintenance thread
+    can work. It expects 24-hour time notation. For example, "00:00-06:00"
+    allows dynamic resharding work from midnight to 06:00 local time.
+  default: 00:00-23:59
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_max_dynamic_shards
+  - rgw_reshard_thread_interval
 - name: rgw_reshard_thread_interval
   type: uint
   level: advanced

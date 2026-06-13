@@ -59,6 +59,15 @@ Request Entities
 +-------------------------------+-----------+-----------------------------------------------------------------+
 | ``LocationConstraint``        | String    | A zonegroup API name, with optional :ref:`s3_bucket_placement`. |
 +-------------------------------+-----------+-----------------------------------------------------------------+
+| ``BucketIndex``               | Container | Ceph RGW extension to customize bucket index layout.            |
++-------------------------------+-----------+-----------------------------------------------------------------+
+| ``BucketIndex/Type``          | String    | Bucket index type: ``Normal`` or ``Indexless``.                |
++-------------------------------+-----------+-----------------------------------------------------------------+
+| ``BucketIndex/NumShards``     | Integer   | Initial shard count for ``Normal`` bucket index type; value     |
+|                               |           | must be greater than ``0``. Limited by                          |
+|                               |           | :confval:`rgw_create_bucket_max_shards` (if that config is      |
+|                               |           | ``0``, no upper limit is enforced).                             |
++-------------------------------+-----------+-----------------------------------------------------------------+
 
 
 HTTP Response

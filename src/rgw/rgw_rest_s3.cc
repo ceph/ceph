@@ -2774,8 +2774,8 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
           s->err.message = "NumShards must be greater than 0";
           return -EINVAL;
         }
-        const auto limit = s->cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards");
-        if (*val > limit) {
+        const auto limit = s->cct->_conf.get_val<uint64_t>("rgw_create_bucket_max_shards");
+        if (limit > 0 && *val > limit) {
           s->err.message = fmt::format("NumShards cannot exceed {}", limit);
           return -EINVAL;
         }

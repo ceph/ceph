@@ -56,6 +56,7 @@ Configuration
 .. confval:: rgw_max_dynamic_shards
 .. confval:: rgw_dynamic_resharding_may_reduce
 .. confval:: rgw_dynamic_resharding_reduction_wait
+.. confval:: rgw_dynamic_resharding_work_time
 .. confval:: rgw_reshard_bucket_lock_duration
 .. confval:: rgw_reshard_thread_interval
 .. confval:: rgw_reshard_num_logs
@@ -187,6 +188,64 @@ too low, for example if they expect the number of objects to increase
 in the future. This command allows administrators to set a per-bucket
 minimum. This does not, however, prevent administrators from manually
 resharding to a lower number of shards.
+
+Runtime Toggle
+---------------
+
+To temporarily disable dynamic resharding (without restart):
+
+.. code-block:: bash
+
+   # Capture current settings for later restoration
+   ORIGINAL_MAX_SHARDS=$(ceph config get client.rgw rgw_max_dynamic_shards)
+   ORIGINAL_MAY_REDUCE=$(ceph config get client.rgw rgw_dynamic_resharding_may_reduce)
+   
+   # Disable dynamic resharding
+   ceph config set client.rgw rgw_dynamic_resharding_may_reduce false
+   ceph config set client.rgw rgw_max_dynamic_shards 1
+
+To re-enable dynamic resharding with original settings:
+
+.. code-block:: bash
+
+   # Restore original settings
+   ceph config set client.rgw rgw_max_dynamic_shards "$ORIGINAL_MAX_SHARDS"
+   ceph config set client.rgw rgw_dynamic_resharding_may_reduce "$ORIGINAL_MAY_REDUCE"
+
+Dynamic Resharding Work Time Window
+-----------------------------------
+
+The :confval:`rgw_dynamic_resharding_work_time` option controls when the
+dynamic resharding maintenance thread is allowed to process resharding work.
+This lets administrators confine automatic resharding activity to a preferred
+local-time window.
+
+Format
+~~~~~~
+
+Set this option as a local-time range in 24-hour format:
+
+::
+
+    HH:MM-HH:MM
+
+For example:
+
+- ``00:00-06:00`` allows dynamic resharding from midnight to 06:00.
+- ``22:00-23:59`` allows dynamic resharding late at night.
+- ``00:00-23:59`` allows dynamic resharding all day (default).
+
+Behavior
+~~~~~~~~
+
+- Inside the configured time window, the maintenance thread can process
+   queued dynamic resharding work.
+- Outside the window, queued work remains pending until the next allowed
+   period.
+
+This option applies to automatic dynamic resharding maintenance activity,
+and is useful when operators want to avoid background resharding impact
+during peak client workloads.
 
 Troubleshooting
 ===============
