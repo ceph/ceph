@@ -674,6 +674,7 @@ private:
   uint8_t salt[AES_256_GCM_SALT_SIZE];
   bool salt_initialized = false;
   uint32_t part_number_ = 0;  // For multipart: ensures unique IVs across parts
+  bool part_salt_applied_ = false;
   std::once_flag gcm_accel_init_once;
   CryptoAccelRef gcm_accel;
 
@@ -731,27 +732,22 @@ public:
     return salt_initialized;
   }
 
-  /**
-   * Set part number for multipart IV derivation and key derivation (SSE-C).
-   * Must be called before encrypt/decrypt for multipart uploads.
-   *
-   * For SSE-C mode (has_base_key=true): also re-derives the part-specific key
-   * from base_key, enabling correct decryption when switching between parts
-   * during multipart GET operations.
+  /*
+   * For a multipart part, re-derive the part key from base_key with the salt.
+   * has_base_key holds for all GCM modes.
    */
-  void set_part_number(uint32_t part_number) override {
+  void set_part_number(uint32_t part_number,
+                       std::string_view part_salt = {}) override {
     this->part_number_ = part_number;
+    this->part_salt_applied_ = !part_salt.empty();
 
-    // For SSE-C mode, also derive the correct part key
     if (has_base_key && part_number > 0) {
-      // Restore base key, then derive part key
       memcpy(this->key, this->base_key, AES_256_KEYSIZE);
-      derive_part_key(part_number);
+      derive_part_key(part_number, part_salt);
     } else if (has_base_key && part_number == 0) {
       // Part 0 means single-part or init - use base key directly
       memcpy(this->key, this->base_key, AES_256_KEYSIZE);
     }
-    // For non-SSE-C modes (has_base_key=false), only IV derivation uses part_number
   }
 
   /**
@@ -845,16 +841,12 @@ public:
     return true;
   }
 
-  /**
-   * Derive part-specific key for multipart uploads.
-   * This prevents part reordering/swapping attacks.
-   *
-   * Formula: PartKey = HMAC-SHA256(ObjectKey, part_number)
-   *
-   * @param part_number Part number (1-based, as per S3 multipart API)
-   * @return true on success
+  /*
+   * PartKey = HMAC-SHA256(ObjectKey, BE32(part_number) || part_salt).
+   * Binds the key to the part number, and with a non-empty salt to the upload
+   * so re-uploading a part can't reuse (key, IV).
    */
-  bool derive_part_key(uint32_t part_number) {
+  bool derive_part_key(uint32_t part_number, std::string_view part_salt = {}) {
     // Encode part number as big-endian 4 bytes
     uint8_t part_bytes[4];
     part_bytes[0] = (part_number >> 24) & 0xFF;
@@ -867,6 +859,9 @@ public:
     try {
       ceph::crypto::HMACSHA256 hmac(this->key, AES_256_KEYSIZE);
       hmac.Update(part_bytes, 4);
+      if (!part_salt.empty()) {
+        hmac.Update(reinterpret_cast<const uint8_t*>(part_salt.data()), part_salt.size());
+      }
       hmac.Final(derived);
     } catch (const ceph::crypto::DigestException& e) {
       ldpp_dout(dpp, 0) << "ERROR: derive_part_key: HMAC failed: " << e.what() << dendl;
@@ -1066,6 +1061,18 @@ public:
                optional_yield y) override
   {
     output.clear();
+
+    // write-path nonce-uniqueness guards: fresh per-part salt + chunk-aligned offset
+    if (part_number_ > 0 && !part_salt_applied_) {
+      ldpp_dout(dpp, 0) << "GCM: multipart part " << part_number_
+                        << " missing per-part salt; refusing to encrypt" << dendl;
+      return false;
+    }
+    if (stream_offset % static_cast<off_t>(CHUNK_SIZE) != 0) {
+      ldpp_dout(dpp, 0) << "GCM: stream_offset " << stream_offset
+                        << " not chunk-aligned (" << CHUNK_SIZE << ")" << dendl;
+      return false;
+    }
 
     // Calculate output size: each CHUNK_SIZE plaintext becomes CHUNK_SIZE + GCM_TAG_SIZE
     size_t num_full_chunks = size / CHUNK_SIZE;
@@ -1397,7 +1404,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
                                                std::vector<size_t> parts_len,
-                                               std::vector<uint32_t> part_nums,
+                                               std::vector<std::pair<uint32_t, std::string>> part_keys,
                                                off_t encrypted_total_size,
                                                bool has_compression,
                                                optional_yield y)
@@ -1415,38 +1422,38 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
     cache(),
     y(y),
     parts_len(std::move(parts_len)),
-    part_nums(std::move(part_nums)),
+    part_keys(std::move(part_keys)),
     current_part_num(0)
 {
   block_size = this->crypt->get_block_size();
   encrypted_block_size = this->crypt->get_encrypted_block_size();
 
   /**
-   * Sanity check: when BOTH part_nums and parts_len are populated, they must
+   * Sanity check: when BOTH part_keys and parts_len are populated, they must
    * match in size. A mismatch indicates data corruption or a bug.
    *
    * When parts_len is empty (e.g., GET ?partNumber=N where CRYPT_PARTS is
    * intentionally skipped and the part object has no manifest), we can only
-   * trust a single fallback part number.
+   * trust a single fallback part.
    */
-  if (!this->part_nums.empty() && !this->parts_len.empty() &&
-      this->part_nums.size() != this->parts_len.size()) {
-    ldpp_dout(dpp, 0) << "ERROR: part_nums.size()=" << this->part_nums.size()
+  if (!this->part_keys.empty() && !this->parts_len.empty() &&
+      this->part_keys.size() != this->parts_len.size()) {
+    ldpp_dout(dpp, 0) << "ERROR: part_keys.size()=" << this->part_keys.size()
                       << " != parts_len.size()=" << this->parts_len.size()
                       << " - possible data corruption" << dendl;
-    this->part_nums.clear();
+    this->part_keys.clear();
   }
-  if (this->parts_len.empty() && this->part_nums.size() > 1) {
-    ldpp_dout(dpp, 0) << "ERROR: part_nums.size()=" << this->part_nums.size()
+  if (this->parts_len.empty() && this->part_keys.size() > 1) {
+    ldpp_dout(dpp, 0) << "ERROR: part_keys.size()=" << this->part_keys.size()
                       << " but parts_len is empty - cannot map part boundaries"
                       << dendl;
-    this->part_nums.clear();
+    this->part_keys.clear();
   }
 
   // Initialize with first part's key if multipart
-  if (!this->part_nums.empty()) {
-    current_part_num = this->part_nums[0];
-    this->crypt->set_part_number(current_part_num);
+  if (!this->part_keys.empty()) {
+    current_part_num = this->part_keys[0].first;
+    this->crypt->set_part_number(current_part_num, this->part_keys[0].second);
   }
 }
 
@@ -1551,15 +1558,17 @@ int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size
 int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) {
   size_t enc_part_ofs = enc_ofs;
   size_t plain_part_ofs = ofs;
-  const bool is_multipart = !part_nums.empty();
+  const bool is_multipart = !part_keys.empty();
   uint32_t part_idx = 0;
   int res = 0;
 
   for (size_t part : parts_len) {
-    // Get actual S3 part number from attribute (not calculated!)
+    // Get actual S3 part number + salt from the attribute (not calculated!)
     uint32_t this_part_num = 0;
-    if (is_multipart && part_idx < part_nums.size()) {
-      this_part_num = part_nums[part_idx];
+    std::string_view this_salt;
+    if (is_multipart && part_idx < part_keys.size()) {
+      this_part_num = part_keys[part_idx].first;
+      this_salt = part_keys[part_idx].second;
     }
 
     if (enc_part_ofs >= part) {
@@ -1571,7 +1580,7 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
       // Ensure cipher has correct part number
       if (is_multipart && current_part_num != this_part_num) {
         current_part_num = this_part_num;
-        crypt->set_part_number(current_part_num);
+        crypt->set_part_number(current_part_num, this_salt);
       }
 
       // Data crosses part boundary - process up to boundary
@@ -1584,12 +1593,14 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
       // Move to next part
       part_idx++;
       uint32_t next_part_num = 0;
-      if (is_multipart && part_idx < part_nums.size()) {
-        next_part_num = part_nums[part_idx];
+      std::string_view next_salt;
+      if (is_multipart && part_idx < part_keys.size()) {
+        next_part_num = part_keys[part_idx].first;
+        next_salt = part_keys[part_idx].second;
       }
       if (is_multipart && part_idx < parts_len.size() && current_part_num != next_part_num) {
         current_part_num = next_part_num;
-        crypt->set_part_number(current_part_num);
+        crypt->set_part_number(current_part_num, next_salt);
       }
 
       enc_part_ofs = 0;
@@ -1598,7 +1609,7 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
       // Ensure cipher has correct part number
       if (is_multipart && current_part_num != this_part_num) {
         current_part_num = this_part_num;
-        crypt->set_part_number(current_part_num);
+        crypt->set_part_number(current_part_num, this_salt);
       }
       break;
     }
