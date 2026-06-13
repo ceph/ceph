@@ -184,6 +184,7 @@ struct DBOpAccountPrepareInfo {
   static constexpr const char* max_groups = ":max_groups";
   static constexpr const char* max_buckets = ":max_buckets";
   static constexpr const char* max_access_keys = ":max_access_keys";
+  static constexpr const char* account_attrs = ":account_attrs";
 };
 
 struct DBOpUserPrepareInfo {
@@ -434,6 +435,7 @@ class DBOp {
       MaxGroups INTEGER ,	\
       MaxBuckets INTEGER ,	\
       MaxAccessKeys INTEGER ,	\
+      AccountAttrs BLOB ,	\
       PRIMARY KEY (AccountID) \n);";
 
     static constexpr std::string_view CreateUserTableQ =
@@ -767,8 +769,8 @@ class InsertAccountOp : virtual public DBOp {
     static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
                           (AccountID, Tenant, AccountName, Email, \
                            Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                           MaxBuckets, MaxAccessKeys) \
-                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                           MaxBuckets, MaxAccessKeys, AccountAttrs) \
+                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertAccountOp() {}
@@ -780,7 +782,8 @@ class InsertAccountOp : virtual public DBOp {
           params.op.account.quota, params.op.account.bucket_quota,
           params.op.account.max_users, params.op.account.max_roles,
           params.op.account.max_groups, params.op.account.max_buckets,
-          params.op.account.max_access_keys);
+          params.op.account.max_access_keys,
+          params.op.account.account_attrs);
     }
 };
 
@@ -803,17 +806,17 @@ class GetAccountOp: virtual public DBOp {
     static constexpr std::string_view Query = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where AccountID = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where AccountID = {}";
 
     static constexpr std::string_view QueryByName = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where AccountName = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where AccountName = {}";
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where Email = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where Email = {}";
 
   public:
     virtual ~GetAccountOp() {}
