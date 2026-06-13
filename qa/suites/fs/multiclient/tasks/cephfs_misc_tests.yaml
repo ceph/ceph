@@ -12,3 +12,4 @@ overrides:
       - MDS_CLIENT_LATE_RELEASE
       - responding to mclientcaps
       - RECENT_CRASH
+      - MON_DOWN
