@@ -173,6 +173,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   librbd::MockTestImageCtx* local_image_ctx = nullptr;
   std::string local_image_id;
   std::string remote_image_id;
+  Peer<librbd::MockTestImageCtx>* remote_image_peer = nullptr;
 
   void destroy() {
   }

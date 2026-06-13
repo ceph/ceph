@@ -7,6 +7,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
+#include "tools/rbd_mirror/Types.h"
 
 struct Context;
 namespace librbd { struct ImageCtx; }
@@ -87,6 +88,7 @@ public:
 
   std::string remote_mirror_uuid;
   std::string remote_image_id;
+  Peer<ImageCtxT>* remote_image_peer = nullptr;
   librbd::mirror::PromotionState remote_promotion_state =
     librbd::mirror::PROMOTION_STATE_UNKNOWN;
   ImageCtxT* remote_image_ctx = nullptr;
