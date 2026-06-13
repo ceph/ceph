@@ -45,19 +45,13 @@ class InternalCryptoCaller(CryptoCaller):
     ) -> str:
         _pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, pkey)
 
-        # Create a "subject" object
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            req = crypto.X509Req()
-        subj = req.get_subject()
-
-        # populate the subject with the dname settings
+        # create a self-signed cert and populate its subject with the dname
+        # settings
+        cert = crypto.X509()
+        subj = cert.get_subject()
         for k, v in dname.items():
             setattr(subj, k, v)
-
-        # create a self-signed cert
-        cert = crypto.X509()
-        cert.set_subject(req.get_subject())
+        cert.set_subject(subj)
         cert.set_serial_number(int(uuid4()))
         cert.gmtime_adj_notBefore(0)
         cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
