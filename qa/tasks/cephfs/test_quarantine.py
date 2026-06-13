@@ -267,6 +267,7 @@ class TestQuarantineSnapshot(QuarantineTestBase):
         time.sleep(1)
 
     def tearDown(self):
+        self._quarantine_disable()
         try:
             self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
                          self.SUBVOLUME_NAME, self.SNAPSHOT_NAME, "--force")
@@ -477,6 +478,7 @@ class TestQuarantineSubvolumeOps(QuarantineTestBase):
                      self.volname, self.SUBVOLUME_NAME, self.SNAPSHOT_NAME)
 
     def tearDown(self):
+        self._quarantine_disable()
         try:
             self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
                          self.SUBVOLUME_NAME, self.SNAPSHOT_NAME, "--force")
@@ -484,23 +486,32 @@ class TestQuarantineSubvolumeOps(QuarantineTestBase):
             pass
         super().tearDown()
 
-    def test_quarantine_info_command(self):
+    def test_quarantine_info_blocked(self):
+        """subvolume info fails on a quarantined subvolume."""
         self.enable_and_wait(sleep_secs=1)
-        info = json.loads(self._fs_cmd("subvolume", "info",
-                                       self.volname, self.SUBVOLUME_NAME))
-        log.info("Subvolume info: %s", info)
+        with self.assertRaises(CommandFailedError) as ctx:
+            self._fs_cmd("subvolume", "info",
+                         self.volname, self.SUBVOLUME_NAME)
+        self.assertEqual(ctx.exception.exitstatus, errno.EACCES)
+        log.info("subvolume info correctly blocked")
 
-    def test_quarantine_getpath_command(self):
+    def test_quarantine_getpath_blocked(self):
+        """subvolume getpath fails on a quarantined subvolume."""
         self.enable_and_wait(sleep_secs=1)
-        path = self._fs_cmd("subvolume", "getpath",
-                            self.volname, self.SUBVOLUME_NAME)
-        self.assertEqual(path.strip(), self.subvol_path)
+        with self.assertRaises(CommandFailedError) as ctx:
+            self._fs_cmd("subvolume", "getpath",
+                         self.volname, self.SUBVOLUME_NAME)
+        self.assertEqual(ctx.exception.exitstatus, errno.EACCES)
+        log.info("subvolume getpath correctly blocked")
 
-    def test_quarantine_snapshot_list(self):
+    def test_quarantine_snapshot_list_blocked(self):
+        """subvolume snapshot ls fails on a quarantined subvolume."""
         self.enable_and_wait(sleep_secs=1)
-        snaps = json.loads(self._fs_cmd("subvolume", "snapshot", "ls",
-                                        self.volname, self.SUBVOLUME_NAME))
-        self.assertIn(self.SNAPSHOT_NAME, [s["name"] for s in snaps])
+        with self.assertRaises(CommandFailedError) as ctx:
+            self._fs_cmd("subvolume", "snapshot", "ls",
+                         self.volname, self.SUBVOLUME_NAME)
+        self.assertEqual(ctx.exception.exitstatus, errno.EACCES)
+        log.info("subvolume snapshot ls correctly blocked")
 
 
 # ---------------------------------------------------------------------------
@@ -1142,6 +1153,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                              "Data on rank 1")
         finally:
             self.get_ceph_cmd_stdout("auth", "del", recovery_client)
+            self._quarantine_disable()
             try:
                 self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
                              self.SUBVOLUME_NAME, snapshot_name, "--force")
@@ -1401,6 +1413,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
                              "Child rank 1 data")
         finally:
             self.get_ceph_cmd_stdout("auth", "del", recovery_client)
+            self._quarantine_disable()
             try:
                 self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
                              self.SUBVOLUME_NAME, snapshot_name, "--force")
