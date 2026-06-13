@@ -16,9 +16,11 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <boost/asio/cancellation_type.hpp>
 
 #include "common/tracer.h"
 #include "rgw_cksum.h"
@@ -54,6 +56,22 @@ struct RGWRoleInfo;
 class RGWGetObj_Filter;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
+
+namespace boost::asio {
+  class io_context;
+  class cancellation_signal;
+}
+
+/// true if the optional_yield carries a yield_context whose cancellation was
+/// requested; false for an empty (null) yield
+inline bool yield_cancelled(optional_yield y)
+{
+  if (!y) {
+    return false;
+  }
+  return y.get_yield_context().get_cancellation_state().cancelled() !=
+         boost::asio::cancellation_type::none;
+}
 
 
 namespace rgw {
@@ -1719,6 +1737,14 @@ class RestoreSerializer : public Serializer {
 public:
   RestoreSerializer() {}
   virtual ~RestoreSerializer() = default;
+
+  /*
+   * A held restore lock may be cleared if background renewal fails. Callers must
+   * stop touching the protected FIFO once is_locked() becomes false.
+   */
+  virtual void clear_locked() {}
+  virtual bool is_locked() const { return true; }
+  virtual void set_lock_lost_signal(boost::asio::cancellation_signal*) {}
 };
 
 /**

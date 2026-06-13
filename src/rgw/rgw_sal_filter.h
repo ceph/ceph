@@ -1075,6 +1075,11 @@ public:
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override
  	{ return next->unlock(dpp, y); }
+  virtual void clear_locked() override { next->clear_locked(); }
+  virtual bool is_locked() const override { return next->is_locked(); }
+  virtual void set_lock_lost_signal(boost::asio::cancellation_signal* signal) override {
+    next->set_lock_lost_signal(signal);
+  }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
