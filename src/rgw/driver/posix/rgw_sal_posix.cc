@@ -3837,16 +3837,8 @@ int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dp
     if (ret < 0) {
       return ret;
     }
-    int call_ret;
-    RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, ent->write(ofs, bl, dpp, y), ret, call_ret);
-    if (call_ret < 0) {
-      return call_ret;
-    }
-
-    return 0;
-
-out:
-    return ret;
+    return RUN_AS(posix_user.get_uid(), posix_user.get_gid(),
+                  ent->write(ofs, bl, dpp, y));
   }
 
   return ent->write(ofs, bl, dpp, y);
@@ -4091,7 +4083,8 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     bufferlist bl;
     int len;
     if (direct) {
-      RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, source->read(cur_ofs, left, bl, dpp, y), ret, len);
+      len = RUN_AS(posix_user.get_uid(), posix_user.get_gid(),
+                   source->read(cur_ofs, left, bl, dpp, y));
     } else {
       len = source->read(cur_ofs, left, bl, dpp, y);
     }
@@ -4115,11 +4108,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     cur_ofs += len;
   }
 
-  /* Doesn't seem to be anything needed from params */
   return 0;
-
-out:
-  return ret;
 }
 
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)

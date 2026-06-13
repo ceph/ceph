@@ -95,11 +95,10 @@ TEST_F(POSIXSystemFixture, CreateEntry) {
   int fd = open(mapping_path.c_str(), (O_APPEND) | O_RDONLY | O_NOFOLLOW, S_IRWXU);
   ASSERT_GE(fd, 0);
 
-  char read_buf[bl.length()];
-  memset(read_buf, 0, bl.length());
+  std::vector<char> read_buf(bl.length(), 0);
   ASSERT_EQ(lseek(fd, (size_t)0, SEEK_SET), 0);
-  ASSERT_EQ(::read(fd, read_buf, bl.length()), bl.length());
-  std::string read_str = read_buf;
+  ASSERT_EQ(::read(fd, read_buf.data(), bl.length()), bl.length());
+  std::string read_str(read_buf.begin(), read_buf.end());
   EXPECT_EQ(read_str.substr(0, bl.length()), bl.to_str());
 
   close(fd);
@@ -112,16 +111,14 @@ TEST_F(POSIXSystemFixture, RemoveEntry) {
   int fd = open(mapping_path.c_str(), (O_APPEND) | O_RDONLY | O_NOFOLLOW, S_IRWXU);
   ASSERT_GE(fd, 0);
 
-  char read_buf[bl.length()];
-  memset(read_buf, 0, bl.length());
+  std::vector<char> read_buf(bl.length(), 0);
   ASSERT_EQ(lseek(fd, (size_t)0, SEEK_SET), 0);
-  ASSERT_EQ(::read(fd, read_buf, bl.length()), 0); // empty file
+  ASSERT_EQ(::read(fd, read_buf.data(), bl.length()), 0); // empty file
 
   close(fd);
 }
 
 TEST_F(POSIXSystemFixture, DirectWrite) {
-  struct stat statbuf;
   EXPECT_EQ(sys_mgr.update_posix_user(env->dpp, ruser, posix_user), 0);
 
   bool existed;
@@ -130,33 +127,26 @@ TEST_F(POSIXSystemFixture, DirectWrite) {
   std::unique_ptr<rgw::sal::FSEnt> ent;
   ASSERT_EQ(env->root->get_ent(env->dpp, null_yield, test_path.c_str() + get_test_name(), std::string(), ent), 0);
 
-  int ret, call_ret;
   bufferlist write_buf;
   write_buf.append("hello world");
   ent->open(env->dpp);
-  EXPECT_EQ(sys_mgr.check_permissions(env->dpp, ruser, ent.get(), statbuf), 0);
-  RUN_AS(env->dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, ent->write(0, write_buf, env->dpp, null_yield), ret, call_ret);
+  int ret = RUN_AS(posix_user.get_uid(), posix_user.get_gid(),
+                   ent->write(0, write_buf, env->dpp, null_yield));
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(call_ret, 0);
   ent->close();
 
   std::string file_path = test_path.c_str() + get_test_name();
   int fd = open(file_path.c_str(), (O_APPEND) | O_RDONLY | O_NOFOLLOW, S_IRUSR);
   ASSERT_GE(fd, 0);
-  char read_buf[write_buf.length()];
-  memset(read_buf, 0, write_buf.length());
+  std::vector<char> read_buf(write_buf.length(), 0);
   ASSERT_EQ(lseek(fd, (size_t)0, SEEK_SET), 0);
-  EXPECT_EQ(::read(fd, read_buf, write_buf.length()), write_buf.length());
-  std::string read_str = read_buf;
+  EXPECT_EQ(::read(fd, read_buf.data(), write_buf.length()), write_buf.length());
+  std::string read_str(read_buf.begin(), read_buf.end());
   EXPECT_EQ(read_str.substr(0, write_buf.length()), write_buf.to_str());
   close(fd);
-
-out:
-  ASSERT_EQ(ret, 0); // fails
 }
 
 TEST_F(POSIXSystemFixture, DirectRead) {
-  struct stat statbuf;
   EXPECT_EQ(sys_mgr.update_posix_user(env->dpp, ruser, posix_user), 0);
 
   bool existed;
@@ -174,17 +164,12 @@ TEST_F(POSIXSystemFixture, DirectRead) {
   ASSERT_EQ(count, write_buf.length());
   close(fd);
 
-  int ret, len;
   bufferlist read_buf;
   ent->open(env->dpp);
-  EXPECT_EQ(sys_mgr.check_permissions(env->dpp, ruser, ent.get(), statbuf), 0);
-  RUN_AS(env->dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, ent->read(0, write_buf.length(), read_buf, env->dpp, null_yield), ret, len);
-  EXPECT_EQ(ret, 0);
+  int len = RUN_AS(posix_user.get_uid(), posix_user.get_gid(),
+                   ent->read(0, write_buf.length(), read_buf, env->dpp, null_yield));
   EXPECT_EQ(len, write_buf.length());
   ent->close();
-
-out:
-  ASSERT_EQ(ret, 0); // fails
 }
 
 int main(int argc, char *argv[]) {

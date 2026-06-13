@@ -92,8 +92,8 @@ int POSIXSystemManager::init(const DoutPrefixProvider *dpp) {
   if (!size) {
     ldpp_dout(dpp, 20) << "POSIXSystemManager::" << __func__ << "(): Mapping successfully created." << dendl;
   } else { // Mapping already exists; initialize user_data
-    char read_buf[size];
-    int ret = read_mapping(dpp, fd, read_buf, size, user_data); 
+    std::vector<char> read_buf(size);
+    int ret = read_mapping(dpp, fd, read_buf.data(), size, user_data);
     if (ret < 0) {
       close(fd);
       return ret;
@@ -128,8 +128,8 @@ int POSIXSystemManager::populate_user_data(const DoutPrefixProvider *dpp) {
   ldpp_dout(dpp, 20) << "POSIXSystemManager::" << __func__ << "(): Read buf size: " << size << dendl;
 
   if (size) {
-    char read_buf[size];
-    ret = read_mapping(dpp, fd, read_buf, size, user_data); 
+    std::vector<char> read_buf(size);
+    ret = read_mapping(dpp, fd, read_buf.data(), size, user_data);
     if (ret < 0) {
       close(fd);
       return ret;
@@ -227,8 +227,8 @@ int POSIXSystemManager::remove_posix_user(const DoutPrefixProvider *dpp, const r
   ldpp_dout(dpp, 20) << "POSIXSystemManager::" << __func__ << "(): Read buf size: " << size << dendl;
 
   if (size) {
-    char read_buf[size];
-    ret = read_mapping(dpp, fd, read_buf, size, user_data); 
+    std::vector<char> read_buf(size);
+    ret = read_mapping(dpp, fd, read_buf.data(), size, user_data);
     if (ret < 0) {
       close(fd);
       return ret;
@@ -244,7 +244,7 @@ int POSIXSystemManager::remove_posix_user(const DoutPrefixProvider *dpp, const r
     } 
 
     bufferlist bl;
-    std::string read_str = read_buf;
+    std::string read_str(read_buf.begin(), read_buf.end());
     size_t pos = read_str.find(ruser.id);
     std::string begin = R"({"rgw_user":")";
     std::string end = ruser.id + R"(","posix_user":{"uid":")" + std::to_string(it->second.first) + R"(,"gid":)" + std::to_string(it->second.first) + R"(}})";
