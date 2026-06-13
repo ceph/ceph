@@ -25,6 +25,12 @@ ARG CI_CONTAINER="true"
 # (optional, for hackers) Use the following URL for ceph repo.
 ARG CUSTOM_CEPH_REPO_URL
 
+# (optional) Use custom CentOS repo file URL to replace /etc/yum.repos.d/centos.repo
+ARG CUSTOM_CENTOS_REPO_URL
+
+# (optional) Use custom CentOS addons repo file URL to replace /etc/yum.repos.d/centos-addons.repo
+ARG CUSTOM_CENTOS_ADDONS_REPO_URL
+
 RUN /bin/echo -e "\
 FROM_IMAGE: ${FROM_IMAGE}\n\
 CEPH_REF: ${CEPH_REF}\n\
@@ -77,6 +83,18 @@ RUN \
         sed -i 's/tsflags=.*/tsflags=nodocs/g' /etc/dnf/dnf.conf ; \
     else \
         echo "tsflags=nodocs" >> /etc/dnf/dnf.conf ; \
+    fi
+
+# Optional: replace default CentOS repo files before any package installation.
+RUN set -euo pipefail; \
+    source /etc/os-release; \
+    if [[ "${ID}" == "centos" ]]; then \
+        if [[ -n "${CUSTOM_CENTOS_REPO_URL:-}" ]]; then \
+            curl -fsSL "${CUSTOM_CENTOS_REPO_URL}" -o /etc/yum.repos.d/centos.repo; \
+        fi; \
+        if [[ -n "${CUSTOM_CENTOS_ADDONS_REPO_URL:-}" ]]; then \
+            curl -fsSL "${CUSTOM_CENTOS_ADDONS_REPO_URL}" -o /etc/yum.repos.d/centos-addons.repo; \
+        fi; \
     fi
 
 # Pre-reqs

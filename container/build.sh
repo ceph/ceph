@@ -28,6 +28,8 @@ CONTAINER_REPO_USERNAME
 CONTAINER_REPO_PASSWORD
 PRERELEASE_USERNAME for download.ceph.com:/prerelease/ceph
 PRERELEASE_PASSWORD
+CUSTOM_CENTOS_REPO_URL (optional): URL for /etc/yum.repos.d/centos.repo
+CUSTOM_CENTOS_ADDONS_REPO_URL (optional): URL for /etc/yum.repos.d/centos-addons.repo
 REMOVE_LOCAL_IMAGES set to 'false' if you want to keep local images
 
 For a release build: (from ceph.git, built and pushed to download.ceph.com)
@@ -132,6 +134,8 @@ CONTAINER_BUILD_ARGS=(
     --build-arg OSD_FLAVOR="${FLAVOR:-default}"
     --build-arg CI_CONTAINER="${CI_CONTAINER:-default}"
     --build-arg CUSTOM_CEPH_REPO_URL="${CUSTOM_CEPH_REPO_URL}"
+    --build-arg CUSTOM_CENTOS_REPO_URL="${CUSTOM_CENTOS_REPO_URL}"
+    --build-arg CUSTOM_CENTOS_ADDONS_REPO_URL="${CUSTOM_CENTOS_ADDONS_REPO_URL}"
     "--secret=id=prerelease_creds,src=./prerelease.secret.txt"
 )
 
