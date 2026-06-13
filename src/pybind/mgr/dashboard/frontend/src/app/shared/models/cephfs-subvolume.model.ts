@@ -27,6 +27,13 @@ export interface SubvolumeSnapshotInfo {
   has_pending_clones: string;
 }
 
+export interface UpdateSubvolume {
+  subvol_name: string;
+  size: string;
+  group_name: string;
+  snapshot_visibility?: string;
+}
+
 export const SNAPSHOT_VISIBILITY_CONFIG_NAME = 'client_respect_subvolume_snapshot_visibility';
 
 export const SNAPSHOT_VISIBILITY_CONFIG_SECTION = 'client';

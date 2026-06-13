@@ -3955,6 +3955,8 @@ paths:
           application/json:
             schema:
               properties:
+                snapshot_visibility:
+                  type: string
                 subvol_name:
                   type: string
                 vol_name:
@@ -4589,6 +4591,8 @@ paths:
                   type: string
                 size:
                   type: integer
+                snapshot_visibility:
+                  type: string
                 subvol_name:
                   type: string
               required:
@@ -4745,7 +4749,7 @@ paths:
       - jwt: []
       tags:
       - CephFSSubvolume
-    put:
+    patch:
       parameters:
       - in: path
         name: vol_name
@@ -4778,15 +4782,6 @@ paths:
               schema:
                 type: object
           description: Resource updated.
-        '202':
-          content:
-            application/json:
-              schema:
-                type: object
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                type: object
-          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
