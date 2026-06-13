@@ -750,6 +750,89 @@ login_control:
     assert share.login_control[3].access == enums.LoginAccess.NONE
 
 
+def test_cluster_client_compat_default():
+    """Test cluster with default client support mode (not set)."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: testcluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: testusers
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # When not set, should default to None
+    assert cluster.client_compat is None
+    # effective_client_compat should return DEFAULT
+    assert cluster.effective_client_compat == enums.ClientSupportMode.DEFAULT
+    # is_macos_compatibility_enabled should be False
+    assert cluster.is_macos_compatibility_enabled is False
+
+
+def test_cluster_client_compat_macos():
+    """Test cluster with macos client support mode enabled."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: maccluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: macusers
+client_compat: macos
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # Should be set to MACOS
+    assert cluster.client_compat == enums.ClientSupportMode.MACOS
+    # effective_client_compat should return MACOS
+    assert cluster.effective_client_compat == enums.ClientSupportMode.MACOS
+    # is_macos_compatibility_enabled should be True
+    assert cluster.is_macos_compatibility_enabled is True
+
+    # Verify it's in the simplified output
+    sd = cluster.to_simplified()
+    assert sd
+    assert 'client_compat' in sd
+    assert sd['client_compat'] == 'macos'
+
+
+def test_cluster_client_compat_explicit_default():
+    """Test cluster with explicitly set default client support mode."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.cluster
+cluster_id: defaultcluster
+auth_mode: user
+user_group_settings:
+  - source_type: resource
+    ref: defaultusers
+client_compat: default
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    cluster = loaded[0]
+
+    # Should be explicitly set to DEFAULT
+    assert cluster.client_compat == enums.ClientSupportMode.DEFAULT
+    # effective_client_compat should return DEFAULT
+    assert cluster.effective_client_compat == enums.ClientSupportMode.DEFAULT
+    # is_macos_compatibility_enabled should be False
+    assert cluster.is_macos_compatibility_enabled is False
+
+
 def test_tls_credential():
     import yaml
 

@@ -29,6 +29,7 @@ from . import resourcelib, validation
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    ClientSupportMode,
     HostAccess,
     Intent,
     JoinSourceType,
@@ -902,6 +903,8 @@ class Cluster(_RBase):
     debug_level: Optional[dict[str, str]] = None
     # configure the keybridge (KMS integration) for this cluster
     keybridge: Optional[KeyBridge] = None
+    # client support mode for client-specific optimizations (macOS, etc.)
+    client_compat: Optional[ClientSupportMode] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -949,6 +952,24 @@ class Cluster(_RBase):
     @property
     def clustering_mode(self) -> SMBClustering:
         return self.clustering if self.clustering else SMBClustering.DEFAULT
+
+    @property
+    def effective_client_compat(self) -> ClientSupportMode:
+        """Return the effective client compat mode.
+
+        Returns ClientSupportMode.DEFAULT if not explicitly set, ensuring
+        client-specific features are disabled by default.
+        """
+        return (
+            self.client_compat
+            if self.client_compat
+            else ClientSupportMode.DEFAULT
+        )
+
+    @property
+    def is_macos_compatibility_enabled(self) -> bool:
+        """Return true if macOS-specific SMB features should be enabled."""
+        return self.effective_client_compat == ClientSupportMode.MACOS
 
     @property
     def remote_control_is_enabled(self) -> bool:
