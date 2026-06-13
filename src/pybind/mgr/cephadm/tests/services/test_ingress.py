@@ -1200,7 +1200,6 @@ class TestIngressService:
             'NFSv4 {\n'
             '        Delegations = false;\n'
             '        RecoveryBackend = "rados_cluster";\n'
-            '        Minor_Versions = 1, 2;\n'
             f'        Server_Scope = "{cephadm_module._cluster_fsid}-foo";\n'
             '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
