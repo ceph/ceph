@@ -369,6 +369,31 @@ class SQLListGroupUsers : public SQLiteDB, public ListGroupUsersOp {
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
+class SQLGetAccountUser : public SQLiteDB, public GetAccountUserOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetAccountUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetAccountUser() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListAccountUsers : public SQLiteDB, public ListAccountUsersOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *count_stmt = NULL;
+  public:
+    SQLListAccountUsers(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListAccountUsers() { if (stmt) sqlite3_finalize(stmt); if (count_stmt) sqlite3_finalize(count_stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
 class SQLInsertUser : public SQLiteDB, public InsertUserOp {
   private:
     sqlite3 **sdb = NULL;

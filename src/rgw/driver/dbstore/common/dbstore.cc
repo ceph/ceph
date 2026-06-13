@@ -134,6 +134,10 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveGroupUser;
   if (!Op.compare("ListGroupUsers"))
     return dbops.ListGroupUsers;
+  if (!Op.compare("GetAccountUser"))
+    return dbops.GetAccountUser;
+  if (!Op.compare("ListAccountUsers"))
+    return dbops.ListAccountUsers;
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
@@ -1077,6 +1081,78 @@ int DB::count_account_groups(const DoutPrefixProvider *dpp,
   }
 
   count = params.op.group.list_entries.size();
+
+  return ret;
+}
+
+int DB::get_account_user_by_name(const DoutPrefixProvider *dpp,
+    const std::string& account_id, const std::string& username,
+    RGWUserInfo& uinfo)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.user.uinfo.account_id = account_id;
+  params.op.user.uinfo.display_name = username;
+
+  ret = ProcessOp(dpp, "GetAccountUser", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (params.op.user.uinfo.user_id.id.empty()) {
+    return -ENOENT;
+  }
+
+  uinfo = params.op.user.uinfo;
+
+  return ret;
+}
+
+int DB::count_account_users(const DoutPrefixProvider *dpp,
+    const std::string& account_id, uint32_t& count)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = "count";
+  params.op.user.uinfo.account_id = account_id;
+
+  ret = ProcessOp(dpp, "ListAccountUsers", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  count = params.op.user.list_entries.size();
+
+  return ret;
+}
+
+int DB::list_account_users(const DoutPrefixProvider *dpp,
+    const std::string& account_id, const std::string& marker,
+    uint32_t max_items, std::vector<RGWUserInfo>& users)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.user.uinfo.account_id = account_id;
+  params.op.user.uinfo.display_name = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListAccountUsers", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  for (auto& entry : params.op.user.list_entries) {
+    users.push_back(std::move(entry));
+  }
 
   return ret;
 }
