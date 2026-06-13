@@ -18,6 +18,9 @@ class Oauth2(RESTController):
         if not token:
             raise cherrypy.HTTPError()
 
+        if OAuth2.is_token_expired(token):
+            raise cherrypy.HTTPError(401, 'Your session has expired. Please log in again.')
+
         raise cherrypy.HTTPRedirect(OAuth2.get_login_redirect_url(token))
 
     @Endpoint(json_response=False, version=None)
