@@ -161,6 +161,8 @@ class BaseObjectStore:
         # set bdev_enable_discard = false
         if self.skip_mkfs_discard and self.objectstore == 'bluestore':
             self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
+        if getattr(self.args, 'crush_device_class', None) == 'fcm' and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--set-keepcaps', 'true'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 
