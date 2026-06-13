@@ -3,6 +3,7 @@
 #include "rgw_lua.h"
 #include "rgw_lua_utils.h"
 #include "rgw_perf_counters.h"
+#include "perfglue/heap_profiler.h"
 #include "include/ceph_assert.h"
 #include <lua.hpp>
 
@@ -197,7 +198,8 @@ void Background::run() {
     }
     process_scripts();
     std::unique_lock cond_lock(cond_mutex);
-    cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;}); 
+    ceph_heap_mark_thread_temporarily_idle();
+    cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;});
   }
   ldpp_dout(dpp, 10) << "Lua background thread stopped" << dendl;
 }
