@@ -98,6 +98,12 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
                   const DBOpParams *params)
 {
+  if (!Op.compare("InsertAccount"))
+    return dbops.InsertAccount;
+  if (!Op.compare("RemoveAccount"))
+    return dbops.RemoveAccount;
+  if (!Op.compare("GetAccount"))
+    return dbops.GetAccount;
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
