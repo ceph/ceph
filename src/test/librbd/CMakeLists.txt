@@ -242,3 +242,18 @@ install(TARGETS
 install(TARGETS
   ceph_test_librbd
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_librbd_create_request
+  ceph_test_librbd_create_request.cc)
+target_link_libraries(ceph_test_librbd_create_request
+  rbd_api
+  rbd_internal
+  rbd_types
+  journal
+  cls_journal_client
+  cls_rbd_client
+  libneorados
+  librados)
+install(TARGETS
+  ceph_test_librbd_create_request
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

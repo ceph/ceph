@@ -125,13 +125,15 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
                                 asio::ContextWQ *op_work_queue,
-                                Context *on_finish)
+                                Context *on_finish,
+                                const CreateRequestFaultInjector& fault_injector)
   : m_config(config), m_image_name(image_name), m_image_id(image_id),
     m_size(size), m_create_flags(create_flags),
     m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
-    m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish),
+    m_fault_injector(fault_injector) {
 
   m_io_ctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_io_ctx.cct());
@@ -275,7 +277,7 @@ void CreateRequest<I>::validate_data_pool() {
   }
 
   if (!m_config.get_val<bool>("rbd_validate_pool")) {
-    add_image_to_directory();
+    negotiate_features();
     return;
   }
 
@@ -301,7 +303,7 @@ void CreateRequest<I>::handle_validate_data_pool(int r) {
     return;
   }
 
-  add_image_to_directory();
+  negotiate_features();
 }
 
 template<typename I>
@@ -329,21 +331,30 @@ void CreateRequest<I>::handle_add_image_to_directory(int r) {
   if (r == -EEXIST) {
     ldout(m_cct, 5) << "directory entry for image " << m_image_name
                     << " already exists" << dendl;
-    complete(r);
-    return;
   } else if (!m_io_ctx.get_namespace().empty() && r == -ENOENT) {
     ldout(m_cct, 5) << "namespace " << m_io_ctx.get_namespace()
                     << " does not exist" << dendl;
-    complete(r);
-    return;
   } else if (r < 0) {
     lderr(m_cct) << "error adding image to directory: " << cpp_strerror(r)
                  << dendl;
-    complete(r);
+  }
+
+  if (r < 0) {
+    // Roll back only the metadata created by this attempt. remove_from_dir()
+    // uses (name, id), so a pre-existing image with the same name is not
+    // unpublished if dir_add_image() collided with another image id.
+    m_r_saved = r;
+    remove_mirror_image();
     return;
   }
 
-  create_id_object();
+  m_directory_added = true;
+
+  if (check_fault_injection("after_dir_add") < 0) {
+    return;
+  }
+
+  complete(0);
 }
 
 template<typename I>
@@ -369,18 +380,27 @@ void CreateRequest<I>::handle_create_id_object(int r) {
   if (r == -EEXIST) {
     ldout(m_cct, 5) << "id object for  " << m_image_name << " already exists"
                     << dendl;
-    m_r_saved = r;
-    remove_from_dir();
-    return;
   } else if (r < 0) {
     lderr(m_cct) << "error creating RBD id object: " << cpp_strerror(r)
                  << dendl;
+  }
+
+  if (r < 0) {
+    // The create flow already owns the new header / optional metadata when
+    // create_id_object() runs, so unwind the current attempt even on EEXIST.
+    // remove_from_dir() remains scoped to this attempt's (name, id) pair.
     m_r_saved = r;
-    remove_from_dir();
+    remove_mirror_image();
     return;
   }
 
-  negotiate_features();
+  m_id_object_created = true;
+
+  if (check_fault_injection("after_id_create") < 0) {
+    return;
+  }
+
+  add_image_to_directory();
 }
 
 template<typename I>
@@ -427,6 +447,18 @@ void CreateRequest<I>::handle_negotiate_features(int r) {
 }
 
 template<typename I>
+int CreateRequest<I>::check_fault_injection(std::string_view stage) {
+  int r = m_fault_injector.check(stage);
+  if (r < 0) {
+    ldout(m_cct, 5) << "injecting create failure at stage '" << stage
+                    << "': " << cpp_strerror(r) << dendl;
+    m_r_saved = r;
+    remove_mirror_image();
+  }
+  return r;
+}
+
+template<typename I>
 void CreateRequest<I>::create_image() {
   ldout(m_cct, 15) << dendl;
   ceph_assert(m_data_pool.empty() || m_data_pool_id != -1);
@@ -439,8 +471,7 @@ void CreateRequest<I>::create_image() {
   oss << m_image_id;
   if (oss.str().length() > RBD_MAX_BLOCK_NAME_PREFIX_LENGTH) {
     lderr(m_cct) << "object prefix '" << oss.str() << "' too large" << dendl;
-    m_r_saved = -EINVAL;
-    remove_id_object();
+    complete(-EINVAL);
     return;
   }
 
@@ -467,8 +498,11 @@ void CreateRequest<I>::handle_create_image(int r) {
     return;
   } else if (r < 0) {
     lderr(m_cct) << "error writing header: " << cpp_strerror(r) << dendl;
-    m_r_saved = r;
-    remove_id_object();
+    complete(r);
+    return;
+  }
+
+  if (check_fault_injection("after_header") < 0) {
     return;
   }
 
@@ -649,7 +683,7 @@ void CreateRequest<I>::mirror_image_enable() {
   if ((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL &&
        mirror_enable_flag != CREATE_FLAG_FORCE_MIRROR_ENABLE) ||
       (mirror_enable_flag == CREATE_FLAG_SKIP_MIRROR_ENABLE)) {
-    complete(0);
+    create_id_object();
     return;
   }
 
@@ -672,11 +706,12 @@ void CreateRequest<I>::handle_mirror_image_enable(int r) {
                  << dendl;
 
     m_r_saved = r;
-    journal_remove();
+    remove_mirror_image();
     return;
   }
 
-  complete(0);
+  m_mirror_image_enabled = true;
+  create_id_object();
 }
 
 template<typename I>
@@ -690,6 +725,38 @@ void CreateRequest<I>::complete(int r) {
 }
 
 // cleanup
+template<typename I>
+void CreateRequest<I>::remove_mirror_image() {
+  if (!m_mirror_image_enabled) {
+    journal_remove();
+    return;
+  }
+
+  ldout(m_cct, 15) << dendl;
+
+  librados::ObjectWriteOperation op;
+  cls_client::mirror_image_remove(&op, m_image_id);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_remove_mirror_image>(this);
+  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_remove_mirror_image(int r) {
+  ldout(m_cct, 15) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "error cleaning up mirror image after creation failed: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  journal_remove();
+}
+
 template<typename I>
 void CreateRequest<I>::journal_remove() {
   if ((m_features & RBD_FEATURE_JOURNALING) == 0) {
@@ -717,7 +784,7 @@ template<typename I>
 void CreateRequest<I>::handle_journal_remove(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "error cleaning up journal after creation failed: "
                  << cpp_strerror(r) << dendl;
   }
@@ -746,7 +813,7 @@ template<typename I>
 void CreateRequest<I>::handle_remove_object_map(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "error cleaning up object map after creation failed: "
                  << cpp_strerror(r) << dendl;
   }
@@ -770,7 +837,7 @@ template<typename I>
 void CreateRequest<I>::handle_remove_header_object(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "error cleaning up image header after creation failed: "
                  << cpp_strerror(r) << dendl;
   }
@@ -781,6 +848,11 @@ void CreateRequest<I>::handle_remove_header_object(int r) {
 template<typename I>
 void CreateRequest<I>::remove_id_object() {
   ldout(m_cct, 15) << dendl;
+
+  if (!m_id_object_created) {
+    remove_from_dir();
+    return;
+  }
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
@@ -794,7 +866,7 @@ template<typename I>
 void CreateRequest<I>::handle_remove_id_object(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "error cleaning up id object after creation failed: "
                  << cpp_strerror(r) << dendl;
   }
@@ -805,6 +877,11 @@ void CreateRequest<I>::handle_remove_id_object(int r) {
 template<typename I>
 void CreateRequest<I>::remove_from_dir() {
   ldout(m_cct, 15) << dendl;
+
+  if (!m_directory_added) {
+    complete(m_r_saved);
+    return;
+  }
 
   librados::ObjectWriteOperation op;
   cls_client::dir_remove_image(&op, m_image_name, m_image_id);
@@ -821,7 +898,7 @@ template<typename I>
 void CreateRequest<I>::handle_remove_from_dir(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "error cleaning up image from rbd_directory object "
                  << "after creation failed: " << cpp_strerror(r) << dendl;
   }
