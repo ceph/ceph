@@ -13,6 +13,7 @@ import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.comp
 import { HostDetailsBreadcrumbResolver } from './ceph/cluster/hosts/host-details/host-details-breadcrumb.resolver';
 import { HostDetailsSectionComponent } from './ceph/cluster/hosts/host-details/host-details-section.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
+import { CephUserFormComponent } from './ceph/cluster/user/ceph-user-form/ceph-user-form.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
@@ -199,10 +200,9 @@ const routes: Routes = [
       },
       {
         path: 'cluster/user/create',
-        component: CrudFormComponent,
+        component: CephUserFormComponent,
         data: {
           breadcrumbs: 'Administration/Ceph Users/Create',
-          resource: 'api.cluster.user@1.0'
         }
       },
       {

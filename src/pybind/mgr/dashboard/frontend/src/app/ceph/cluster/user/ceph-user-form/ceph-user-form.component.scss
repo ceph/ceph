@@ -1,0 +1,40 @@
+@use './src/styles/defaults' as *;
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/spacing' as *;
+
+/* Container (Card-like layout) */
+:host {
+  display: block;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: $spacing-04;
+}
+
+/* Prefix styling */
+.cds--text-input__prefix {
+  background-color: var(--cds-layer-accent-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-right: none;
+  padding: $spacing-03 $spacing-04;
+  display: flex;
+  align-items: center;
+  color: var(--cds-text-secondary);
+}
+
+/* Label row spacing */
+.cap-label-row {
+  margin-bottom: $spacing-03;
+}
+
+/* Input row alignment */
+.cap-input-row {
+  align-items: center;
+  margin-bottom: $spacing-03;
+}
+
+/* Remove button alignment */
+.remove-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
