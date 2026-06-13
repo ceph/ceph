@@ -21,6 +21,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_cache_enabled
 .. confval:: rgw_cache_lru_size
 .. confval:: rgw_dns_name
+.. note:: You can define multiple hostnames delimited by commas directly with the rgw_dns_name parameter.
 .. confval:: rgw_script_uri
 .. confval:: rgw_request_uri
 .. confval:: rgw_print_continue
