@@ -1,7 +1,7 @@
 <cds-modal
   size="md"
   [open]="open"
-  hasScrollingContent="true"
+  [hasScrollingContent]="true"
   (overlaySelected)="closeModal()"
 >
   <cds-modal-header
@@ -15,13 +15,14 @@
     </h3>
   </cds-modal-header>
 
-  <form
-    [formGroup]="form"
-    novalidate
+  <div
+    cdsModalContent
+    class="modal-wrapper"
   >
-    <div
-      cdsModalContent
-      class="modal-wrapper"
+    <form
+      [formGroup]="form"
+      #formDir="ngForm"
+      novalidate
     >
       <!-- Name -->
       <div
@@ -801,13 +802,13 @@
           />
         </cds-text-label>
       </div>
-    </div>
-    <cd-form-button-panel
-      (submitActionEvent)="onSubmit()"
-      [form]="form"
-      [modalForm]="true"
-      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-    >
-    </cd-form-button-panel>
-  </form>
+    </form>
+  </div>
+  <cd-form-button-panel
+    (submitActionEvent)="onSubmit()"
+    [form]="form"
+    [modalForm]="true"
+    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+  >
+  </cd-form-button-panel>
 </cds-modal>
