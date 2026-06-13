@@ -192,7 +192,7 @@ class QuiesceAgentTest : public testing::Test {
       if (WaitForAgent::No == wait) {
         return std::nullopt;
       } else {
-        assert(await_idle_v(v.set_version));
+        EXPECT_TRUE(await_idle_v(v.set_version));
         return async_ack;
       }
     }
