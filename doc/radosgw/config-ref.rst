@@ -153,8 +153,6 @@ thread running:
 Multisite Settings
 ==================
 
-.. versionadded:: Jewel
-
 You may include the following settings in your Ceph configuration
 file under each ``[client.radosgw.{instance-name}]`` instance.
 
@@ -284,8 +282,6 @@ KMS Secrets Cache Settings
 
 QoS Settings
 ============
-
-.. versionadded:: Nautilus
 
 The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
 connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`

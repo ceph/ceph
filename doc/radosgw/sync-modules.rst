@@ -2,8 +2,6 @@
 Sync Modules
 ============
 
-.. versionadded:: Kraken
-
 The :ref:`multisite` functionality of RGW introduced in Jewel allowed the ability to
 create multiple zones and mirror data and metadata between them. *Sync Modules*
 are built on top of the multisite framework that allows for forwarding data and

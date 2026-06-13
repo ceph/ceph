@@ -4,8 +4,6 @@
 Compression
 ===========
 
-.. versionadded:: Kraken
-
 The Ceph Object Gateway supports server-side compression of uploaded objects.
 
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup

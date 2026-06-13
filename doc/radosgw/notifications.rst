@@ -4,8 +4,6 @@
 Bucket Notifications
 ====================
 
-.. versionadded:: Nautilus
-
 .. versionchanged:: Squid
    A new "v2" format for Topic and Notification metadata can be enabled with
    the :ref:`feature_notification_v2` zone feature.

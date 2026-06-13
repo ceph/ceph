@@ -2,8 +2,6 @@
 Orphan List and Associated Tooling
 ==================================
 
-.. versionadded:: Luminous
-
 .. contents::
 
 Orphans are RADOS objects that are left behind after their associated

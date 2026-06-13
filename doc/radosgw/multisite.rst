@@ -22,8 +22,6 @@ instances that make use of a single Ceph storage cluster.
 Varieties of Multi-site Configuration
 -------------------------------------
 
-.. versionadded:: Jewel
-
 Since the Kraken release, Ceph has supported several multi-site configurations
 for the Ceph Object Gateway:
 
