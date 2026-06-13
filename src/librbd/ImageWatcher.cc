@@ -795,27 +795,27 @@ template <typename I>
 int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_id,
                                            bool* new_request, Context** ctx,
                                            ProgressContext** prog_ctx) {
+  int r = 0;
   if (async_request_id.client_id == get_client_id()) {
-    return -ERESTART;
+    r = -ERESTART;
   } else {
     std::unique_lock l{m_async_request_lock};
     if (is_new_request(async_request_id)) {
       m_async_pending.insert(async_request_id);
       *new_request = true;
-      *prog_ctx = new RemoteProgressContext(*this, async_request_id);
-      *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
     } else {
       *new_request = false;
       auto it = m_async_complete.find(async_request_id);
       if (it != m_async_complete.end()) {
-        int r = it->second;
+        r = it->second;
         // reset complete request expiration time
         mark_async_request_complete(async_request_id, r);
-        return r;
       }
     }
+    *prog_ctx = new RemoteProgressContext(*this, async_request_id);
+    *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
   }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -925,47 +925,51 @@ bool ImageWatcher<I>::handle_operation_request(
     C_NotifyAck *ack_ctx) {
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
 
+  bool complete = true;
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r = 0;
     if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
       bool new_request;
       Context *ctx;
       ProgressContext *prog_ctx;
-      bool complete;
       if (async_request_id) {
         r = prepare_async_request(async_request_id, &new_request, &ctx,
                                   &prog_ctx);
-        encode(ResponseMessage(r), ack_ctx->out);
-        complete = true;
+	if (!new_request) {
+          ldout(m_image_ctx.cct, 20) << this << " " << __func__ << ": op: "
+                                     << operation << " whose async request id: "
+                                     << async_request_id
+                                     << " has a previous return value r=" << r
+                                     << dendl;
+          // reset previous return value as we are about to retry the operation
+          r = 0;
+	}
       } else {
         new_request = true;
         ctx = new C_ResponseMessage(ack_ctx);
         prog_ctx = &m_no_op_prog_ctx;
         complete = false;
       }
-      if (r == 0 && new_request) {
-        ctx = new LambdaContext(
-          [this, operation, ctx](int r) {
-            m_image_ctx.operations->finish_op(operation, r);
+      ctx = new LambdaContext(
+        [this, operation, ctx](int r) {
+          m_image_ctx.operations->finish_op(operation, r);
+          ctx->complete(r);
+        });
+      ctx = new LambdaContext(
+        [this, execute, prog_ctx, ctx](int r) {
+          if (r < 0) {
             ctx->complete(r);
-          });
-        ctx = new LambdaContext(
-          [this, execute, prog_ctx, ctx](int r) {
-            if (r < 0) {
-              ctx->complete(r);
-              return;
-            }
-            std::shared_lock l{m_image_ctx.owner_lock};
-            execute(*prog_ctx, ctx);
-          });
-        m_image_ctx.operations->start_op(operation, ctx);
-      }
-      return complete;
+            return;
+          }
+          std::shared_lock l{m_image_ctx.owner_lock};
+          execute(*prog_ctx, ctx);
+        });
+      m_image_ctx.operations->start_op(operation, ctx);
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
   }
-  return true;
+  return complete;
 }
 
 template <typename I>
