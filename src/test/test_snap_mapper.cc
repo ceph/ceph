@@ -512,7 +512,7 @@ public:
     }
     {
       PausyAsyncMap::Transaction t;
-      mapper->add_oid(obj, snaps, &t);
+      mapper->add_oid(SnapMapper::object_snaps(obj, snaps), &t);
       driver->submit(&t);
     }
   }
@@ -572,8 +572,7 @@ public:
 	{
 	  PausyAsyncMap::Transaction t;
 	  mapper->update_snaps(
-	    hoid,
-	    j->second,
+	    SnapMapper::object_snaps(hoid, j->second),
 	    &old_snaps,
 	    &t);
 	  driver->submit(&t);
@@ -1062,7 +1061,7 @@ public:
   void create_object(const hobject_t& obj, const set<snapid_t> &snaps) {
     std::lock_guard l{lock};
       PausyAsyncMap::Transaction t;
-      mapper->add_oid(obj, snaps, &t);
+      mapper->add_oid(SnapMapper::object_snaps(obj, snaps), &t);
       driver->submit(&t);
   }
 
@@ -1147,9 +1146,9 @@ TEST_F(DirectMapperTest, CorruptedSnaRecord)
   set<snapid_t> cln2_snaps{100, 200};
 
   PausyAsyncMap::Transaction t;
-  direct->mapper->add_oid(head, head_snaps, &t);
-  direct->mapper->add_oid(cln1, cln1_snaps, &t);
-  direct->mapper->add_oid(cln2, cln2_snaps, &t);
+  direct->mapper->add_oid(SnapMapper::object_snaps(head, head_snaps), &t);
+  direct->mapper->add_oid(SnapMapper::object_snaps(cln1, cln1_snaps), &t);
+  direct->mapper->add_oid(SnapMapper::object_snaps(cln2, cln2_snaps), &t);
   direct->driver->submit(&t);
   direct->driver->flush();
 

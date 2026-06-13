@@ -1587,7 +1587,7 @@ public:
   void handle_backoff(OpRequestRef& op);
 
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
-		  OpContextUPtr *ctxp);
+		  OpContextUPtr *ctxp, OSDMap::removed_snaps_queue_ctx_t *rsq_ctx);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1679,7 +1679,7 @@ private:
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
 
-    std::set<hobject_t> in_flight;
+    size_t in_flight_ops = 0;
     snapid_t snap_to_trim;
 
     explicit Trimming(my_context ctx)
@@ -1687,7 +1687,7 @@ private:
 	NamedState(nullptr, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context< SnapTrimmer >().permit_trim());
-      ceph_assert(in_flight.empty());
+      ceph_assert(in_flight_ops == 0);
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1711,7 +1711,7 @@ private:
       : my_base(ctx),
 	NamedState(nullptr, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
-      ceph_assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight_ops == 0);
       struct OnTimer : Context {
 	PrimaryLogPGRef pg;
 	epoch_t epoch;
@@ -1762,7 +1762,7 @@ private:
       : my_base(ctx),
 	NamedState(nullptr, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
-      ceph_assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight_ops == 0);
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1785,7 +1785,7 @@ private:
       : my_base(ctx),
 	NamedState(nullptr, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
-      ceph_assert(!context<Trimming>().in_flight.empty());
+      ceph_assert(!context<Trimming>().in_flight_ops == 0);
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1839,7 +1839,7 @@ private:
       : my_base(ctx),
 	NamedState(nullptr, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
-      ceph_assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight_ops == 0);
       auto *pg = context< SnapTrimmer >().pg;
       pending = new ReservationCB(pg);
       pg->osd->snap_reserver.request_reservation(
