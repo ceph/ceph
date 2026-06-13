@@ -462,7 +462,7 @@ void FSMirror::remove_peer(const Peer &peer) {
 void FSMirror::mirror_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("status");
-  if (m_init_failed) {
+  if (is_failed(locker)) {
     f->dump_string("state", "failed");
   } else if (is_blocklisted(locker)) {
     f->dump_string("state", "blocklisted");
