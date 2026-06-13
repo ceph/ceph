@@ -632,11 +632,11 @@ rules and failure handling on all pools. For a given PG to successfully peer
 and be marked active, ``min_size`` replicas will now need to be active under all
 (currently two) CRUSH buckets of type <dividing_bucket>.
 
-<tiebreaker_mon> is the tiebreaker mon to use if a network split happens.
+<tiebreaker_mon> is the tiebreaker Monitor to use if a network split happens.
 This parameter is optional. If not supplied, the system will automatically
-select a monitor that is not in either data zone. If there are multiple
-monitors outside the data zones, automatic selection will fail and you must
-explicitly specify the tiebreaker monitor.
+select a Monitor that is not in either data zone. If there are multiple
+Monitors outside the data zones, automatic selection will fail and you must
+explicitly specify the tiebreaker Monitor.
 
 <dividing_bucket> is the bucket type across which to stretch.
 This will typically be ``datacenter`` or other CRUSH hierarchy bucket type that
