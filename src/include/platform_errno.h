@@ -14,7 +14,7 @@
 
 /* XXX: This definitions are placed here so that it's easy to import them into
  * CephFS python bindings. Otherwise, entire src/include/types.h would needed to
- * be imported, which is unneccessary and also complicated.
+ * be imported, which is unnecessary and also complicated.
  */
 
 #pragma once

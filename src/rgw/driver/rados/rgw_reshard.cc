@@ -1273,7 +1273,7 @@ int RGWBucketReshard::execute(int num_shards,
   if (ret < 0) {
     return ret;
   }
-  // TODO: release the lock when purging the old index shards or unsucessful new index shards
+  // TODO: release the lock when purging the old index shards or unsuccessful new index shards
   auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
 
   if (reshard_log) {

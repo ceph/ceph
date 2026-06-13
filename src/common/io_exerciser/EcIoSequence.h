@@ -23,7 +23,7 @@ class EcIoSequence : public IoSequence {
 
   EcIoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
-  // Writes cannot be sent to injected on shard zero, so selections seperated
+  // Writes cannot be sent to injected on shard zero, so selections separated
   // out
   void select_random_data_shard_to_inject_read_error(
       std::optional<std::pair<int, int>> km,
