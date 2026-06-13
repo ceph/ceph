@@ -250,7 +250,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(9, 6, blist);
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -267,13 +267,14 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+  encode(netsplit_zone_preferences, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(10, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -330,6 +331,11 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
     stretch_marked_down_mons.clear();
+  }
+  if (struct_v >= 10) {
+    decode(netsplit_zone_preferences, p);
+  } else {
+    netsplit_zone_preferences.clear();
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -488,6 +494,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
+  f->dump_stream("netsplit_zone_preferences") << netsplit_zone_preferences;
   f->dump_stream("removed_ranks") << removed_ranks;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
