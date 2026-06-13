@@ -321,6 +321,56 @@ Create a read-only share at a custom path in the CephFS volume:
         --path=/qbranch/top/secret/plans --readonly
 
 
+Create RGW Share
+++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share create rgw <cluster_id> <share_id> <bucket> [--share-name=<share_name>] [--user-id=<user_id>] [--readonly]
+
+Create a new SMB share, hosted by the named cluster, that maps to a RADOS
+Gateway (RGW) bucket. This allows S3-compatible object storage to be accessed
+via the SMB protocol.
+
+Options:
+
+cluster_id
+    A short string uniquely identifying the cluster
+share_id
+    A short string uniquely identifying the share
+bucket
+    The name of the RGW bucket to be shared
+share_name
+    Optional. The public name of the share, visible to clients. If not provided
+    the ``share_id`` will be used automatically
+user_id
+    Optional. The RGW user ID that owns the bucket. If not provided, the system
+    will attempt to determine the bucket owner automatically
+readonly
+    Creates a read-only share
+
+.. note::
+   RGW shares use S3 credentials (access_key_id and secret_access_key) for
+   authentication, not CephX keys. The credentials are automatically fetched
+   from the RGW user associated with the bucket.
+
+Examples
+~~~~~~~~
+
+Create a share for an RGW bucket:
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket
+
+Create a share with a custom name and specific user:
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket \
+        --share-name="Photo Archive" --user-id=s3user
+
+
 .. _qos-parameters:
 
 QoS Parameters
@@ -1018,7 +1068,8 @@ max_connections
     connections to a specific share. The default value is 0 and it indicates
     that there is no limit on the number of connections
 cephfs
-    Required object. Fields:
+    Object. Configures CephFS-backed storage for the share. Either ``cephfs`` or
+    ``rgw`` must be specified, but not both. Fields:
 
     volume
         Required string. Name of the cephfs volume to use
@@ -1088,6 +1139,37 @@ cephfs
         name
             String. A value indicating what FSCrypt key to fetch. The specific
             value of the name depends on the scope being used.
+rgw
+    Object. Configures RADOS Gateway (RGW) backed storage for the share. Either
+    ``cephfs`` or ``rgw`` must be specified, but not both. This allows
+    S3-compatible object storage to be accessed via the SMB protocol. Fields:
+
+    bucket
+        Required string. The name of the RGW bucket to be shared.
+    user_id
+        Optional string. The RGW user ID that owns the bucket. If not provided,
+        the system will automatically determine the bucket owner and fetch the
+        necessary credentials.
+    access_key_id
+        Optional string. The S3 access key ID for authentication. If not provided
+        along with ``secret_access_key``, credentials will be automatically
+        fetched from the RGW user associated with the bucket.
+    secret_access_key
+        Optional string. The S3 secret access key for authentication. If not
+        provided along with ``access_key_id``, credentials will be automatically
+        fetched from the RGW user associated with the bucket.
+
+    .. note::
+       RGW shares use S3 credentials (access_key_id and secret_access_key) for
+       authentication, not CephX keys. When credentials are not explicitly
+       provided, the system will:
+
+       1. Query the bucket to determine its owner
+       2. Fetch the owner's S3 credentials automatically
+       3. Store the complete configuration with credentials
+
+       This automatic credential fetching works for both the declarative
+       (YAML/JSON) and imperative (CLI) approaches.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -1135,7 +1217,33 @@ custom_smb_share_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
-The following is an example of a share with QoS settings including burst
+The following is an example of an RGW-backed share with minimal configuration
+(credentials auto-fetched):
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: s3share
+    name: "S3 Storage"
+    rgw:
+      bucket: my-bucket
+
+Another example of an RGW-backed share with explicit credentials:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: s3share
+    name: "S3 Storage"
+    rgw:
+      bucket: my-bucket
+      user_id: s3user
+      access_key_id: AKIAIOSFODNN7EXAMPLE
+      secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+The following is an example of a CephFS share with QoS settings including burst
 multipliers and human-readable bandwidth limits:
 
 .. code-block:: yaml

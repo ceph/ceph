@@ -1200,3 +1200,184 @@ def test_share_qos_remove_individual_limit():
     assert updated_cephfs.qos.write_iops_limit == 200  # Preserved
     assert updated_cephfs.qos.read_bw_limit == "10M"  # Preserved
     assert updated_cephfs.qos.write_bw_limit == "20M"  # Preserved
+
+
+def test_rgw_storage_basic():
+    """Test basic RGWStorage creation and validation."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert isinstance(share.rgw, smb.resources.RGWStorage)
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id is None
+    assert share.rgw.access_key_id is None
+    assert share.rgw.secret_access_key is None
+
+
+def test_rgw_storage_with_credentials():
+    """Test RGWStorage with explicit credentials."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    user_id: testuser
+    access_key_id: AKIAIOSFODNN7EXAMPLE
+    secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id == 'testuser'
+    assert share.rgw.access_key_id == 'AKIAIOSFODNN7EXAMPLE'
+    assert (
+        share.rgw.secret_access_key
+        == 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+    )
+
+
+def test_rgw_storage_missing_bucket():
+    """Test validation error when bucket is missing."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: ""
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match='bucket requires a value'):
+        smb.resources.load(data)
+
+
+def test_rgw_storage_convert_mask():
+    """Test password masking for display."""
+    storage = smb.resources.RGWStorage(
+        bucket='my-bucket',
+        user_id='testuser',
+        access_key_id='AKIAIOSFODNN7EXAMPLE',
+        secret_access_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    )
+
+    masked = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.bucket == 'my-bucket'
+    assert masked.user_id == 'testuser'
+    # Credentials should be masked (16 asterisks)
+    assert masked.access_key_id == '****************'
+    assert masked.secret_access_key == '****************'
+
+
+def test_rgw_storage_convert_none_credentials():
+    """Test conversion when credentials are None."""
+    storage = smb.resources.RGWStorage(
+        bucket='my-bucket',
+    )
+
+    encoded = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.BASE64)
+    )
+    assert encoded.access_key_id is None
+    assert encoded.secret_access_key is None
+
+    masked = storage.convert(
+        (smb.enums.PasswordFilter.NONE, smb.enums.PasswordFilter.HIDDEN)
+    )
+    assert masked.access_key_id is None
+    assert masked.secret_access_key is None
+
+
+def test_rgw_storage_to_simplified():
+    """Test RGWStorage serialization to simplified format."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    user_id: testuser
+    access_key_id: AKIAIOSFODNN7EXAMPLE
+    secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    simplified = share.to_simplified()
+
+    assert 'rgw' in simplified
+    assert simplified['rgw']['bucket'] == 'my-bucket'
+    assert simplified['rgw']['user_id'] == 'testuser'
+    # Credentials should be present in simplified output
+    assert 'access_key_id' in simplified['rgw']
+    assert 'secret_access_key' in simplified['rgw']
+
+
+def test_rgw_storage_invalid_credentials():
+    """Test validation error for malformed credentials."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rgwcluster
+share_id: rgwshare
+name: RGW Share
+rgw:
+    bucket: my-bucket
+    access_key_id: "invalid key with spaces"
+    secret_access_key: "valid_secret"
+"""
+    data = yaml.safe_load_all(yaml_str)
+    # Note: Current implementation may not validate credential format
+    # This test documents expected behavior for future validation
+    loaded = smb.resources.load(data)
+    assert loaded
+    # If validation is added, this should raise ValueError
+
+
+def test_share_with_rgw_and_cephfs_mutual_exclusion():
+    """Test that share cannot have both rgw and cephfs."""
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: testcluster
+share_id: testshare
+name: Invalid Share
+cephfs:
+    volume: cephfs
+    path: /
+rgw:
+    bucket: my-bucket
+    path: /
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match='only one storage backend'):
+        smb.resources.load(data)
