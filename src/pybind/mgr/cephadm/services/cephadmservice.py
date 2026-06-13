@@ -956,13 +956,13 @@ class CephadmService(metaclass=ABCMeta):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
         if curr_deps == last_deps:
-            return scheduled_action
+            return utils.NextDaemonStep(scheduled_action)
         sym_diff = set(curr_deps).symmetric_difference(last_deps)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -971,7 +971,7 @@ class CephadmService(metaclass=ABCMeta):
             curr_deps,
             sym_diff,
         )
-        return utils.Action.RECONFIG
+        return utils.NextDaemonStep(utils.Action.RECONFIG)
 
 
 class CephService(CephadmService):
@@ -1970,7 +1970,7 @@ class CephExporterService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
@@ -2084,7 +2084,7 @@ def next_action_for_mgmt_stack_service(
     spec: Optional[ServiceSpec],
     curr_deps: List[str],
     last_deps: List[str],
-) -> utils.Action:
+) -> utils.NextDaemonStep:
     """This function exists to help refactor existing code to use
     choose_next_action instead of if-blocks inside serve.py.
     It avoids the need to muck around with common base classes at the
@@ -2092,7 +2092,7 @@ def next_action_for_mgmt_stack_service(
     Call this from choose_next_action.
     """
     if curr_deps == last_deps:
-        return scheduled_action
+        return utils.NextDaemonStep(scheduled_action)
     sym_diff = set(curr_deps).symmetric_difference(last_deps)
     logger.info(
         'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -2123,4 +2123,4 @@ def next_action_for_mgmt_stack_service(
     # If so we ought to be able to vastly simplify this...
     if any(svc in e for e in sym_diff for svc in REDEPLOY_TRIGGERS):
         action = utils.Action.REDEPLOY
-    return action
+    return utils.NextDaemonStep(action)

@@ -555,14 +555,15 @@ class IngressService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
-        action = super().choose_next_action(
+        step = super().choose_next_action(
             scheduled_action, daemon_type, spec, curr_deps, last_deps
         )
+        action = step.action
         if (
             action is not utils.Action.REDEPLOY
             and daemon_type == 'haproxy'
@@ -570,13 +571,26 @@ class IngressService(CephService):
             and hasattr(spec, 'backend_service')
         ):
             backend_spec = self.mgr.spec_store[spec.backend_service].spec
-            if (
-                backend_spec.service_type == 'nfs'
-                and self.has_placement_changed(last_deps, spec)
-            ):
-                logger.debug(
-                    'Redeploy wanted %s: placement has changed',
-                    spec.service_name(),
-                )
-                action = utils.Action.REDEPLOY
-        return action
+            if backend_spec.service_type == 'nfs':
+                if self.has_placement_changed(last_deps, spec):
+                    logger.debug(
+                        'Redeploy wanted %s: placement has changed',
+                        spec.service_name(),
+                    )
+                    return utils.NextDaemonStep(utils.Action.REDEPLOY)
+                sym_diff = set(curr_deps).symmetric_difference(last_deps)
+                if sym_diff and all(
+                    s.startswith(f'nfs.{backend_spec.service_id}')
+                    for s in sym_diff
+                ):
+                    logger.debug(
+                        'Reconfigure HAProxy with SIGHUP due to change in NFS backend '
+                        '(%s)',
+                        spec.service_name(),
+                    )
+                    return utils.NextDaemonStep(
+                        utils.Action.RECONFIG,
+                        skip_restart_for_reconfig=True,
+                        send_signal_to_daemon='SIGHUP',
+                    )
+        return step
