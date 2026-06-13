@@ -10252,6 +10252,10 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     }
   } // for (auto& i : ref_map)
 
+  if (o->onode.has_omap()) {
+    _fsck_check_object_omap(depth, o, ctx);
+  }
+
   {
     auto &sbm = o->extent_map.spanning_blob_map;
     size_t broken = 0;
@@ -10284,10 +10288,6 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 	  });
       }
     }
-  }
-
-  if (o->onode.has_omap()) {
-    _fsck_check_object_omap(depth, o, ctx);
   }
 
   return o;

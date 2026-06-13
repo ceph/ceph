@@ -10531,6 +10531,11 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
       for(size_t i = 0; i < 0x10; i++) {
               t.write(cid, hoid4, i * bl.length(), bl.length(), bl);
       }
+      map<string, bufferlist> omap;
+      bufferlist h;
+      h.append("header");
+      omap["omap_key"].append("omap value");
+      t.omap_setheader(cid, hoid4, h);
       t.register_on_commit(&c);
       queue_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
@@ -10540,11 +10545,16 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
       bstore->inject_zombie_spanning_blob(cid, hoid4, 12345);
       bstore->inject_zombie_spanning_blob(cid, hoid4, 23456);
       bstore->inject_zombie_spanning_blob(cid, hoid4, 23457);
+
+      bstore->inject_legacy_omap();
+      bstore->inject_legacy_omap(cid, hoid4);
     }
 
     ch.reset(nullptr);
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 1);
+    SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+    g_ceph_context->_conf.apply_changes(nullptr);
+    ASSERT_EQ(bstore->fsck(true), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
