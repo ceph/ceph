@@ -1055,7 +1055,7 @@ class SMB(ContainerDaemonForm):
         etc_samba_ctr = ddir / 'etc-samba-container'
         file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
         file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o755)
-        file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
+        file_utils.makedirs(ddir / 'run', uid, gid, 0o755)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
         if self._tls_files:
