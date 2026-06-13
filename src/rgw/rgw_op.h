@@ -2123,6 +2123,13 @@ public:
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
+  // Called once just before the expensive upload->complete() work begins.
+  // Protocol-specific subclasses should send the 200 OK response headers here
+  // so the client knows the request was accepted, matching AWS S3 behaviour.
+  virtual void send_response_begin() {}
+  // Called periodically while upload->complete() runs to keep the connection
+  // alive. Protocol-specific subclasses should write whitespace or similar.
+  virtual void send_keepalive() {}
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
