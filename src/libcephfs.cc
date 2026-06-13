@@ -853,6 +853,7 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
                                   const char* rel_path,
                                   const char* snap1,
                                   const char* snap2,
+				  unsigned diff_mask,
                                   struct ceph_snapdiff_info* out)
 {
   if (!cmount->is_mounted()) {
@@ -867,6 +868,7 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
   }
   out->cmount = cmount;
   out->dir1 = out->dir_aux = nullptr;
+  out->mask = diff_mask;
 
   char full_path1[PATH_MAX];
   char snapdir[PATH_MAX];
@@ -939,6 +941,7 @@ extern "C" int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
   int r = snapdiff->cmount->get_client()->readdir_snapdiff(
     d1,
     d2->inode->snapid,
+    snapdiff->mask,
     &(out->dir_entry),
     &snapid);
   if (r >= 0) {
