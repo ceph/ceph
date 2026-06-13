@@ -34,7 +34,7 @@ class TestSnapSchedulesHelper(CephFSTestCase):
 
         snapshots = self.mount_a.ls(path=snap_path)
         for snapshot in snapshots:
-            if snapshot.startswith("_scheduled"):
+            if snapshot.startswith("scheduled-"):
                 continue
             snapshot_path = os.path.join(snap_path, snapshot)
             log.debug(f'removing snapshot: {snapshot_path}')
@@ -756,10 +756,11 @@ class TestSnapSchedulesSubvolAndGroupArguments(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('add', '--subvol', 'sv05', '--group', 'mygrp05', path='.', snap_schedule='1m', fs='cephfs')
 
         self._verify_snap_schedule(self.CREATE_VERSION, 'sv05', 'mygrp05')
-        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv05', 'mygrp05')
         self.fs_snap_schedule_cmd('deactivate', '--subvol', 'sv05', '--group', 'mygrp05', path='.', fs='cephfs')
-        self.remove_snapshots(path, self.get_snap_dir_name())
+        self.fs_snap_schedule_cmd('remove', '--subvol', 'sv05', '--group', 'mygrp05', path='.', snap_schedule='1m', fs='cephfs')
 
+        path = self._get_subvol_snapdir_path(self.CREATE_VERSION, 'sv05', 'mygrp05')
+        self.remove_snapshots(path, self.get_snap_dir_name())
         self._fs_cmd('subvolume', 'rm', 'cephfs', 'sv05', '--group_name', 'mygrp05')
         self._fs_cmd('subvolumegroup', 'rm', 'cephfs', 'mygrp05')
 
