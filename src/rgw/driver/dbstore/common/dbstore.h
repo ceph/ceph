@@ -46,6 +46,14 @@ struct DBOpOIDCProviderInfo {
   std::vector<RGWOIDCProviderInfo> list_entries;
 };
 
+struct DBOpGroupInfo {
+  RGWGroupInfo info;
+  rgw::sal::Attrs group_attrs;
+  std::vector<RGWGroupInfo> list_entries;
+  std::string user_id;
+  std::vector<std::string> user_list;
+};
+
 struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
   obj_version user_version;
@@ -146,6 +154,7 @@ struct DBOpInfo {
   DBOpAccountInfo account;
   DBOpRoleInfo role;
   DBOpOIDCProviderInfo oidc;
+  DBOpGroupInfo group;
   DBOpUserInfo user;
   std::string query_str;
   DBOpBucketInfo bucket;
@@ -163,6 +172,8 @@ struct DBOpParams {
   std::string account_table;
   std::string role_table;
   std::string oidc_table;
+  std::string group_table;
+  std::string group_users_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -227,6 +238,16 @@ struct DBOpOIDCProviderPrepareInfo {
   static constexpr const char* thumbprints = ":thumbprints";
   static constexpr const char* provider_arn = ":provider_arn";
   static constexpr const char* creation_date = ":oidc_creation_date";
+};
+
+struct DBOpGroupPrepareInfo {
+  static constexpr const char* group_id = ":group_id";
+  static constexpr const char* name = ":group_name";
+  static constexpr const char* tenant = ":group_tenant";
+  static constexpr const char* account_id = ":group_account_id";
+  static constexpr const char* path = ":group_path";
+  static constexpr const char* group_attrs = ":group_attrs";
+  static constexpr const char* user_id = ":group_user_id";
 };
 
 struct DBOpUserPrepareInfo {
@@ -383,6 +404,7 @@ struct DBOpPrepareInfo {
   DBOpAccountPrepareInfo account;
   DBOpRolePrepareInfo role;
   DBOpOIDCProviderPrepareInfo oidc;
+  DBOpGroupPrepareInfo group;
   DBOpUserPrepareInfo user;
   std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
@@ -398,6 +420,8 @@ struct DBOpPrepareParams {
   std::string account_table;
   std::string role_table;
   std::string oidc_table;
+  std::string group_table;
+  std::string group_users_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -426,6 +450,13 @@ struct DBOps {
   std::shared_ptr<class RemoveOIDCProviderOp> RemoveOIDCProvider;
   std::shared_ptr<class GetOIDCProviderOp> GetOIDCProvider;
   std::shared_ptr<class ListOIDCProvidersOp> ListOIDCProviders;
+  std::shared_ptr<class InsertGroupOp> InsertGroup;
+  std::shared_ptr<class RemoveGroupOp> RemoveGroup;
+  std::shared_ptr<class GetGroupOp> GetGroup;
+  std::shared_ptr<class ListGroupsOp> ListGroups;
+  std::shared_ptr<class InsertGroupUserOp> InsertGroupUser;
+  std::shared_ptr<class RemoveGroupUserOp> RemoveGroupUser;
+  std::shared_ptr<class ListGroupUsersOp> ListGroupUsers;
   std::shared_ptr<class InsertUserOp> InsertUser;
   std::shared_ptr<class RemoveUserOp> RemoveUser;
   std::shared_ptr<class GetUserOp> GetUser;
@@ -518,6 +549,22 @@ class DBOp {
       ProviderARN TEXT ,	\
       CreationDate TEXT ,	\
       PRIMARY KEY (ProviderURL, Tenant) \n);";
+
+    static constexpr std::string_view CreateGroupTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      GroupID TEXT NOT NULL UNIQUE,		\
+      Name TEXT ,		\
+      Tenant TEXT ,		\
+      AccountID TEXT ,		\
+      Path TEXT ,		\
+      GroupAttrs BLOB ,		\
+      PRIMARY KEY (GroupID) \n);";
+
+    static constexpr std::string_view CreateGroupUsersTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      GroupID TEXT NOT NULL,		\
+      UserID TEXT NOT NULL,		\
+      PRIMARY KEY (GroupID, UserID) \n);";
 
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
@@ -799,6 +846,12 @@ class DBOp {
       if (!type.compare("OIDCProvider"))
         return fmt::format(CreateOIDCProviderTableQ,
             params->oidc_table);
+      if (!type.compare("Group"))
+        return fmt::format(CreateGroupTableQ,
+            params->group_table);
+      if (!type.compare("GroupUsers"))
+        return fmt::format(CreateGroupUsersTableQ,
+            params->group_users_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -1095,6 +1148,130 @@ class ListOIDCProvidersOp: virtual public DBOp {
     static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.oidc_table,
           params.op.oidc.tenant);
+    }
+};
+
+class InsertGroupOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (GroupID, Name, Tenant, AccountID, Path, GroupAttrs) \
+                          VALUES ({}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.op.group.group_id, params.op.group.name,
+          params.op.group.tenant, params.op.group.account_id,
+          params.op.group.path, params.op.group.group_attrs);
+    }
+};
+
+class RemoveGroupOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where GroupID = {}";
+
+  public:
+    virtual ~RemoveGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.op.group.group_id);
+    }
+};
+
+class GetGroupOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByID = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where GroupID = {}";
+
+    static constexpr std::string_view QueryByName = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where Name = {} AND AccountID = {}";
+
+  public:
+    virtual ~GetGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "name") {
+        return fmt::format(QueryByName, params.group_table,
+            params.op.group.name, params.op.group.account_id);
+      } else {
+        return fmt::format(QueryByID, params.group_table,
+            params.op.group.group_id);
+      }
+    }
+};
+
+class ListGroupsOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByAccount = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where AccountID = {} AND Path LIKE {} \
+                          AND Name > {} ORDER BY Name ASC LIMIT {}";
+
+    static constexpr std::string_view CountByAccount =
+      "SELECT COUNT(*) from '{}' where AccountID = {}";
+
+  public:
+    virtual ~ListGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "count_account") {
+        return fmt::format(CountByAccount, params.group_table,
+            params.op.group.account_id);
+      } else {
+        return fmt::format(QueryByAccount, params.group_table,
+            params.op.group.account_id, params.op.group.path,
+            params.op.group.name, params.op.list_max_count);
+      }
+    }
+};
+
+class InsertGroupUserOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "INSERT OR IGNORE INTO '{}' (GroupID, UserID) VALUES ({}, {});";
+
+  public:
+    virtual ~InsertGroupUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id);
+    }
+};
+
+class RemoveGroupUserOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where GroupID = {} AND UserID = {}";
+
+  public:
+    virtual ~RemoveGroupUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id);
+    }
+};
+
+class ListGroupUsersOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT UserID from '{}' \
+                          where GroupID = {} AND UserID > {} \
+                          ORDER BY UserID ASC LIMIT {}";
+
+  public:
+    virtual ~ListGroupUsersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id,
+          params.op.list_max_count);
     }
 };
 
@@ -1899,6 +2076,8 @@ class DB {
     const std::string account_table;
     const std::string role_table;
     const std::string oidc_table;
+    const std::string group_table;
+    const std::string group_users_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -1924,6 +2103,8 @@ class DB {
     account_table(table_name_prefix + "_account_table"),
     role_table(table_name_prefix + "_role_table"),
     oidc_table(table_name_prefix + "_oidc_table"),
+    group_table(table_name_prefix + "_group_table"),
+    group_users_table(table_name_prefix + "_group_users_table"),
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
@@ -1939,6 +2120,8 @@ class DB {
     account_table(db_name+"_account_table"),
     role_table(db_name+"_role_table"),
     oidc_table(db_name+"_oidc_table"),
+    group_table(db_name+"_group_table"),
+    group_users_table(db_name+"_group_users_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -1954,6 +2137,8 @@ class DB {
     const std::string getAccountTable() { return account_table; }
     const std::string getRoleTable() { return role_table; }
     const std::string getOIDCTable() { return oidc_table; }
+    const std::string getGroupTable() { return group_table; }
+    const std::string getGroupUsersTable() { return group_users_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
@@ -2056,6 +2241,27 @@ class DB {
     int list_oidc_providers(const DoutPrefixProvider *dpp,
         const std::string& tenant,
         std::vector<RGWOIDCProviderInfo>& providers);
+    int get_group(const DoutPrefixProvider *dpp,
+        const std::string& query_str, RGWGroupInfo& info,
+        rgw::sal::Attrs& attrs);
+    int store_group(const DoutPrefixProvider *dpp,
+        const RGWGroupInfo& info, const rgw::sal::Attrs& attrs,
+        bool exclusive);
+    int remove_group(const DoutPrefixProvider *dpp,
+        const RGWGroupInfo& info);
+    int add_group_user(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& user_id);
+    int remove_group_user(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& user_id);
+    int list_group_users(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& marker,
+        uint32_t max_items, std::vector<std::string>& user_ids);
+    int list_account_groups(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& path_prefix,
+        const std::string& marker, uint32_t max_items,
+        std::vector<RGWGroupInfo>& groups);
+    int count_account_groups(const DoutPrefixProvider *dpp,
+        const std::string& account_id, uint32_t& count);
     int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,

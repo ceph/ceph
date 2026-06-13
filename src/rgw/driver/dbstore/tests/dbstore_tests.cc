@@ -1665,6 +1665,119 @@ TEST_F(DBStoreTest, RemoveOIDCProvider) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, InsertGroup) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+  params.op.group.info.name = "TestGroup";
+  params.op.group.info.tenant = "default";
+  params.op.group.info.account_id = "ACCT00000000000000001";
+  params.op.group.info.path = "/";
+
+  ret = db->ProcessOp(dpp, "InsertGroup", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetGroupByID) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetGroup", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.group.list_entries.empty());
+  ASSERT_EQ(params.op.group.list_entries[0].name, "TestGroup");
+  ASSERT_EQ(params.op.group.list_entries[0].account_id, "ACCT00000000000000001");
+}
+
+TEST_F(DBStoreTest, GetGroupByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.group.info.name = "TestGroup";
+  params.op.group.info.account_id = "ACCT00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetGroup", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.group.list_entries.empty());
+  ASSERT_EQ(params.op.group.list_entries[0].id, "GRP00000000000000001");
+}
+
+TEST_F(DBStoreTest, GroupMembership) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+  params.op.group.user_id = "user1";
+
+  ret = db->ProcessOp(dpp, "InsertGroupUser", &params);
+  ASSERT_EQ(ret, 0);
+
+  params.op.group.user_id = "user2";
+  ret = db->ProcessOp(dpp, "InsertGroupUser", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.group.info.id = "GRP00000000000000001";
+  list_params.op.group.user_id = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListGroupUsers", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.group.user_list.size(), 2u);
+
+  struct DBOpParams rm_params = GlobalParams;
+  rm_params.op.group.info.id = "GRP00000000000000001";
+  rm_params.op.group.user_id = "user1";
+  ret = db->ProcessOp(dpp, "RemoveGroupUser", &rm_params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list2 = GlobalParams;
+  list2.op.group.info.id = "GRP00000000000000001";
+  list2.op.group.user_id = "";
+  list2.op.list_max_count = 100;
+  ret = db->ProcessOp(dpp, "ListGroupUsers", &list2);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list2.op.group.user_list.size(), 1u);
+  ASSERT_EQ(list2.op.group.user_list[0], "user2");
+}
+
+TEST_F(DBStoreTest, ListGroupsByAccount) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.group.info.id = "GRP00000000000000002";
+  params2.op.group.info.name = "AnotherGroup";
+  params2.op.group.info.tenant = "default";
+  params2.op.group.info.account_id = "ACCT00000000000000001";
+  params2.op.group.info.path = "/eng/";
+
+  ret = db->ProcessOp(dpp, "InsertGroup", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.query_str = "account";
+  list_params.op.group.info.account_id = "ACCT00000000000000001";
+  list_params.op.group.info.path = "%";
+  list_params.op.group.info.name = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListGroups", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.group.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, RemoveGroup) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveGroup", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.group.info.id = "GRP00000000000000001";
+  ret = db->ProcessOp(dpp, "GetGroup", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.group.list_entries.empty());
+
+  params.op.group.info.id = "GRP00000000000000002";
+  ret = db->ProcessOp(dpp, "RemoveGroup", &params);
+  ASSERT_EQ(ret, 0);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;
