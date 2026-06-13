@@ -40,3 +40,5 @@ overrides:
       - Low space hindering backfill .*? backfill_toofull
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
+      - pgs degraded
+      - pgs undersized
