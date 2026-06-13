@@ -3,3 +3,7 @@ tasks:
     clients:
       client.0:
         - rgw/run-admin-pagination.sh
+- workunit:
+    clients:
+      client.0:
+        - rgw/test_rgw_role_pagination.sh
