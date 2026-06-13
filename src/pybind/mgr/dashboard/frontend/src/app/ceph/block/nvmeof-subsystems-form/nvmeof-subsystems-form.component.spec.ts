@@ -3,9 +3,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
 import { ToastrModule } from 'ngx-toastr';
-
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -17,6 +15,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
 import {
   ComboBoxModule,
+  FileUploaderModule,
   GridModule,
   InputModule,
   RadioModule,
@@ -75,6 +74,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
         RadioModule,
         TagModule,
         ToastrModule.forRoot(),
+        FileUploaderModule,
         ComboBoxModule
       ]
     }).compileComponents();
