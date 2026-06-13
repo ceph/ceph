@@ -85,3 +85,9 @@
 [submodule "src/lss"]
 	path = src/lss
 	url = https://chromium.googlesource.com/linux-syscall-support
+[submodule "src/tools/CephBPF/libbpf"]
+	path = src/tools/CephBPF/libbpf
+	url = https://github.com/libbpf/libbpf.git
+[submodule "src/tools/CephBPF/bpftool"]
+	path = src/tools/CephBPF/bpftool
+	url = https://github.com/libbpf/bpftool.git

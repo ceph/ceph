@@ -253,7 +253,12 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
+BuildRequires:  clang
 BuildRequires:  cmake > 3.5
+BuildRequires:  elfutils-devel
+%ifarch x86_64
+BuildRequires:  glibc-devel.i686
+%endif
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
 BuildRequires:	grpc-devel
@@ -2167,6 +2172,7 @@ exit 0
 %{_bindir}/cephfs-tool
 %{_bindir}/crushdiff
 %{_bindir}/rados
+%{_bindir}/radostrace
 %{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
@@ -2198,6 +2204,7 @@ exit 0
 %{_mandir}/man8/crushdiff.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
+%{_mandir}/man8/radostrace.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/rbdmap.8*

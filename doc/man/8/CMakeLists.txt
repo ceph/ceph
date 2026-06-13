@@ -5,6 +5,7 @@ set(client_srcs
   ceph-authtool.rst
   ceph-kvstore-tool.rst
   rados.rst
+  radostrace.rst
   ceph-post-file.rst
   ceph-dencoder.rst)
 

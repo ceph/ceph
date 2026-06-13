@@ -172,8 +172,10 @@ extern const char *ceph_con_mode_name(int con_mode);
 
 /* osd */
 #define CEPH_MSG_OSD_MAP                41
+/* BPF-EXPORT-START */
 #define CEPH_MSG_OSD_OP                 42
 #define CEPH_MSG_OSD_OPREPLY            43
+/* BPF-EXPORT-END */
 #define CEPH_MSG_WATCH_NOTIFY           44
 #define CEPH_MSG_OSD_BACKOFF            61
 
