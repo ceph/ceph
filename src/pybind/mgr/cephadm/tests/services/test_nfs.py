@@ -521,7 +521,7 @@ class TestNFS:
                         ports=[2049, 9587, 20049],
                     ))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
-                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+                assert "Protocols = 4, nfsrdma, rpcrdma" in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm_json")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -549,6 +549,7 @@ class TestNFS:
                 placement=PlacementSpec(hosts=['host1']),
                 enable_rdma=True,
                 rdma_port=1234,
+                enable_nfsv3=True,
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
@@ -584,9 +585,35 @@ class TestNFS:
                         service_name=nfs_spec.service_name(),
                     ))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
-                assert "Protocols = 3, 4" in ganesha_conf
+                assert "Protocols = 4" in ganesha_conf
                 assert "nfsrdma" not in ganesha_conf
                 assert "NFS_RDMA_Port" not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_enable_nfsv3(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            # Test with enable_nfsv3=False (default)
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 4;" in ganesha_conf
+
+            # Test with enable_nfsv3=True
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      enable_nfsv3=True)
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4;" in ganesha_conf
 
 
 def test_nfs_colocation_ports_validation():
