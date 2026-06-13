@@ -30,6 +30,8 @@ export type SubsystemPayload = {
   listeners: ListenerItem[];
   authType: AUTHENTICATION.Bidirectional | AUTHENTICATION.Unidirectional;
   hostDchapKeyList: Array<{ dhchap_key: string; host_nqn: string }>;
+  listenerMode?: string;
+  subnetMask?: string;
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
@@ -159,56 +161,68 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       hosts: payload.hostType === HOST_TYPE.SPECIFIC ? payload.hostDchapKeyList : [],
       gw_group: this.group
     };
-    this.nvmeofService
-      .createSubsystem({
-        nqn: payload.nqn,
-        gw_group: this.group,
-        dhchap_key: payload.subsystemDchapKey
-      })
-      .subscribe({
-        next: () => {
-          stepResults.push({ step: this.steps[0].label, success: true });
-          const sequentialSteps: { step: string; call: () => Observable<any> }[] = [];
 
-          if (payload.listeners && payload.listeners.length > 0) {
-            sequentialSteps.push({
-              step: $localize`Listeners`,
-              call: () =>
-                this.nvmeofService.createListeners(
-                  `${payload.nqn}.${this.group}`,
-                  this.group,
-                  payload.listeners
-                )
-            });
-          }
+    // Prepare subsystem creation request
+    const createSubsystemRequest: any = {
+      nqn: payload.nqn,
+      gw_group: this.group,
+      dhchap_key: payload.subsystemDchapKey
+    };
 
+    // Add network_mask if in auto-fetch mode
+    if (payload.listenerMode === 'auto-fetch' && payload.subnetMask) {
+      createSubsystemRequest.network_mask = [payload.subnetMask];
+    }
+
+    this.nvmeofService.createSubsystem(createSubsystemRequest).subscribe({
+      next: () => {
+        stepResults.push({ step: this.steps[0].label, success: true });
+        const sequentialSteps: { step: string; call: () => Observable<any> }[] = [];
+
+        // Only create manual listeners if NOT in auto-fetch mode
+        if (
+          payload.listenerMode !== 'auto-fetch' &&
+          payload.listeners &&
+          payload.listeners.length > 0
+        ) {
           sequentialSteps.push({
-            step: this.steps[1].label,
+            step: $localize`Listeners`,
             call: () =>
-              this.nvmeofService.addSubsystemInitiators(
+              this.nvmeofService.createListeners(
                 `${payload.nqn}.${this.group}`,
-                initiatorRequest
+                this.group,
+                payload.listeners
               )
           });
-
-          this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
-            complete: () => this.showFinalNotification(stepResults)
-          });
-        },
-        error: (err) => {
-          err.preventDefault();
-          const errorMsg = err?.error?.detail || $localize`Subsystem creation failed`;
-          this.notificationService.show(
-            NotificationType.error,
-            $localize`Subsystem creation failed`,
-            errorMsg
-          );
-          this.isSubmitLoading = false;
-          this.router.navigate(['block/nvmeof/subsystems'], {
-            queryParams: { group: this.group }
-          });
         }
-      });
+
+        sequentialSteps.push({
+          step: this.steps[1].label,
+          call: () =>
+            this.nvmeofService.addSubsystemInitiators(
+              `${payload.nqn}.${this.group}`,
+              initiatorRequest
+            )
+        });
+
+        this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
+          complete: () => this.showFinalNotification(stepResults)
+        });
+      },
+      error: (err) => {
+        err.preventDefault();
+        const errorMsg = err?.error?.detail || $localize`Subsystem creation failed`;
+        this.notificationService.show(
+          NotificationType.error,
+          $localize`Subsystem creation failed`,
+          errorMsg
+        );
+        this.isSubmitLoading = false;
+        this.router.navigate(['block/nvmeof/subsystems'], {
+          queryParams: { group: this.group }
+        });
+      }
+    });
   }
 
   private runSequentialSteps(
