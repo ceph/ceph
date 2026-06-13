@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: '*'
+        osd_pool_default_flag_ec_optimizations: false
+  thrashosds:
+    ec_optimizations_off_then_on: true
+  rados:
+    ops: 400000
+    max_seconds: 1800

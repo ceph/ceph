@@ -238,6 +238,8 @@ class OSDThrasher(Thrasher):
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
         self.chance_reset_purged_snaps_last = self.config.get('chance_reset_purged_snaps_last', 0.3)
         self.chance_trim_stale_osdmaps = self.config.get('chance_trim_stale_osdmaps', 0.3)
+        self.ec_opts_enable = self.config.get('ec_optimizations_off_then_on', False)
+        self.ec_opts_delay = self.config.get('ec_optimizations_delay', random.uniform(300, 900))
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
@@ -283,6 +285,10 @@ class OSDThrasher(Thrasher):
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+        if self.ec_opts_enable:
+            # need delay to let some objects be written before enabling optimizations
+            self.ec_opts_enable_thread = gevent.spawn_later(self.ec_opts_delay,
+                                                            self.do_ec_opts_enable)
 
     def log(self, msg, *args, **kwargs):
         self.logger.info(msg, *args, **kwargs)
@@ -893,6 +899,9 @@ class OSDThrasher(Thrasher):
         if self.noscrub_toggle_delay:
             self.log("joining the do_noscrub_toggle greenlet")
             self.noscrub_toggle_thread.join()
+        if self.ec_opts_enable:
+            self.log("joining the do_ec_opts_enable greenlet")
+            self.ec_opts_enable_thread.join()
 
     def stop_and_join(self):
         """
@@ -1469,6 +1478,25 @@ class OSDThrasher(Thrasher):
             gevent.sleep(delay)
         self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
         self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
+
+    @log_exc
+    def do_ec_opts_enable(self):
+        """
+        Loop through pools and enable allow_ec_optimizations on
+        any EC pools with optimizations disabled.
+        """
+        pools_json = self.ceph_manager.get_osd_dump_json()['pools']
+        enabled_count = 0
+        for pool_json in pools_json:
+            pool = pool_json['pool_name']
+            pool_type = pool_json['type']
+            if pool_type != PoolType.ERASURE_CODED:
+                continue
+            pool_ec_opts = self.ceph_manager.get_pool_property(pool, 'allow_ec_optimizations')
+            if pool_ec_opts == 'false':
+                self.ceph_manager.set_pool_property(pool, 'allow_ec_optimizations', 1)
+                enabled_count += 1
+        assert enabled_count > 0
 
     @log_exc
     def _do_thrash(self):
