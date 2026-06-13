@@ -758,7 +758,15 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
   PyFormatter f;
   for (auto p = store_cache.lower_bound(global_prefix);
        p != store_cache.end() && p->first.find(global_prefix) == 0; ++p) {
-    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+    PyObject *value = PyUnicode_FromStringAndSize(
+      p->second.c_str(), p->second.size());
+    if (!value) {
+      dout(1) << __func__ << " skipping key " << p->first
+              << " due to PyUnicode_FromStringAndSize failure" << dendl;
+      PyErr_Clear();
+      continue;
+    }
+    f.dump_pyobject(p->first.substr(base_prefix.size()).c_str(), value);
   }
   return f.get();
 }
