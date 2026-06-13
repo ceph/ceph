@@ -40,6 +40,7 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+
 #include "include/denc.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
@@ -3512,3 +3513,4 @@ bool EMetaBlob::rewrite_truncate_finish(MDSRank const *mds,
 
   return modified;
 }
+

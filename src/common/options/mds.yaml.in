@@ -1812,3 +1812,21 @@ options:
   min: 30
   services:
   - mds
+- name: mds_max_inflight_qtine_ops
+  type: size
+  level: advanced
+  desc: Threshold for number of inodes that can be quarantined
+  default: 512_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_qtine_sleep
+  type: millisecs
+  level: advanced
+  desc: Sleep time for requests after passing the quarantine threshold
+  default: 200
+  services:
+  - mds
+  flags:
+  - runtime

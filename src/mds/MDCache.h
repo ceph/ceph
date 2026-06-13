@@ -68,6 +68,7 @@ class Session;
 class Migrator;
 
 class Session;
+class QuarantineTracker;
 
 class ESubtreeMap;
 
@@ -1154,6 +1155,14 @@ private:
 
   void uninline_data_work(MDRequestRef mdr);
 
+  void quarantine_dir_auth(const MDRequestRef& mdr);
+  void quarantine_work(const MDRequestRef& mdr);
+  void quarantine_inode(MDRequestRef const& mdr);
+  void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
+  bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
+  void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
+                                       bool is_quarantined);
+
   // my leader
   MDSRank *mds;
 
@@ -1622,6 +1631,9 @@ private:
   DecayCounter quiesce_counter;
   uint64_t quiesce_threshold;
   std::chrono::milliseconds quiesce_sleep;
+
+  uint64_t qtine_inflight_ops;
+  std::chrono::milliseconds qtine_sleep;
 };
 
 /**

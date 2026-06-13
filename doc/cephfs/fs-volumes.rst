@@ -1403,6 +1403,138 @@ outputs:
 .. note:: A ``charmap`` can only be removed when a subvolumegroup or subvolume is empty.
 
 
+Subvolume Quarantine
+--------------------
+
+Subvolume quarantine allows administrators to block client access to a
+subvolume while still allowing authorized recovery clients to read and write
+data. This is useful during security incidents (for example, ransomware
+attacks) or when a subvolume needs to be isolated for investigation.
+
+When quarantine is enabled on a subvolume:
+
+- Normal clients lose all capabilities except ``PIN`` and cannot read, write,
+  stat, or create files inside the subvolume.
+- Clients receive ``-EACCES`` when they try to access quarantined files.
+- Recovery clients with special quarantine auth caps (``rwq`` or ``rwQ``) keep
+  full access and can perform data recovery operations.
+- The quarantine state is persistent — it survives MDS restarts.
+- In multi-MDS setups, quarantine is coordinated across all MDS ranks
+  through the standard policylock replication mechanism.
+
+Enabling Quarantine
+~~~~~~~~~~~~~~~~~~~
+
+To enable quarantine on a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine enable <vol_name> <sub_name> [--group_name=<group_name>]
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine enable cephfs mysubvol
+
+After this command completes, all normal clients will have their caps revoked
+and will see errors when trying to access files in the subvolume.
+
+Disabling Quarantine
+~~~~~~~~~~~~~~~~~~~~
+
+To disable quarantine and restore normal access:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine disable <vol_name> <sub_name> [--group_name=<group_name>]
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolume quarantine disable cephfs mysubvol
+
+After this command completes, normal clients can access files again. Clients
+are notified that quarantine has been lifted and can resume I/O.
+
+Recovery Client Access
+~~~~~~~~~~~~~~~~~~~~~~
+
+Recovery clients need special MDS auth caps with the ``q`` or ``Q`` flag to
+access quarantined subvolumes:
+
+- ``q`` flag: allows access to a specific quarantined path.
+- ``Q`` flag: allows access to all quarantined paths (admin/recovery use).
+
+To create a recovery client that can access a specific quarantined subvolume:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery \
+        mon 'allow r' \
+        mds 'allow rwq fsname=<vol_name> path=<subvol_root_path>' \
+        osd 'allow rw tag cephfs data=<vol_name>'
+
+For example, to create a recovery client for a subvolume at
+``/volumes/_nogroup/mysubvol``:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery \
+        mon 'allow r' \
+        mds 'allow rwq fsname=cephfs path=/volumes/_nogroup/mysubvol' \
+        osd 'allow rw tag cephfs data=cephfs'
+
+To create an admin-level recovery client that can access all quarantined
+subvolumes:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create client.recovery_admin \
+        mon 'allow r' \
+        mds 'allow rwQ fsname=<vol_name>' \
+        osd 'allow rw tag cephfs data=<vol_name>'
+
+The recovery client can then mount the subvolume using ``ceph-fuse`` and
+perform data recovery while normal clients remain blocked.
+
+What Gets Blocked
+~~~~~~~~~~~~~~~~~
+
+When a subvolume is quarantined, the following operations are blocked for
+normal (non-recovery) clients:
+
+- Reading file contents
+- Writing file contents
+- Creating new files or directories
+- Stat operations on files
+- Any operation that requires capabilities beyond ``PIN``
+
+The quarantine applies to all files and directories within the subvolume,
+including snapshot data under ``.snap``.
+
+.. note:: Quarantine operates at the subvolume level. You cannot quarantine
+   individual files or directories within a subvolume. The subvolume must
+   be a proper subvolume root (a snaprealm boundary).
+
+Multi-MDS
+~~~~~~~~~
+
+Quarantine works with multiple active MDS daemons. When quarantine is enabled,
+the MDS that is authoritative for the subvolume root inode journals the state
+change. Other MDS ranks that serve parts of the subvolume learn about the
+quarantine through policylock replication and revoke caps from their clients.
+
+Subtree migration is blocked while a subvolume is under quarantine to prevent
+exported subtrees from moving to a rank that does not yet know the quarantine
+state.
+
+If an MDS rank does not have the subvolume root inode in its cache, it fails
+closed: all capability checks treat the subvolume as quarantined until the
+authoritative state is available.
+
+
 Subvolume Quiesce
 -----------------
 

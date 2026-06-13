@@ -954,6 +954,9 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   } else if (dir->inode->is_quiesced()) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": is quiesced" << dendl;
     return;
+  } else if (dir->inode->is_under_quarantine()) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": is under quarantine" << dendl;
+    return;
   }
 
   if (unlikely(g_conf()->mds_thrash_exports)) {

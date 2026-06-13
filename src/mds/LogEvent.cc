@@ -44,6 +44,7 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+
 #define dout_context g_ceph_context
 
 
