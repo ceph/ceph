@@ -787,6 +787,11 @@ class RbdTest(DashboardTestCase):
                                                  'fast-diff', 'object-map'],
                              metadata={'key1': 'val1'})
 
+        self.wait_until_true(
+            lambda: self.get_image(
+                'rbd_iscsi', None, 'coimg-copy')['disk_usage'] == img['disk_usage'],
+            timeout=30)
+
         img_copy = self.get_image('rbd_iscsi', None, 'coimg-copy')
         self._validate_image(img_copy, features_name=['exclusive-lock',
                                                       'fast-diff', 'layering',
