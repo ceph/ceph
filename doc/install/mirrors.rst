@@ -14,27 +14,27 @@ Locations
 
 These mirrors are available on the following locations:
 
-- **EU: Netherlands**: http://eu.ceph.com/
-- **AU: Australia**: http://au.ceph.com/
-- **SE: Sweden**: http://se.ceph.com/
-- **DE: Germany**: http://de.ceph.com/
-- **FR: France**: http://fr.ceph.com/
-- **UK: UK**: http://uk.ceph.com
-- **US-Mid-West: Chicago**: http://mirrors.gigenet.com/ceph/
-- **US-West: US West Coast**: http://us-west.ceph.com/
-- **CN: China**: http://mirrors.ustc.edu.cn/ceph/
+- **EU: Netherlands**: https://eu.ceph.com/
+- **AU: Australia**: https://au.ceph.com/
+- **SE: Sweden**: https://se.ceph.com/
+- **DE: Germany**: https://de.ceph.com/
+- **FR: France**: https://fr.ceph.com/
+- **UK: UK**: https://uk.ceph.com
+- **US-Mid-West: Chicago**: https://mirrors.gigenet.com/ceph/
+- **US-West: US West Coast**: https://us-west.ceph.com/
+- **CN: China**: https://mirrors.ustc.edu.cn/ceph/
 
 You can replace all download.ceph.com URLs with any of the mirrors, for example:
 
-- http://download.ceph.com/tarballs/
-- http://download.ceph.com/debian-hammer/
-- http://download.ceph.com/rpm-hammer/
+- https://download.ceph.com/tarballs/
+- https://download.ceph.com/debian-tentacle/
+- https://download.ceph.com/rpm-tentacle/
 
 Change this to:
 
-- http://eu.ceph.com/tarballs/
-- http://eu.ceph.com/debian-hammer/
-- http://eu.ceph.com/rpm-hammer/
+- https://eu.ceph.com/tarballs/
+- https://eu.ceph.com/debian-tentacle/
+- https://eu.ceph.com/rpm-tentacle/
 
 
 Mirroring
@@ -62,4 +62,4 @@ set for all mirrors. These can be found on `GitHub`_.
 If you want to apply for an official mirror, please contact the ceph-users mailinglist.
 
 
-.. _GitHub: https://github.com/ceph/ceph/tree/master/mirroring
+.. _GitHub: https://github.com/ceph/ceph/tree/main/mirroring
