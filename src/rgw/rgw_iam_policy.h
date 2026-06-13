@@ -216,6 +216,43 @@ enum {
   organizationsListTargetsForPolicy,
   organizationsAll,
 
+  // S3 Files API actions (filesystem-style access to S3 buckets).
+  // Smithy model vendored at src/rgw/spec/aws/s3files/. See
+  // doc/dev/radosgw/s3_files_api.rst for the design. Each action
+  // here mirrors one Smithy operation; policies reference them as
+  // `s3files:CreateFileSystem` etc.
+  s3filesCreateFileSystem,
+  s3filesGetFileSystem,
+  s3filesListFileSystems,
+  s3filesDeleteFileSystem,
+  s3filesPutFileSystemPolicy,
+  s3filesGetFileSystemPolicy,
+  s3filesDeleteFileSystemPolicy,
+  s3filesPutSynchronizationConfiguration,
+  s3filesGetSynchronizationConfiguration,
+  s3filesCreateAccessPoint,
+  s3filesGetAccessPoint,
+  s3filesListAccessPoints,
+  s3filesDeleteAccessPoint,
+  s3filesCreateMountTarget,
+  s3filesGetMountTarget,
+  s3filesListMountTargets,
+  s3filesUpdateMountTarget,
+  s3filesDeleteMountTarget,
+  s3filesTagResource,
+  s3filesUntagResource,
+  s3filesListTagsForResource,
+  // Mount-auth actions, evaluated by the data plane (Ganesha
+  // RGW FSAL) at NFS mount handshake time, not by the s3files
+  // control-plane handlers. Modeled after the EFS shape:
+  // ClientMount implies read; ClientWrite is additive on
+  // ClientMount; ClientRootAccess bypasses the AccessPoint's
+  // posixUser squash. See doc/dev/radosgw/s3_files_api.rst.
+  s3filesClientMount,
+  s3filesClientWrite,
+  s3filesClientRootAccess,
+  s3filesAll,
+
   allCount
 };
 
@@ -242,6 +279,7 @@ static const Action_t iamAllValue = set_cont_bits<allCount>(s3objectlambdaAll+1,
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
 static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll+1, snsAll);
 static const Action_t organizationsAllValue = set_cont_bits<allCount>(snsAll+1,organizationsAll);
+static const Action_t s3filesAllValue = set_cont_bits<allCount>(organizationsAll+1, s3filesAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
