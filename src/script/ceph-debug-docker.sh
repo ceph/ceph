@@ -102,6 +102,10 @@ function main {
         centos:stream8)
             distro="centos/8"
             ;;
+        rocky:10|rockylinux:10)
+            env="docker.io/rockylinux/rockylinux:10"
+            distro="rocky/10"
+            ;;
         *)
             distro="${env/://}"
     esac
@@ -159,6 +163,12 @@ EOF
                     base_debuginfo="glibc-debuginfo"
                     ceph_debuginfo="ceph-base-debuginfo"
                     debuginfo=/etc/yum.repos.d/centos.repo
+                    ;;
+                docker.io/rockylinux/rockylinux:10)
+                    python_bindings="python3-rados python3-cephfs"
+                    base_debuginfo="glibc-debuginfo"
+                    ceph_debuginfo="ceph-base-debuginfo"
+                    debuginfo=/etc/yum.repos.d/rocky*.repo
                     ;;
             esac
             if [ "${FLAVOR}" = "crimson" ]; then
