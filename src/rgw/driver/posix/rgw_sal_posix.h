@@ -606,11 +606,11 @@ public:
 					std::string_view account_id,
 					std::string_view tenant,
 					std::string_view username,
-					std::unique_ptr<User>* user) override { return -ENOTSUP; }
+					std::unique_ptr<User>* user) override;
   virtual int count_account_users(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
-				  uint32_t& count) override { return -ENOTSUP; }
+				  uint32_t& count) override;
   virtual int list_account_users(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
@@ -618,7 +618,7 @@ public:
 				 std::string_view path_prefix,
 				 std::string_view marker,
 				 uint32_t max_items,
-				 UserList& listing) override { return -ENOTSUP; }
+				 UserList& listing) override;
 
   virtual int load_group_by_id(const DoutPrefixProvider* dpp,
 			       optional_yield y,

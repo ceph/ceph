@@ -2687,6 +2687,60 @@ int NSFSDriver::list_roles(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int NSFSDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
+					  optional_yield y,
+					  std::string_view account_id,
+					  std::string_view tenant,
+					  std::string_view username,
+					  std::unique_ptr<User>* user)
+{
+  RGWUserInfo uinfo;
+  int ret = get_account_db()->get_account_user_by_name(dpp,
+      std::string(account_id), std::string(username), uinfo);
+  if (ret < 0) {
+    return ret;
+  }
+  if (user) {
+    *user = get_user(uinfo.user_id);
+    (*user)->get_info() = uinfo;
+  }
+  return 0;
+}
+
+int NSFSDriver::count_account_users(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    uint32_t& count)
+{
+  return get_account_db()->count_account_users(dpp,
+      std::string(account_id), count);
+}
+
+int NSFSDriver::list_account_users(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view account_id,
+				   std::string_view tenant,
+				   std::string_view path_prefix,
+				   std::string_view marker,
+				   uint32_t max_items,
+				   UserList& listing)
+{
+  std::vector<RGWUserInfo> users;
+  int ret = get_account_db()->list_account_users(dpp,
+      std::string(account_id), std::string(marker),
+      max_items + 1, users);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (users.size() > max_items) {
+    listing.next_marker = users[max_items].display_name;
+    users.resize(max_items);
+  }
+  listing.users = std::move(users);
+  return 0;
+}
+
 int NSFSDriver::load_group_by_id(const DoutPrefixProvider* dpp,
 				 optional_yield y, std::string_view id,
 				 RGWGroupInfo& info, Attrs& attrs,
