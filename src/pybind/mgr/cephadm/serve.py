@@ -1541,6 +1541,14 @@ class CephadmServe:
                             sd.update_pending_daemon_config(True)
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+                elif reconfig and daemon_spec.daemon_type == 'mgr':
+                    cache_host = daemon_spec.host
+                    if not code and self.mgr.cache.has_daemon(daemon_spec.name()):
+                        existing_dd = self.mgr.cache.get_daemon(daemon_spec.name())
+                        existing_dd.ports = daemon_spec.ports
+                        cache_host = existing_dd.hostname or daemon_spec.host
+                        self.mgr.cache.add_daemon(cache_host, existing_dd)
+                    self.mgr.cache.invalidate_host_daemons(cache_host)
 
                 if daemon_spec.daemon_type != 'agent':
                     self.mgr.cache.update_daemon_config_deps(
