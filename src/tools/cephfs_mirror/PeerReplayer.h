@@ -9,6 +9,7 @@
 #include "mds/FSMap.h"
 #include "ServiceDaemon.h"
 #include "Types.h"
+#include "Checkpoint.h"
 
 #include <stack>
 #include <boost/optional.hpp>
@@ -548,6 +549,13 @@ private:
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
                      bool is_remote=false);
+
+  void initialize_checkpoints(const std::string &dir_root);
+  void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
+                                const std::string &snap_name);
+  void checkpoint_sync_failed(const std::string &dir_root, uint64_t snap_id,
+                              const std::string &snap_name);
+  void cleanup_old_synced_checkpoints(const std::string &dir_root, size_t keep_count = 10);
 
   int propagate_snap_deletes(const std::string &dir_root, const std::set<std::string> &snaps);
   int propagate_snap_renames(const std::string &dir_root,
