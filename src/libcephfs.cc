@@ -2395,6 +2395,12 @@ extern "C" int ceph_ll_setlk(struct ceph_mount_info *cmount,
   return (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
 }
 
+extern "C" int ceph_ll_flock(struct ceph_mount_info *cmount,
+			     Fh *fh, int operation, uint64_t owner)
+{
+  return (cmount->get_client()->ll_flock(fh, operation, owner));
+}
+
 extern "C" int ceph_ll_lazyio(class ceph_mount_info *cmount,
 			      Fh *fh, int enable)
 {

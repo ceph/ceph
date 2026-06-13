@@ -42,7 +42,7 @@ extern "C" {
 
 #define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 0
+#define LIBCEPHFS_VER_EXTRA 1
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -2221,6 +2221,8 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner);
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+int ceph_ll_flock(struct ceph_mount_info *cmount,
+		  Fh *fh, int operation, uint64_t owner);
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 
