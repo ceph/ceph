@@ -49,6 +49,7 @@ public:
   virtual uint64_t get_alloc_units() const = 0;
   virtual uint64_t get_alloc_size() const = 0;
 
+  virtual int expand(uint64_t new_size, KeyValueDB* db) = 0;
   virtual void get_meta(uint64_t target_size,
   std::vector<std::pair<std::string, std::string>>*) const = 0;
 

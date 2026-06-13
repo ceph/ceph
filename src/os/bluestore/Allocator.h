@@ -13,6 +13,7 @@
 #ifndef CEPH_OS_BLUESTORE_ALLOCATOR_H
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
+#include <atomic>
 #include <functional>
 #include <ostream>
 #include "include/ceph_assert.h"
@@ -84,15 +85,19 @@ public:
   virtual const std::string& get_name() const = 0;
   int64_t get_capacity() const
   {
-    return device_size;
+    return device_size.load();
   }
   int64_t get_block_size() const
   {
     return block_size;
   }
+  virtual void expand(int64_t new_size){
+    ceph_assert(new_size >= device_size.load());
+    device_size.store(new_size);
+  }
 
 protected:
-  const int64_t device_size = 0;
+  std::atomic<int64_t> device_size{0};
   const int64_t block_size = 0;
 };
 

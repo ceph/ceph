@@ -295,6 +295,48 @@ protected:
     }
   }
 
+  void expand(uint64_t new_capacity, uint64_t old_capacity)
+  {
+    auto new_aligned_capacity =
+      p2roundup((int64_t)new_capacity,
+        int64_t(l1_granularity * slots_per_slotset * _children_per_slot()));
+
+    auto old_aligned_capacity =
+      p2roundup((int64_t)old_capacity,
+        int64_t(l1_granularity * slots_per_slotset * _children_per_slot()));
+
+    if (new_aligned_capacity == old_aligned_capacity) {
+      // aligned capacity didn't change, but we should check the old and new boundaries
+      auto old_l0_pos_no_use = p2roundup((int64_t)old_capacity, (int64_t)l0_granularity) / l0_granularity;
+      auto new_l0_pos_no_use = p2roundup((int64_t)new_capacity, (int64_t)l0_granularity) / l0_granularity;
+      if (old_l0_pos_no_use < new_l0_pos_no_use) {
+        // L1 aligned capacity is the same but actual capacity increased
+        // mark the newly expanded region [old_capacity, new_capacity) as free
+        _mark_free_l1_l0(old_l0_pos_no_use, new_l0_pos_no_use);
+      }
+      return;
+    }
+
+    size_t new_slot_count = new_aligned_capacity / l1_granularity / _children_per_slot();
+    size_t old_slot_count = l1.size();
+    l1.resize(new_slot_count, all_slot_set);
+
+    size_t new_slot_count_l0 = new_aligned_capacity / l0_granularity / bits_per_slot;
+    l0.resize(new_slot_count_l0, all_slot_set);
+
+    unalloc_l1_count += (new_slot_count - old_slot_count) * _children_per_slot();
+
+    // Free the old padding at the old aligned boundary
+    auto old_l0_pos_no_use = p2roundup((int64_t)old_capacity, (int64_t)l0_granularity) / l0_granularity;
+    auto old_l0_pos_end = old_aligned_capacity / l0_granularity;
+    if (old_l0_pos_no_use < old_l0_pos_end) {
+      _mark_free_l1_l0(old_l0_pos_no_use, old_l0_pos_end);
+    }
+
+    auto l0_pos_no_use = p2roundup((int64_t)new_capacity, (int64_t)l0_granularity) / l0_granularity;
+    _mark_alloc_l1_l0(l0_pos_no_use, new_aligned_capacity / l0_granularity);
+  }
+
   struct search_ctx_t
   {
     size_t partial_count = 0;
@@ -594,6 +636,49 @@ public:
   double get_fragmentation_internal() {
     std::lock_guard l(lock);
     return l1.get_fragmentation();
+  }
+
+  void expand(uint64_t new_capacity, uint64_t old_capacity)
+  {
+    ceph_assert(new_capacity >= old_capacity);
+    std::lock_guard l(lock);
+
+    l1.expand(new_capacity, old_capacity);
+
+    auto new_aligned_capacity =
+      p2roundup((int64_t)new_capacity, (int64_t)l2_granularity * L1_ENTRIES_PER_SLOT);
+    auto old_aligned_capacity =
+      p2roundup((int64_t)old_capacity, (int64_t)l2_granularity * L1_ENTRIES_PER_SLOT);
+
+    if (new_aligned_capacity == old_aligned_capacity) {
+      // L2 vector didn't grow, but we need to update L2 bits to reflect the expanded L1 entries
+      // calculate which L2 position range covers the expanded region [old_capacity, new_capacity)
+      auto l2_pos_start = old_capacity / l2_granularity;
+      auto l2_pos_end = p2roundup((int64_t)new_capacity, (int64_t)l2_granularity) / l2_granularity;
+
+      if (l2_pos_start < l2_pos_end) {
+        // update L2 metadata for the expanded region by examining L1 state
+        _mark_l2_on_l1(l2_pos_start, l2_pos_end);
+      }
+
+      return;
+    }
+
+    size_t new_elem_count = new_aligned_capacity / l2_granularity / L1_ENTRIES_PER_SLOT;
+    l2.resize(new_elem_count, all_slot_set);
+
+    // free the old padding so we can reuse that space
+    auto old_l2_pos_no_use = 
+      p2roundup((int64_t)old_capacity, (int64_t)l2_granularity) / l2_granularity;
+    auto old_l2_pos_end = old_aligned_capacity / l2_granularity;
+    if (old_l2_pos_no_use < old_l2_pos_end) {
+      _mark_l2_free(old_l2_pos_no_use, old_l2_pos_end);
+    }
+
+    auto l2_pos_no_use = 
+      p2roundup((int64_t)new_capacity, (int64_t)l2_granularity) / l2_granularity;
+    _mark_l2_allocated(l2_pos_no_use, new_aligned_capacity / l2_granularity);
+
   }
 
 protected:
