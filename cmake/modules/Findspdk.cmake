@@ -1,7 +1,7 @@
 # Findspdk.cmake -- locate a system-installed SPDK via pkg-config.
 #
 # Paired with WITH_SYSTEM_SPDK: link a distro-provided spdk-devel instead of
-# building the bundled src/spdk fork. Modelled on Finddpdk.cmake.
+# building the bundled src/spdk fork. Modelled on FindDPDK.cmake.
 #
 # Provides: spdk::spdk, spdk_FOUND, SPDK_INCLUDE_DIRS
 

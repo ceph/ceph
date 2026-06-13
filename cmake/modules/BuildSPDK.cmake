@@ -76,6 +76,6 @@ macro(build_spdk)
   set_target_properties(spdk::spdk PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${SPDK_INCLUDE_DIR}
     INTERFACE_LINK_LIBRARIES
-    "-Wl,--whole-archive $<JOIN:${spdk_libs}, > -Wl,--no-whole-archive;dpdk::dpdk;rt;${UUID_LIBRARIES}")
+    "-Wl,--whole-archive $<JOIN:${spdk_libs}, > -Wl,--no-whole-archive;DPDK::dpdk;rt;${UUID_LIBRARIES}")
   unset(source_dir)
 endmacro()
