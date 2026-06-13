@@ -269,6 +269,12 @@ int main() {
 }
 " HAVE_STDLIB_MAP_SPLICING)
 
+# Another way to check for a C++ feature:
+include(HasCppFeature)
+# Example: has_cpp_feature(__cpp_lib_generator HAVE_CPP_LIB_GENERATOR)
+# ...and, try to install a reference implementation:
+# JFW
+
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)

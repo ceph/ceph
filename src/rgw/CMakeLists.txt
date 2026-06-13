@@ -1,3 +1,12 @@
+include(HasCppFeature)
+has_cpp_feature(__cpp_lib_generator HAVE_CPP_DECLTYPE)
+
+if(HAVE_CPP_DECLTYPE)
+ message("-- C++ decltype support is active")
+else()
+ message(FATAL_ERROR "-- C++ decltype is not present")
+endif()
+
 find_program(GPERF gperf
   REQUIRED)
 
@@ -30,7 +39,6 @@ function(gperf_generate input output)
     COMMENT "Generate ${output}"
     )
 endfunction()
-
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
