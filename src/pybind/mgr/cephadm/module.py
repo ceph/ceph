@@ -522,6 +522,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             default='169.254.1.1',
             desc="Default IP address for RedFish API (OOB management)."
         ),
+        Option(
+            'nfs_ganesha_rados_grace_timeout',
+            type='int',
+            default=30,
+            desc='Timeout in seconds for ganesha-rados-grace operations during NFS service deployment',
+            min=10,
+            max=300
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
