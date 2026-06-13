@@ -148,6 +148,23 @@ struct LBALeafNode
     laddr_t addr,
     lba_map_val_t val) final;
 
+  void replace(
+    internal_const_iterator_t iter,
+    laddr_t pivot,
+    lba_map_val_t val) {
+    LOG_PREFIX(FixedKVInternalNode::replace);
+    SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}",
+      this->pending_for_transaction,
+      iter.get_offset(),
+      iter.get_key(),
+      pivot);
+    return this->journal_replace(
+      iter,
+      pivot,
+      std::move(val),
+      maybe_get_delta_buffer());
+  }
+
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",

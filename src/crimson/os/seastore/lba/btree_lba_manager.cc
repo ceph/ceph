@@ -1086,38 +1086,54 @@ BtreeLBAManager::remap_mappings(
 	 (orig_val.pladdr.is_paddr() &&
 	  orig_val.pladdr.get_paddr().is_absolute()));
   auto type = cursor->get_extent_type();
-  cursor = co_await update_mapping_refcount(
-    c.trans, cursor, -1);
-  iter = btree.make_partial_iter(c, *cursor);
+  auto off = 0;
+  auto last_iter = iter;
   for (auto &remap : remaps) {
     assert(remap.offset + remap.len <= orig_len);
     assert((bool)remap.extent == !orig_indirect);
-    lba_map_val_t val = orig_val;
     auto new_key = (orig_laddr + remap.offset).checked_to_laddr();
-    val.len = remap.len;
-    if (val.pladdr.is_laddr()) {
-      DEBUGT("{} + {:#x}",
-        t,
-        val.pladdr.get_local_clone_id(),
-        remap.offset);
-    } else {
-      auto paddr = val.pladdr.get_paddr();
-      val.pladdr = paddr + remap.offset;
-    }
-    val.refcount = EXTENT_DEFAULT_REF_COUNT;
-    // Checksum will be updated when the committing the transaction
-    val.checksum = CRC_NULL;
-    val.type = type;
+    auto f = [&last_iter, &remap, off, &t, FNAME, type] {
+      lba_map_val_t val = last_iter.get_val();
+      auto cur_off = remap.offset - off;
+      if (val.pladdr.is_laddr()) {
+        DEBUGT("{} + {:#x}",
+          t,
+          val.pladdr.get_local_clone_id(),
+          remap.offset);
+      } else {
+        auto paddr = val.pladdr.get_paddr();
+        val.pladdr = paddr + cur_off;
+      }
+      val.len = remap.len;
+      val.refcount = EXTENT_DEFAULT_REF_COUNT;
+      // Checksum will be updated when the committing the transaction
+      val.checksum = CRC_NULL;
+      val.type = type;
+      return val;
+    };
     // committing the transaction
-    auto p = co_await btree.insert(
-      c, iter, new_key, std::move(val),
-      orig_indirect
-        ? get_reserved_ptr<LBALeafNode, laddr_t>()
-        : remap.extent);
-    auto &[it, inserted] = p;
-    ceph_assert(inserted);
-    ret.push_back(it.get_cursor(c));
-    iter = co_await it.next(c);
+    if (remap.offset == remaps.front().offset) {
+      iter = co_await btree.replace(
+        c, std::move(iter), new_key,
+        std::move(f),
+        orig_indirect
+          ? get_reserved_ptr<LBALeafNode, laddr_t>()
+          : remap.extent);
+      ret.push_back(iter.get_cursor(c));
+      iter = co_await iter.next(c);
+    } else {
+      auto p = co_await btree.insert(
+        c, iter, new_key, f(),
+        orig_indirect
+          ? get_reserved_ptr<LBALeafNode, laddr_t>()
+          : remap.extent);
+      auto &[it, inserted] = p;
+      ceph_assert(inserted);
+      ret.push_back(it.get_cursor(c));
+      last_iter = it;
+      iter = co_await it.next(c);
+    }
+    off += remap.offset;
   }
   co_await trans_intr::parallel_for_each(
     ret,

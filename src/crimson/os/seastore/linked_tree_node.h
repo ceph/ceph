@@ -426,7 +426,9 @@ public:
 
   void update_child_ptr(btreenode_pos_t pos, BaseChildNode<T, node_key_t>* child) {
     children[pos] = child;
-    set_child_ptracker(child);
+    if (!is_reserved_ptr(child)) {
+      set_child_ptracker(child);
+    }
   }
 
   // copy dests points from a stable node back to its pending nodes
