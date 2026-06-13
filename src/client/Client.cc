@@ -3791,6 +3791,14 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
+  // Keep the dentry alive for the duration of this function.
+  // Dentry::unlink() may call put() internally (for dir/ll_ref pins) which
+  // could drop the ref to 0 if the dentry was previously unpinned (e.g., by
+  // close_dir() cascading from a child trim). Prevent use-after-free on the
+  // detach/lru_remove path below.
+  // See: https://tracker.ceph.com/issues/74625
+  DentryRef dnref(dn);
+
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
@@ -3800,6 +3808,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
+  ceph_assert(dn->ref > 1);
 
   if (keepdentry) {
     dn->lease_mds = -1;
