@@ -232,13 +232,13 @@ if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
   if(HAVE_NASM_X64)
-    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
+    list(APPEND crc32_asm_flags "-i${PROJECT_SOURCE_DIR}/src/isa-l/include")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
   if(HAVE_NASM_X64_AVX512_VPCLMUL)
-    set(CMAKE_ASM_FLAGS "-DAS_FEATURE_LEVEL=10 ${CMAKE_ASM_FLAGS}")
+    list(APPEND crc32_asm_flags "-DAS_FEATURE_LEVEL=10")
     list(APPEND crc32_srcs ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
   endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)
@@ -266,13 +266,13 @@ elseif(HAVE_RISCV_ZVBC OR HAVE_RISCV_ZBC)
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
-
+target_compile_options(crc32 PRIVATE
+  $<$<COMPILE_LANGUAGE:ASM>:${crc32_asm_flags}>)
 if(HAVE_ARMV8_CRC)
-  set_target_properties(crc32 PROPERTIES
-    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
+  target_compile_options(crc32 PRIVATE ${ARMV8_CRC_COMPILE_FLAGS})
 endif()
 if(HAVE_RISCV)
-  set_target_properties(crc32 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${SIMD_COMPILE_FLAGS}")
+  target_compile_options(crc32 PRIVATE ${SIMD_COMPILE_FLAGS})
   if(HAVE_RISCV_ZBC)
     target_compile_definitions(crc32 PRIVATE HAVE_RISCV_ZBC)
   endif()
