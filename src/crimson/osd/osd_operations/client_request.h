@@ -40,6 +40,7 @@ class ClientRequest final
   seastar::promise<> on_complete;
   unsigned instance_id = 0;
   std::chrono::time_point<std::chrono::steady_clock> begin_time;
+  bool completed = false;
 
 public:
   epoch_t get_epoch_sent_at() const {
@@ -231,7 +232,7 @@ public:
   interruptible_future<> with_pg_process_interruptible(
     Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
 
-  seastar::future<> with_pg_process(Ref<PG> pg);
+  seastar::future<> with_pg_process(Ref<PG> pg, bool requeued = false);
 
 public:
   seastar::future<> with_pg(
