@@ -202,6 +202,9 @@
   ``last_clean``, the ``last_degraded`` timestamp enables the calculation of
   data vulnerability and durability scores.
 
+* common: Optional annotation provisioning has been added for "ceph config set" command.
+  Annotations attached to options are accessible through "ceph config dump/get" commands.
+
 >=20.0.0
 
 * Client: New config value osd_min_split_replica_read_size, which allows control

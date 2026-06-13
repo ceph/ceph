@@ -504,7 +504,7 @@ The following CLI commands are used to configure the cluster:
   (for example, ``mds.a``), or, if that value is not present in the Monitor
   configuration database, the compiled-in default value.
 
-* ``ceph config set <who> <option> <value>`` sets a configuration
+* ``ceph config set <who> <option> <value> [annotation]`` sets a configuration
   option in the Monitor's configuration database. If a value for this
   option was previously set, it will be overwritten.  Take care to
   set values with appropriate ``who`` and optional mask attributes. If,
@@ -513,7 +513,7 @@ The following CLI commands are used to configure the cluster:
   form ``ceph config set global someoption somevalue`` is executed,
   the central database will retain both.  This may be useful in
   certain situations, but it can lead to confusion and is often best
-  avoided.
+  avoided. Optional annotation could be provided for the new option instance.
 
 * ``ceph config show <who>`` shows configuration values for a running daemon.
   These settings might differ from those stored by the monitors if there are
