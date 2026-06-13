@@ -9233,6 +9233,182 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_bulk_deletion_of_canceled_clones(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clones = self._gen_subvol_clone_name(7)
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+        for i in range(0,6):
+            # schedule a clone
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[i])
+            # cancel pending clone
+            self._fs_cmd("clone", "cancel", self.volname, clones[i])
+            # check clone status
+            clone1_result = self._get_clone_status(clones[i])
+            self.assertEqual(clone1_result["status"]["state"], "canceled")
+            self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+            self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+        # schedule another clone and let it be completed
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[6])
+        # check clone status
+        self._wait_for_clone_to_complete(clones[6])
+        # clone removal should succeed after gets canceled, remove canceled clones only
+        self._fs_cmd("bulk", "canceled", "clones", "rm", self.volname)
+        # check clone6 status after deletion of canceled clones, shouldn't be deleted
+        self._wait_for_clone_to_complete(clones[6])
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clones[6])
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_bulk_deletion_of_canceled_clones_within_non_default_group(self):
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+        clones = self._gen_subvol_clone_name(7)
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=20)
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+        for i in range(0,6):
+            # schedule a clone
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[i], '--target_group_name', group)
+            # cancel pending clone
+            self._fs_cmd("clone", "cancel", self.volname, clones[i], '--group_name', group)
+            # check clone status
+            clone1_result = self._get_clone_status(clones[i], clone_group = group)
+            self.assertEqual(clone1_result["status"]["state"], "canceled")
+            self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+            self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+        # schedule another clone and let it be completed
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[6], '--target_group_name', group)
+        # check clone status
+        self._wait_for_clone_to_complete(clones[6], clone_group = group)
+        # clone removal should succeed after gets canceled, remove canceled clones only
+        self._fs_cmd("bulk", "canceled", "clones", "rm", self.volname)
+        # check clone6 status after deletion of canceled clones, shouldn't be deleted
+        self._wait_for_clone_to_complete(clones[6], clone_group = group)
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clones[6], group)
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+    
+    def test_bulk_cancellation_of_pending_clones(self):
+
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clones = self._gen_subvol_clone_name(7)
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=20)
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        # schedule a clone and let it be completed
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[6])
+        # check clone status
+        self._wait_for_clone_to_complete(clones[6])
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+        for i in range(0,6):
+            # schedule a clone
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[i])
+            self._wait_for_clone_to_be_pending(clones[i])
+            # check clones status
+            clone1_result = self._get_clone_status(clones[i])
+            self.assertEqual(clone1_result["status"]["state"], "pending")
+        # bulk cancellation of pending clones
+        self._fs_cmd("clone", "bulk", "cancel", self.volname)
+        self._wait_for_clone_to_be_canceled(clones[0])
+        for i in range(0,6):
+            # check clones status
+            clone1_result = self._get_clone_status(clones[i])
+            self.assertEqual(clone1_result["status"]["state"], "canceled")
+            self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+            self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+       # check clone6 status after bulk cancel, shouldn't be canceled
+        self._wait_for_clone_to_complete(clones[6])
+        # clone removal should succeed after gets canceled
+        self._fs_cmd("bulk", "canceled", "clones", "rm", self.volname)
+        # check clone6 status after bulk deletion of canceled clones, shouldn't be deleted
+        self._wait_for_clone_to_complete(clones[6])
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clones[6])
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+    
+    def test_bulk_cancellation_of_pending_clones_within_non_default_group(self):
+
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+        clones = self._gen_subvol_clone_name(7)
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=20)
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        # schedule a clone and let it be completed
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[6], '--target_group_name', group)
+        # check clone status
+        self._wait_for_clone_to_complete(clones[6], clone_group = group)
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+        for i in range(0,6):
+            # schedule a clone
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clones[i], '--target_group_name', group)
+            self._wait_for_clone_to_be_pending(clones[i], clone_group = group)
+            # check clones status
+            clone1_result = self._get_clone_status(clones[i], clone_group = group)
+            self.assertEqual(clone1_result["status"]["state"], "pending")
+        # bulk cancellation of pending clones
+        self._fs_cmd("clone", "bulk", "cancel", self.volname)
+        self._wait_for_clone_to_be_canceled(clones[0], clone_group = group)
+        for i in range(0,6):
+            # check clones status
+            clone1_result = self._get_clone_status(clones[i], clone_group = group)
+            self.assertEqual(clone1_result["status"]["state"], "canceled")
+            self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+            self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+       # check clone6 status after bulk cancel, shouldn't be canceled
+        self._wait_for_clone_to_complete(clones[6], clone_group = group)
+        # clone removal should succeed after gets canceled
+        self._fs_cmd("bulk", "canceled", "clones", "rm", self.volname)
+        # check clone6 status after bulk deletion of canceled clones, shouldn't be deleted
+        self._wait_for_clone_to_complete(clones[6], clone_group = group)
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clones[6], group)
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
 class TestSubvolumeSnapshotVisibilityBasic(TestVolumesHelper):
     """
