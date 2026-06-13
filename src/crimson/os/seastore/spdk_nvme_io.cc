@@ -366,6 +366,248 @@ spdk_nvme_io::io_ertr::future<> spdk_nvme_io::do_io(
 }
 
 namespace {
+// Per-command SGL iteration state for spdk_nvme_ns_cmd_writev. `segs` is one
+// command's ordered list of sector-aligned, DMA-safe (ptr,len) segments. Every
+// segment length is a sector multiple — NVMe SGL rejects sub-sector segments.
+// The buffers the segments point into (the source bufferlist referenced
+// zero-copy, plus any coalesced hugepage buffers) are owned by the do_writev
+// state that outlives all commands, not by this ctx. Heap-owned; freed in the
+// completion callback.
+struct writev_ctx {
+  std::vector<std::pair<char*, uint32_t>> segs;
+  size_t idx = 0;
+  uint32_t seg_off = 0;
+  seastar::promise<> pr;
+};
+
+void writev_reset_sgl(void* arg, uint32_t offset)
+{
+  auto* c = static_cast<writev_ctx*>(arg);
+  c->idx = 0;
+  uint32_t rem = offset;
+  while (c->idx < c->segs.size() && rem >= c->segs[c->idx].second) {
+    rem -= c->segs[c->idx].second;
+    ++c->idx;
+  }
+  c->seg_off = rem;
+}
+
+int writev_next_sge(void* arg, void** address, uint32_t* length)
+{
+  auto* c = static_cast<writev_ctx*>(arg);
+  if (c->idx >= c->segs.size()) {
+    *address = nullptr;
+    *length = 0;
+    return 0;
+  }
+  auto& s = c->segs[c->idx];
+  *address = s.first + c->seg_off;
+  *length = s.second - c->seg_off;
+  ++c->idx;
+  c->seg_off = 0;
+  return 0;
+}
+
+void writev_complete(void* arg, const spdk_nvme_cpl* cpl)
+{
+  auto* c = static_cast<writev_ctx*>(arg);
+  if (spdk_nvme_cpl_is_error(cpl)) {
+    c->pr.set_exception(std::make_exception_ptr(
+      std::runtime_error("spdk nvme writev error")));
+  } else {
+    c->pr.set_value();
+  }
+  delete c;
+}
+}
+
+seastar::future<> spdk_nvme_io::submit_writev(
+  void* writev_ctx_v, uint64_t lba, uint32_t lba_count, uint32_t io_flags)
+{
+  ceph_assert(qpair);
+  auto* ctx = static_cast<writev_ctx*>(writev_ctx_v);
+  auto fut = ctx->pr.get_future();
+  return seastar::repeat(
+    [this, ctx, lba, lba_count, io_flags] {
+      int rc = spdk_nvme_ns_cmd_writev(
+        ns, qpair, lba, lba_count, &writev_complete, ctx, io_flags,
+        &writev_reset_sgl, &writev_next_sge);
+      if (rc == -ENOMEM) {
+        // qpair request pool exhausted — same flow control as submit_io().
+        spdk_nvme_qpair_process_completions(qpair, 0);
+        return seastar::yield().then([] {
+          return seastar::stop_iteration::no;
+        });
+      }
+      if (rc != 0) {
+        ctx->pr.set_exception(std::make_exception_ptr(
+          std::runtime_error("spdk_nvme_ns_cmd_writev submit failed")));
+        delete ctx;
+      }
+      return seastar::make_ready_future<seastar::stop_iteration>(
+        seastar::stop_iteration::yes);
+    }
+  ).then([fut = std::move(fut)] () mutable {
+    return std::move(fut);
+  });
+}
+
+spdk_nvme_io::io_ertr::future<> spdk_nvme_io::do_writev(
+  uint64_t offset, ceph::bufferlist&& bl, uint32_t io_flags)
+{
+  LOG_PREFIX(spdk_nvme_io::do_writev);
+  ceph_assert(seastar::this_shard_id() == owning_shard);
+
+  size_t len = bl.length();
+  if (len == 0) {
+    return io_ertr::now();
+  }
+  ceph_assert(len % sector_size == 0);
+
+  ceph_assert(ctrlr != nullptr);
+#if SPDK_VERSION >= SPDK_VERSION_NUM(24, 9, 0)
+  const uint16_t max_sges = spdk_nvme_ctrlr_get_max_sges(ctrlr);
+#else
+  // Older SPDK (e.g. the built-in 20.x) has no public max_sges accessor, and
+  // the field lives in the private struct spdk_nvme_ctrlr (nvme_internal.h) --
+  // reaching into it is UB and breaks across versions/build configs. Default to
+  // the safe, deadlock-free value of 1: every contiguous run becomes its own
+  // command. That matches what old SPDK reports anyway (its TCP and vfio-user
+  // transports both cap at 1); modern TCP reports 16, so this just costs a few
+  // extra commands there while staying correct.
+  const uint16_t max_sges = 1;
+#endif
+
+  // Pack the record's SGL into commands of at most max_sges segments each.
+  // Bounding the segment count is what keeps SPDK from splitting a command
+  // across more SGL descriptors than the transport supports -- the internal
+  // splitting that exhausts the request pool and deadlocks under load. vfio-user
+  // reports max_sges==1 (so each contiguous run is its own command -- a 1 MB
+  // extent rides one command instead of 256 sector-sized ones); NVMe/TCP reports
+  // 1 on older SPDK and 16 on recent; PCIe reports ~250, so a whole record's SGL
+  // rides a single multi-segment command.
+  struct command_t {
+    uint64_t off;
+    std::vector<std::pair<char*, uint32_t>> segs;
+    uint32_t bytes = 0;
+  };
+  // Owns everything the in-flight commands reference: the source bufferlist
+  // (zero-copy segments point into it) and the coalesced hugepage buffers
+  // (sub-sector / non-DMA runs). Outlives all commands.
+  struct state_t {
+    ceph::bufferlist keep;
+    std::vector<ceph::bufferptr> coalesced;
+    std::vector<command_t> cmds;
+  };
+  auto state = seastar::make_lw_shared<state_t>();
+  state->keep = bl;
+
+  uint64_t run_off = offset;   // device offset of the next byte to place
+  command_t cur;
+  cur.off = offset;
+  auto flush_cmd = [&]() {
+    if (cur.segs.empty()) {
+      return;
+    }
+    state->cmds.push_back(std::move(cur));
+    cur = command_t{};
+    cur.off = run_off;
+  };
+  auto add_seg = [&](char* ptr, uint32_t slen) {
+    if (cur.segs.size() == max_sges) {
+      flush_cmd();
+    }
+    cur.segs.emplace_back(ptr, slen);
+    cur.bytes += slen;
+    run_off += slen;
+  };
+
+  // seastore lays records out as [block-aligned metadata][block-aligned data],
+  // so each data extent already starts on a sector boundary and is referenced
+  // in place (zero-copy); the sub-sector encoded-metadata fragments preceding
+  // it are coalesced into one sector-aligned hugepage buffer. NVMe SGL rejects
+  // sub-sector segments, so coalescing to sector granularity is what makes the
+  // submit valid. On-disk bytes are unchanged.
+  size_t cum = 0;
+  std::vector<std::pair<char*, uint32_t>> pending;  // current sub-sector run
+  size_t pending_len = 0;
+  auto flush_pending = [&]() {
+    if (pending_len == 0) {
+      return;
+    }
+    ceph_assert(pending_len % sector_size == 0);
+    ceph::bufferptr b(create_spdk_dma(pending_len));
+    size_t off = 0;
+    for (auto& [p, l] : pending) {
+      std::memcpy(b.c_str() + off, p, l);
+      off += l;
+    }
+    add_seg(b.c_str(), (uint32_t)pending_len);
+    state->coalesced.push_back(std::move(b));
+    pending.clear();
+    pending_len = 0;
+  };
+  for (const auto& frag : bl.buffers()) {
+    if (frag.length() == 0) {
+      continue;
+    }
+    char* a = const_cast<char*>(frag.c_str());
+    const bool passthrough =
+      pending_len == 0 &&
+      (cum % sector_size) == 0 &&
+      (frag.length() % sector_size) == 0 &&
+      spdk_vtophys(a, nullptr) != SPDK_VTOPHYS_ERROR;
+    if (passthrough) {
+      add_seg(a, frag.length());
+    } else {
+      pending.emplace_back(a, frag.length());
+      pending_len += frag.length();
+    }
+    cum += frag.length();
+    if (pending_len != 0 && (cum % sector_size) == 0) {
+      flush_pending();
+    }
+  }
+  flush_pending();
+  flush_cmd();
+  ceph_assert(cum == len);
+  ceph_assert(pending_len == 0);
+
+  return io_ertr::parallel_for_each(
+    state->cmds,
+    [this, io_flags, FNAME](const command_t& c) -> io_ertr::future<> {
+      // A single-segment command is a plain contiguous write -- skip the SGL
+      // callback machinery (this is every command on NVMe/TCP).
+      if (c.segs.size() == 1) {
+        return submit_io(true, c.off, c.segs[0].first, c.segs[0].second,
+                         io_flags
+        ).handle_exception([FNAME, off = c.off, bytes = c.bytes](auto e)
+                           -> io_ertr::future<> {
+          ERROR("poffset=0x{:x}~0x{:x} spdk io error -- {}", off, bytes, e);
+          return crimson::ct_error::input_output_error::make();
+        }).then([] () -> io_ertr::future<> {
+          return io_ertr::now();
+        });
+      }
+      auto ctx = std::make_unique<writev_ctx>();
+      ctx->segs = c.segs;
+      uint64_t lba = c.off / sector_size;
+      uint32_t lba_count = c.bytes / sector_size;
+      return submit_writev(ctx.release(), lba, lba_count, io_flags
+      ).handle_exception([FNAME, off = c.off, bytes = c.bytes](auto e)
+                         -> io_ertr::future<> {
+        ERROR("poffset=0x{:x}~0x{:x} spdk writev error -- {}", off, bytes, e);
+        return crimson::ct_error::input_output_error::make();
+      }).then([] () -> io_ertr::future<> {
+        return io_ertr::now();
+      });
+    }
+  ).safe_then([state] {
+    return io_ertr::now();
+  });
+}
+
+namespace {
 // Completion callback for raw admin/io commands: stores the status (0 ok, -1 err).
 void raw_complete(void* arg, const struct spdk_nvme_cpl* cpl)
 {

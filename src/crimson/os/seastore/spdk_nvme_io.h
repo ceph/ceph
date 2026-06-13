@@ -76,6 +76,17 @@ public:
     bool is_write, uint64_t offset, char* data, size_t len,
     uint32_t io_flags = 0);
 
+  /// Write a whole (block-aligned) bufferlist in a single NVMe command via a
+  /// sector-aligned SGL. Data extents that are already sector-aligned DMA
+  /// buffers travel zero-copy; only the sub-sector encoded-metadata fragments
+  /// are coalesced into a sector-aligned hugepage buffer (the small copy).
+  /// Relies on seastore's [block-aligned metadata][block-aligned data] record
+  /// layout, so it needs no on-disk change. Replaces the per-backend
+  /// "rebuild_aligned + per-fragment bounce" path; shared by both
+  /// SPDKBlockIODriver and SPDKNVMeIODriver.
+  io_ertr::future<> do_writev(
+    uint64_t offset, ceph::bufferlist&& bl, uint32_t io_flags = 0);
+
   /// Submit a raw NVMe admin command; returns 0 on success, -1 on error. The
   /// admin queue is pumped (process_admin_completions) until completion.
   seastar::future<int> admin_raw(spdk_nvme_cmd& cmd, void* buf, size_t len);
@@ -93,6 +104,12 @@ public:
 
 private:
   static void io_complete(void* arg, const spdk_nvme_cpl* cpl);
+
+  /// Submit a prepared SGL write context (heap-owned; freed in its completion
+  /// callback), with the same ENOMEM drain-and-retry flow as submit_io().
+  seastar::future<> submit_writev(
+    void* writev_ctx, uint64_t lba, uint32_t lba_count, uint32_t io_flags);
+
 
   std::string transport_id;
   spdk_nvme_ctrlr* ctrlr = nullptr;
