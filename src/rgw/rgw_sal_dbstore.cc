@@ -36,9 +36,10 @@ namespace rgw::sal {
 
   int DBStore::list_buckets(const DoutPrefixProvider *dpp,
       const rgw_owner& owner, const std::string& tenant,
-      const string& marker, const string& end_marker, uint64_t max,
-      bool need_stats, BucketList &result, optional_yield y)
+      const string& marker, const string& end_marker, const string& prefix,
+      uint64_t max, bool need_stats, BucketList &result, optional_yield y)
   {
+    (void)prefix;
     RGWUserBuckets ulist;
     bool is_truncated = false;
 

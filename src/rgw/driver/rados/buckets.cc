@@ -80,7 +80,7 @@ int remove(const DoutPrefixProvider* dpp, optional_yield y,
 int list(const DoutPrefixProvider* dpp, optional_yield y,
          librados::Rados& rados, const rgw_raw_obj& obj,
          const std::string& tenant, const std::string& start_marker,
-         const std::string& end_marker, uint64_t max,
+         const std::string& end_marker, const std::string& prefix, uint64_t max,
          rgw::sal::BucketList& listing)
 {
   listing.buckets.clear();
@@ -100,7 +100,7 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
     librados::ObjectReadOperation op;
     int rc = 0;
-    ::cls_user_bucket_list(op, marker, end_marker, count,
+    ::cls_user_bucket_list(op, marker, end_marker, prefix, count,
                            entries, &marker, &truncated, &rc);
 
     bufferlist bl;

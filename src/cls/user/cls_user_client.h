@@ -24,6 +24,7 @@ void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
 			  const std::string& in_marker,
 			  const std::string& end_marker,
+			  const std::string& prefix,
 			  int max_entries,
 			  std::list<cls_user_bucket_entry>& entries,
 			  std::string *out_marker,

@@ -485,7 +485,8 @@ class Driver {
     virtual int list_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& tenant,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, bool need_stats, BucketList& buckets,
+			     const std::string& prefix, uint64_t max,
+			     bool need_stats, BucketList& buckets,
 			     optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;

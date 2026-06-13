@@ -159,9 +159,10 @@ void MotrMetaCache::set_enabled(bool status)
 // with starting key `marker`.
 int MotrStore::list_buckets(const DoutPrefixProvider *dpp,
     const rgw_owner& owner, const std::string& tenant,
-    const string& marker, const string& end_marker, uint64_t max,
-    bool need_stats, BucketList &buckets, optional_yield y)
+    const string& marker, const string& end_marker, const string& prefix,
+    uint64_t max, bool need_stats, BucketList &buckets, optional_yield y)
 {
+  (void)prefix;
   int rc;
   vector<string> keys(max);
   vector<bufferlist> vals(max);
