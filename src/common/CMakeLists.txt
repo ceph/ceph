@@ -75,6 +75,7 @@ set(common_srcs
   errno.cc
   escape.cc
   fd.cc
+  filepath.cc
   fs_types.cc
   hex.cc
   histogram.cc

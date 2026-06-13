@@ -210,7 +210,7 @@ struct Inode : RefCountedObject {
     return layout != file_layout_t();
   }
 
-  __u32 hash_dentry_name(const std::string &dn) {
+  __u32 hash_dentry_name(std::string_view dn) {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;

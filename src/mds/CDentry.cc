@@ -30,7 +30,7 @@
 
 #include "common/debug.h"
 #include "common/strescape.h" // for binstrprint()
-#include "include/filepath.h"
+#include "common/filepath.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
