@@ -127,6 +127,37 @@
         </ng-template>
       </div>
 
+      <!-- Crush num failure domain -->
+      <div
+        cdsrow
+        class="form-item"
+      >
+        <cds-number
+          cdValidate
+          #crushNumFailureDomainsRef="cdValidate"
+          label="Crush num failure domain"
+          [helperText]="tooltips.crushNumFailureDomains"
+          [invalid]="crushNumFailureDomainsRef.isInvalid"
+          [invalidText]="crushNumFailureDomainsError"
+          formControlName="crushNumFailureDomains"
+          min="0"
+          i18n
+        >
+        </cds-number>
+        <ng-template
+          #crushNumFailureDomainsError
+        >
+          <ng-container
+            *ngTemplateOutlet="crushFailureDomainValidationErrors; context: {
+            control: form.get('crushNumFailureDomains'),
+            requiredText: 'This field is required when crush osds per failure domain is set!',
+            showMaxFailureDomains: true
+            }"
+          >
+          </ng-container>
+        </ng-template>
+      </div>      
+
       <!-- Data Chunk k -->
       <div
         class="form-item"
@@ -514,37 +545,6 @@
         </cds-select>
       </div>
 
-      <!-- Crush num failure domain -->
-      <div
-        cdsrow
-        class="form-item"
-      >
-        <cds-number
-          cdValidate
-          #crushNumFailureDomainsRef="cdValidate"
-          label="Crush num failure domain"
-          [helperText]="tooltips.crushNumFailureDomains"
-          [invalid]="crushNumFailureDomainsRef.isInvalid"
-          [invalidText]="crushNumFailureDomainsError"
-          formControlName="crushNumFailureDomains"
-          min="0"
-          i18n
-        >
-        </cds-number>
-        <ng-template
-          #crushNumFailureDomainsError
-        >
-          <ng-container
-            *ngTemplateOutlet="crushFailureDomainValidationErrors; context: {
-            control: form.get('crushNumFailureDomains'),
-            requiredText: 'This field is required when crush osds per failure domain is set!',
-            showMaxFailureDomains: true
-            }"
-          >
-          </ng-container>
-        </ng-template>
-      </div>
-
       <!-- Crush osds per failure domain -->
       <div
         cdsrow
@@ -670,82 +670,6 @@
       </div>
       }
 
-      <!-- Technique -->
-      @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
-        <cds-select
-          label="Technique"
-          id="technique"
-          formControlName="technique"
-          [helperText]="tooltips.plugins[plugin]?.technique"
-          i18n
-        >
-          @for (technique of techniques; track technique) {
-          <option
-            [value]="technique"
-          >
-            {{ technique }}
-          </option>
-          }
-        </cds-select>
-      </div>
-      }
-
-      <!-- Packetsize -->
-      @if (plugin === PLUGIN.JERASURE) {
-      <div
-        cdsrow
-        class="form-item"
-      >
-        <cds-number
-          id="packetSize"
-          label="Packetsize"
-          [helperText]="tooltips.plugins.jerasure.packetSize"
-          [invalid]="form.controls.packetSize.invalid && form.controls.packetSize.dirty"
-          [invalidText]="packetSizeError"
-          formControlName="packetSize"
-          min="1"
-          i18n
-        >
-        </cds-number>
-        <ng-template
-          #packetSizeError
-        >
-          @if (form.showError('packetSize', formDir, 'min')) {
-          <span
-            class="invalid-feedback"
-            i18n
-          >
-            Must be equal to or greater than 1.
-          </span>
-          }
-        </ng-template>
-      </div>
-      }
-
-      <!-- Crush root -->
-      @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
-        <cds-dropdown
-          label="Crush root"
-          id="crushRoot"
-          formControlName="crushRoot"
-          [placeholder]="'Select crush root...'"
-          [helperText]="tooltips.crushRoot"
-          i18n-label
-        >
-          <cds-dropdown-list
-            [items]="buckets"
-          >
-          </cds-dropdown-list>
-        </cds-dropdown>
-      </div>
-      }
-
       <!-- Crush device class -->
       <div
         class="form-item"
@@ -782,24 +706,6 @@
           >
           </cd-helper>
         </ng-template>
-      </div>
-
-      <!-- Directory -->
-      <div
-        class="form-item"
-      >
-        <cds-text-label
-          [helperText]="tooltips.directory"
-        >
-          Directory
-          <input
-            cdsText
-            id="directory"
-            type="text"
-            formControlName="directory"
-            placeholder="Path..."
-          />
-        </cds-text-label>
       </div>
     </div>
     <cd-form-button-panel
