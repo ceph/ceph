@@ -101,17 +101,35 @@ const std::vector<SeastarOption> seastar_options = {
 };
 
 std::optional<std::string> get_option_value(const SeastarOption& option) {
+  logger().debug("get_option_value: processing {} (config_key={}, type={})",
+                 option.option_name, option.config_key,
+                 static_cast<int>(option.value_type));
   switch (option.value_type) {
     case Option::TYPE_FLOAT: {
-      if (auto value = crimson::common::get_conf<double>(option.config_key)) {
+      auto value = crimson::common::get_conf<double>(option.config_key);
+      if (value) {
+        logger().debug("get_option_value: {} -> {}", option.option_name, value);
         return std::to_string(value);
       }
+      logger().debug("get_option_value: {} -> skipped (zero)", option.option_name);
       break;
     }
     case Option::TYPE_UINT: {
-      if (auto value = crimson::common::get_conf<uint64_t>(option.config_key)) {
+      auto value = crimson::common::get_conf<uint64_t>(option.config_key);
+      if (value) {
+        logger().debug("get_option_value: {} -> {}", option.option_name, value);
         return std::to_string(value);
       }
+      logger().debug("get_option_value: {} -> skipped (zero)", option.option_name);
+      break;
+    }
+    case Option::TYPE_SIZE: {
+      if (auto value = crimson::common::get_conf<Option::size_t>(option.config_key)) {
+        logger().debug("get_option_value: {} -> {}", option.option_name,
+                       static_cast<uint64_t>(value));
+        return std::to_string(value);
+      }
+      logger().debug("get_option_value: {} -> skipped (zero)", option.option_name);
       break;
     }
     case Option::TYPE_SIZE: {
@@ -121,7 +139,9 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
       break;
     }
     case Option::TYPE_BOOL: {
-     if (crimson::common::get_conf<bool>(option.config_key)) {
+      auto value = crimson::common::get_conf<bool>(option.config_key);
+      logger().debug("get_option_value: {} -> {}", option.option_name, value);
+      if (value) {
         return "true";
       }
       break;
@@ -129,12 +149,15 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
     case Option::TYPE_STR: {
       auto value = crimson::common::get_conf<std::string>(option.config_key);
       if (!value.empty()) {
+        logger().debug("get_option_value: {} -> '{}'", option.option_name, value);
         return value;
       }
+      logger().debug("get_option_value: {} -> skipped (empty)", option.option_name);
       break;
     }
     default:
-      logger().warn("get_option_value: {} has unknown type", option.option_name);
+      logger().warn("get_option_value: {} has unknown type {}", option.option_name,
+                    static_cast<int>(option.value_type));
       return std::nullopt;
   }
   return std::nullopt;
@@ -200,7 +223,14 @@ _get_early_config(int argc, const char *argv[])
 	  std::end(early_args));
 
         for (const auto& option : seastar_options) {
-          auto option_value = get_option_value(option);
+          std::optional<std::string> option_value;
+          try {
+            option_value = get_option_value(option);
+          } catch (const std::exception& e) {
+            logger().error("get_option_value failed for {} (config_key={}): {}",
+                           option.option_name, option.config_key, e.what());
+            throw;
+          }
           if (option_value) {
             logger().info("configure {} with value: {}", option.option_name, option_value);
             ret.early_args.emplace_back(option.option_name);
@@ -214,10 +244,9 @@ _get_early_config(int argc, const char *argv[])
 	      std::end(early_args),
 	      [](auto* arg) { return "--cpuset"sv == arg; });
 	    found == std::end(early_args)) {
+	  logger().debug("get_early_config: reading crimson_cpu_set");
 	  auto cpu_cores = crimson::common::get_conf<std::string>("crimson_cpu_set");
 	  if (!cpu_cores.empty()) {
-	    // Set --cpuset based on crimson_cpu_set config option
-	    // --smp default is one per CPU
 	    ret.early_args.emplace_back("--cpuset");
 	    ret.early_args.emplace_back(cpu_cores);
 	    ret.early_args.emplace_back("--thread-affinity");
@@ -225,9 +254,10 @@ _get_early_config(int argc, const char *argv[])
 	    logger().info("get_early_config: set --thread-affinity 1 --cpuset {}",
 	                  cpu_cores);
 	  } else {
+	    logger().debug("get_early_config: crimson_cpu_set empty, reading crimson_cpu_num");
 	    auto reactor_num = crimson::common::get_conf<uint64_t>("crimson_cpu_num");
+	    logger().debug("get_early_config: crimson_cpu_num={}", reactor_num);
 	    if (!reactor_num) {
-	      // We would like to avoid seastar using all available cores.
 	      logger().error("get_early_config: crimson_cpu_set"
 	                     " or crimson_cpu_num must be set");
 	      ceph_abort();
@@ -245,10 +275,15 @@ _get_early_config(int argc, const char *argv[])
 	                 "set only using crimson_cpu_set");
 	  ceph_abort();
 	}
+	logger().info("get_early_config: final early_args:");
+	for (const auto& arg : ret.early_args) {
+	  logger().info("  arg: {}", arg);
+	}
 	return 0;
       });
     });
-  if (r < 0) {
+  if (r != 0) {
+    logger().error("get_early_config: bootstrap app.run() returned {}", r);
     return tl::unexpected(r);
   }
   return ret;
