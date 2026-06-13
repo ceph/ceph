@@ -273,23 +273,34 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
   {
     if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::postAuth, script);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute post authorization script. "
-          "error: " << rc << dendl;
-      } else {
-        int script_return_code = 0;
-        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, s->penv.lua.manager.get(), s->yield,
+                                                 s->bucket_tenant, rgw::lua::context::postAuth, script_names);
+      if (rc < 0 && rc != -ENOENT) {
+        ldpp_dout(op, 5) << "WARNING: failed to list data scripts in tenant " << s->bucket_tenant
+                                << " and context " << rgw::lua::to_string(rgw::lua::context::postAuth)
+                                << ". error " << rc << dendl;
+      }
+
+      for (const auto& name : script_names) {
+        auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                    s->yield, s->bucket_tenant,
+                                                    rgw::lua::context::postAuth, name);
+        if (rc == -ENOENT) {
+          // no script, nothing to do
+          continue;
+        }
         if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post authorization script. "
-            "error: " << rc << dendl;
+          ldpp_dout(op, 5) << "WARNING: failed to read post authorization script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
+          continue;
+        }
+
+        int script_return_code = 0;
+        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, lua_script, script_return_code);
+        if (rc < 0) {
+          ldpp_dout(op, 5) << "WARNING: failed to execute post authorization script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
         }
         if (script_return_code == -EPERM) {
           return script_return_code;
@@ -426,23 +437,35 @@ int process_request(const RGWProcessEnv& penv,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::preRequest);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute pre request script. "
-          "error: " << rc << dendl;
-      } else {
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->yield,
+                                                 s->bucket_tenant, rgw::lua::context::preRequest, script_names);
+      if (rc < 0 && rc != -ENOENT) {
+        ldpp_dout(op, 5) << "WARNING: failed to list data scripts in tenant " << s->bucket_tenant
+                                << " and context " << rgw::lua::to_string(rgw::lua::context::preRequest)
+                                << ". error " << rc << dendl;
+      }
+
+      for (const auto& name : script_names) {
+        auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                    s->yield, s->bucket_tenant,
+                                                    rgw::lua::context::preRequest, name);
+        if (rc == -ENOENT) {
+          // no script, nothing to do
+          continue;
+        }
+        if (rc < 0) {
+          ldpp_dout(op, 5) << "WARNING: failed to read pre request script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
+          continue;
+        }
+
         int script_return_code = 0;
         rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script, script_return_code);
 
         if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute pre request script. "
-            "error: " << rc << dendl;
+          ldpp_dout(op, 5) << "WARNING: failed to execute pre request script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
         }
         if (script_return_code == -EPERM) {
           abort_early(s, op, script_return_code, handler, yield);
@@ -481,21 +504,33 @@ done:
       }
     }
     if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::postRequest);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to read post request script. "
-          "error: " << rc << dendl;
-      } else {
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->yield,
+                                                 s->bucket_tenant, rgw::lua::context::postRequest, script_names);
+      if (rc < 0 && rc != -ENOENT) {
+        ldpp_dout(op, 5) << "WARNING: failed to list data scripts in tenant " << s->bucket_tenant
+                                << " and context " << rgw::lua::to_string(rgw::lua::context::postRequest)
+                                << ". error " << rc << dendl;
+      }
+
+      for (const auto& name : script_names) {
+        auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                    s->yield, s->bucket_tenant,
+                                                    rgw::lua::context::postRequest, name);
+        if (rc == -ENOENT) {
+          // no script, nothing to do
+          continue;
+        }
+        if (rc < 0) {
+          ldpp_dout(op, 5) << "WARNING: failed to read post request script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
+          continue;
+        }
+
         rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script);
         if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post request script. "
-            "error: " << rc << dendl;
+          ldpp_dout(op, 5) << "WARNING: failed to execute post request script in tenant " << s->bucket_tenant
+                                  << ". error " << rc << dendl;
         }
       }
     }

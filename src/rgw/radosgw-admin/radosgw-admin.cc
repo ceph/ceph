@@ -365,6 +365,7 @@ void usage()
   cout << "  topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic\n";
   cout << "  script put                       upload a Lua script to a context\n";
   cout << "  script get                       get the Lua script of a context\n";
+  cout << "  script list                      list the Lua scripts of a context\n";
   cout << "  script rm                        remove the Lua scripts of a context\n";
   cout << "  script-package add               add a Lua package to the scripts allowlist\n";
   cout << "  script-package rm                remove a Lua package from the scripts allowlist\n";
@@ -488,6 +489,7 @@ void usage()
   cout << "   --skip-zero-entries               log show only dumps entries that don't have zero value\n";
   cout << "                                     in one of the numeric field\n";
   cout << "   --infile=<file>                   file to read in when setting data\n";
+  cout << "   --script-name=<script-name>       name of the Lua script\n";
   cout << "   --categories=<list>               comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>                     list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --op-mask=<op-mask>               permission of user's operations (e.g., \"read, write, delete, *\")\n";
@@ -981,6 +983,7 @@ enum class OPT {
   PUBSUB_TOPIC_DUMP,
 #endif
   SCRIPT_PUT,
+  SCRIPT_LIST,
   SCRIPT_GET,
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
@@ -1284,6 +1287,7 @@ static SimpleCmd::Commands all_cmds = {
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
 #endif
   { "script put", OPT::SCRIPT_PUT },
+  { "script list", OPT::SCRIPT_LIST },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
@@ -3835,6 +3839,7 @@ int main(int argc, const char **argv)
   int check_objects = false;
   RGWBucketAdminOpState bucket_op;
   string infile;
+  string script_name;
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
@@ -4404,6 +4409,8 @@ int main(int argc, const char **argv)
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--infile", (char*)NULL)) {
       infile = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--script-name", (char*)NULL)) {
+      script_name = (val == "default") ? "" : val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
@@ -4993,6 +5000,7 @@ int main(int argc, const char **argv)
 #endif
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
+        && opt_cmd != OPT::SCRIPT_LIST
 			  && opt_cmd != OPT::SCRIPT_RM
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
@@ -12520,8 +12528,14 @@ next:
       cerr << "ERROR: cannot specify tenant in background context" << std::endl;
       return EINVAL;
     }
+    if ((script_ctx == rgw::lua::context::getData ||
+         script_ctx == rgw::lua::context::putData) &&
+        !script_name.empty()) {
+      cerr << "ERROR: cannot create more than one Lua script in the " << *str_script_ctx << " context; remove the --script-name flag" << std::endl;
+      return EINVAL;
+    }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -12538,17 +12552,57 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
+    if ((script_ctx == rgw::lua::context::getData ||
+         script_ctx == rgw::lua::context::putData) &&
+        !script_name.empty()) {
+      cerr << "ERROR: cannot get more than one Lua script in the " << *str_script_ctx << " context; remove the --script-name flag" << std::endl;
+      return EINVAL;
+    }
     auto lua_manager = driver->get_lua_manager("");
     std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script, script_name);
     if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
+      if (script_name.empty() || script_name == "default") {
+        std::cout << "no script exists for context: " << *str_script_ctx << (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+      } else {
+        std::cout << "'" << script_name << "' script does not exist in context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+      }
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
       return -rc;
     } else {
       std::cout << script << std::endl;
+    }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_LIST) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+      return EINVAL;
+    }
+    auto lua_manager = driver->get_lua_manager("");
+    std::vector<std::string> scripts;
+    const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, scripts);
+    if (rc < 0 && rc != -ENOENT) {
+      cerr << "ERROR: failed to list scripts. error: " << rc << std::endl;
+      return -rc;
+    } else if (scripts.size() == 0) {
+      std::cout << "no scripts to list for context: " << *str_script_ctx << 
+        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+    } else {
+      for (const auto& script : scripts) {
+        if (script.empty()) {
+          std::cout << "default" << std::endl;
+        } else {
+          std::cout << script << std::endl;
+        }
+      }
     }
   }
   
@@ -12562,8 +12616,14 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
+    if ((script_ctx == rgw::lua::context::getData ||
+         script_ctx == rgw::lua::context::putData) &&
+        !script_name.empty()) {
+      cerr << "ERROR: cannot remove more than one Lua script in the " << *str_script_ctx << " context; remove the --script-name flag" << std::endl;
+      return EINVAL;
+    }
     auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;
