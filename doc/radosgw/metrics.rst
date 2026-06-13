@@ -74,6 +74,12 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
    * - list_bucket_lat
      - Gauge
      - Total latency of list bucket operations
+   * - head_obj_ops
+     - Counter
+     - Number of successful HEAD Object operations
+   * - head_obj_lat
+     - Gauge
+     - Total latency of HEAD Object operations
 
 There are three different sections in the output of the ``counter dump`` and ``counter schema`` commands that show the op metrics and their information.
 The sections are ``rgw_op``, ``rgw_op_per_user``, and ``rgw_op_per_bucket``.
@@ -109,6 +115,12 @@ To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` sections of t
                     "avgcount": 1,
                     "sum": 0.002300000,
                     "avgtime": 0.002300000
+                },
+                "head_obj_ops": 3,
+                "head_obj_lat": {
+                    "avgcount": 3,
+                    "sum": 0.006123456,
+                    "avgtime": 0.002041152
                 }
             }
         },
@@ -146,6 +158,12 @@ Op metrics can also be tracked per-user or per-bucket. These metrics are exporte
                     "avgcount": 1,
                     "sum": 0.002300000,
                     "avgtime": 0.002300000
+                },
+                "head_obj_ops": 3,
+                "head_obj_lat": {
+                    "avgcount": 3,
+                    "sum": 0.006123456,
+                    "avgtime": 0.002041152
                 }
             }
         },

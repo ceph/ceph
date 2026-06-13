@@ -98,6 +98,9 @@ void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
 
   lpcb->add_u64_counter(l_rgw_op_list_buckets, "list_buckets_ops", "List buckets");
   lpcb->add_time_avg(l_rgw_op_list_buckets_lat, "list_buckets_lat", "List buckets latency");
+
+  lpcb->add_u64_counter(l_rgw_op_head_obj, "head_obj_ops","Head object operations");
+  lpcb->add_time_avg(l_rgw_op_head_obj_lat, "head_obj_lat","Head object latency");
 }
 
 void add_rgw_topic_counters(PerfCountersBuilder *lpcb) {
