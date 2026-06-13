@@ -3,7 +3,9 @@ import unittest
 from tests import mock
 import pytest
 import json
+from collections import defaultdict
 from pg_autoscaler import module
+from pg_autoscaler.module import CrushRootResourceStatus
 
 
 class OSDMAP:
@@ -45,17 +47,16 @@ class TestPgAutoscaler(object):
     def setup_method(self):
         # a bunch of attributes for testing.
         self.autoscaler = module.PgAutoscaler('module_name', 0, 0)
+        self.autoscaler.mon_target_pg_per_osd = 100
 
-    def helper_test(self, osd_dic, rules, pools, expected_overlapped_roots):
-        result = {}
-        roots = []
-        overlapped_roots = set()
+    def helper_test(self, osd_dic, rules, pools, expected_result):
         osdmap = OSDMAP(pools)
         crush = CRUSH(rules, osd_dic)
-        roots, overlapped_roots = self.autoscaler.identify_subtrees_and_overlaps(
-            osdmap, pools, crush, result, overlapped_roots, roots
+        result = self.autoscaler.get_subtree_resource_status(
+            osdmap, pools, crush
         )
-        assert overlapped_roots == expected_overlapped_roots
+        for root_id in result:
+            assert result[root_id].pg_target == expected_result[root_id].pg_target
 
     def test_subtrees_and_overlaps(self):
         osd_dic = {
@@ -282,8 +283,13 @@ class TestPgAutoscaler(object):
                 "expected_final_pg_target": 128,
             },
         }
-        expected_overlapped_roots = {-40, -1, -5}
-        self.helper_test(osd_dic, rules, pools, expected_overlapped_roots)
+        expected_result = defaultdict(CrushRootResourceStatus)
+        for root in osd_dic:
+            expected_result[root] = CrushRootResourceStatus()
+        expected_result[-1].pg_target = 550
+        expected_result[-40].pg_target = 250
+        expected_result[-5].pg_target = 800
+        self.helper_test(osd_dic, rules, pools, expected_result)
 
     def test_no_overlaps(self):
         osd_dic = {
@@ -510,5 +516,10 @@ class TestPgAutoscaler(object):
                 "expected_final_pg_target": 128,
             },
         }
-        expected_overlapped_roots = set()
-        self.helper_test(osd_dic, rules, pools, expected_overlapped_roots)
+        expected_result = defaultdict(CrushRootResourceStatus)
+        for root in osd_dic:
+            expected_result[root] = CrushRootResourceStatus()
+        expected_result[-1].pg_target = 1100
+        expected_result[-40].pg_target = 500
+        expected_result[-5].pg_target = 300
+        self.helper_test(osd_dic, rules, pools, expected_result)
