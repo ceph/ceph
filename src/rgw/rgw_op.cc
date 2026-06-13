@@ -8291,9 +8291,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(dpp);
-  if (op_ret < 0) {
-    send_partial_response(o, false, "", op_ret);
+  int r = res->publish_reserve(dpp);
+  if (r < 0) {
+    send_partial_response(o, false, "", r);
     return;
   }
 
@@ -8309,10 +8309,10 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y,
-                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (op_ret == -ENOENT) {
-    op_ret = 0;
+  r = del_op->delete_obj(dpp, y,
+                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+  if (r == -ENOENT) {
+    r = 0;
   }
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
@@ -8320,7 +8320,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
   }
 
-  if (op_ret == 0) {
+  if (r == 0) {
     // send request to notification manager
     int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
@@ -8329,7 +8329,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     }
   }
   
-  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
