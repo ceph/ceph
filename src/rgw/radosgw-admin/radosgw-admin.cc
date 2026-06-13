@@ -2340,6 +2340,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     params["period_id"] = period_id;
   if (!period_epoch.empty())
     params["epoch"] = period_epoch;
+  params["mask_secrets"] = "false";
 
   bufferlist bl;
   JSONParser p;
@@ -3710,6 +3711,51 @@ public:
   }
 };
 
+// Handler to mask secret keys in S3 tier configurations for CLI display
+// This handler works with any Formatter (JSON or XML)
+class TierS3KeysHandler : public JSONEncodeFilter::Handler<RGWZoneGroupPlacementTierS3> {
+  void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
+    auto tier = static_cast<const RGWZoneGroupPlacementTierS3 *>(pval);
+    f->open_object_section(name);
+    tier->dump_mask_keys(f);
+    f->close_section();
+  }
+};
+
+// JSON Formatter that masks secret keys in S3 tier configurations
+class JSONFormatter_TierS3Keys : public JSONFormatter {
+  TierS3KeysHandler tier_s3_type_handler;
+  JSONEncodeFilter encode_filter;
+public:
+  JSONFormatter_TierS3Keys(bool pretty_format) : JSONFormatter(pretty_format) {
+    encode_filter.register_type(&tier_s3_type_handler);
+  }
+
+  void *get_external_feature_handler(const std::string& feature) override {
+    if (feature != "JSONEncodeFilter") {
+      return nullptr;
+    }
+    return &encode_filter;
+  }
+};
+
+// XML Formatter that masks secret keys in S3 tier configurations
+class XMLFormatter_TierS3Keys : public XMLFormatter {
+  TierS3KeysHandler tier_s3_type_handler;
+  JSONEncodeFilter encode_filter;
+public:
+  XMLFormatter_TierS3Keys(bool pretty_format) : XMLFormatter(pretty_format) {
+    encode_filter.register_type(&tier_s3_type_handler);
+  }
+
+  void *get_external_feature_handler(const std::string& feature) override {
+    if (feature != "JSONEncodeFilter") {
+      return nullptr;
+    }
+    return &encode_filter;
+  }
+};
+
 void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_var, const string& conf_name)
 {
   var = cct->_conf.get_val<string>(conf_name);
@@ -3813,6 +3859,7 @@ int main(int argc, const char **argv)
   string new_bucket_name;
   std::unique_ptr<Formatter> formatter;
   std::unique_ptr<Formatter> zone_formatter;
+  std::unique_ptr<Formatter> tier_formatter;
   int purge_data = false;
   int pretty_format = false;
   int show_log_entries = true;
@@ -5050,6 +5097,14 @@ int main(int argc, const char **argv)
 
   zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(pretty_format);
 
+  // Create appropriate tier formatter based on output format
+  if (format == "xml") {
+    tier_formatter = std::make_unique<XMLFormatter_TierS3Keys>(pretty_format);
+  } else {
+    tier_formatter = std::make_unique<JSONFormatter_TierS3Keys>(pretty_format);
+  }
+  Formatter* tier_display_formatter = tier_formatter.get();
+
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
   zonegroup_name = g_conf()->rgw_zonegroup;
@@ -5152,8 +5207,8 @@ int main(int argc, const char **argv)
 	  cerr << "failed to load period: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("period", period, formatter.get());
-	formatter->flush(cout);
+	encode_json("period", period, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::PERIOD_GET_CURRENT:
@@ -5197,7 +5252,7 @@ int main(int argc, const char **argv)
         int ret = update_period(cfgstore.get(), realm_id, realm_name,
                                 period_epoch, commit, remote, url,
                                 opt_region, access_key, secret_key,
-                                formatter.get(), yes_i_really_mean_it, site.get());
+                                tier_display_formatter, yes_i_really_mean_it, site.get());
 	if (ret < 0) {
 	  return -ret;
 	}
@@ -5229,8 +5284,8 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("period", period, formatter.get());
-        formatter->flush(cout);
+        encode_json("period", period, tier_display_formatter);
+        tier_display_formatter->flush(cout);
       }
       break;
     case OPT::GLOBAL_RATELIMIT_GET:
@@ -5831,8 +5886,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
+        encode_json("zonegroup", zonegroup, tier_display_formatter);
+        tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_CREATE:
@@ -5887,8 +5942,8 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
+	encode_json("zonegroup", zonegroup, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_DEFAULT:
@@ -5947,8 +6002,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
+	encode_json("zonegroup", zonegroup, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_LIST:
@@ -6067,8 +6122,8 @@ int main(int argc, const char **argv)
           }
         }
 
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
+        encode_json("zonegroup", zonegroup, tier_display_formatter);
+        tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_SET:
@@ -6135,8 +6190,8 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
+	encode_json("zonegroup", zonegroup, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_REMOVE:
@@ -6182,8 +6237,8 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
+        encode_json("zonegroup", zonegroup, tier_display_formatter);
+        tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_RENAME:
@@ -6223,8 +6278,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-	encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
-	formatter->flush(cout);
+	encode_json("placement_targets", zonegroup.placement_targets, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_PLACEMENT_GET:
@@ -6247,8 +6302,8 @@ int main(int argc, const char **argv)
 	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
 	  return -ENOENT;
 	}
-	encode_json("placement_targets", p->second, formatter.get());
-	formatter->flush(cout);
+	encode_json("placement_targets", p->second, tier_display_formatter);
+	tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONEGROUP_PLACEMENT_ADD:
@@ -6399,8 +6454,8 @@ int main(int argc, const char **argv)
       return -ret;
     }
 
-    encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
-    formatter->flush(cout);
+    encode_json("placement_targets", zonegroup.placement_targets, tier_display_formatter);
+    tier_display_formatter->flush(cout);
       }
       break;
     case OPT::ZONE_CREATE:
@@ -7341,7 +7396,7 @@ int main(int argc, const char **argv)
       int ret = update_period(cfgstore.get(), realm_id, realm_name,
                               period_epoch, commit, remote, url,
                               opt_region, access_key, secret_key,
-                              formatter.get(), yes_i_really_mean_it, site.get());
+                              tier_display_formatter, yes_i_really_mean_it, site.get());
       if (ret < 0) {
 	return -ret;
       }
@@ -7376,8 +7431,8 @@ int main(int argc, const char **argv)
         return -ret;
       }
 
-      encode_json("period", period, formatter.get());
-      formatter->flush(cout);
+      encode_json("period", period, tier_display_formatter);
+      tier_display_formatter->flush(cout);
     }
     return 0;
   case OPT::ROLE_CREATE:
