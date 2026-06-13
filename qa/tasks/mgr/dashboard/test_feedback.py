@@ -6,7 +6,7 @@ class FeedbackTest(MgrModuleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback'], wait=3)
+        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback', '--force'], wait=3)
         # Point the feedback module at an unreachable host so the test
         # does not depend on tracker.ceph.com being available. Any
         # create_issue call will fail fast with a ConnectionError

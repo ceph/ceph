@@ -10435,13 +10435,25 @@ paths:
     post:
       description: "\n        Enable the specified Ceph Mgr module.\n        :param\
         \ module_name: The name of the Ceph Mgr module.\n        :type module_name:\
-        \ str\n        "
+        \ str\n        :param force: Force enablement when not all mgr daemons support\
+        \ the module.\n        :type force: bool\n        "
       parameters:
       - in: path
         name: module_name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                force:
+                  default: false
+                  description: Force enablement when not all mgr daemons support the
+                    module
+                  type: boolean
+              type: object
       responses:
         '201':
           content:
@@ -10472,6 +10484,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Enable Mgr module
       tags:
       - MgrModule
   /api/mgr/module/{module_name}/options:
