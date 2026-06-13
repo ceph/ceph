@@ -8823,7 +8823,8 @@ next:
     }
     if (need_rewrite) {
       RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-      ret = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+      ret = store->rewrite_obj(bucket->get_info(), obj->get_obj(),
+                                opt_storage_class.value_or(""), dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -9036,7 +9037,8 @@ next:
             formatter->dump_string("status", "Skipped");
           } else {
             RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-            r = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+            r = store->rewrite_obj(bucket->get_info(), obj->get_obj(),
+                                    opt_storage_class.value_or(""), dpp(), null_yield);
             if (r == 0) {
               formatter->dump_string("status", "Success");
             } else {
