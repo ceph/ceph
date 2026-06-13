@@ -220,6 +220,53 @@ class SMBShareTest(ControllerTestCase):
         self.assertStatus(204)
         mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))
 
+    def test_get_share_with_qos(self):
+        import copy
+        share_with_qos = copy.deepcopy(self._shares['resources'][0])
+        share_with_qos['cephfs']['qos'] = {
+            'read_iops_limit': 1000,
+            'write_iops_limit': 500,
+            'read_bw_limit': 100000,
+            'write_bw_limit': 100000,
+            'read_delay_max': 30,
+            'write_delay_max': 60,
+        }
+        mgr.remote = Mock(return_value=share_with_qos)
+
+        self._get(f'{self._endpoint}/smbCluster1/share1')
+        self.assertStatus(200)
+        self.assertJsonBody(share_with_qos)
+        mgr.remote.assert_called_once_with(
+            'smb', 'show', ['ceph.smb.share.smbCluster1.share1']
+        )
+
+    def test_update_qos(self):
+        cluster_id = 'smbCluster1'
+        share_id = 'share1'
+
+        mock_result = Mock()
+        mock_result.to_simplified.return_value = {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': cluster_id,
+            'share_id': share_id,
+        }
+        mgr.remote = Mock(return_value=mock_result)
+
+        qos_body = {
+            'cluster_id': cluster_id,
+            'share_id': share_id,
+            'read_iops_limit': 1000,
+            'write_iops_limit': 500,
+        }
+        self._put(f'{self._endpoint}/qos', qos_body)
+        self.assertStatus(200)
+
+        mgr.remote.assert_called_once_with(
+            'smb', 'share_update_qos',
+            cluster_id, share_id,
+            1000, 500, None, None, None, None
+        )
+
 
 class SMBJoinAuthTest(ControllerTestCase):
     _endpoint = '/api/smb/joinauth'
