@@ -578,6 +578,7 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
     ) -> utils.Action:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that

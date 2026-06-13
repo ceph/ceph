@@ -1,8 +1,13 @@
 import contextlib
+from typing import cast
 from unittest.mock import MagicMock, patch, ANY
 
 import pytest
 
+from ceph.utils import datetime_now
+from orchestrator import DaemonDescriptionStatus
+
+from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
@@ -740,3 +745,68 @@ def test_ingress_for_nfs_choose_next_action(cephadm_module, mock_cephadm):
         # _daemon_action so we can check what action was chosen
         mock_cephadm.serve(cephadm_module)._check_daemons()
         mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
+
+
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_check_daemons_starts_keepalived_when_stopped_and_haproxy_running(
+    cephadm_module, mock_cephadm
+):
+    """Regression: serve loop must issue 'start' for keepalived when deps are ok
+    and colocated haproxy is running (keepalived is not systemd-enabled)."""
+    nfs_spec = NFSServiceSpec(
+        service_id="foo",
+        placement=PlacementSpec(hosts=['test']),
+        port=8765,
+    )
+    ingress_spec = IngressSpec(
+        service_id='bar',
+        backend_service='nfs.foo',
+        frontend_port=2468,
+        monitor_port=8642,
+        virtual_ip='1.2.3.0/24',
+        placement=PlacementSpec(hosts=['test']),
+        keepalived_password='abcde',
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        cephadm_module.cache.update_host_networks(
+            'test',
+            {
+                '1.2.3.0/24': {
+                    'if0': [
+                        '1.2.3.4',
+                        '1.2.3.1',
+                    ]
+                }
+            },
+        )
+        stack.enter_context(with_service(cephadm_module, nfs_spec))
+        stack.enter_context(with_service(cephadm_module, ingress_spec))
+
+        ingress_svc = service_registry.get_service('ingress')
+        ispec = cast(IngressSpec, cephadm_module.spec_store[ingress_spec.service_name()].spec)
+
+        for dd in list(cephadm_module.cache.get_daemons_by_service(ingress_spec.service_name())):
+            if dd.daemon_type == 'haproxy' and dd.hostname == 'test':
+                dd.status = DaemonDescriptionStatus.running
+            elif dd.daemon_type == 'keepalived' and dd.hostname == 'test':
+                dd.status = DaemonDescriptionStatus.stopped
+                assert dd.hostname is not None
+                deps = ingress_svc.sorted_dependencies(
+                    cephadm_module, ispec, 'keepalived'
+                )
+                cephadm_module.cache.update_daemon_config_deps(
+                    dd.hostname, dd.name(), deps, datetime_now()
+                )
+
+        mock_cephadm._daemon_action.reset_mock()
+        CephadmServe(cephadm_module)._check_daemons()
+
+        keepalived_started = any(
+            getattr(c.args[0], 'daemon_type', None) == 'keepalived'
+            and (len(c.args) > 1 and c.args[1] == 'start' or c.kwargs.get('action') == 'start')
+            for c in mock_cephadm._daemon_action.call_args_list
+        )
+        assert keepalived_started

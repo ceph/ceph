@@ -34,6 +34,7 @@ from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
 from cephadm.services.nfs import NFSService
+from cephadm.services.ingress import IngressService
 
 from . import utils
 from . import exchange
@@ -45,6 +46,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
+# Daemons not systemd-enabled on deploy, mgr start them when not user stopped
+DISABLED_SERVICES = ['nfs', 'keepalived']
 
 WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
@@ -857,6 +860,17 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        related_service_required_count = None
+        if service_type == 'ingress':
+            ingress_spec = cast(IngressSpec, spec)
+            assert ingress_spec.backend_service
+            backend_spec = self.mgr.spec_store.active_specs.get(
+                ingress_spec.backend_service
+            )
+            if backend_spec and backend_spec.placement:
+                related_service_required_count = backend_spec.placement.get_target_count(
+                    self.mgr.cache.get_schedulable_hosts()
+                )
         host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
@@ -867,6 +881,7 @@ class CephadmServe:
             blocking_daemon_hosts=blocking_daemon_hosts,
             daemons=daemons,
             related_service_daemons=related_service_daemons,
+            related_service_required_count=related_service_required_count,
             networks=self.mgr.cache.networks,
             filter_new_host=host_filters.get(service_type, None),
             allow_colo=svc.allow_colo(),
@@ -968,10 +983,11 @@ class CephadmServe:
                 for d in daemons_to_remove:
                     assert d.hostname is not None
                     self._remove_daemon(d.name(), d.hostname)
-                daemons_to_remove = []
 
                 # fence them
-                svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                if daemons_to_remove:
+                    svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                daemons_to_remove = []
 
             # create daemons
             daemon_place_fails = []
@@ -1208,6 +1224,7 @@ class CephadmServe:
                     spec,
                     curr_deps=deps,
                     last_deps=last_deps,
+                    daemon=dd,
                 )
                 if _action is not _scheduled_action:
                     self.log.info(
@@ -1226,6 +1243,36 @@ class CephadmServe:
             action = _ceph_service_next_action(
                 action, dd.daemon_type, dd.name(), self.mgr, last_config
             )
+
+            # If no action is specified, check whether we need to start the daemon
+            if not action and dd.daemon_type in DISABLED_SERVICES:
+                if dd.status == 0 and not dd.user_stopped:
+                    should_start = False
+                    if spec and service_registry.get_service(daemon_type_to_service(dd.daemon_type)).ranked(spec):
+                        # For ranked services, check if we should start this daemon
+                        same_rank_daemons = [
+                            d for d in self.mgr.cache.get_daemons_by_service(dd.service_name())
+                            if d.rank == dd.rank and d.daemon_type == dd.daemon_type
+                        ]
+                        self.log.debug(
+                            f'Start hightest rank_gen daemon of same rank daemons {same_rank_daemons}'
+                        )
+                        if len(same_rank_daemons) == 1:
+                            should_start = True
+                        else:
+                            # Multiple daemons exist for this rank, only start the highest generation
+                            highest_gen_daemon = max(same_rank_daemons,
+                                                     key=lambda d: d.rank_generation or 0)
+                            should_start = (dd == highest_gen_daemon)
+                    elif dd.daemon_type == 'keepalived' and spec is not None:
+                        should_start = IngressService.keepalived_should_auto_start(
+                            self.mgr, dd, spec
+                        )
+                    else:
+                        should_start = True
+                    if should_start:
+                        self.log.debug(f'Starting daemon {dd.name()}')
+                        action = 'start'
 
             if action:
                 if scheduled_action == 'redeploy' and action == 'reconfig':

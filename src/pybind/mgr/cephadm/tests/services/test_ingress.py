@@ -14,7 +14,10 @@ from ceph.deployment.service_spec import (
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
 from ceph.utils import datetime_now
-from orchestrator._interface import DaemonDescription
+from orchestrator._interface import DaemonDescription, DaemonDescriptionStatus
+from orchestrator import HostSpec
+from cephadm import utils
+from cephadm.services.ingress import IngressService
 
 
 class TestIngressService:
@@ -1455,3 +1458,224 @@ class TestIngressService:
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         assert "Bind_addr = 10.10.2.20" in ganesha_conf
+
+
+def test_keepalived_choose_next_action_redeploy_on_deps_change_when_stopped():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    daemon = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host1',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.stopped,
+    )
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=['haproxy.test'],
+        last_deps=['haproxy.old'],
+        daemon=daemon,
+    )
+    assert action is utils.Action.REDEPLOY
+
+
+def test_keepalived_choose_next_action_reconfig_when_running():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    daemon = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host1',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.running,
+    )
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=['haproxy.test'],
+        last_deps=['haproxy.old'],
+        daemon=daemon,
+    )
+    assert action is utils.Action.RECONFIG
+
+
+def test_keepalived_choose_next_action_scheduled_when_deps_unchanged():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    deps = ['haproxy.test']
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert action is utils.Action.NO_ACTION
+
+
+def test_keepalived_should_auto_start_colocated_haproxy():
+    mgr = MagicMock()
+    mgr.cache.get_schedulable_hosts.return_value = [HostSpec('host-a')]
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8999,
+        virtual_ip='192.168.1.50/24',
+        placement=PlacementSpec(hosts=['host-a']),
+    )
+    k = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host-a',
+        service_name='ingress.test',
+    )
+    hp = DaemonDescription(
+        daemon_type='haproxy',
+        daemon_id='test',
+        hostname='host-a',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.running,
+        ports=[8080, 8999],
+    )
+    hp_stopped = DaemonDescription(
+        daemon_type='haproxy',
+        daemon_id='test',
+        hostname='host-a',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.stopped,
+        ports=[8080, 8999],
+    )
+
+    mgr.cache.get_daemons_by_service.side_effect = lambda n: [] if n == 'ingress.test' else []
+    assert not IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+    mgr.cache.get_daemons_by_service.side_effect = lambda n: [hp, k] if n == 'ingress.test' else []
+    assert IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+    mgr.cache.get_daemons_by_service.side_effect = (
+        lambda n: [hp_stopped, k] if n == 'ingress.test' else []
+    )
+    assert not IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+
+def test_keepalived_should_auto_start_false_when_more_kv_than_required():
+    mgr = MagicMock()
+    mgr.cache.get_schedulable_hosts.return_value = [
+        HostSpec('host-a'),
+        HostSpec('host-b'),
+        HostSpec('host-c'),
+    ]
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8999,
+        virtual_ip='192.168.1.50/24',
+        placement=PlacementSpec(hosts=['host-a', 'host-b']),
+    )
+    hp_a = DaemonDescription(
+        daemon_type='haproxy',
+        daemon_id='test',
+        hostname='host-a',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.running,
+        ports=[8080, 8999],
+    )
+    hp_b = DaemonDescription(
+        daemon_type='haproxy',
+        daemon_id='test',
+        hostname='host-b',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.running,
+        ports=[8080, 8999],
+    )
+    kv_a = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host-a',
+        service_name='ingress.test',
+    )
+    kv_b = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host-b',
+        service_name='ingress.test',
+    )
+    kv_extra = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host-c',
+        service_name='ingress.test',
+    )
+    mgr.cache.get_daemons_by_service.side_effect = (
+        lambda n: [hp_a, hp_b, kv_a, kv_b, kv_extra] if n == 'ingress.test' else []
+    )
+    assert not IngressService.keepalived_should_auto_start(mgr, kv_extra, spec)
+
+
+def test_keepalived_should_auto_start_keepalive_only_backend():
+    mgr = MagicMock()
+    mgr.cache.get_schedulable_hosts.return_value = [HostSpec('host1')]
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        keepalive_only=True,
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    k = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='keepalived.test',
+        hostname='host1',
+        service_name='ingress.test',
+    )
+    nfs_d = DaemonDescription(
+        daemon_type='nfs',
+        daemon_id='foo.host1',
+        hostname='host1',
+        service_name='nfs.foo',
+        status=DaemonDescriptionStatus.starting,
+    )
+
+    mgr.cache.get_daemons_by_service.side_effect = lambda n: []
+    assert not IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+    def _with_nfs(name: str):
+        if name == 'ingress.test':
+            return [k]
+        if name == 'nfs.foo':
+            return [nfs_d]
+        return []
+
+    mgr.cache.get_daemons_by_service.side_effect = _with_nfs
+    assert IngressService.keepalived_should_auto_start(mgr, k, spec)
