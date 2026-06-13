@@ -1,0 +1,82 @@
+{
+  "paths": {
+    "/{Bucket}": {
+      "put": {
+        "1": {
+          "parameters": {
+            "path": {  
+              "Bucket": "test-bucket-example"
+            }
+          }
+        },
+        "2": {
+          "parameters": {
+            "path": {  
+              "Bucket": "yournamehere-lqban9jgga9018ye-1"
+            }
+          }
+        }
+      },
+      "get": {
+        "1": {
+          "parameters": {
+            "path": {  
+              "Bucket": "test-bucket-example"
+            }
+          }
+        },
+        "2": {
+          "parameters": {
+            "path": {  
+              "Bucket": "yournamehere-lqban9jgga9018ye-1"
+            },
+            "query": {
+              "encoding-type": "url"
+            }
+          }
+        },
+        "3": {
+          "parameters": {
+            "path": {  
+              "Bucket": "yournamehere-lqban9jgga9018ye-1"
+            },
+            "query": {
+              "versions": true,
+              "max-keys": "128",
+              "encoding-type": "url"
+            }
+          }
+        }
+      },
+      "delete": {
+        "1": {
+          "parameters": {
+            "path": {  
+              "Bucket": "test-bucket-example"
+            }
+          }
+        },
+        "2": {
+          "parameters": {
+            "path": {  
+              "Bucket": "yournamehere-lqban9jgga9018ye-1"
+            }
+          }
+        }
+      }
+    },
+    "/{Bucket}/{Key}": {
+      "put": {
+        "1": {
+          "parameters": {
+            "path": {  
+              "Bucket": "test-bucket-example",
+              "Key": "test-object.txt"
+            },
+            "__body__": "This is test object content"
+          }
+        }
+      }
+    }
+  }
+}
