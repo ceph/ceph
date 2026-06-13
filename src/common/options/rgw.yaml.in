@@ -3184,8 +3184,10 @@ options:
   type: str
   level: advanced
   desc: Type of authentication method to be used with Vault.
-  fmt_desc: Type of authentication method to be used. The only method
-    currently supported is ``token``.
+  fmt_desc: Authentication method for Vault. With ``token``, RGW reads the token from
+    ``rgw_crypt_vault_token_file`` and sends ``X-Vault-Token``. With ``agent``, RGW omits
+    that header; set ``rgw_crypt_vault_addr`` to a Vault Agent HTTP listener so the agent
+    authenticates and forwards requests to Vault.
   default: token
   services:
   - rgw
@@ -3433,8 +3435,10 @@ options:
   type: str
   level: advanced
   desc: Type of authentication method to be used with SSE-S3 and Vault.
-  fmt_desc: Type of authentication method to be used. The only method
-    currently supported is ``token``.
+  fmt_desc: Authentication method for Vault with SSE-S3. With ``token``, RGW reads the
+    token from ``rgw_crypt_sse_s3_vault_token_file`` and sends ``X-Vault-Token``. With
+    ``agent``, RGW omits that header; set ``rgw_crypt_sse_s3_vault_addr`` to a Vault Agent
+    HTTP listener so the agent authenticates and forwards requests to Vault.
   default: token
   services:
   - rgw
