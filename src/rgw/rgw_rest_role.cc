@@ -514,6 +514,11 @@ int RGWListRoles::init_processing(optional_yield y)
   if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
     account_id = *id;
   }
+
+  const std::string resource_name = "";
+  const rgw::ARN arn{resource_name, "role", account_id, true};
+  resource = arn;
+
   return 0;
 }
 
