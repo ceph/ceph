@@ -422,6 +422,22 @@ class OSDService(CephService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         config, parent_deps = super().generate_config(daemon_spec)
+
+        # The FCM extblkdev plugin uses NVME_IOCTL_ADMIN_CMD, which requires
+        # CAP_SYS_ADMIN. The plugin only raises it briefly, but the OSD needs to
+        # keep the capability in its permitted set after dropping privileges.
+        try:
+            plugins = str(self.mgr.get_foreign_ceph_option('osd', 'osd_extblkdev_plugins') or '')
+        except KeyError:
+            logger.warning('Failed to read osd_extblkdev_plugins config option, skipping keepcaps injection')
+            plugins = ''
+        plugins = plugins.replace(';', ',').lower()
+        if any(p.strip() == 'fcm' for p in plugins.split(',')):
+            ceph_conf = config.get('config', '')
+            if isinstance(ceph_conf, str) and 'set_keepcaps' not in ceph_conf.lower():
+                logger.info('FCM extblkdev plugin enabled: injecting set_keepcaps=true into OSD config')
+                config['config'] = ceph_conf.rstrip() + '\n\n[osd]\nset_keepcaps = true\n'
+
         if daemon_spec.service_name in self.mgr.spec_store:
             svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 

@@ -42,6 +42,7 @@ from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, make_daemons_running, async_side_effect
 from cephadm.module import CephadmOrchestrator
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 """
 TODOs:
@@ -83,6 +84,36 @@ def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, host: st
             return
 
     assert False, 'Daemon not found'
+
+
+@mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+def test_osd_config_sets_keepcaps_when_fcm_enabled(_get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+    cephadm_module.get_minimal_ceph_conf = lambda: "[global]\nfsid = deadbeef\n"
+    _get_foreign_ceph_option.return_value = "fcm"
+
+    daemon_spec = CephadmDaemonDeploySpec(
+        host='test',
+        daemon_id='0',
+        service_name='osd',
+        keyring='[osd.0]\nkey = dummy\n',
+    )
+    config, _deps = cephadm_module.osd_service.generate_config(daemon_spec)
+    assert 'set_keepcaps = true' in config['config']
+
+
+@mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+def test_osd_config_does_not_set_keepcaps_without_fcm(_get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+    cephadm_module.get_minimal_ceph_conf = lambda: "[global]\nfsid = deadbeef\n"
+    _get_foreign_ceph_option.return_value = ""
+
+    daemon_spec = CephadmDaemonDeploySpec(
+        host='test',
+        daemon_id='0',
+        service_name='osd',
+        keyring='[osd.0]\nkey = dummy\n',
+    )
+    config, _deps = cephadm_module.osd_service.generate_config(daemon_spec)
+    assert 'set_keepcaps' not in config['config'].lower()
 
 
 @contextmanager
