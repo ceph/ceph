@@ -894,6 +894,7 @@ public:
   int unlink(std::string_view dirname, std::string_view filename);
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
+
   bool wal_is_rotational();
   bool db_is_rotational();
 
