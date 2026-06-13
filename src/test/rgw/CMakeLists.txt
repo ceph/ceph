@@ -328,6 +328,13 @@ target_include_directories(unittest_rgw_arn
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+# unittest_rgw_keystone_access_rules
+add_executable(unittest_rgw_keystone_access_rules test_rgw_keystone_access_rules.cc)
+add_ceph_unittest(unittest_rgw_keystone_access_rules)
+target_include_directories(unittest_rgw_keystone_access_rules
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_keystone_access_rules ${rgw_libs})
+
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)
