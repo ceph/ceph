@@ -130,7 +130,12 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
-  target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_librgw
+    rgw_a
+    pthread
+    ${CRYPTO_LIBS}
+    ${EXTRALIBS}
+    ${ALLOC_LIBS})
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)
