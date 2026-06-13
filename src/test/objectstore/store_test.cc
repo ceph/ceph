@@ -1685,7 +1685,7 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
 
   SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
-  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
   g_conf().apply_changes(nullptr);
   StartDeferred(65536);
 
@@ -10036,7 +10036,7 @@ TEST_P(StoreTestSpecificAUSize, ReproBug56488Test) {
   size_t alloc_size = 65536;
   size_t write_size = 4096;
   SetVal(g_conf(), "bluestore_write_v2", "false");
-  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
 
@@ -11858,7 +11858,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
     return;
 
   SetVal(g_conf(), "bluestore_write_v2", "false");
-  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
   StartDeferred(0x1000);
 
   int r;
@@ -12216,7 +12216,7 @@ TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
 
   SetVal(g_conf(), "bluestore_default_buffered_write", "true");
   SetVal(g_conf(), "bluestore_max_blob_size", "65536");
-  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
   g_conf().apply_changes(nullptr);
 
