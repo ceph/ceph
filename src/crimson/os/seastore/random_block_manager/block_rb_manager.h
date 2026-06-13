@@ -82,10 +82,11 @@ public:
     return device->get_device_id();
   }
 
+  // Returns the current count of free blocks based on the authoritative
+  // allocator state (or 0 if the allocator is not yet initialized).
   uint64_t get_free_blocks() const override { 
-    // TODO: return correct free blocks after block allocator is introduced
     assert(device);
-    return get_size() / get_block_size();
+    return allocator ? (allocator->get_available_size() / get_block_size()) : 0;
   }
   const seastore_meta_t &get_meta() const override {
     return device->get_meta();

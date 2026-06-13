@@ -131,7 +131,8 @@ public:
   // TODO: switch the entire write family to errorator.
   using write_ertr = crimson::errorator<
     crimson::ct_error::file_too_large,
-    crimson::ct_error::invarg>;
+    crimson::ct_error::invarg,
+    crimson::ct_error::enospc>;
   using write_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
