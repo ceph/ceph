@@ -15,7 +15,6 @@
 
 #include "SnapMapper.h"
 
-#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
 #include "common/ceph_context.h"
@@ -279,7 +278,7 @@ string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
   // note: the snap_id is to be formatted as a 64-bit hex number,
   // and not according to the text representation of snapid_t
   ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
-  return fmt::sprintf("%s%lld_%.16X_",
+  return fmt::format("{}{}_{:016X}_",
 		      MAPPING_PREFIX,
 		      pool,
 		      static_cast<uint64_t>(snap));
@@ -873,7 +872,7 @@ void SnapMapper::update_snap_map(
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
   ceph_assert(last != CEPH_NOSNAP && last != CEPH_SNAPDIR);
-  return fmt::sprintf("%s_%lld_%016llx",
+  return fmt::format("{}_{}_{:016x}",
 		      PURGED_SNAP_PREFIX,
 		      pool,
 		      static_cast<uint64_t>(last));
