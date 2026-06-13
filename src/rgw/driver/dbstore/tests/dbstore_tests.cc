@@ -1474,6 +1474,127 @@ TEST_F(DBStoreTest, RemoveAccount) {
   ASSERT_TRUE(get_params.op.account.info.name.empty());
 }
 
+TEST_F(DBStoreTest, InsertRole) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+  params.op.role.info.name = "TestRole";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.path = "/";
+  params.op.role.info.arn = "arn:aws:iam:::role/TestRole";
+  params.op.role.info.trust_policy = R"({"Version":"2012-10-17","Statement":[]})";
+  params.op.role.info.max_session_duration = 3600;
+  params.op.role.info.description = "A test role";
+  params.op.role.info.creation_date = "2026-06-13T00:00:00.000Z";
+
+  ret = db->ProcessOp(dpp, "InsertRole", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetRoleByID) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetRole", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.info.name, "TestRole");
+  ASSERT_EQ(params.op.role.info.tenant, "default");
+  ASSERT_EQ(params.op.role.info.path, "/");
+  ASSERT_EQ(params.op.role.info.trust_policy, R"({"Version":"2012-10-17","Statement":[]})");
+  ASSERT_EQ(params.op.role.info.max_session_duration, 3600u);
+  ASSERT_EQ(params.op.role.info.description, "A test role");
+}
+
+TEST_F(DBStoreTest, GetRoleByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.role.info.name = "TestRole";
+  params.op.role.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "GetRole", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.info.id, "AROA00000000000000001");
+}
+
+TEST_F(DBStoreTest, RoleFieldsRoundtrip) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000002";
+  params.op.role.info.name = "RoundtripRole";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.account_id = "ACCT00000000000000001";
+  params.op.role.info.path = "/division_abc/";
+  params.op.role.info.arn = "arn:aws:iam::ACCT00000000000000001:role/RoundtripRole";
+  params.op.role.info.trust_policy = R"({"Version":"2012-10-17"})";
+  params.op.role.info.perm_policy_map["inline1"] = R"({"Effect":"Allow"})";
+  params.op.role.info.tags.insert({"env", "test"});
+  params.op.role.info.tags.insert({"project", "ceph"});
+  params.op.role.info.max_session_duration = 7200;
+  params.op.role.info.description = "roundtrip test";
+  params.op.role.info.creation_date = "2026-06-13T12:00:00.000Z";
+
+  ret = db->ProcessOp(dpp, "InsertRole", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.role.info.id = "AROA00000000000000002";
+  ret = db->ProcessOp(dpp, "GetRole", &get_params);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_EQ(get_params.op.role.info.name, "RoundtripRole");
+  ASSERT_EQ(get_params.op.role.info.account_id, "ACCT00000000000000001");
+  ASSERT_EQ(get_params.op.role.info.path, "/division_abc/");
+  ASSERT_EQ(get_params.op.role.info.perm_policy_map.size(), 1u);
+  ASSERT_EQ(get_params.op.role.info.perm_policy_map["inline1"], R"({"Effect":"Allow"})");
+  ASSERT_EQ(get_params.op.role.info.tags.count("env"), 1u);
+  ASSERT_EQ(get_params.op.role.info.tags.count("project"), 1u);
+  ASSERT_EQ(get_params.op.role.info.max_session_duration, 7200u);
+}
+
+TEST_F(DBStoreTest, ListRoles) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "tenant";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.path = "%";
+  params.op.role.info.name = "";
+  params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListRoles", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, ListRolesByAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "account";
+  params.op.role.info.account_id = "ACCT00000000000000001";
+  params.op.role.info.path = "%";
+  params.op.role.info.name = "";
+  params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListRoles", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.list_entries.size(), 1u);
+  ASSERT_EQ(params.op.role.list_entries[0].name, "RoundtripRole");
+}
+
+TEST_F(DBStoreTest, RemoveRole) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveRole", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.role.info.id = "AROA00000000000000001";
+  ret = db->ProcessOp(dpp, "GetRole", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.role.info.name.empty());
+
+  /* Clean up second role */
+  params.op.role.info.id = "AROA00000000000000002";
+  ret = db->ProcessOp(dpp, "RemoveRole", &params);
+  ASSERT_EQ(ret, 0);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;

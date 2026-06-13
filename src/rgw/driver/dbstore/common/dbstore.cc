@@ -104,6 +104,14 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveAccount;
   if (!Op.compare("GetAccount"))
     return dbops.GetAccount;
+  if (!Op.compare("InsertRole"))
+    return dbops.InsertRole;
+  if (!Op.compare("RemoveRole"))
+    return dbops.RemoveRole;
+  if (!Op.compare("GetRole"))
+    return dbops.GetRole;
+  if (!Op.compare("ListRoles"))
+    return dbops.ListRoles;
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
@@ -243,6 +251,7 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params)
 
   //reset params here
   params->account_table = account_table;
+  params->role_table = role_table;
   params->user_table = user_table;
   params->bucket_table = bucket_table;
   params->quota_table = quota_table;
@@ -613,6 +622,149 @@ int DB::remove_account(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0)<<"remove_account failed with err:(" <<ret<<") " << dendl;
     return ret;
   }
+
+  return ret;
+}
+
+int DB::get_role(const DoutPrefixProvider *dpp,
+    const std::string& query_str, RGWRoleInfo& rinfo)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = query_str;
+
+  if (query_str == "name") {
+    params.op.role.info.name = rinfo.name;
+    params.op.role.info.tenant = rinfo.tenant;
+  } else if (query_str == "name_account") {
+    params.op.role.info.name = rinfo.name;
+    params.op.role.info.account_id = rinfo.account_id;
+  } else if (query_str == "role_id") {
+    params.op.role.info.id = rinfo.id;
+  } else {
+    ldpp_dout(dpp, 0)<<"In GetRole Invalid query string :" <<query_str.c_str()<<") " << dendl;
+    return -1;
+  }
+
+  ret = ProcessOp(dpp, "GetRole", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (params.op.role.list_entries.empty()) {
+    ldpp_dout(dpp, 0)<<"In GetRole - No role found for query(" <<query_str.c_str()<<")" << dendl;
+    return -ENOENT;
+  }
+
+  rinfo = params.op.role.list_entries.front();
+
+  return ret;
+}
+
+int DB::store_role(const DoutPrefixProvider *dpp,
+    const RGWRoleInfo& rinfo, bool exclusive)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  if (exclusive) {
+    RGWRoleInfo orig_info;
+    orig_info.id = rinfo.id;
+    ret = get_role(dpp, "role_id", orig_info);
+    if (!ret) {
+      return -EEXIST;
+    }
+  }
+
+  params.op.role.info = rinfo;
+
+  ret = ProcessOp(dpp, "InsertRole", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"store_role failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20)<<"Role creation successful - role_id:(" <<rinfo.id<<") " << dendl;
+
+  return ret;
+}
+
+int DB::remove_role(const DoutPrefixProvider *dpp,
+    const RGWRoleInfo& rinfo)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  params.op.role.info.id = rinfo.id;
+
+  ret = ProcessOp(dpp, "RemoveRole", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_role failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
+int DB::list_roles(const DoutPrefixProvider *dpp,
+    const std::string& query_str,
+    const std::string& tenant, const std::string& account_id,
+    const std::string& path_prefix, const std::string& marker,
+    uint32_t max_items, std::vector<RGWRoleInfo>& roles)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = query_str;
+
+  if (query_str == "account") {
+    params.op.role.info.account_id = account_id;
+  } else {
+    params.op.role.info.tenant = tenant;
+  }
+
+  std::string path_filter = path_prefix + "%";
+  params.op.role.info.path = path_filter;
+  params.op.role.info.name = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListRoles", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_roles failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  roles = std::move(params.op.role.list_entries);
+
+  return ret;
+}
+
+int DB::count_account_roles(const DoutPrefixProvider *dpp,
+    const std::string& account_id, uint32_t& count)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = "count_account";
+  params.op.role.info.account_id = account_id;
+
+  ret = ProcessOp(dpp, "ListRoles", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"count_account_roles failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  count = params.op.role.list_entries.size();
 
   return ret;
 }

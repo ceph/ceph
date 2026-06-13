@@ -182,3 +182,39 @@ int POSIXAccountDB::Destroy(const DoutPrefixProvider *dpp)
 
 } } // namespace rgw::store
 
+namespace rgw::sal {
+
+int DBStoreRole::load_by_name(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  std::string query;
+  if (!info.account_id.empty()) {
+    query = "name_account";
+  } else {
+    query = "name";
+  }
+  return db->get_role(dpp, query, info);
+}
+
+int DBStoreRole::load_by_id(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  return db->get_role(dpp, "role_id", info);
+}
+
+int DBStoreRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  return db->store_role(dpp, info, exclusive);
+}
+
+int DBStoreRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  if (info.id.empty()) {
+    int r = load_by_name(dpp, y);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return db->remove_role(dpp, info);
+}
+
+} // namespace rgw::sal
+
