@@ -62,7 +62,10 @@ if [ -z "$DIR" ] ; then
 fi
 rm -fr $DIR
 mkdir -p $DIR
-$PYTHON -m venv $DIR
+# CEPH_PYTHON_SYSTEM_SITE (default off): build venv against system site-packages
+VENV_OPTS=
+test -n "${CEPH_PYTHON_SYSTEM_SITE:-}" && VENV_OPTS="--system-site-packages"
+$PYTHON -m venv $VENV_OPTS $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
