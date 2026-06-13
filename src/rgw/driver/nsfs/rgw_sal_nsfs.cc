@@ -2687,6 +2687,44 @@ int NSFSDriver::list_roles(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int NSFSDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    const RGWOIDCProviderInfo& info,
+				    bool exclusive,
+				    RGWObjVersionTracker* objv_tracker)
+{
+  return get_account_db()->store_oidc_provider(dpp, info, exclusive);
+}
+
+int NSFSDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view tenant,
+				   std::string_view url,
+				   RGWOIDCProviderInfo& info,
+				   RGWObjVersionTracker* objv_tracker)
+{
+  return get_account_db()->load_oidc_provider(dpp,
+      std::string(tenant), std::string(url), info);
+}
+
+int NSFSDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view tenant,
+				     std::string_view url)
+{
+  return get_account_db()->delete_oidc_provider(dpp,
+      std::string(tenant), std::string(url));
+}
+
+int NSFSDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view tenant,
+				   std::vector<RGWOIDCProviderInfo>& providers)
+{
+  return get_account_db()->list_oidc_providers(dpp,
+      std::string(tenant), providers);
+}
+
 struct meta_list_handle {
   std::string marker;
   std::string section;

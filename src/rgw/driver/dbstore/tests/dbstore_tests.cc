@@ -1595,6 +1595,76 @@ TEST_F(DBStoreTest, RemoveRole) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, InsertOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+  params.op.oidc.info.arn = "arn:aws:iam:::oidc-provider/login.example.com";
+  params.op.oidc.info.creation_date = "2026-06-13T00:00:00.000Z";
+  params.op.oidc.info.client_ids = {"client1", "client2"};
+  params.op.oidc.info.thumbprints = {"aabbccdd"};
+
+  ret = db->ProcessOp(dpp, "InsertOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "GetOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.oidc.list_entries.empty());
+  ASSERT_EQ(params.op.oidc.list_entries[0].arn,
+            "arn:aws:iam:::oidc-provider/login.example.com");
+  ASSERT_EQ(params.op.oidc.list_entries[0].client_ids.size(), 2u);
+  ASSERT_EQ(params.op.oidc.list_entries[0].client_ids[0], "client1");
+  ASSERT_EQ(params.op.oidc.list_entries[0].thumbprints.size(), 1u);
+  ASSERT_EQ(params.op.oidc.list_entries[0].thumbprints[0], "aabbccdd");
+}
+
+TEST_F(DBStoreTest, ListOIDCProviders) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.oidc.info.provider_url = "https://auth.other.com";
+  params2.op.oidc.info.tenant = "default";
+  params2.op.oidc.info.arn = "arn:aws:iam:::oidc-provider/auth.other.com";
+  params2.op.oidc.info.creation_date = "2026-06-13T01:00:00.000Z";
+  params2.op.oidc.info.client_ids = {"clientA"};
+  params2.op.oidc.info.thumbprints = {"11223344"};
+
+  ret = db->ProcessOp(dpp, "InsertOIDCProvider", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "ListOIDCProviders", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.oidc.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, RemoveOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "RemoveOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.oidc.info.provider_url = "https://login.example.com";
+  get_params.op.oidc.info.tenant = "default";
+  ret = db->ProcessOp(dpp, "GetOIDCProvider", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.oidc.list_entries.empty());
+
+  /* Clean up second provider */
+  params.op.oidc.info.provider_url = "https://auth.other.com";
+  ret = db->ProcessOp(dpp, "RemoveOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;

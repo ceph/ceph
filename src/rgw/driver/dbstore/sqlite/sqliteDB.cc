@@ -163,6 +163,9 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->role_table.empty()) {
     params->role_table = getRoleTable();
   }
+  if (params->oidc_table.empty()) {
+    params->oidc_table = getOIDCTable();
+  }
   if (params->user_table.empty()) {
     params->user_table = getUserTable();
   }
@@ -181,6 +184,7 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
 
   p_params.account_table = params->account_table;
   p_params.role_table = params->role_table;
+  p_params.oidc_table = params->oidc_table;
   p_params.user_table = params->user_table;
   p_params.bucket_table = params->bucket_table;
   p_params.quota_table = params->quota_table;
@@ -251,6 +255,15 @@ enum GetRole {
   RoleMaxSessionDuration,
   RoleDescription,
   RoleCreationDate,
+};
+
+enum GetOIDCProvider {
+  OIDCProviderURL = 0,
+  OIDCTenant,
+  OIDCClientIDs,
+  OIDCThumbprints,
+  OIDCProviderARN,
+  OIDCCreationDate,
 };
 
 enum GetUser {
@@ -467,6 +480,32 @@ static int list_role_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_
   RGWRoleInfo dummy;
   dummy.id = std::to_string(sqlite3_column_int(stmt, 0));
   op.role.list_entries.push_back(dummy);
+
+  return 0;
+}
+
+static int list_oidc_provider(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWOIDCProviderInfo info;
+
+  info.provider_url = (const char*)sqlite3_column_text(stmt, OIDCProviderURL);
+
+  const char *t = (const char*)sqlite3_column_text(stmt, OIDCTenant);
+  if (t) info.tenant = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, OIDCClientIDs, info.client_ids, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, OIDCThumbprints, info.thumbprints, sdb);
+
+  t = (const char*)sqlite3_column_text(stmt, OIDCProviderARN);
+  if (t) info.arn = t;
+
+  t = (const char*)sqlite3_column_text(stmt, OIDCCreationDate);
+  if (t) info.creation_date = t;
+
+  op.oidc.info = info;
+  op.oidc.list_entries.push_back(info);
 
   return 0;
 }
@@ -708,6 +747,10 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.RemoveRole = make_shared<SQLRemoveRole>(&this->db, this->getDBname(), cct);
   dbops.GetRole = make_shared<SQLGetRole>(&this->db, this->getDBname(), cct);
   dbops.ListRoles = make_shared<SQLListRoles>(&this->db, this->getDBname(), cct);
+  dbops.InsertOIDCProvider = make_shared<SQLInsertOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.RemoveOIDCProvider = make_shared<SQLRemoveOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.GetOIDCProvider = make_shared<SQLGetOIDCProvider>(&this->db, this->getDBname(), cct);
+  dbops.ListOIDCProviders = make_shared<SQLListOIDCProviders>(&this->db, this->getDBname(), cct);
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
   dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
@@ -837,11 +880,12 @@ out:
 int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  int ca = 0, cr = 0, cu = 0, cb = 0, cq = 0;
+  int ca = 0, cr = 0, co = 0, cu = 0, cb = 0, cq = 0;
   DBOpParams params = {};
 
   params.account_table = getAccountTable();
   params.role_table = getRoleTable();
+  params.oidc_table = getOIDCTable();
   params.user_table = getUserTable();
   params.bucket_table = getBucketTable();
   params.quota_table = getQuotaTable();
@@ -850,6 +894,9 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
     goto out;
 
   if ((cr = createRoleTable(dpp, &params)))
+    goto out;
+
+  if ((co = createOIDCProviderTable(dpp, &params)))
     goto out;
 
   if ((cu = createUserTable(dpp, &params)))
@@ -906,6 +953,22 @@ int SQLiteDB::createRoleTable(const DoutPrefixProvider *dpp, DBOpParams *params)
     ldpp_dout(dpp, 0)<<"CreateRoleTable failed" << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateRoleTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createOIDCProviderTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("OIDCProvider", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateOIDCProviderTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateOIDCProviderTable succeeded" << dendl;
 
   return ret;
 }
@@ -1668,6 +1731,183 @@ int SQLListRoles::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *para
     SQL_EXECUTE(dpp, params, stmt, list_role);
   }
 
+out:
+  return ret;
+}
+
+int SQLInsertOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLInsertOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLInsertOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.client_ids, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.oidc.info.client_ids, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.thumbprints, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.oidc.info.thumbprints, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_arn, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.arn.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.creation_date, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.creation_date.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLRemoveOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLRemoveOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetOIDCProvider::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLGetOIDCProvider - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetOIDCProvider");
+out:
+  return ret;
+}
+
+int SQLGetOIDCProvider::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.provider_url, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.provider_url.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLGetOIDCProvider::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_oidc_provider);
+out:
+  return ret;
+}
+
+int SQLListOIDCProviders::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLListOIDCProviders - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListOIDCProviders");
+out:
+  return ret;
+}
+
+int SQLListOIDCProviders::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.oidc.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.oidc.info.tenant.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLListOIDCProviders::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_oidc_provider);
 out:
   return ret;
 }

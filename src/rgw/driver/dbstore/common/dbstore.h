@@ -16,6 +16,7 @@
 #include "rgw_sal_store.h"
 #include "rgw_common.h"
 #include "rgw_role.h"
+#include "rgw_oidc_provider.h"
 #include "driver/rados/rgw_bucket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -38,6 +39,11 @@ struct DBOpRoleInfo {
   RGWRoleInfo info;
   obj_version role_version;
   std::vector<RGWRoleInfo> list_entries;
+};
+
+struct DBOpOIDCProviderInfo {
+  RGWOIDCProviderInfo info;
+  std::vector<RGWOIDCProviderInfo> list_entries;
 };
 
 struct DBOpUserInfo {
@@ -139,6 +145,7 @@ struct DBOpInfo {
    * XXX: Swift keys and subuser not supported for now */
   DBOpAccountInfo account;
   DBOpRoleInfo role;
+  DBOpOIDCProviderInfo oidc;
   DBOpUserInfo user;
   std::string query_str;
   DBOpBucketInfo bucket;
@@ -155,6 +162,7 @@ struct DBOpParams {
   /* Tables */
   std::string account_table;
   std::string role_table;
+  std::string oidc_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -210,6 +218,15 @@ struct DBOpRolePrepareInfo {
   static constexpr const char* max_session_duration = ":max_session_duration";
   static constexpr const char* description = ":role_description";
   static constexpr const char* creation_date = ":creation_date";
+};
+
+struct DBOpOIDCProviderPrepareInfo {
+  static constexpr const char* provider_url = ":provider_url";
+  static constexpr const char* tenant = ":oidc_tenant";
+  static constexpr const char* client_ids = ":client_ids";
+  static constexpr const char* thumbprints = ":thumbprints";
+  static constexpr const char* provider_arn = ":provider_arn";
+  static constexpr const char* creation_date = ":oidc_creation_date";
 };
 
 struct DBOpUserPrepareInfo {
@@ -365,6 +382,7 @@ struct DBOpLCHeadPrepareInfo {
 struct DBOpPrepareInfo {
   DBOpAccountPrepareInfo account;
   DBOpRolePrepareInfo role;
+  DBOpOIDCProviderPrepareInfo oidc;
   DBOpUserPrepareInfo user;
   std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
@@ -379,6 +397,7 @@ struct DBOpPrepareParams {
   /* Tables */
   std::string account_table;
   std::string role_table;
+  std::string oidc_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -403,6 +422,10 @@ struct DBOps {
   std::shared_ptr<class RemoveRoleOp> RemoveRole;
   std::shared_ptr<class GetRoleOp> GetRole;
   std::shared_ptr<class ListRolesOp> ListRoles;
+  std::shared_ptr<class InsertOIDCProviderOp> InsertOIDCProvider;
+  std::shared_ptr<class RemoveOIDCProviderOp> RemoveOIDCProvider;
+  std::shared_ptr<class GetOIDCProviderOp> GetOIDCProvider;
+  std::shared_ptr<class ListOIDCProvidersOp> ListOIDCProviders;
   std::shared_ptr<class InsertUserOp> InsertUser;
   std::shared_ptr<class RemoveUserOp> RemoveUser;
   std::shared_ptr<class GetUserOp> GetUser;
@@ -485,6 +508,16 @@ class DBOp {
       Description TEXT ,	\
       CreationDate TEXT ,	\
       PRIMARY KEY (RoleID) \n);";
+
+    static constexpr std::string_view CreateOIDCProviderTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      ProviderURL TEXT NOT NULL,		\
+      Tenant TEXT ,		\
+      ClientIDs BLOB ,		\
+      Thumbprints BLOB ,	\
+      ProviderARN TEXT ,	\
+      CreationDate TEXT ,	\
+      PRIMARY KEY (ProviderURL, Tenant) \n);";
 
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
@@ -763,6 +796,9 @@ class DBOp {
       if (!type.compare("Role"))
         return fmt::format(CreateRoleTableQ,
             params->role_table);
+      if (!type.compare("OIDCProvider"))
+        return fmt::format(CreateOIDCProviderTableQ,
+            params->oidc_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -995,6 +1031,70 @@ class ListRolesOp: virtual public DBOp {
             params.op.role.tenant, params.op.role.path,
             params.op.role.name, params.op.list_max_count);
       }
+    }
+};
+
+class InsertOIDCProviderOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                           ProviderARN, CreationDate) \
+                          VALUES ({}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant,
+          params.op.oidc.client_ids, params.op.oidc.thumbprints,
+          params.op.oidc.provider_arn, params.op.oidc.creation_date);
+    }
+};
+
+class RemoveOIDCProviderOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where ProviderURL = {} AND Tenant = {}";
+
+  public:
+    virtual ~RemoveOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant);
+    }
+};
+
+class GetOIDCProviderOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                          ProviderARN, CreationDate \
+                          from '{}' where ProviderURL = {} AND Tenant = {}";
+
+  public:
+    virtual ~GetOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant);
+    }
+};
+
+class ListOIDCProvidersOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                          ProviderARN, CreationDate \
+                          from '{}' where Tenant = {}";
+
+  public:
+    virtual ~ListOIDCProvidersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.tenant);
     }
 };
 
@@ -1798,6 +1898,7 @@ class DB {
     rgw::sal::Driver* driver;
     const std::string account_table;
     const std::string role_table;
+    const std::string oidc_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -1822,6 +1923,7 @@ class DB {
     table_name_prefix(std::filesystem::path(db_name).filename()),
     account_table(table_name_prefix + "_account_table"),
     role_table(table_name_prefix + "_role_table"),
+    oidc_table(table_name_prefix + "_oidc_table"),
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
@@ -1836,6 +1938,7 @@ class DB {
     table_name_prefix(db_name),
     account_table(db_name+"_account_table"),
     role_table(db_name+"_role_table"),
+    oidc_table(db_name+"_oidc_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -1850,6 +1953,7 @@ class DB {
     const std::string getDBfile() { return db_name + ".db"; }
     const std::string getAccountTable() { return account_table; }
     const std::string getRoleTable() { return role_table; }
+    const std::string getOIDCTable() { return oidc_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
@@ -1942,6 +2046,16 @@ class DB {
         uint32_t max_items, std::vector<RGWRoleInfo>& roles);
     int count_account_roles(const DoutPrefixProvider *dpp,
         const std::string& account_id, uint32_t& count);
+    int store_oidc_provider(const DoutPrefixProvider *dpp,
+        const RGWOIDCProviderInfo& info, bool exclusive);
+    int load_oidc_provider(const DoutPrefixProvider *dpp,
+        const std::string& tenant, const std::string& url,
+        RGWOIDCProviderInfo& info);
+    int delete_oidc_provider(const DoutPrefixProvider *dpp,
+        const std::string& tenant, const std::string& url);
+    int list_oidc_providers(const DoutPrefixProvider *dpp,
+        const std::string& tenant,
+        std::vector<RGWOIDCProviderInfo>& providers);
     int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
