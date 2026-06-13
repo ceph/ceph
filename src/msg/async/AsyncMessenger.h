@@ -125,6 +125,10 @@ public:
   double get_dispatch_queue_max_age(utime_t now) const override {
     return dispatch_queue.get_max_age(now);
   }
+
+  void set_dispatch_throttle_size(uint64_t size) override {
+    dispatch_queue.dispatch_throttler.reset_max(size);
+  }
   /** @} Accessors */
 
   /**
