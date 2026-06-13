@@ -4327,6 +4327,8 @@ static bool ignore_sync_error(int err) {
   switch (err) {
     case -ENOENT:
     case -EPERM:
+    case -EBUSY:
+    case -EAGAIN:
       return true;
     default:
       break;
@@ -4493,7 +4495,9 @@ public:
       if (retcode < 0 && retcode != -ENOENT) {
         set_status() << "failed to sync obj; retcode=" << retcode;
         tn->log(0, SSTR("ERROR: failed to sync object: "
-            << bucket_shard_str{bs} << "/" << key.name));
+            << bucket_shard_str{bs} << "/" << key.name
+            << " retcode=" << retcode
+            << " (" << cpp_strerror(-retcode) << ")"));
         if (!ignore_sync_error(retcode)) {
           error_ss << bucket_shard_str{bs} << "/" << key.name;
           sync_status = retcode;
