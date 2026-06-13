@@ -2102,49 +2102,6 @@ int PGMap::dump_stuck_pg_stats(
   return 0;
 }
 
-std::vector<std::pair<int32_t, osd_stat_t>> PGMap::get_sorted_osd_stats() const
-{
-  std::vector<std::pair<int32_t, osd_stat_t>> sorted_stats(osd_stat.begin(), osd_stat.end());
-
-  std::sort(sorted_stats.begin(), sorted_stats.end(), [](const auto& a, const auto& b) {
-    return a.first < b.first;
-  });
-
-  return sorted_stats;
-}
-
-void PGMap::dump_osd_perf_stats(ceph::Formatter *f) const
-{
-  f->open_array_section("osd_perf_infos");
-
-  for (const auto& [osd_id, stat] : get_sorted_osd_stats()) {
-    f->open_object_section("osd");
-    f->dump_int("id", osd_id);
-    {
-      f->open_object_section("perf_stats");
-      stat.os_perf_stat.dump(f);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  f->close_section();
-}
-void PGMap::print_osd_perf_stats(std::ostream *ss) const
-{
-  TextTable tab;
-  tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
-
-  for (const auto& [osd_id, stat] : get_sorted_osd_stats()) {
-    tab << osd_id;
-    tab << stat.os_perf_stat.os_commit_latency_ns / 1000000ull;
-    tab << stat.os_perf_stat.os_apply_latency_ns / 1000000ull;
-    tab << TextTable::endrow;
-  }
-  (*ss) << tab;
-}
-
 void PGMap::dump_osd_blocked_by_stats(ceph::Formatter *f) const
 {
   f->open_array_section("osd_blocked_by_infos");
@@ -3796,19 +3753,6 @@ int process_pg_map_command(
       odata->append(ds);
       return 0;
     }
-  }
-
-  if (prefix == "osd perf") {
-    if (f) {
-      f->open_object_section("osdstats");
-      pg_map.dump_osd_perf_stats(f);
-      f->close_section();
-      f->flush(ds);
-    } else {
-      pg_map.print_osd_perf_stats(&ds);
-    }
-    odata->append(ds);
-    return 0;
   }
 
   if (prefix == "osd blocked-by") {
