@@ -29,13 +29,13 @@ struct CompatSet {
 
   struct Feature {
     uint64_t id;
-    std::string name;
+    std::string_view name;
 
-    Feature(uint64_t _id, const std::string& _name) : id(_id), name(_name) {}
+    constexpr Feature(uint64_t _id, const std::string_view _name) : id(_id), name(_name) {}
   };
 
   class FeatureSet {
-    uint64_t mask;
+    uint64_t mask = 1;
     std::map<uint64_t, std::string> names;
 
   public:
@@ -45,7 +45,7 @@ struct CompatSet {
     friend class CephCompatSet_merge_Test;
     friend std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs);
     friend std::ostream& operator<<(std::ostream& out, const CompatSet& compat);
-    FeatureSet() : mask(1), names() {}
+
     void insert(const Feature& f) {
       ceph_assert(f.id > 0);
       ceph_assert(f.id < 64);
@@ -62,7 +62,7 @@ struct CompatSet {
     /**
      * Getter instead of using name[] to be const safe
      */
-    std::string get_name(uint64_t const f) const {
+    std::string_view get_name(uint64_t const f) const noexcept {
       std::map<uint64_t, std::string>::const_iterator i = names.find(f);
       ceph_assert(i != names.end());
       return i->second;
