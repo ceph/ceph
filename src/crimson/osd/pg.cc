@@ -1382,6 +1382,7 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
   decode(log_entries, p);
   update_stats(req->pg_stats);
 
+  const bool transaction_applied = !txn.empty();
   co_await update_snap_map(
     log_entries,
     txn);
@@ -1391,7 +1392,7 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
                 req->pg_trim_to,
                 req->version,
                 req->pg_committed_to,
-                !txn.empty(),
+                transaction_applied,
                 txn,
                 false);
   DEBUGDPP("{} do_transaction", *this, *req);
@@ -1469,7 +1470,7 @@ void PG::log_operation(
                            roll_forward_to,
                            pg_committed_to,
                            txn,
-                           !txn.empty(),
+                           transaction_applied,
                            false);
 }
 
