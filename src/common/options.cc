@@ -333,7 +333,7 @@ void Option::print(ostream *out) const
     *out << "  See also: " << see_also << "\n";
   }
 
-  if (long_desc.size()) {
+  if (*long_desc != '\0') {
     *out << "\n" << long_desc << "\n";
   }
 }
