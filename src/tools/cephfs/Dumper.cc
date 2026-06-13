@@ -17,6 +17,7 @@
 
 #include "include/compat.h"
 #include "include/fs_types.h"
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
