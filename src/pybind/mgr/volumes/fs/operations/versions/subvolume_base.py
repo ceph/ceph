@@ -5,7 +5,6 @@ import errno
 import logging
 import hashlib
 from typing import Dict, Union
-from pathlib import Path
 
 import cephfs
 
@@ -443,11 +442,16 @@ class SubvolumeBase(object):
             self.fs.stat(self.base_path)
             self.metadata_mgr.refresh()
             log.debug("loaded subvolume '{0}'".format(self.subvolname))
-            subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+            subvol_data_path = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+            subvol_path_v2 = os.path.dirname(subvol_data_path)
+            subvol_path_v3 = os.path.dirname(os.path.dirname(os.path.dirname(subvol_data_path)))
+            base_path = self.base_path.decode('utf-8')
             # subvolume with retained snapshots has empty path, don't mistake it for
             # fabricated metadata.
-            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
-                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
+            if (not self.legacy_mode and
+                self.state != SubvolumeStates.STATE_RETAINED and
+                base_path != subvol_path_v2 and
+                base_path != subvol_path_v3):
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
             if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
@@ -471,7 +475,7 @@ class SubvolumeBase(object):
     def _trash_dir(self, path):
         create_trashcan(self.fs, self.vol_spec)
         with open_trashcan(self.fs, self.vol_spec) as trashcan:
-            trashcan.dump(path)
+            trashcan.dump(path, unique=True)
             log.info("subvolume path '{0}' moved to trashcan".format(path))
 
     def _link_dir(self, path, bname):
