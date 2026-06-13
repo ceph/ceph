@@ -592,14 +592,14 @@ public:
   virtual int count_account_roles(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
-				  uint32_t& count) override { return -ENOTSUP; }
+				  uint32_t& count) override;
   virtual int list_account_roles(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
 				 std::string_view path_prefix,
 				 std::string_view marker,
 				 uint32_t max_items,
-				 RoleList& listing) override { return -ENOTSUP; }
+				 RoleList& listing) override;
 
   virtual int load_account_user_by_name(const DoutPrefixProvider* dpp,
 					optional_yield y,
@@ -753,7 +753,7 @@ public:
 			 const std::string& path_prefix,
 			 const std::string& marker,
 			 uint32_t max_items,
-			 RoleList& listing) override { return 0; }
+			 RoleList& listing) override;
   virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   const RGWOIDCProviderInfo& info,
