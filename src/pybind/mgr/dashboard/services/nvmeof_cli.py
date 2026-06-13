@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 import errno
+import inspect
 import json
+import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import Enum
-from typing import Annotated, Any, Dict, List, NamedTuple, Optional, Type, \
-    Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Callable, Dict, List, NamedTuple, Optional, \
+    Type, Union, get_args, get_origin, get_type_hints
 
 import yaml
-from mgr_module import CLICheckNonemptyFileInput, HandleCommandResult, HandlerFuncType
+from mgr_module import CLICheckNonemptyFileInput, HandleCommandResult
 from prettytable import PrettyTable
 
 from ..cli import DBCLICommand
@@ -15,6 +18,8 @@ from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
+
+logger = logging.getLogger(__name__)
 
 
 @DBCLICommand.Read('dashboard nvmeof-gateway-list')
@@ -62,6 +67,39 @@ UNITS = {
     for suffix in ['', 'B', 'iB']
     if not (prefix == '' and suffix == 'iB')
 }
+
+
+def escape_address_if_ipv6(addr: str) -> str:
+    ret_addr = addr
+    if ":" in addr and not addr.strip().startswith("["):
+        ret_addr = f"[{addr}]"
+    return ret_addr
+
+
+def _normalize_to_list(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def format_host_updates(args: Dict[str, Any],
+                        template_wildcard: str,
+                        template_item: str,
+                        host_arg: str = 'host_nqn',
+                        nqn_arg: str = 'nqn',
+                        wildcard_value: str = '*') -> str:
+    nqn = args.get(nqn_arg)
+    hosts = _normalize_to_list(args.get(host_arg))
+
+    messages: List[str] = []
+    for host in hosts:
+        if host == wildcard_value:
+            messages.append(template_wildcard.format(nqn=nqn))
+        else:
+            messages.append(template_item.format(nqn=nqn, host_nqn=host))
+    return "\n".join(messages)
 
 
 def convert_to_bytes(size: Union[int, str], default_unit=None):
@@ -248,38 +286,178 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 class NvmeofCLICommand(DBCLICommand):
     desc: str
 
-    def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
+    def __init__(self,
+                 prefix,
+                 model: Type[NamedTuple],
+                 alias: Optional[str] = None,
+                 perm: str = 'rw',
+                 poll: bool = False,
+                 success_message_template: Optional[str] = None,
+                 success_message_map: Optional[Dict[str, Any]] = None,
+                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
         self._alias = alias
         self._alias_cmd: Optional[NvmeofCLICommand] = None
 
+        self._success_message_template = success_message_template
+        self._success_message_map = success_message_map or {}
+        self._success_message_fn = success_message_fn
+        self._func_defaults: Dict[str, Any] = {}
+
+    def __call__(self, func):
+        resp = super().__call__(func)
+        self._func_defaults = self._compute_func_defaults()
+
+        if self._alias:
+            self._alias_cmd = NvmeofCLICommand(
+                self._alias,
+                model=self._model,
+                success_message_template=self._success_message_template,
+                success_message_map=self._success_message_map,
+                success_message_fn=self._success_message_fn,
+            )
+            self._alias_cmd(func)
+            self._alias_cmd._func_defaults = self._alias_cmd._compute_func_defaults()
+
+        self._use_api_endpoint_desc_if_available(func)
+        return resp
+
     def _use_api_endpoint_desc_if_available(self, func):
         if not self.desc and hasattr(func, 'doc_info'):
             self.desc = func.doc_info.get('summary', '')
 
-    def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        if self._alias:
-            self._alias_cmd = NvmeofCLICommand(self._alias, model=self._model)
-            assert self._alias_cmd is not None
-            self._alias_cmd(func)
+    def _compute_func_defaults(self) -> Dict[str, Any]:
+        defaults: Dict[str, Any] = {}
+        sig = inspect.signature(self.func)
 
-        resp = super().__call__(func)
-        self._use_api_endpoint_desc_if_available(func)
-        return resp
+        for name, param in sig.parameters.items():
+            if name in DBCLICommand.KNOWN_ARGS:
+                continue
+            if name not in self.arg_spec:
+                continue
+            if param.default is not inspect.Parameter.empty:
+                defaults[name] = param.default
+
+        return defaults
+
+    def _stringify(self, value: Any) -> str:
+        if isinstance(value, (bytes, bytearray)):
+            return value.decode('utf-8', errors='replace')
+
+        if isinstance(value, (list, tuple)):
+            try:
+                return ','.join(self._stringify(v) for v in value)
+            except (TypeError, ValueError):
+                return str(value)
+
+        return str(value)
+
+    def _args_map_from_argspec(self,
+                               cmd_dict: Dict[str, Any],
+                               inbuf: Optional[str] = None) -> Dict[str, Any]:
+        kwargs, specials = self._collect_args_by_argspec(cmd_dict)
+        kwargs = kwargs or {}
+        specials = specials or {}
+
+        if inbuf and 'inbuf' in specials:
+            kwargs['inbuf'] = inbuf
+
+        return {**self._func_defaults, **kwargs}
+
+    def _apply_single_map_spec(
+        self,
+        spec: Union[str, dict, Callable],
+        raw: Any,
+        fields: Dict[str, Any],
+    ) -> Any:
+        """
+        spec can be:
+          - dict mapping exact raw values to literal/callable
+          - callable(value, fields)
+          - literal value (e.g. string)
+        """
+        if callable(spec):
+            return spec(raw, fields)
+
+        if isinstance(spec, dict):
+            if raw in spec:
+                val = spec[raw]
+                return val(raw, fields) if callable(val) else val
+            return raw
+        return spec
+
+    def _apply_success_message_map(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(fields)
+        for field, spec in self._success_message_map.items():
+            raw = out.get(field)
+            try:
+                out[field] = self._apply_single_map_spec(spec, raw, out)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.warning("Failed applying success_message_map for field %s",
+                               field, exc_info=True)
+        return out
+
+    def get_success_msg(self, args_map: Dict[str, Any], response: Any) -> Optional[str]:
+        merged_fields: Dict[str, Any]
+
+        if isinstance(response, Mapping):
+            merged_fields = {**args_map, **dict(response)}
+        else:
+            merged_fields = dict(args_map)
+
+        if self._success_message_fn:
+            try:
+                return self._success_message_fn(merged_fields)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.warning("success_message_fn failed for %s", self.prefix, exc_info=True)
+                return None
+
+        return self._format_success_message_from_args(args_map, response)
+
+    def _format_success_message_from_args(self,
+                                          args_map: Dict[str, Any],
+                                          response: Any) -> Optional[str]:
+        if not self._success_message_template:
+            return None
+
+        resp_map: Dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+
+        try:
+            fields_dict = {**args_map, **resp_map}
+            fields_dict = self._apply_success_message_map(fields_dict)
+            str_map = {k: self._stringify(v) for k, v in fields_dict.items()}
+            return self._success_message_template.format(**str_map)
+        # pylint: disable=broad-except
+        except Exception:
+            logger.warning("Success message template failed for %s", self.prefix, exc_info=True)
+            return None
 
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
-            ret = super().call(mgr, cmd_dict, inbuf)
             out_format = cmd_dict.get('format')
+            args_map = self._args_map_from_argspec(cmd_dict, inbuf)
+            ret = super().call(mgr, cmd_dict, inbuf)
             if ret is None:
-                out = ''
+                ret = {}
+
             if out_format == 'plain' or not out_format:
-                out = self._output_formatter.format_output(ret, self._model)
+                message: Optional[str] = None
+                try:
+                    message = self.get_success_msg(args_map, ret)
+                # pylint: disable=broad-except
+                except Exception:
+                    logger.warning("Formatting of success message failed for %s",
+                                   self.prefix, exc_info=True)
+
+                out = message if message else self._output_formatter.format_output(ret, self._model)
+
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)
             elif out_format == 'yaml':
@@ -287,6 +465,9 @@ class NvmeofCLICommand(DBCLICommand):
             else:
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
+
             return HandleCommandResult(0, out, '')
-        except Exception as e:  # pylint: disable=broad-except
+
+        # pylint: disable=broad-except
+        except Exception as e:
             return HandleCommandResult(-errno.EINVAL, '', str(e))
