@@ -307,6 +307,7 @@ public:
       rocksdb::ColumnFamilyHandle *cf,
       const std::string &k,
       const ceph::bufferlist &to_set_bl);
+
   public:
     size_t get_count() const override {
       return bat.Count();
@@ -314,6 +315,7 @@ public:
     size_t get_size_bytes() const override {
       return bat.GetDataSize();
     }
+    std::string get_summary_string(bool verbose) const override;
     void set(
       const std::string &prefix,
       const std::string &k,
