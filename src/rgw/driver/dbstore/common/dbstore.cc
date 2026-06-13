@@ -112,6 +112,14 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.GetRole;
   if (!Op.compare("ListRoles"))
     return dbops.ListRoles;
+  if (!Op.compare("InsertOIDCProvider"))
+    return dbops.InsertOIDCProvider;
+  if (!Op.compare("RemoveOIDCProvider"))
+    return dbops.RemoveOIDCProvider;
+  if (!Op.compare("GetOIDCProvider"))
+    return dbops.GetOIDCProvider;
+  if (!Op.compare("ListOIDCProviders"))
+    return dbops.ListOIDCProviders;
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
@@ -252,6 +260,7 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params)
   //reset params here
   params->account_table = account_table;
   params->role_table = role_table;
+  params->oidc_table = oidc_table;
   params->user_table = user_table;
   params->bucket_table = bucket_table;
   params->quota_table = quota_table;
@@ -765,6 +774,101 @@ int DB::count_account_roles(const DoutPrefixProvider *dpp,
   }
 
   count = params.op.role.list_entries.size();
+
+  return ret;
+}
+
+int DB::store_oidc_provider(const DoutPrefixProvider *dpp,
+    const RGWOIDCProviderInfo& info, bool exclusive)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  if (exclusive) {
+    RGWOIDCProviderInfo orig;
+    ret = load_oidc_provider(dpp, info.tenant, info.provider_url, orig);
+    if (!ret) {
+      return -EEXIST;
+    }
+  }
+
+  params.op.oidc.info = info;
+
+  ret = ProcessOp(dpp, "InsertOIDCProvider", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"store_oidc_provider failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
+int DB::load_oidc_provider(const DoutPrefixProvider *dpp,
+    const std::string& tenant, const std::string& url,
+    RGWOIDCProviderInfo& info)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.oidc.info.tenant = tenant;
+  params.op.oidc.info.provider_url = url;
+
+  ret = ProcessOp(dpp, "GetOIDCProvider", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (params.op.oidc.list_entries.empty()) {
+    return -ENOENT;
+  }
+
+  info = params.op.oidc.list_entries.front();
+
+  return ret;
+}
+
+int DB::delete_oidc_provider(const DoutPrefixProvider *dpp,
+    const std::string& tenant, const std::string& url)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  params.op.oidc.info.tenant = tenant;
+  params.op.oidc.info.provider_url = url;
+
+  ret = ProcessOp(dpp, "RemoveOIDCProvider", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"delete_oidc_provider failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
+int DB::list_oidc_providers(const DoutPrefixProvider *dpp,
+    const std::string& tenant,
+    std::vector<RGWOIDCProviderInfo>& providers)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.oidc.info.tenant = tenant;
+
+  ret = ProcessOp(dpp, "ListOIDCProviders", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_oidc_providers failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  providers = std::move(params.op.oidc.list_entries);
 
   return ret;
 }
