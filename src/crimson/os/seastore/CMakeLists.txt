@@ -59,7 +59,7 @@ set(crimson_seastore_srcs
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
 
-CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" OFF
+CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" ON
   "CMAKE_SYSTEM_NAME STREQUAL Linux" OFF)
 if(WITH_ZNS)
   find_package(LinuxZNS REQUIRED)
