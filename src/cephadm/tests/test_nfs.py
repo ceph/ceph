@@ -119,10 +119,11 @@ def test_nfsganesha_container_mounts():
             good_nfs_json(),
         )
         cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 3
+        assert len(cmounts) == 4
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
+        assert cmounts[f"/var/log/ceph/{SAMPLE_UUID}/nfs.fred"] == "/var/log/ceph:z"
 
     with with_cephadm_ctx([]) as ctx:
         nfsg = _cephadm.NFSGanesha(
@@ -132,7 +133,7 @@ def test_nfsganesha_container_mounts():
             nfs_json(pool=True, files=True, rgw=True),
         )
         cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 4
+        assert len(cmounts) == 5
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
@@ -140,6 +141,7 @@ def test_nfsganesha_container_mounts():
             cmounts["/var/tmp/keyring.rgw"]
             == "/var/lib/ceph/radosgw/ceph-jsmith/keyring:z"
         )
+        assert cmounts[f"/var/log/ceph/{SAMPLE_UUID}/nfs.fred"] == "/var/log/ceph:z"
 
 
 def test_nfsganesha_container_envs():
