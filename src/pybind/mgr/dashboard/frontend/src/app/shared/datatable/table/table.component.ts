@@ -29,7 +29,8 @@ import {
   CdTableColumnFilter,
   CdTableColumnFilterOption,
   CdTableColumnSelectedFilter,
-  CdTableColumnStagedFilter
+  CdTableColumnStagedFilter,
+  CdTableCustomColumnFilter
 } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -198,6 +199,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   extraFilterableColumns: CdTableColumn[] = [];
 
   @Input()
+  customFilter: boolean = false;
+
+  @Input()
   status = new TableStatus();
 
   // Support server-side pagination/sorting/etc.
@@ -292,6 +296,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   @Output()
   isCellEditingEvent = new EventEmitter<boolean>();
+
+  @Output()
+  customFilterChange = new EventEmitter<CdTableCustomColumnFilter[]>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -432,6 +439,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       return filter.value !== undefined;
     });
   }
+  customFilters: CdTableCustomColumnFilter[] = [];
+  private nextFilterId = 0;
   private previousRows = new Map<string | number, TableItem[]>();
   private debouncedSearch = this.reloadData.bind(this);
 
@@ -769,6 +778,25 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   toggleFilterPopover() {
     this.openFilterPopover = !this.openFilterPopover;
+
+    if (this.customFilter && this.customFilters.length === 0) {
+      this.addCustomFilter();
+    }
+  }
+
+  addCustomFilter() {
+    this.customFilters.push({
+      id: this.nextFilterId++,
+      key: '',
+      value: ''
+    });
+  }
+
+  removeCustomFilter(idToRemove: number) {
+    const index = this.customFilters.findIndex((filter) => filter.id === idToRemove);
+    if (index !== -1) {
+      this.customFilters.splice(index, 1);
+    }
   }
 
   initColumnFilters() {
@@ -844,6 +872,11 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSubmitFilter() {
+    if (this.customFilter) {
+      this.customFilterChange.emit(this.customFilters);
+      this.openFilterPopover = false;
+      return;
+    }
     this.columnFilters.forEach((filter) => {
       const filterName = filter.column.name;
 

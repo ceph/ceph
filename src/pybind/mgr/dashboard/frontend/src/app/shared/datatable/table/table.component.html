@@ -51,7 +51,7 @@
       </cds-table-toolbar-search>
       <!-- end search -->
       <!-- column filters -->
-       @if (columnFilters.length !== 0) {
+       @if (columnFilters.length !== 0 || customFilter) {
         <div cdsPopover
              [isOpen]="openFilterPopover"
              [autoAlign]="true"
@@ -71,6 +71,7 @@
               [fullWidth]="true"
               [condensed]="true"
               [narrow]="true">
+            @if (columnFilters.length !== 0) {
             @for (filter of columnFilters; track filter.column.name; let i = $index) {
             <div
               cdsRow
@@ -112,7 +113,55 @@
                 </cds-select>
               </div>
             </div>
+          }}
+          @if (customFilter) {
+          @for (filter of customFilters; track filter.id; let i = $index) {
+            <div cdsRow
+                 [cdsLayer]="2"
+                 class="cds-mt-4">
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Key
+                  <input cdsText
+                         size="sm"
+                         [id]="'filter_key_' + i"
+                         [value]="filter.key"
+                         (input)="filter.key = $any($event.target).value">
+                </cds-text-label>
+              </div>
+
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Value
+                  <input cdsText
+                         size="sm"
+                         [id]="'filter_value_' + i"
+                         [value]="filter.value"
+                         (input)="filter.value = $any($event.target).value">
+                </cds-text-label>
+            </div>
+
+            @if (i !== 0) {
+            <div cdsCol
+                 [columnNumbers]="{sm: 2, md: 2, lg: 2}"
+                class="cds-mt-6">
+              <cds-icon-button kind="ghost"
+                               size="sm"
+                               (click)="removeCustomFilter(filter.id)">
+                <cd-icon type="trash"></cd-icon>
+              </cds-icon-button>
+            </div>
+            }
+          </div>
           }
+          <div cdsRow
+              class="cds-mt-4">
+            <div cdsCol>
+              <button cdsButton="tertiary" size="sm" (click)="addCustomFilter()">Add new filter rule +</button>
+            </div>
+          </div>
+          }
+
           <div cdsRow
                class="cds-mt-4 cds-mb-4">
 
