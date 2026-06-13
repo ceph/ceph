@@ -65,20 +65,105 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
   return params;
 }
 
+/**
+ * ResolvedIP - Per-IP connection status tracking.
+ *
+ * Each resolved IP address has its own failure status. An IP is considered
+ * "down" if last_failure is non-zero and less than rgw_rest_conn_ip_fail_timeout_secs old.
+ * After the timeout, the IP becomes eligible for retry.
+ */
+struct ResolvedIP {
+  std::string connect_to;  // Pre-computed "host:port:ip:port" for CURLOPT_CONNECT_TO
+  mutable std::atomic<ceph::real_time> last_failure;
+
+  ResolvedIP() : last_failure(ceph::real_clock::zero()) {}
+
+  explicit ResolvedIP(std::string _connect_to)
+    : connect_to(std::move(_connect_to)), last_failure(ceph::real_clock::zero()) {}
+
+  // Move & assignment operations (required because std::atomic is not movable)
+  ResolvedIP(ResolvedIP&& o) noexcept
+    : connect_to(std::move(o.connect_to)), last_failure(o.last_failure.load()) {}
+
+  ResolvedIP& operator=(ResolvedIP&& o) noexcept {
+    connect_to = std::move(o.connect_to);
+    last_failure.store(o.last_failure.load());
+    return *this;
+  }
+
+  // Delete copy (std::atomic is not copyable)
+  ResolvedIP(const ResolvedIP&) = delete;
+  ResolvedIP& operator=(const ResolvedIP&) = delete;
+
+  void mark_down() const { last_failure.store(ceph::real_clock::now()); }
+  void mark_up() const { last_failure.store(ceph::real_clock::zero()); }
+};
+
+/**
+ * ResolvedEndpoint - A zone endpoint URL with its resolved IP addresses.
+ *
+ * Tracks per-IP connection status. An endpoint is considered "down" only when
+ * ALL of its IPs are marked as failed (within the retry timeout window).
+ */
+struct ResolvedEndpoint {
+  std::string url;                // e.g., "https://s3.abc.com:8443"
+  std::string scheme;             // e.g., "https"
+  std::string host;               // e.g., "s3.abc.com"
+  int port = -1;                  // e.g., 8443
+  std::vector<ResolvedIP> resolved_ips;  // Per-IP connect_to strings with health status
+  mutable std::atomic<size_t> ip_rr_index{0};    // round-robin index for IPs
+  mutable std::atomic<ceph::real_time> last_failure_time; // most recent IP failure seen on this endpoint
+
+  ResolvedEndpoint() : last_failure_time(ceph::real_clock::zero()) {}
+
+  // Custom move constructor (required because of atomics in ResolvedIP)
+  ResolvedEndpoint(ResolvedEndpoint&& other) noexcept
+    : url(std::move(other.url)),
+      scheme(std::move(other.scheme)),
+      host(std::move(other.host)),
+      port(other.port),
+      resolved_ips(std::move(other.resolved_ips)),
+      ip_rr_index(other.ip_rr_index.load()),
+      last_failure_time(other.last_failure_time.load())
+  {}
+
+  // Custom move assignment
+  ResolvedEndpoint& operator=(ResolvedEndpoint&& other) noexcept {
+    url = std::move(other.url);
+    scheme = std::move(other.scheme);
+    host = std::move(other.host);
+    port = other.port;
+    resolved_ips = std::move(other.resolved_ips);
+    ip_rr_index.store(other.ip_rr_index.load());
+    last_failure_time.store(other.last_failure_time.load());
+    return *this;
+  }
+
+  // Delete copy operations
+  ResolvedEndpoint(const ResolvedEndpoint&) = delete;
+  ResolvedEndpoint& operator=(const ResolvedEndpoint&) = delete;
+
+  // Find IP status by connect_to string
+  ResolvedIP* find_ip_status(const std::string& connect_to_str) {
+    for (auto& ip : resolved_ips) {
+      if (ip.connect_to == connect_to_str) return &ip;
+    }
+    return nullptr;
+  }
+};
+
 class RGWRESTConn
 {
-  /* the endpoint is not able to connect if the timestamp is not real_clock::zero */
-  using endpoint_status_map = std::unordered_map<std::string, std::atomic<ceph::real_time>>;
-
   CephContext *cct;
-  std::vector<std::string> endpoints;
-  endpoint_status_map endpoints_status;
+  std::atomic<int64_t> endpoint_rr_index = { 0 }; // Round-robin counter for resolved_endpoints
+  std::vector<ResolvedEndpoint> resolved_endpoints;
   RGWAccessKey key;
   std::string self_zone_group;
   std::string remote_id;
   std::optional<std::string> api_name;
   HostStyle host_style;
-  std::atomic<int64_t> counter = { 0 };
+
+  void resolve_endpoints(void);
 
 public:
 
@@ -101,9 +186,11 @@ public:
   RGWRESTConn& operator=(RGWRESTConn&& other);
   virtual ~RGWRESTConn() = default;
 
-  int get_url(std::string& endpoint);
-  std::string get_url();
-  void set_url_unconnectable(const std::string& endpoint);
+  int get_endpoint(RGWEndpoint& endpoint);
+  RGWEndpoint get_endpoint();
+  const std::vector<ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
+  ResolvedEndpoint* find_resolved_endpoint(const std::string& url);
+  void set_endpoint_unconnectable(const RGWEndpoint& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
   }
@@ -125,7 +212,7 @@ public:
   CephContext *get_ctx() {
     return cct;
   }
-  size_t get_endpoint_count() const { return endpoints.size(); }
+  size_t get_endpoint_count() const { return resolved_endpoints.size(); }
 
   virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 
@@ -148,6 +235,9 @@ public:
   int complete_request(const DoutPrefixProvider* dpp,
                        RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
+
+  /* pick an IP to 'connect-to' given the endpoint url */
+  void populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& res_ep);
 
   struct get_obj_params {
     const rgw_owner *uid{nullptr};
@@ -358,7 +448,7 @@ public:
     int ret = req.wait(dpp, y);
     if (ret < 0) {
       if (ret == -ERR_INTERNAL_ERROR) {
-        conn->set_url_unconnectable(req.get_url_orig());
+        conn->set_endpoint_unconnectable(req.get_endpoint());
       }
       return ret;
     }
@@ -414,7 +504,7 @@ int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
   int ret = req.wait(dpp, y);
   if (ret < 0) {
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_url_unconnectable(req.get_url_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint());
     }
     return ret;
   }
@@ -489,7 +579,7 @@ public:
     *pbl = bl;
 
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_url_unconnectable(req.get_url_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint());
     }
 
     if (ret < 0 && err_result ) {
@@ -510,7 +600,7 @@ int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
 {
   int ret = req.wait(dpp, y);
   if (ret == -ERR_INTERNAL_ERROR) {
-    conn->set_url_unconnectable(req.get_url_orig());
+    conn->set_endpoint_unconnectable(req.get_endpoint());
   }
 
   if (ret >= 0) {
