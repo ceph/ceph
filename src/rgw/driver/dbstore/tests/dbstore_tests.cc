@@ -1381,6 +1381,99 @@ TEST_F(DBStoreTest, InsertTestIDUser) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, InsertAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+  params.op.account.info.tenant = "default";
+  params.op.account.info.name = "TestAccount";
+  params.op.account.info.email = "test@test.com";
+  params.op.account.info.max_users = 100;
+  params.op.account.info.max_buckets = 500;
+
+  ret = db->ProcessOp(dpp, "InsertAccount", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.name, "TestAccount");
+  ASSERT_EQ(params.op.account.info.email, "test@test.com");
+  ASSERT_EQ(params.op.account.info.max_users, 100);
+  ASSERT_EQ(params.op.account.info.max_buckets, 500);
+}
+
+TEST_F(DBStoreTest, GetAccountByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.account.info.name = "TestAccount";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.email, "test@test.com");
+}
+
+TEST_F(DBStoreTest, GetAccountByEmail) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "email";
+  params.op.account.info.email = "test@test.com";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.name, "TestAccount");
+}
+
+TEST_F(DBStoreTest, AccountAttrsRoundtrip) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000002";
+  params.op.account.info.tenant = "default";
+  params.op.account.info.name = "AttrsAccount";
+  params.op.account.info.email = "attrs@test.com";
+
+  bufferlist val;
+  encode(std::string("/mnt/data/account2"), val);
+  params.op.account.account_attrs["user.rgw.fs_root"] = val;
+
+  ret = db->ProcessOp(dpp, "InsertAccount", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.account.info.id = "RGW00000000000000002";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(get_params.op.account.info.name, "AttrsAccount");
+
+  auto it = get_params.op.account.account_attrs.find("user.rgw.fs_root");
+  ASSERT_NE(it, get_params.op.account.account_attrs.end());
+  std::string fs_root;
+  auto bl_iter = it->second.cbegin();
+  decode(fs_root, bl_iter);
+  ASSERT_EQ(fs_root, "/mnt/data/account2");
+}
+
+TEST_F(DBStoreTest, RemoveAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveAccount", &params);
+  ASSERT_EQ(ret, 0);
+
+  /* ProcessOp returns 0 even when no rows match (SQLITE_DONE);
+   * verify the account is gone by checking the result is empty */
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.account.info.id = "RGW00000000000000001";
+  ret = db->ProcessOp(dpp, "GetAccount", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.account.info.name.empty());
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;
