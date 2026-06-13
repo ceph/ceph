@@ -258,5 +258,25 @@ public:
     return active_modules->get_pending_modules();
   }
 
+  uint64_t get_max_queue_len()  {
+    return active_modules->get_max_queue_len();
+  }
+
+  void inc_mod_finisher_cnt() {
+    active_modules->inc_mod_finisher_cnt();
+  }
+
+  void dec_mod_finisher_cnt() {
+    active_modules->dec_mod_finisher_cnt();
+  }
+
+  bool is_overloaded() const  {
+    return active_modules->is_overloaded();
+  }
+
+  uint64_t get_mod_finisher_cnt() {
+    return active_modules->get_mod_finisher_cnt();
+  }
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };

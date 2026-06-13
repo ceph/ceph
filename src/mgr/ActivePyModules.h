@@ -77,6 +77,9 @@ private:
 
   std::map<std::string,ProgressEvent> progress_events;
 
+  std::atomic<uint64_t> mod_finisher_cnt{0};
+  std::atomic<uint64_t> max_queue_len{0}; // 0 means disabled
+
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
 public:
@@ -230,6 +233,37 @@ public:
 
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
+  }
+
+  uint64_t set_max_queue_len(uint64_t val)
+  {
+    max_queue_len.store(val, std::memory_order_relaxed);
+    return max_queue_len.load(std::memory_order_relaxed);
+  }
+
+  uint64_t get_max_queue_len()  {
+    return max_queue_len.load(std::memory_order_relaxed);
+  }
+  
+  bool is_overloaded() const  {
+    uint64_t max = 
+      max_queue_len.load(std::memory_order_relaxed);
+    if (max == 0) {
+      return false;
+    }
+    return mod_finisher_cnt.load(std::memory_order_relaxed) >= max;
+  }
+
+  void inc_mod_finisher_cnt() {
+    mod_finisher_cnt.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void dec_mod_finisher_cnt() {
+    mod_finisher_cnt.fetch_sub(1, std::memory_order_relaxed);
+  }
+
+  uint64_t get_mod_finisher_cnt() {
+    return mod_finisher_cnt;
   }
 
   // Return set of active modules where class instances are not yet created
