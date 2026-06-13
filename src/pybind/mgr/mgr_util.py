@@ -541,9 +541,10 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     pkey = crypto.PKey()
     pkey.generate_key(crypto.TYPE_RSA, 2048)
 
-    # Create a "subject" object
-    req = crypto.X509Req()
-    subj = req.get_subject()
+    # create a self-signed cert and populate its subject with the dname
+    # settings
+    cert = crypto.X509()
+    subj = cert.get_subject()
 
     if dname:
         # dname received, so check it contains valid RDNs
@@ -556,9 +557,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     for k, v in dname.items():
         setattr(subj, k, v)
 
-    # create a self-signed cert
-    cert = crypto.X509()
-    cert.set_subject(req.get_subject())
+    cert.set_subject(subj)
     cert.set_serial_number(int(uuid4()))
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
