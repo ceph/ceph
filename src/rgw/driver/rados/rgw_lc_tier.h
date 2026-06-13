@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "rgw_lc.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rados.h"
@@ -80,3 +82,6 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp,
 
 bool is_restore_in_progress(const DoutPrefixProvider *dpp,
                             std::map<std::string, std::string>& headers);
+
+int retry_on_transient_error(optional_yield y, const DoutPrefixProvider *dpp, CephContext *cct,
+                  const char *op_name, std::function<int()> op);
