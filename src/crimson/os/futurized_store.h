@@ -11,6 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
@@ -24,7 +25,6 @@ class Transaction;
 }
 
 namespace crimson::os {
-class FuturizedCollection;
 class FuturizedStore;
 struct BackendStore {
   FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
