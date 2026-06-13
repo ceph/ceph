@@ -120,6 +120,20 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.GetOIDCProvider;
   if (!Op.compare("ListOIDCProviders"))
     return dbops.ListOIDCProviders;
+  if (!Op.compare("InsertGroup"))
+    return dbops.InsertGroup;
+  if (!Op.compare("RemoveGroup"))
+    return dbops.RemoveGroup;
+  if (!Op.compare("GetGroup"))
+    return dbops.GetGroup;
+  if (!Op.compare("ListGroups"))
+    return dbops.ListGroups;
+  if (!Op.compare("InsertGroupUser"))
+    return dbops.InsertGroupUser;
+  if (!Op.compare("RemoveGroupUser"))
+    return dbops.RemoveGroupUser;
+  if (!Op.compare("ListGroupUsers"))
+    return dbops.ListGroupUsers;
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
@@ -261,6 +275,8 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params)
   params->account_table = account_table;
   params->role_table = role_table;
   params->oidc_table = oidc_table;
+  params->group_table = group_table;
+  params->group_users_table = group_users_table;
   params->user_table = user_table;
   params->bucket_table = bucket_table;
   params->quota_table = quota_table;
@@ -869,6 +885,198 @@ int DB::list_oidc_providers(const DoutPrefixProvider *dpp,
   }
 
   providers = std::move(params.op.oidc.list_entries);
+
+  return ret;
+}
+
+int DB::get_group(const DoutPrefixProvider *dpp,
+    const std::string& query_str, RGWGroupInfo& info,
+    rgw::sal::Attrs& attrs)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = query_str;
+
+  if (query_str == "name") {
+    params.op.group.info.name = info.name;
+    params.op.group.info.account_id = info.account_id;
+  } else {
+    params.op.group.info.id = info.id;
+  }
+
+  ret = ProcessOp(dpp, "GetGroup", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (params.op.group.list_entries.empty()) {
+    return -ENOENT;
+  }
+
+  info = params.op.group.list_entries.front();
+  attrs = params.op.group.group_attrs;
+
+  return ret;
+}
+
+int DB::store_group(const DoutPrefixProvider *dpp,
+    const RGWGroupInfo& info, const rgw::sal::Attrs& attrs,
+    bool exclusive)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  if (exclusive) {
+    RGWGroupInfo orig;
+    rgw::sal::Attrs dummy_attrs;
+    orig.id = info.id;
+    ret = get_group(dpp, "group_id", orig, dummy_attrs);
+    if (!ret) {
+      return -EEXIST;
+    }
+  }
+
+  params.op.group.info = info;
+  params.op.group.group_attrs = attrs;
+
+  ret = ProcessOp(dpp, "InsertGroup", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"store_group failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
+int DB::remove_group(const DoutPrefixProvider *dpp,
+    const RGWGroupInfo& info)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  params.op.group.info.id = info.id;
+
+  ret = ProcessOp(dpp, "RemoveGroup", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_group failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
+int DB::add_group_user(const DoutPrefixProvider *dpp,
+    const std::string& group_id, const std::string& user_id)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.group.info.id = group_id;
+  params.op.group.user_id = user_id;
+
+  int ret = ProcessOp(dpp, "InsertGroupUser", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"add_group_user failed with err:(" <<ret<<") " << dendl;
+  }
+
+  return ret;
+}
+
+int DB::remove_group_user(const DoutPrefixProvider *dpp,
+    const std::string& group_id, const std::string& user_id)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.group.info.id = group_id;
+  params.op.group.user_id = user_id;
+
+  int ret = ProcessOp(dpp, "RemoveGroupUser", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_group_user failed with err:(" <<ret<<") " << dendl;
+  }
+
+  return ret;
+}
+
+int DB::list_group_users(const DoutPrefixProvider *dpp,
+    const std::string& group_id, const std::string& marker,
+    uint32_t max_items, std::vector<std::string>& user_ids)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.group.info.id = group_id;
+  params.op.group.user_id = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListGroupUsers", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_group_users failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  user_ids = std::move(params.op.group.user_list);
+
+  return ret;
+}
+
+int DB::list_account_groups(const DoutPrefixProvider *dpp,
+    const std::string& account_id, const std::string& path_prefix,
+    const std::string& marker, uint32_t max_items,
+    std::vector<RGWGroupInfo>& groups)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = "account";
+  params.op.group.info.account_id = account_id;
+  params.op.group.info.path = path_prefix + "%";
+  params.op.group.info.name = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListGroups", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_account_groups failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  groups = std::move(params.op.group.list_entries);
+
+  return ret;
+}
+
+int DB::count_account_groups(const DoutPrefixProvider *dpp,
+    const std::string& account_id, uint32_t& count)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = "count_account";
+  params.op.group.info.account_id = account_id;
+
+  ret = ProcessOp(dpp, "ListGroups", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"count_account_groups failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  count = params.op.group.list_entries.size();
 
   return ret;
 }

@@ -166,6 +166,12 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->oidc_table.empty()) {
     params->oidc_table = getOIDCTable();
   }
+  if (params->group_table.empty()) {
+    params->group_table = getGroupTable();
+  }
+  if (params->group_users_table.empty()) {
+    params->group_users_table = getGroupUsersTable();
+  }
   if (params->user_table.empty()) {
     params->user_table = getUserTable();
   }
@@ -185,6 +191,8 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   p_params.account_table = params->account_table;
   p_params.role_table = params->role_table;
   p_params.oidc_table = params->oidc_table;
+  p_params.group_table = params->group_table;
+  p_params.group_users_table = params->group_users_table;
   p_params.user_table = params->user_table;
   p_params.bucket_table = params->bucket_table;
   p_params.quota_table = params->quota_table;
@@ -264,6 +272,20 @@ enum GetOIDCProvider {
   OIDCThumbprints,
   OIDCProviderARN,
   OIDCCreationDate,
+};
+
+enum GetGroup {
+  GroupID = 0,
+  GroupName,
+  GroupTenant,
+  GroupAccountID,
+  GroupPath,
+  GroupAttrsCol,
+};
+
+enum GetGroupUser {
+  GUGroupID = 0,
+  GUUserID,
 };
 
 enum GetUser {
@@ -510,6 +532,55 @@ static int list_oidc_provider(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlit
   return 0;
 }
 
+static int list_group(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWGroupInfo info;
+
+  info.id = (const char*)sqlite3_column_text(stmt, GroupID);
+  info.name = (const char*)sqlite3_column_text(stmt, GroupName);
+
+  const char *t = (const char*)sqlite3_column_text(stmt, GroupTenant);
+  if (t) info.tenant = t;
+
+  t = (const char*)sqlite3_column_text(stmt, GroupAccountID);
+  if (t) info.account_id = t;
+
+  t = (const char*)sqlite3_column_text(stmt, GroupPath);
+  if (t) info.path = t;
+
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, GroupAttrsCol, op.group.group_attrs, sdb);
+
+  op.group.info = info;
+  op.group.list_entries.push_back(info);
+
+  return 0;
+}
+
+static int list_group_count(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  RGWGroupInfo dummy;
+  dummy.id = std::to_string(sqlite3_column_int(stmt, 0));
+  op.group.list_entries.push_back(dummy);
+
+  return 0;
+}
+
+static int list_group_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  const char *uid = (const char*)sqlite3_column_text(stmt, 0);
+  if (uid) {
+    op.group.user_list.push_back(uid);
+  }
+
+  return 0;
+}
+
 static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
@@ -751,6 +822,13 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.RemoveOIDCProvider = make_shared<SQLRemoveOIDCProvider>(&this->db, this->getDBname(), cct);
   dbops.GetOIDCProvider = make_shared<SQLGetOIDCProvider>(&this->db, this->getDBname(), cct);
   dbops.ListOIDCProviders = make_shared<SQLListOIDCProviders>(&this->db, this->getDBname(), cct);
+  dbops.InsertGroup = make_shared<SQLInsertGroup>(&this->db, this->getDBname(), cct);
+  dbops.RemoveGroup = make_shared<SQLRemoveGroup>(&this->db, this->getDBname(), cct);
+  dbops.GetGroup = make_shared<SQLGetGroup>(&this->db, this->getDBname(), cct);
+  dbops.ListGroups = make_shared<SQLListGroups>(&this->db, this->getDBname(), cct);
+  dbops.InsertGroupUser = make_shared<SQLInsertGroupUser>(&this->db, this->getDBname(), cct);
+  dbops.RemoveGroupUser = make_shared<SQLRemoveGroupUser>(&this->db, this->getDBname(), cct);
+  dbops.ListGroupUsers = make_shared<SQLListGroupUsers>(&this->db, this->getDBname(), cct);
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
   dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
@@ -880,12 +958,14 @@ out:
 int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  int ca = 0, cr = 0, co = 0, cu = 0, cb = 0, cq = 0;
+  int ca = 0, cr = 0, co = 0, cg = 0, cgu = 0, cu = 0, cb = 0, cq = 0;
   DBOpParams params = {};
 
   params.account_table = getAccountTable();
   params.role_table = getRoleTable();
   params.oidc_table = getOIDCTable();
+  params.group_table = getGroupTable();
+  params.group_users_table = getGroupUsersTable();
   params.user_table = getUserTable();
   params.bucket_table = getBucketTable();
   params.quota_table = getQuotaTable();
@@ -897,6 +977,12 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
     goto out;
 
   if ((co = createOIDCProviderTable(dpp, &params)))
+    goto out;
+
+  if ((cg = createGroupTable(dpp, &params)))
+    goto out;
+
+  if ((cgu = createGroupUsersTable(dpp, &params)))
     goto out;
 
   if ((cu = createUserTable(dpp, &params)))
@@ -969,6 +1055,38 @@ int SQLiteDB::createOIDCProviderTable(const DoutPrefixProvider *dpp, DBOpParams 
     ldpp_dout(dpp, 0)<<"CreateOIDCProviderTable failed" << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateOIDCProviderTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createGroupTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("Group", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateGroupTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateGroupTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("GroupUsers", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateGroupUsersTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateGroupUsersTable succeeded" << dendl;
 
   return ret;
 }
@@ -1908,6 +2026,269 @@ int SQLListOIDCProviders::Execute(const DoutPrefixProvider *dpp, struct DBOpPara
   int ret = -1;
 
   SQL_EXECUTE(dpp, params, stmt, list_oidc_provider);
+out:
+  return ret;
+}
+
+int SQLInsertGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertGroup");
+out:
+  return ret;
+}
+
+int SQLInsertGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.tenant, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.account_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.path, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.path.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_attrs, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.group.group_attrs, sdb);
+out:
+  return rc;
+}
+
+int SQLInsertGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveGroup");
+out:
+  return ret;
+}
+
+int SQLRemoveGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetGroup::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLGetGroup - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "name") {
+    SQL_PREPARE(dpp, p_params, sdb, name_stmt, ret, "PrepareGetGroup");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetGroup");
+  }
+out:
+  return ret;
+}
+
+int SQLGetGroup::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "name") {
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.group.name, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.group.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, name_stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, name_stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLGetGroup::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "name") {
+    SQL_EXECUTE(dpp, params, name_stmt, list_group);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_group);
+  }
+out:
+  return ret;
+}
+
+int SQLListGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  if (params->op.query_str == "count_account") {
+    SQL_PREPARE(dpp, p_params, sdb, count_stmt, ret, "PrepareListGroups");
+  } else {
+    SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListGroups");
+  }
+out:
+  return ret;
+}
+
+int SQLListGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (params->op.query_str == "count_account") {
+    SQL_BIND_INDEX(dpp, count_stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, count_stmt, index, params->op.group.info.account_id.c_str(), sdb);
+  } else {
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.account_id, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.account_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.path, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.path.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+    SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+    SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+  }
+out:
+  return rc;
+}
+
+int SQLListGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  if (params->op.query_str == "count_account") {
+    SQL_EXECUTE(dpp, params, count_stmt, list_group_count);
+  } else {
+    SQL_EXECUTE(dpp, params, stmt, list_group);
+  }
+out:
+  return ret;
+}
+
+int SQLInsertGroupUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertGroupUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertGroupUser");
+out:
+  return ret;
+}
+
+int SQLInsertGroupUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLInsertGroupUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveGroupUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveGroupUser - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveGroupUser");
+out:
+  return ret;
+}
+
+int SQLRemoveGroupUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveGroupUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLListGroupUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListGroupUsers - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListGroupUsers");
+out:
+  return ret;
+}
+
+int SQLListGroupUsers::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.group_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+out:
+  return rc;
+}
+
+int SQLListGroupUsers::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_group_user);
 out:
   return ret;
 }

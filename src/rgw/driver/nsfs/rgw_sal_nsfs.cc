@@ -2687,6 +2687,103 @@ int NSFSDriver::list_roles(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int NSFSDriver::load_group_by_id(const DoutPrefixProvider* dpp,
+				 optional_yield y, std::string_view id,
+				 RGWGroupInfo& info, Attrs& attrs,
+				 RGWObjVersionTracker& objv)
+{
+  info.id = std::string(id);
+  return get_account_db()->get_group(dpp, "group_id", info, attrs);
+}
+
+int NSFSDriver::load_group_by_name(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view account_id,
+				   std::string_view name,
+				   RGWGroupInfo& info, Attrs& attrs,
+				   RGWObjVersionTracker& objv)
+{
+  info.account_id = std::string(account_id);
+  info.name = std::string(name);
+  return get_account_db()->get_group(dpp, "name", info, attrs);
+}
+
+int NSFSDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+			    const RGWGroupInfo& info, const Attrs& attrs,
+			    RGWObjVersionTracker& objv, bool exclusive,
+			    const RGWGroupInfo* old_info)
+{
+  return get_account_db()->store_group(dpp, info, attrs, exclusive);
+}
+
+int NSFSDriver::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+			     const RGWGroupInfo& info,
+			     RGWObjVersionTracker& objv)
+{
+  return get_account_db()->remove_group(dpp, info);
+}
+
+int NSFSDriver::list_group_users(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::string_view tenant,
+				 std::string_view id,
+				 std::string_view marker,
+				 uint32_t max_items,
+				 UserList& listing)
+{
+  std::vector<std::string> user_ids;
+  int ret = get_account_db()->list_group_users(dpp,
+      std::string(id), std::string(marker), max_items + 1, user_ids);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (user_ids.size() > max_items) {
+    listing.next_marker = user_ids[max_items];
+    user_ids.resize(max_items);
+  }
+
+  for (auto& uid : user_ids) {
+    RGWUserInfo uinfo;
+    uinfo.user_id.id = uid;
+    listing.users.push_back(std::move(uinfo));
+  }
+  return 0;
+}
+
+int NSFSDriver::count_account_groups(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     uint32_t& count)
+{
+  return get_account_db()->count_account_groups(dpp,
+      std::string(account_id), count);
+}
+
+int NSFSDriver::list_account_groups(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    std::string_view path_prefix,
+				    std::string_view marker,
+				    uint32_t max_items,
+				    GroupList& listing)
+{
+  std::vector<RGWGroupInfo> groups;
+  int ret = get_account_db()->list_account_groups(dpp,
+      std::string(account_id), std::string(path_prefix),
+      std::string(marker), max_items + 1, groups);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (groups.size() > max_items) {
+    listing.next_marker = groups[max_items].name;
+    groups.resize(max_items);
+  }
+  listing.groups = std::move(groups);
+  return 0;
+}
+
 int NSFSDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
 				    optional_yield y,
 				    const RGWOIDCProviderInfo& info,
