@@ -367,6 +367,12 @@ If successful, the response contains the user information.
 :Type: Container
 :Parent: ``user``
 
+``op_mask``
+
+:Description: The operation mask for the user, specifying which operations are allowed.
+:Type: String
+:Parent: ``user``
+
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1266,6 +1272,12 @@ If successful, the response contains the user information.
 :Type: Container
 :Parent: ``user``
 
+``op_mask``
+
+:Description: The operation mask for the user, specifying which operations are allowed.
+:Type: String
+:Parent: ``user``
+
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1491,6 +1503,12 @@ If successful, the response contains the user information.
 
 :Description: User capabilities.
 :Type: Container
+:Parent: ``user``
+
+``op_mask``
+
+:Description: The operation mask for the user, specifying which operations are allowed.
+:Type: String
 :Parent: ``user``
 
 
