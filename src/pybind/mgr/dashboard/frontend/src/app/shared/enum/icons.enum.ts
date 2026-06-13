@@ -29,6 +29,7 @@ export enum Icons {
   expand = 'maximize', // Expand cluster
   user = 'user', // User, Initiators
   users = 'user--multiple', // Users, Groups
+  replicate = 'replicate', // replicate
   share = 'share', // share
   key = 'password', // S3 Keys, Swift Keys, Authentication
   warning = 'warning--alt--filled', // Notification warning
@@ -124,7 +125,8 @@ export enum Icons {
   inProgress = 'in-progress',
   arrowDown = 'arrow--down',
   locked = 'locked', // Access denied, locked state
-  cloudMonitoring = 'cloud--monitoring'
+  cloudMonitoring = 'cloud--monitoring',
+  folder = 'folder'
 }
 
 export enum IconSize {
@@ -174,7 +176,12 @@ export const ICON_TYPE = {
   leftArrow: 'caret--left',
   rightArrow: 'caret--right',
   locked: 'locked',
-  cloudMonitoring: 'cloud--monitoring'
+  cloudMonitoring: 'cloud--monitoring',
+  replicate: 'replicate',
+  share: 'share',
+  chevronDown: 'chevron--down',
+  trash: 'trash-can',
+  folder: 'folder'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

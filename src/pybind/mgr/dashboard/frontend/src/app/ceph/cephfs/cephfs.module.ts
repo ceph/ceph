@@ -56,17 +56,26 @@ import {
   TilesModule,
   TreeviewModule,
   TabsModule,
+  ToggleModule,
   NotificationModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
+import AddIcon16 from '@carbon/icons/es/add/16';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
-import Renew16 from '@carbon/icons/es/renew/16';
-import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
-import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
-import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
+import TrashIcon16 from '@carbon/icons/es/trash-can/16';
+import ReplicateIcon from '@carbon/icons/es/replicate/32';
+import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
+import ShareIcon from '@carbon/icons/es/share/32';
+import ShareIcon24 from '@carbon/icons/es/share/24';
+import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import FolderIcon16 from '@carbon/icons/es/folder/16';
+import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
 
 @NgModule({
   imports: [
@@ -105,6 +114,7 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     RadioModule,
     TilesModule,
     TagModule,
+    ToggleModule,
     NotificationModule
   ],
   declarations: [
@@ -127,15 +137,29 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
-    CephfsMirroringWizardComponent,
-    CephfsFilesystemSelectorComponent,
     CephfsMirroringErrorComponent,
-    CephfsMirroringEntityComponent
+    CephfsAddMirroringPathComponent,
+    MirroringPathsStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash, Renew16]);
+    this.iconService.registerAll([
+      AddIcon,
+      AddIcon16,
+      LaunchIcon,
+      Close,
+      Trash,
+      TrashIcon16,
+      ReplicateIcon,
+      ReplicateIcon24,
+      ShareIcon,
+      ShareIcon24,
+      ChevronDown16,
+      ChevronRight16,
+      WarningAltFilled16,
+      FolderIcon16
+    ]);
   }
 }

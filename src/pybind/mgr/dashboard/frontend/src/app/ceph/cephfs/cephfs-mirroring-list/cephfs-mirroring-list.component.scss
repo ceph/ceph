@@ -1,0 +1,22 @@
+.jump-in-cards {
+  display: flex;
+  gap: 1rem;
+}
+
+.jump-in-card {
+  flex: 0 0 18.25rem;
+}
+
+.tile-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 8rem;
+}
+
+.tile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  width: 100%;
+}
