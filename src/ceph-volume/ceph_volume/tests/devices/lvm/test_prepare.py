@@ -1,4 +1,5 @@
 import pytest
+from argparse import Namespace
 from ceph_volume.devices import lvm
 from unittest.mock import patch
 
@@ -43,6 +44,33 @@ class TestPrepare(object):
     def test_invalid_osd_id_passed(self, m_create_key):
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--osd-id', 'foo']).main()
+
+    def test_seastore_rejects_block_db(self, m_create_key):
+        p = lvm.prepare.Prepare([])
+        p.args = Namespace(objectstore='seastore', bluestore=False,
+                           block_db='/dev/sdb', block_wal=None,
+                           seastore_secondary=[])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--block.db cannot be used with --objectstore seastore' in str(exc.value)
+
+    def test_seastore_rejects_block_wal(self, m_create_key):
+        p = lvm.prepare.Prepare([])
+        p.args = Namespace(objectstore='seastore', bluestore=False,
+                           block_db=None, block_wal='/dev/sdc',
+                           seastore_secondary=[])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--block.wal cannot be used with --objectstore seastore' in str(exc.value)
+
+    def test_bluestore_rejects_seastore_secondary(self, m_create_key):
+        p = lvm.prepare.Prepare([])
+        p.args = Namespace(objectstore='bluestore', bluestore=False,
+                           block_db=None, block_wal=None,
+                           seastore_secondary=[('/dev/sdb', 'HDD')])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--seastore-secondary cannot be used with --objectstore bluestore' in str(exc.value)
 
 
 class TestActivate(object):

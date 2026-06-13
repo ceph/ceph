@@ -336,6 +336,48 @@ class TestValidBatchDataDevice(object):
         assert self.validator('/dev/foo')
 
 
+class TestValidSeastoreSecondary(object):
+
+    def setup_method(self):
+        self.validator = arg_validators.ValidSeastoreSecondary()
+
+    def test_valid_hdd(self):
+        result = self.validator('/dev/sdb:HDD')
+        assert result == ('/dev/sdb', 'HDD')
+
+    def test_valid_ssd(self):
+        result = self.validator('/dev/sdc:SSD')
+        assert result == ('/dev/sdc', 'SSD')
+
+    def test_valid_zbd(self):
+        result = self.validator('/dev/sdd:ZBD')
+        assert result == ('/dev/sdd', 'ZBD')
+
+    def test_valid_random_block_ssd(self):
+        result = self.validator('/dev/nvme0n1:RANDOM_BLOCK_SSD')
+        assert result == ('/dev/nvme0n1', 'RANDOM_BLOCK_SSD')
+
+    def test_invalid_type(self):
+        with pytest.raises(argparse.ArgumentError) as exc:
+            self.validator('/dev/sdb:FLOPPY')
+        assert 'Invalid seastore secondary device type' in str(exc.value)
+
+    def test_missing_colon(self):
+        with pytest.raises(argparse.ArgumentError) as exc:
+            self.validator('/dev/sdb')
+        assert 'DEVICE:TYPE format' in str(exc.value)
+
+    def test_empty_device(self):
+        with pytest.raises(argparse.ArgumentError) as exc:
+            self.validator(':HDD')
+        assert 'device path cannot be empty' in str(exc.value)
+
+    def test_extra_colon(self):
+        with pytest.raises(argparse.ArgumentError) as exc:
+            self.validator('/dev/sdb:HDD:extra')
+        assert 'DEVICE:TYPE format' in str(exc.value)
+
+
 class TestValidFraction(object):
 
     def setup_method(self):

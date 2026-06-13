@@ -1,4 +1,5 @@
 import pytest
+from argparse import Namespace
 from ceph_volume.devices import raw
 from unittest.mock import patch, MagicMock
 from ceph_volume.objectstore.raw import Raw
@@ -116,3 +117,37 @@ class TestPrepare(object):
         with pytest.raises(Exception):
             raw.prepare.Prepare(argv=['--bluestore', '--data', '/dev/foo']).main()
         m_rollback_osd.assert_called()
+
+    @patch('ceph_volume.devices.raw.prepare.create_parser')
+    def test_seastore_rejects_block_db(self, m_parser, m_create_key):
+        m_parser.return_value.parse_args.return_value = Namespace(
+            objectstore='seastore', bluestore=False,
+            block_db='/dev/sdb', block_wal=None,
+            seastore_secondary=[], dmcrypt=False, with_tpm=False)
+        p = raw.prepare.Prepare(['--dummy'])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--block.db cannot be used with --objectstore seastore' in str(exc.value)
+
+    @patch('ceph_volume.devices.raw.prepare.create_parser')
+    def test_seastore_rejects_block_wal(self, m_parser, m_create_key):
+        m_parser.return_value.parse_args.return_value = Namespace(
+            objectstore='seastore', bluestore=False,
+            block_db=None, block_wal='/dev/sdc',
+            seastore_secondary=[], dmcrypt=False, with_tpm=False)
+        p = raw.prepare.Prepare(['--dummy'])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--block.wal cannot be used with --objectstore seastore' in str(exc.value)
+
+    @patch('ceph_volume.devices.raw.prepare.create_parser')
+    def test_bluestore_rejects_seastore_secondary(self, m_parser, m_create_key):
+        m_parser.return_value.parse_args.return_value = Namespace(
+            objectstore='bluestore', bluestore=False,
+            block_db=None, block_wal=None,
+            seastore_secondary=[('/dev/sdb', 'HDD')],
+            dmcrypt=False, with_tpm=False)
+        p = raw.prepare.Prepare(['--dummy'])
+        with pytest.raises(RuntimeError) as exc:
+            p.main()
+        assert '--seastore-secondary cannot be used with --objectstore bluestore' in str(exc.value)

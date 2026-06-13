@@ -91,4 +91,14 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         choices=['classic', 'crimson'],
         type=str,
     )
+    parser.add_argument(
+        '--seastore-secondary',
+        dest='seastore_secondary',
+        help='Secondary device for seastore in DEVICE:TYPE format '
+             '(TYPE is one of HDD, SSD, ZBD, RANDOM_BLOCK_SSD). '
+             'May be specified multiple times.',
+        action='append',
+        default=[],
+        type=arg_validators.ValidSeastoreSecondary(),
+    )
     return parser

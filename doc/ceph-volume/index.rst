@@ -83,5 +83,6 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    simple/activate
    simple/scan
    simple/systemd
+   seastore
    zfs/index
    zfs/inventory

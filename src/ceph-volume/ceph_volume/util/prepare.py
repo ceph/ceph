@@ -5,6 +5,8 @@ may want to change some part of the process, while others might want to consume
 the single-call helper
 """
 import os
+import re
+import shutil
 import logging
 import json
 from ceph_volume import process, conf, terminal
@@ -346,6 +348,39 @@ def _validate_bluestore_device(device, excepted_device_type, osd_uuid):
 
 def link_block(block_device, osd_id):
     _link_device(block_device, 'block', osd_id)
+
+
+def link_seastore_secondary(device, dtype, dev_id, osd_id):
+    """
+    Create the directory-and-symlink structure for a seastore secondary device.
+
+    Seastore expects secondary devices at ``{osd_dir}/block.{TYPE}.{ID}/block``
+    (i.e. a directory containing a ``block`` symlink), as opposed to BlueStore
+    which uses flat symlinks.  This matches the layout produced by vstart.sh and
+    read by SegmentManager::get_segment_manager() in segment_manager.cc.
+    """
+    osd_dir = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    sec_dir = os.path.join(osd_dir, 'block.%s.%s' % (dtype, dev_id))
+    os.makedirs(sec_dir, exist_ok=True)
+    _link_device(device, 'block.%s.%s/block' % (dtype, dev_id), osd_id)
+
+
+_SEASTORE_SECONDARY_RE = re.compile(r'^block\.[A-Z_]+\.\d+$')
+
+
+def unlink_seastore_secondaries(osd_path):
+    """
+    Remove all seastore secondary device directories (block.TYPE.ID/) from
+    ``osd_path``.
+    """
+    # TODO: once ceph/ceph#68106 (crimson-objectstore-tool dump-superblock) is
+    # merged, call it with --dev-path <primary_device> and remove exactly the
+    # directories listed in config.secondary_devices[] rather than enumerating.
+    # The caller already holds the primary device path before invoking
+    # unlink_bs_symlinks(), so it can be threaded through here.
+    for entry in os.listdir(osd_path):
+        if _SEASTORE_SECONDARY_RE.match(entry):
+            shutil.rmtree(os.path.join(osd_path, entry))
 
 
 def link_wal(wal_device, osd_id, osd_uuid=None):

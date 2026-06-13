@@ -323,3 +323,50 @@ class TestMkfs(object):
             '--osd-uuid', 'asdf-1234',
             '--setuser', 'ceph', '--setgroup', 'ceph'])
         assert expected in str(error.value)
+
+
+class TestLinkSeastoreSecondary(object):
+
+    def test_creates_directory_and_symlink(self, fake_run, monkeypatch, fake_filesystem):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        fake_filesystem.create_dir('/var/lib/ceph/osd/ceph-0')
+        prepare.link_seastore_secondary('/dev/sdb', 'HDD', 1, '0')
+        sec_dir = fake_filesystem.get_object('/var/lib/ceph/osd/ceph-0/block.HDD.1')
+        assert sec_dir.st_mode & 0o40000  # is a directory
+        assert fake_run.calls
+        ln_cmd = fake_run.calls[0]['args'][0]
+        assert ln_cmd[0] == 'ln'
+        assert ln_cmd[1] == '-s'
+        assert ln_cmd[2] == '/dev/sdb'
+        assert ln_cmd[3] == '/var/lib/ceph/osd/ceph-0/block.HDD.1/block'
+
+    def test_uses_correct_type_and_id(self, fake_run, monkeypatch, fake_filesystem):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        fake_filesystem.create_dir('/var/lib/ceph/osd/ceph-5')
+        prepare.link_seastore_secondary('/dev/nvme0n1', 'RANDOM_BLOCK_SSD', 3, '5')
+        ln_cmd = fake_run.calls[0]['args'][0]
+        assert ln_cmd[3] == '/var/lib/ceph/osd/ceph-5/block.RANDOM_BLOCK_SSD.3/block'
+
+
+class TestUnlinkSeastoreSecondaries(object):
+
+    def test_removes_secondary_dirs(self, fake_filesystem):
+        osd_path = '/var/lib/ceph/osd/ceph-0'
+        fake_filesystem.create_dir(osd_path + '/block.HDD.1')
+        fake_filesystem.create_file(osd_path + '/block.HDD.1/block')
+        fake_filesystem.create_dir(osd_path + '/block.SSD.2')
+        fake_filesystem.create_file(osd_path + '/block')
+        prepare.unlink_seastore_secondaries(osd_path)
+        assert not fake_filesystem.exists(osd_path + '/block.HDD.1')
+        assert not fake_filesystem.exists(osd_path + '/block.SSD.2')
+        # non-secondary files are untouched
+        assert fake_filesystem.exists(osd_path + '/block')
+
+    def test_no_secondaries_is_noop(self, fake_filesystem):
+        osd_path = '/var/lib/ceph/osd/ceph-0'
+        fake_filesystem.create_dir(osd_path)
+        fake_filesystem.create_file(osd_path + '/block')
+        prepare.unlink_seastore_secondaries(osd_path)
+        assert fake_filesystem.exists(osd_path + '/block')

@@ -258,3 +258,52 @@ class ValidFraction(object):
         if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
             raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
         return fraction_float
+
+
+def validate_objectstore_args(args):
+    """Reject flag combinations that cross objectstore boundaries.
+
+    Seastore does not use --block.db / --block.wal, and bluestore does
+    not use --seastore-secondary.  Call this after argument parsing in
+    every prepare/create path.
+    """
+    if args.objectstore == 'seastore':
+        if getattr(args, 'block_db', None):
+            raise RuntimeError('--block.db cannot be used with --objectstore seastore')
+        if getattr(args, 'block_wal', None):
+            raise RuntimeError('--block.wal cannot be used with --objectstore seastore')
+    elif args.objectstore == 'bluestore':
+        if getattr(args, 'seastore_secondary', None):
+            raise RuntimeError('--seastore-secondary cannot be used with --objectstore bluestore')
+
+
+VALID_SEASTORE_SECONDARY_TYPES = {'HDD', 'SSD', 'ZBD', 'RANDOM_BLOCK_SSD'}
+
+
+class ValidSeastoreSecondary(object):
+    """
+    Validate and parse a seastore secondary device specification of the form
+    DEVICE:TYPE where TYPE is one of HDD, SSD, ZBD, RANDOM_BLOCK_SSD.
+    Returns a (device, type) tuple.
+    """
+
+    def __call__(self, value):
+        parts = value.split(':')
+        if len(parts) != 2:
+            raise argparse.ArgumentError(
+                None,
+                '--seastore-secondary must be in DEVICE:TYPE format, got: %s' % value
+            )
+        device, dtype = parts
+        if not device:
+            raise argparse.ArgumentError(
+                None,
+                '--seastore-secondary device path cannot be empty'
+            )
+        if dtype not in VALID_SEASTORE_SECONDARY_TYPES:
+            raise argparse.ArgumentError(
+                None,
+                'Invalid seastore secondary device type %r, must be one of: %s' % (
+                    dtype, ', '.join(sorted(VALID_SEASTORE_SECONDARY_TYPES)))
+            )
+        return device, dtype
