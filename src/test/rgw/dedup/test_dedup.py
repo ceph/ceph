@@ -3604,6 +3604,230 @@ def test_dedup_dry_large_scale():
 
 
 #-------------------------------------------------------------------------------
+def write_filter_list_file(filepath, names):
+    """Write a filter list file with one name per line."""
+    with open(filepath, 'w') as f:
+        for name in names:
+            f.write(name + '\n')
+
+
+#-------------------------------------------------------------------------------
+def read_filter_skip_stats():
+    """Read ingress_skip_filtered_bucket/storage_class from dedup stats JSON."""
+    result = admin(['dedup', 'stats'])
+    assert result[1] == 0
+    jstats = json.loads(result[0])
+    worker_stats = jstats['worker_stats']
+    skipped = worker_stats['skipped']
+    skip_bucket = skipped.get('Ingress skip: filtered bucket', 0)
+    skip_sc     = skipped.get('Ingress skip: filtered storage class', 0)
+    return (skip_bucket, skip_sc)
+
+
+#-------------------------------------------------------------------------------
+def exec_dedup_with_filter(dry_run, deny_bucket_list=None, allow_bucket_list=None,
+                            deny_storage_class_list=None, allow_storage_class_list=None,
+                            max_dedup_time=300):
+    cmd = ['dedup', 'estimate' if dry_run else 'exec']
+    if not dry_run:
+        cmd += ['--yes-i-really-mean-it']
+    if deny_bucket_list:
+        cmd += ['--deny-bucket-list', deny_bucket_list]
+    if allow_bucket_list:
+        cmd += ['--allow-bucket-list', allow_bucket_list]
+    if deny_storage_class_list:
+        cmd += ['--deny-storage-class-list', deny_storage_class_list]
+    if allow_storage_class_list:
+        cmd += ['--allow-storage-class-list', allow_storage_class_list]
+    result = admin(cmd)
+    assert result[1] == 0, f"dedup command failed: {result[0]}"
+    dedup_time = 0
+    dedup_timeout = 3
+    while dedup_time < max_dedup_time:
+        time.sleep(dedup_timeout)
+        dedup_time += dedup_timeout
+        ret = read_dedup_stats(dry_run)
+        if ret[0]:  # completed
+            return ret
+    assert False, f"dedup did not complete in {max_dedup_time}s"
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_bucket_estimate():
+    """
+    Upload identical objects to 3 buckets. Deny bucket_a.
+    Verify:
+      - ingress_skip_filtered_bucket == 1  (exactly one bucket skipped)
+      - dedup estimate reflects only bucket_b + bucket_c (2 visible copies)
+      - dedup_bytes_estimate == 0 for bucket_a's copy (not counted)
+      - dedup ratio calculated from visible copies only
+    """
+    prepare_test()
+    conn = get_single_connection()
+    NUM_COPIES_TOTAL    = 3
+    NUM_COPIES_FILTERED = 1
+    NUM_COPIES_VISIBLE  = NUM_COPIES_TOTAL - NUM_COPIES_FILTERED  # 2
+
+    bucket_a = gen_bucket_name()
+    bucket_b = gen_bucket_name()
+    bucket_c = gen_bucket_name()
+    bucket_names = [bucket_a, bucket_b, bucket_c]
+    deny_list_path = OUT_DIR + 'deny_bucket_list.txt'
+
+    files = []
+    gen_files_fixed_copies(files, 1, MULTIPART_SIZE, NUM_COPIES_TOTAL)
+
+    try:
+        for b in bucket_names:
+            conn.create_bucket(Bucket=b)
+
+        # Upload copy i to bucket_names[i]
+        f = files[0]
+        filename = f[0]
+        for i, bkt in enumerate(bucket_names):
+            key = gen_object_name(filename, i)
+            conn.upload_file(OUT_DIR + filename, bkt, key, Config=default_config)
+
+        # Build expected stats for only the VISIBLE copies
+        expected_dedup_stats = Dedup_Stats()
+        calc_expected_stats(expected_dedup_stats, MULTIPART_SIZE, NUM_COPIES_VISIBLE, default_config)
+
+        # Write the deny-list (only bucket_a is denied)
+        write_filter_list_file(deny_list_path, [bucket_a])
+
+        # Run estimate with deny filter
+        ret = exec_dedup_with_filter(dry_run=True, deny_bucket_list=deny_list_path)
+        dedup_ratio_estimate = ret[2]
+
+        # 1. Exactly 1 bucket was skipped
+        (skip_bucket, skip_sc) = read_filter_skip_stats()
+        assert skip_bucket == NUM_COPIES_FILTERED, \
+            f"Expected {NUM_COPIES_FILTERED} skipped buckets, got {skip_bucket}"
+        assert skip_sc == 0
+
+        # 2. Dedup estimate is based on visible copies only
+        on_disk = calc_on_disk_byte_size(MULTIPART_SIZE)
+        s3_bytes_before = NUM_COPIES_VISIBLE * on_disk
+        s3_dedup_bytes  = expected_dedup_stats.dedup_bytes_estimate
+        s3_bytes_after  = s3_bytes_before - s3_dedup_bytes
+        assert dedup_ratio_estimate.s3_bytes_before == s3_bytes_before, \
+            f"s3_bytes_before mismatch: {dedup_ratio_estimate.s3_bytes_before} != {s3_bytes_before}"
+        assert dedup_ratio_estimate.s3_bytes_after == s3_bytes_after, \
+            f"s3_bytes_after mismatch: {dedup_ratio_estimate.s3_bytes_after} != {s3_bytes_after}"
+
+        log.info("test_dedup_filter_deny_bucket_estimate: PASSED")
+    finally:
+        for b in bucket_names:
+            try:
+                delete_bucket_with_all_objects(b, conn)
+            except Exception:
+                pass
+        verify_pool_is_empty()
+        if os.path.exists(deny_list_path):
+            os.remove(deny_list_path)
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_bucket_exec():
+    """
+    Upload identical objects to 3 buckets. Deny bucket_a.
+    Run full dedup exec with deny filter.
+    Verify:
+      - ingress_skip_filtered_bucket == 1  (exactly one bucket skipped)
+      - Objects in bucket_a are intact (readable, content matches)
+      - Rados pool has MORE tail objects than a full (unfiltered) dedup would leave,
+        because bucket_a's tails were not deduplicated
+      - Rados pool count == rados_bucket_a_untouched + rados_bucket_bc_post_dedup
+    """
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    conn = get_single_connection()
+    NUM_COPIES_TOTAL    = 3
+    NUM_COPIES_FILTERED = 1
+    NUM_COPIES_VISIBLE  = NUM_COPIES_TOTAL - NUM_COPIES_FILTERED  # 2
+
+    bucket_a = gen_bucket_name()
+    bucket_b = gen_bucket_name()
+    bucket_c = gen_bucket_name()
+    bucket_names = [bucket_a, bucket_b, bucket_c]
+    deny_list_path = OUT_DIR + 'deny_bucket_list_exec.txt'
+
+    files = []
+    gen_files_fixed_copies(files, 1, MULTIPART_SIZE, NUM_COPIES_TOTAL)
+
+    try:
+        for b in bucket_names:
+            conn.create_bucket(Bucket=b)
+
+        f = files[0]
+        filename = f[0]
+        for i, bkt in enumerate(bucket_names):
+            key = gen_object_name(filename, i)
+            conn.upload_file(OUT_DIR + filename, bkt, key, Config=default_config)
+
+        # Compute rados object counts
+        rados_per_copy = calc_rados_obj_count(1, MULTIPART_SIZE, default_config)
+        tail_count     = rados_per_copy - 1  # head is zero-size for multipart
+
+        # After filtered exec: bucket_a untouched + bucket_b/c share tails
+        # bucket_a: 1 head + tail_count tails = rados_per_copy
+        rados_bucket_a = rados_per_copy
+        # bucket_b/c: shared tail_count tails + NUM_COPIES_VISIBLE zero-size heads
+        rados_bucket_bc_post_dedup = tail_count + NUM_COPIES_VISIBLE
+        expected_rados_filtered = rados_bucket_a + rados_bucket_bc_post_dedup
+
+        # Without filter: all 3 share tail_count tails + NUM_COPIES_TOTAL heads
+        rados_full_dedup = tail_count + NUM_COPIES_TOTAL
+
+        # Sanity: filtered dedup must leave more rados objects than full dedup
+        assert expected_rados_filtered > rados_full_dedup, \
+            f"expected_rados_filtered({expected_rados_filtered}) should be > rados_full_dedup({rados_full_dedup})"
+
+        # Write deny-list
+        write_filter_list_file(deny_list_path, [bucket_a])
+
+        # Run exec with deny filter
+        exec_dedup_with_filter(dry_run=False, deny_bucket_list=deny_list_path)
+
+        result = admin(['gc', 'process', '--include-all'])
+        assert result[1] == 0
+
+        # 1. Exactly 1 bucket was skipped
+        (skip_bucket, skip_sc) = read_filter_skip_stats()
+        assert skip_bucket == NUM_COPIES_FILTERED, \
+            f"Expected {NUM_COPIES_FILTERED} skipped buckets, got {skip_bucket}"
+        assert skip_sc == 0
+
+        # 2. Rados pool has exactly the expected count (more than full dedup)
+        actual_rados = count_object_parts_in_all_buckets(False, 0)
+        assert actual_rados == expected_rados_filtered, \
+            f"Rados count: got {actual_rados}, expected {expected_rados_filtered}"
+
+        # 3. Objects in bucket_a are intact and readable
+        tmpfile = OUT_DIR + 'temp_verify'
+        key_a = gen_object_name(filename, 0)
+        conn.download_file(bucket_a, key_a, tmpfile, Config=default_config)
+        assert filecmp.cmp(tmpfile, OUT_DIR + filename, shallow=False), \
+            "bucket_a object content mismatch after filtered dedup!"
+        os.remove(tmpfile)
+
+        log.info("test_dedup_filter_deny_bucket_exec: PASSED")
+    finally:
+        for b in bucket_names:
+            try:
+                delete_bucket_with_all_objects(b, conn)
+            except Exception:
+                pass
+        verify_pool_is_empty()
+        if os.path.exists(deny_list_path):
+            os.remove(deny_list_path)
+
+
+#-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_cli_operations():
     """Exercise all dedup CLI subcommands: estimate, stats, exec, pause, resume,
