@@ -184,6 +184,23 @@ def rename_mapper(current: str, new: str) -> None:
         raise RuntimeError(f"Can't rename mapper '{current}' to '{new}': {err}")
 
 
+def dmsetup_remove(mapper_name: str = '', skip_path_check: bool = False, **kwargs: Any) -> None:
+    """Remove a device mapper device by name.
+
+    Unlike `cryptsetup remove`, `dmsetup remove` does not retry on busy devices.
+
+    Args:
+        mapper_name: Device mapper name (not `/dev/mapper/...`).
+        skip_path_check: When False, skip removal if `/dev/mapper/<name>` is absent.
+    """
+    mapper_path = '/dev/mapper/%s' % mapper_name
+    if not skip_path_check and not os.path.exists(mapper_path):
+        logger.debug('device mapper path does not exist %s', mapper_path)
+        logger.debug('will skip dmsetup removal')
+        return
+    process.run(['dmsetup', 'remove', mapper_name], **kwargs)
+
+
 def luks_open(key: str,
               device: str,
               mapping: str,
@@ -437,7 +454,14 @@ class CephLuks2:
         self.device: str = device
         self.osd_fsid: str = ''
         if self.is_ceph_encrypted:
-            self.osd_fsid = self.get_osd_fsid()
+            try:
+                self.osd_fsid = self.get_osd_fsid()
+            except RuntimeError:
+                logger.debug(
+                    'LUKS2 device %s looks like Ceph encrypted but osd_fsid '
+                    'could not be read',
+                    device,
+                )
 
     @property
     def has_luks2_signature(self) -> bool:

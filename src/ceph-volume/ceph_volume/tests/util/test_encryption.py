@@ -86,6 +86,20 @@ class TestStatus(object):
         assert encryption.status('/dev/sdc1') == {}
 
 
+class TestDmsetupRemove(object):
+
+    def test_mapper_exists(self, fake_run, fake_filesystem):
+        mapper_name = 'ceph-fsid-nvme2n2-block-dmcrypt'
+        fake_filesystem.create_file('/dev/mapper/%s' % mapper_name)
+        encryption.dmsetup_remove(mapper_name)
+        arguments = fake_run.calls[0]['args'][0]
+        assert arguments == ['dmsetup', 'remove', mapper_name]
+
+    def test_mapper_does_not_exist(self, fake_run):
+        encryption.dmsetup_remove('ceph-fsid-missing-block-dmcrypt')
+        assert fake_run.calls == []
+
+
 class TestDmcryptClose(object):
 
     def test_mapper_exists(self, fake_run, fake_filesystem):
