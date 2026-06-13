@@ -1005,6 +1005,21 @@ int AsioFrontend::init_ssl()
     }
   }
 
+  std::optional<string> ciphersuites = conf->get_val("ssl_ciphersuites");
+  if (ciphersuites) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_ciphersuites" << dendl;
+      return -EINVAL;
+    }
+
+    int r = SSL_CTX_set_ciphersuites(ssl_context->native_handle(), ciphersuites->c_str());
+    if (r == 0) {
+      lderr(ctx()) << "no cipher could be selected from ssl_ciphersuites: "
+                   << *ciphersuites << dendl;
+      return -EINVAL;
+    }
+  }
+
   auto ports = config.equal_range("ssl_port");
   auto endpoints = config.equal_range("ssl_endpoint");
 
