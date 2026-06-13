@@ -8,7 +8,7 @@ using namespace std;
 
 namespace rgw { namespace store {
 
-int POSIXUserDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpParams *params) {
+int FilesystemUserDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpParams *params) {
   int ret = -1;
   shared_ptr<class DBOp> db_op;
 
@@ -29,7 +29,7 @@ int POSIXUserDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpPa
   return ret;
 }
 
-int POSIXUserDB::Initialize(string logfile, int loglevel)
+int FilesystemUserDB::Initialize(string logfile, int loglevel)
 {
   int ret = -1;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -57,13 +57,13 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   ret = InitializeDBOps(dpp);
 
   if (ret) {
-    ldpp_dout(dpp, 0) <<"InitializePOSIXUserDBOps failed " << dendl;
+    ldpp_dout(dpp, 0) <<"InitializeFilesystemUserDBOps failed " << dendl;
     closeDB(dpp);
     db = NULL;
     return ret;
   }
 
-  ldpp_dout(dpp, 0) << "POSIXUserDB successfully initialized - name:" \
+  ldpp_dout(dpp, 0) << "FilesystemUserDB successfully initialized - name:" \
     << db_name << "" << dendl;
 
   // Create default user that corresponds to vstart user (TODO: Temporary fix)
@@ -99,17 +99,17 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   return ret;
 }
 
-int POSIXUserDB::Destroy(const DoutPrefixProvider *dpp)
+int FilesystemUserDB::Destroy(const DoutPrefixProvider *dpp)
 {
   DB::Destroy(dpp);
 
-  ldpp_dout(dpp, 20)<<"POSIXUserDB successfully destroyed - name:" \
+  ldpp_dout(dpp, 20)<<"FilesystemUserDB successfully destroyed - name:" \
     <<db_name << dendl;
 
   return 0;
 }
 
-int POSIXAccountDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpParams *params) {
+int FilesystemAccountDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpParams *params) {
   int ret = -1;
   shared_ptr<class DBOp> db_op;
 
@@ -130,7 +130,7 @@ int POSIXAccountDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBO
   return ret;
 }
 
-int POSIXAccountDB::Initialize(string logfile, int loglevel)
+int FilesystemAccountDB::Initialize(string logfile, int loglevel)
 {
   int ret = -1;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -158,23 +158,23 @@ int POSIXAccountDB::Initialize(string logfile, int loglevel)
   ret = InitializeDBOps(dpp);
 
   if (ret) {
-    ldpp_dout(dpp, 0) <<"InitializePOSIXAccountDBOps failed " << dendl;
+    ldpp_dout(dpp, 0) <<"InitializeFilesystemAccountDBOps failed " << dendl;
     closeDB(dpp);
     db = NULL;
     return ret;
   }
 
-  ldpp_dout(dpp, 0) << "POSIXAccountDB successfully initialized - name:" \
+  ldpp_dout(dpp, 0) << "FilesystemAccountDB successfully initialized - name:" \
     << db_name << "" << dendl;
 
   return ret;
 }
 
-int POSIXAccountDB::Destroy(const DoutPrefixProvider *dpp)
+int FilesystemAccountDB::Destroy(const DoutPrefixProvider *dpp)
 {
   DB::Destroy(dpp);
 
-  ldpp_dout(dpp, 20)<<"POSIXAccountDB successfully destroyed - name:" \
+  ldpp_dout(dpp, 20)<<"FilesystemAccountDB successfully destroyed - name:" \
     <<db_name << dendl;
 
   return 0;

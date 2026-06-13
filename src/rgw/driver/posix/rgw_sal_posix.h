@@ -479,8 +479,8 @@ public:
 class POSIXDriver : public StoreDriver {
 protected:	
   CephContext *cct;
-  std::unique_ptr<rgw::store::POSIXUserDB> userDB;
-  std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
+  std::unique_ptr<rgw::store::FilesystemUserDB> userDB;
+  std::unique_ptr<rgw::store::FilesystemAccountDB> accountDB;
   POSIXZone zone;
   std::unique_ptr<posix::BucketCache> bucket_cache;
   std::string base_path;
@@ -497,8 +497,8 @@ public:
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
     
-    userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
-    accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
+    userDB = std::make_unique<rgw::store::FilesystemUserDB>(db_full_path.string(), cct);
+    accountDB = std::make_unique<rgw::store::FilesystemAccountDB>(db_full_path.string(), cct);
   }
   virtual ~POSIXDriver() { }
 
@@ -785,7 +785,7 @@ public:
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
-  rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
+  rgw::store::FilesystemUserDB* get_user_db() { return userDB.get(); }
   posix::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   posix::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
