@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
