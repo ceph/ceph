@@ -180,6 +180,10 @@ configuration, we should send smaller batches using:
 
 .. confval:: rgw_kafka_max_batch_size
 
+Default Kerberos service name to be used for Kafka SASL/GSSAPI:
+
+.. confval:: rgw_kafka_sasl_kerberos_service_name
+
 Bucket Notification REST API
 ----------------------------
 
@@ -239,6 +243,9 @@ and must be between 1 and 256 characters long. To relax these requirements, use:
    [&Attributes.entry.19.key=ssl-certificate-location&Attributes.entry.19.value=<file path>]
    [&Attributes.entry.20.key=ssl-key-location&Attributes.entry.20.value=<file path>]
    [&Attributes.entry.21.key=ssl-key-password&Attributes.entry.21.value=<password-string>]
+   [&Attributes.entry.22.key=sasl-kerberos-service-name&Attributes.entry.22.value=<kerberos-service-name>]
+   [&Attributes.entry.23.key=sasl-kerberos-principal&Attributes.entry.23.value=<kerberos-principal>]
+   [&Attributes.entry.24.key=sasl-kerberos-keytab&Attributes.entry.24.value=<kerberos-keytab-path>]
 
 Request parameters:
 
@@ -381,6 +388,14 @@ Request parameters:
    The same security considerations in place for this parameter as
    for ``user``/``password``: it should be provided over HTTPS or
    ``rgw_allow_notification_secrets_in_cleartext`` must be set to "true".
+
+ - ``sasl-kerberos-service-name``: Kerberos service name used with
+   ``GSSAPI`` (per-topic override). If not provided, the global
+   config value ``rgw_kafka_sasl_kerberos_service_name`` is used.
+ - ``sasl-kerberos-principal``: Kerberos principal for the RGW client when
+   using ``GSSAPI``. Optional if a valid ticket is available in the cache.
+ - ``sasl-kerberos-keytab``: Path to the keytab to use with ``GSSAPI``.
+   Optional if a valid ticket is available in the cache.
 
 .. note::
 
@@ -658,12 +673,17 @@ Valid ``AttributeName`` that can be passed:
   broker before being delivered to their final destinations.
 - ``kafka-brokers``: Set endpoint with broker(s) as a comma-separated list of
   ``host`` or ``host:port`` (default port 9092).
+- ``user-name``: User name to use when connecting to the Kafka broker.
+- ``password``: Password to use when connecting to the Kafka broker.
 - ``ssl-certificate-location``: Path to a PEM-encoded client certificate for mTLS
   authentication to the Kafka broker. Must be provided together with
   ``ssl-key-location``; specifying only one will cause the connection to fail.
 - ``ssl-key-location``: Path to a PEM-encoded private key corresponding to the
   client certificate. Must be provided together with ``ssl-certificate-location``.
 - ``ssl-key-password``: Password for an encrypted private key (optional).
+- ``sasl-kerberos-service-name``: Kerberos service name for Kafka SASL/GSSAPI.
+- ``sasl-kerberos-principal``: Kerberos principal for the RGW client when using ``GSSAPI``.
+- ``sasl-kerberos-keytab``: Path to the keytab to use with ``GSSAPI``.
 
 Notifications
 ~~~~~~~~~~~~~

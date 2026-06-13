@@ -306,12 +306,18 @@ public:
         ack_level(get_ack_level(args)) {
    if (!kafka::connect(
            conn_id, _endpoint, get_bool(args, "use-ssl", false),
-           get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
-           args.get_optional("mechanism"), args.get_optional("user-name"),
-           args.get_optional("password"), args.get_optional("kafka-brokers"),
+           get_bool(args, "verify-ssl", true),
+           args.get_optional("ca-location"),
+           args.get_optional("mechanism"),
+           args.get_optional("user-name"),
+           args.get_optional("password"),
+           args.get_optional("kafka-brokers"),
            args.get_optional("ssl-certificate-location"),
            args.get_optional("ssl-key-location"),
-           args.get_optional("ssl-key-password"))) {
+           args.get_optional("ssl-key-password"),
+           args.get_optional("sasl-kerberos-service-name"),
+           args.get_optional("sasl-kerberos-principal"),
+           args.get_optional("sasl-kerberos-keytab"))) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }
