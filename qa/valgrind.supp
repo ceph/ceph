@@ -832,11 +832,26 @@
 }
 
 {
-  ignore *all* ceph-mgr python crap.  this is overkill, but better than nothing
+  mgr lttng dlopen reachable
   Memcheck:Leak
-  match-leak-kinds: all
+  match-leak-kinds: reachable
   ...
-  fun:UnknownInlinedFun
+  fun:dlopen@@GLIBC_2.34
+  fun:lttng_ust__tracepoints__init
+  ...
+  obj:/usr/lib64/ld-linux-x86-64.so.2
+}
+
+{
+  mgr lttng fd tracker reachable
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:lttng_ust_fd_tracker_init.part.0
+  fun:lttng_ust_fd_tracker_init
+  fun:lttng_ust_common_ctor
+  ...
+  fun:lttng_ust__tracepoints__init
   ...
 }
 
