@@ -21,6 +21,16 @@ using ceph::encode;
 
 constexpr auto CLS_QUEUE_URGENT_DATA_XATTR_NAME = "cls_queue_urgent_data";
 
+// Compute reserved size from a reservations map
+static uint64_t calc_reservations_size(
+    const cls_2pc_reservations& reservations) {
+  uint64_t total = 0;
+  for (const auto& [id, res] : reservations) {
+    total += res.size + (res.entries * QUEUE_ENTRY_OVERHEAD);
+  }
+  return total;
+}
+
 static int cls_2pc_queue_init(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   auto in_iter = in->cbegin();
 
@@ -122,6 +132,42 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     return -EINVAL;
   }
 
+  // For old queues (v1/v2), recalculate reserved_size from actual reservations
+  // to fix any historical drift. Once written back, queue becomes v3.
+  if (urgent_data.decoded_struct_v < 3) {
+    urgent_data.reserved_size =
+        calc_reservations_size(urgent_data.reservations);
+
+    // Also check xattrs if they exist
+    cls_2pc_reservations xattr_reservations;
+    bufferlist bl_xattrs;
+    if (urgent_data.has_xattrs) {
+      ret =
+          cls_cxx_getxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME, &bl_xattrs);
+      if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
+        CLS_LOG(1,
+                "ERROR: cls_2pc_queue_reserve: failed to read xattrs with: %d",
+                ret);
+        return ret;
+      }
+      if (ret >= 0) {
+        auto iter = bl_xattrs.cbegin();
+        try {
+          decode(xattr_reservations, iter);
+        } catch (ceph::buffer::error& err) {
+          CLS_LOG(1,
+                  "ERROR: cls_2pc_queue_reserve: failed to decode xattrs "
+                  "urgent data map");
+          return -EINVAL;
+        }
+        urgent_data.reserved_size += calc_reservations_size(xattr_reservations);
+      }
+    }
+    CLS_LOG(
+        1,
+        "INFO: cls_2pc_queue_reserve: re-calculated urgent_data.reserved_size, reserved_size=%lu",
+        urgent_data.reserved_size);
+  }
   const auto overhead = res_op.entries*QUEUE_ENTRY_OVERHEAD;
   const auto remaining_size = (head.tail.offset >= head.front.offset) ?
     (head.queue_size - head.tail.offset) + (head.front.offset - head.max_head_size) :
@@ -299,7 +345,8 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
     return ret;
   }
 
-  urgent_data.reserved_size -= res.size;
+  const auto overhead = res.entries * QUEUE_ENTRY_OVERHEAD;
+  urgent_data.reserved_size -= (res.size + overhead);
   urgent_data.committed_entries += res.entries;
 
   if (xattr_reservations.empty()) {
@@ -385,7 +432,9 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
       CLS_LOG(20, "INFO: cls_2pc_queue_abort: reservation does not exist: %u", abort_op.id);
       return 0;
     }
-    reservation_size = it->second.size;
+    const auto reservation_overhead = it->second.entries *
+        QUEUE_ENTRY_OVERHEAD;
+    reservation_size = it->second.size + reservation_overhead;
     xattr_reservations.erase(it);
     bl_xattrs.clear();
     encode(xattr_reservations, bl_xattrs);
@@ -395,8 +444,10 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
   } else {
-    reservation_size = it->second.size;
-    urgent_data.reservations.erase(it);
+      const auto reservation_overhead = it->second.entries *
+          QUEUE_ENTRY_OVERHEAD;
+      reservation_size = it->second.size + reservation_overhead;
+      urgent_data.reservations.erase(it);
   }
 
   // remove the reservation
@@ -492,7 +543,9 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
   for (auto it = urgent_data.reservations.begin(); it != urgent_data.reservations.end();) {
     if (it->second.timestamp < expire_op.stale_time) {
       CLS_LOG(5, "WARNING: cls_2pc_queue_expire_reservations: stale reservation %u will be removed", it->first);
-      reservation_size += it->second.size;
+      const auto reservation_overhead = it->second.entries *
+          QUEUE_ENTRY_OVERHEAD;
+      reservation_size += it->second.size + reservation_overhead;
       it = urgent_data.reservations.erase(it);
       stale_found = true;
     } else {
@@ -521,7 +574,9 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
       for (auto it = xattr_reservations.begin(); it != xattr_reservations.end();) {
         if (it->second.timestamp < expire_op.stale_time) {
           CLS_LOG(5, "WARNING: cls_2pc_queue_expire_reservations: stale reservation %u will be removed", it->first);
-          reservation_size += it->second.size;
+          const auto reservation_overhead = it->second.entries *
+              QUEUE_ENTRY_OVERHEAD;
+          reservation_size += it->second.size + reservation_overhead;
           it = xattr_reservations.erase(it);
           xattr_stale_found = true;
         } else {
