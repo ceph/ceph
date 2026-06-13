@@ -40,6 +40,17 @@ Finally, build ceph:
 
 Omit ``--target...`` if you want to do a full build.
 
+Devcontainer
+------------
+
+Ceph ships a working devcontainer that can be used with IDEs that support it, like ``vscode`` with the ``Dev Containers`` plugin.
+This is a good choice for systems that are not directly supported.
+You do not need to install dependencies in this devcontainer, and can run commands like ``do_cmake.sh`` directly.
+
+.. note::
+   devcontainers do not work well with git worktree setup, as the parent git repository will not be reachable.
+   You will need to do a regular checkout for each environment you want to use in parallel.
+
 
 Running a development deployment
 --------------------------------

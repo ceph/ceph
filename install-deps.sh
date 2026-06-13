@@ -13,6 +13,8 @@
 #
 set -e
 
+cd $(dirname $0) # Ensure script can be run from any directory
+
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     CEPH_ROOT="${SCRIPT_DIR}"

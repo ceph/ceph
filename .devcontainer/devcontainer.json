@@ -1,0 +1,17 @@
+
+{
+    "name": "Ceph Developer Environment",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+          "extensions": [
+            "ms-vscode.cpptools-extension-pack",
+            "ms-vscode.cmake-tools",
+            "vscjava.vscode-java-pack"
+           ]
+        }
+    }
+}
