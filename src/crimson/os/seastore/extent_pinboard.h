@@ -28,6 +28,9 @@ struct ExtentPinboard {
     extent_len_t increased_length,
     const Transaction::src_t *p_src) = 0;
   virtual void clear() = 0;
+
+  counter_by_extent_t<uint64_t> hits_by_ext = {};
+  counter_by_extent_t<uint64_t> misses_by_ext = {};
 };
 using ExtentPinboardRef = std::unique_ptr<ExtentPinboard>;
 ExtentPinboardRef create_extent_pinboard(std::size_t capacity);
