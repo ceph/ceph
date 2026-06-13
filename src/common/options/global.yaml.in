@@ -5460,6 +5460,8 @@ options:
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
   with_legacy: true
+  flags:
+    - startup
 - name: bluestore_allocation_recovery_threads
   type: uint
   level: basic
