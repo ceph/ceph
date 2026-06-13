@@ -626,7 +626,19 @@ A row begins when the reader encounters the path, and it ends when the reader ex
 
 NOTE : The semantics of querying JSON document may change and may not be the same as the current methodology described.
 
-TODO : relevant example for object and array values.
+**Object value example** (access nested object fields):
+
+.. code-block:: sql
+
+    SELECT _1.address.city, _1.address.state
+    FROM s3object[*];
+
+**Array value example** (each array element becomes a row):
+
+.. code-block:: sql
+
+    SELECT _1.type, _1.number
+    FROM s3object[*].phoneNumbers;
 
 A JSON Query Example
 --------------------
