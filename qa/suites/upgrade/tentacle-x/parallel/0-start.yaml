@@ -59,3 +59,4 @@ overrides:
       - OBJECT_UNFOUND
       - PG_DEGRADED
       - OSD_HOST_DOWN
+      - but it is still running

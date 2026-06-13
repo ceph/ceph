@@ -36,6 +36,7 @@ overrides:
       - CEPHADM_FAILED_DAEMON
       - failed cephadm daemon
       - osd.* is in unknown state
+      - but it is still running
 tasks:
 - install:
     branch: squid
