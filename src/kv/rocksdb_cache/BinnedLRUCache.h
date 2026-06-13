@@ -58,8 +58,8 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
 
 struct BinnedLRUHandle {
   std::shared_ptr<uint64_t> age_bin;
-  void* value;
-  DeleterFn deleter;
+  rocksdb::Cache::ObjectPtr value;
+  const rocksdb::Cache::CacheItemHelper* helper;
   BinnedLRUHandle* next_hash;
   BinnedLRUHandle* next;
   BinnedLRUHandle* prev;
@@ -121,8 +121,8 @@ struct BinnedLRUHandle {
 
   void Free() {
     ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
-    if (deleter) {
-      (*deleter)(key(), value);
+    if (helper && helper->del_cb) {
+      (*helper->del_cb)(value, /*allocator=*/nullptr);
     }
     delete[] key_data;
     delete this;
@@ -240,9 +240,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   void SetHighPriPoolRatio(double high_pri_pool_ratio);
 
   // Like Cache methods, but with an extra "hash" parameter.
-  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
+  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash,
+                        rocksdb::Cache::ObjectPtr value,
+                        const rocksdb::Cache::CacheItemHelper* helper,
                         size_t charge,
-                        DeleterFn deleter,
                         rocksdb::Cache::Handle** handle,
                         rocksdb::Cache::Priority priority) override;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) override;
@@ -260,16 +261,17 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   virtual void ApplyToAllCacheEntries(
     const std::function<void(const rocksdb::Slice& key,
-                             void* value,
+                             rocksdb::Cache::ObjectPtr value,
                              size_t charge,
-                             DeleterFn)>& callback,
+                             const rocksdb::Cache::CacheItemHelper* helper)>& callback,
     bool thread_safe) override;
 
   virtual void EraseUnRefEntries() override;
 
   virtual std::string GetPrintableOptions() const override;
 
-  virtual DeleterFn GetDeleter(rocksdb::Cache::Handle* handle) const override;
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      rocksdb::Cache::Handle* handle) const override;
 
   void TEST_GetLRUList(BinnedLRUHandle** lru, BinnedLRUHandle** lru_low_pri);
 
@@ -382,13 +384,12 @@ class BinnedLRUCache : public ShardedCache {
   virtual const char* Name() const override { return "BinnedLRUCache"; }
   virtual CacheShard* GetShard(int shard) override;
   virtual const CacheShard* GetShard(int shard) const override;
-  virtual void* Value(Handle* handle) override;
+  virtual rocksdb::Cache::ObjectPtr Value(Handle* handle) override;
   virtual size_t GetCharge(Handle* handle) const override;
   virtual uint32_t GetHash(Handle* handle) const override;
   virtual void DisownData() override;
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
-  virtual DeleterFn GetDeleter(Handle* handle) const override;
-#endif
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      Handle* handle) const override;
   //  Retrieves number of elements in LRU, for unit test purpose only
   size_t TEST_GetLRUSize();
   // Sets the high pri pool ratio

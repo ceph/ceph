@@ -160,9 +160,9 @@ void BinnedLRUCacheShard::EraseUnRefEntries() {
 
 void BinnedLRUCacheShard::ApplyToAllCacheEntries(
   const std::function<void(const rocksdb::Slice& key,
-                           void* value,
+                           rocksdb::Cache::ObjectPtr value,
                            size_t charge,
-                           DeleterFn)>& callback,
+                           const rocksdb::Cache::CacheItemHelper* helper)>& callback,
   bool thread_safe)
 {
   if (thread_safe) {
@@ -170,7 +170,7 @@ void BinnedLRUCacheShard::ApplyToAllCacheEntries(
   }
   table_.ApplyToAllCacheEntries(
     [callback](BinnedLRUHandle* h) {
-      callback(h->key(), h->value, h->charge, h->deleter);
+      callback(h->key(), h->value, h->charge, h->helper);
     });
   if (thread_safe) {
     mutex_.unlock();
@@ -419,16 +419,17 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
   return last_reference;
 }
 
-rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
+rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t hash,
+                             rocksdb::Cache::ObjectPtr value,
+                             const rocksdb::Cache::CacheItemHelper* helper,
                              size_t charge,
-                             DeleterFn deleter,
                              rocksdb::Cache::Handle** handle, rocksdb::Cache::Priority priority) {
   auto e = new BinnedLRUHandle();
   rocksdb::Status s;
   BinnedLRUHandle* deleted = nullptr;
 
   e->value = value;
-  e->deleter = deleter;
+  e->helper = helper;
   e->charge = charge;
   e->key_length = key.size();
   e->key_data = new char[e->key_length];
@@ -560,10 +561,11 @@ std::string BinnedLRUCacheShard::GetPrintableOptions() const {
   return std::string(buffer);
 }
 
-DeleterFn BinnedLRUCacheShard::GetDeleter(rocksdb::Cache::Handle* h) const
+const rocksdb::Cache::CacheItemHelper*
+BinnedLRUCacheShard::GetCacheItemHelper(rocksdb::Cache::Handle* h) const
 {
   auto* handle = reinterpret_cast<BinnedLRUHandle*>(h);
-  return handle->deleter;
+  return handle->helper;
 }
 
 #undef dout_context
@@ -702,7 +704,7 @@ const CacheShard* BinnedLRUCache::GetShard(int shard) const {
   return reinterpret_cast<CacheShard*>(&shards_[shard]);
 }
 
-void* BinnedLRUCache::Value(Handle* handle) {
+rocksdb::Cache::ObjectPtr BinnedLRUCache::Value(Handle* handle) {
   return reinterpret_cast<const BinnedLRUHandle*>(handle)->value;
 }
 
@@ -721,12 +723,11 @@ void BinnedLRUCache::DisownData() {
 #endif  // !__SANITIZE_ADDRESS__
 }
 
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
-DeleterFn BinnedLRUCache::GetDeleter(Handle* handle) const
+const rocksdb::Cache::CacheItemHelper*
+BinnedLRUCache::GetCacheItemHelper(Handle* handle) const
 {
-  return reinterpret_cast<const BinnedLRUHandle*>(handle)->deleter;
+  return reinterpret_cast<const BinnedLRUHandle*>(handle)->helper;
 }
-#endif
 
 size_t BinnedLRUCache::TEST_GetLRUSize() {
   size_t lru_size_of_all_shards = 0;
