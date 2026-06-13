@@ -1188,8 +1188,8 @@ BtreeLBAManager::_copy_mapping(
   c.trans.new_lba_key_copied(
     ret.src->get_key(),
     dest_laddr,
-    [this](Transaction &t, laddr_t laddr, paddr_t paddr) {
-      update_paddr_sync(t, laddr, paddr);
+    [this, c](laddr_t laddr, paddr_t paddr) {
+      update_paddr_sync(c.trans, laddr, paddr);
     });
   auto [niter, inserted] = co_await btree.copy(
       c,
