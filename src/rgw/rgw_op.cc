@@ -3173,7 +3173,7 @@ void RGWGetUsage::execute(optional_yield y)
   }
 
   op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),
-                              s->user->get_tenant());
+                              false, s->user->get_tenant());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
@@ -3529,8 +3529,11 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   const auto& index = bucket.get_info().layout.current_index;
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
 
-  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories, sc_stats);
   if (r < 0) {
     return r;
   }
@@ -4341,7 +4344,7 @@ void RGWDeleteBucket::execute(optional_yield y)
 
   if (own_bucket) {
     // only if we own the bucket
-    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    op_ret = s->bucket->sync_owner_stats(this, y, false, nullptr);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
     }

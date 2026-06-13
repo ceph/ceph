@@ -949,6 +949,7 @@ class Bucket {
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+			   std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			   std::string* max_marker = nullptr,
 			   bool* syncstopped = nullptr) = 0;
     /** Read the bucket stats from the backing Store, asynchronous */
@@ -957,6 +958,7 @@ class Bucket {
 				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 bool reset,
                                  RGWBucketEnt* optional_ent) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp,

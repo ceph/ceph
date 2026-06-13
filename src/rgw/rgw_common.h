@@ -1245,6 +1245,7 @@ struct RGWStorageStats
   uint64_t num_objects;
   uint64_t size_utilized{0}; //< size after compression, encryption
   bool dump_utilized;        // whether dump should include utilized values
+  std::optional<std::map<std::string, RGWStorageStats>> storage_class_stats;
 
   RGWStorageStats(bool _dump_utilized=true)
     : category(RGWObjCategory::None),
@@ -1496,6 +1497,7 @@ struct RGWBucketEnt {
    * of the Swift API. Although the info available in RGWBucketInfo, we need
    * to duplicate it here to not affect the performance of buckets listing. */
   rgw_placement_rule placement_rule;
+  std::map<std::string, RGWBucketEnt> storage_class_ents;
 
   RGWBucketEnt()
     : size(0),
@@ -1520,10 +1522,21 @@ struct RGWBucketEnt {
     b->size_rounded = size_rounded;
     b->creation_time = creation_time;
     b->count = count;
+    for (auto it = storage_class_ents.begin(); it != storage_class_ents.end(); ++it) {
+      std::string storage_class = it->first;
+      RGWBucketEnt bent = it->second;
+      std::string placement_target = placement_rule.name;
+      b->storage_class_stats.emplace();
+      cls_user_bucket_entry stats;
+      stats.count = bent.count;
+      stats.size = bent.size;
+      stats.size_rounded = bent.size_rounded;
+      b->storage_class_stats.value()[placement_target + "::" + storage_class] = stats;
+    }
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 5, bl);
+    ENCODE_START(8, 5, bl);
     uint64_t s = size;
     // issue tracked here: https://tracker.ceph.com/issues/61160
     // coverity[store_truncates_time_t:SUPPRESS]
@@ -1538,10 +1551,11 @@ struct RGWBucketEnt {
     encode(s, bl);
     encode(creation_time, bl);
     encode(placement_rule, bl);
+    encode(storage_class_ents, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     std::string empty_str;  // backward compatibility
@@ -1563,6 +1577,8 @@ struct RGWBucketEnt {
       decode(creation_time, bl);
     if (struct_v >= 7)
       decode(placement_rule, bl);
+    if (struct_v >= 8)
+      decode(storage_class_ents, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

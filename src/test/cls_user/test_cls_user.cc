@@ -209,3 +209,192 @@ TEST_F(ClsAccount, list)
   ASSERT_EQ(0, add(oid, u5, false, max_users)); // overwrite u1
   EXPECT_EQ(make_list(u5, u3, u4), list_all(oid, ""));
 }
+
+// ============================================================================
+// USER STORAGE CLASS STATS std::optional TESTS
+// ============================================================================
+
+static int write_user_header_test(librados::IoCtx& ioctx, const std::string& oid,
+                                   const cls_user_header& header)
+{
+  librados::ObjectWriteOperation op;
+  bufferlist bl;
+  encode(header, bl);
+  op.omap_set_header(bl);
+  return ioctx.operate(oid, &op);
+}
+
+static int read_user_header_test(librados::IoCtx& ioctx, const std::string& oid,
+                                  cls_user_header& header)
+{
+  librados::ObjectReadOperation op;
+  cls_user_get_header(op, &header, nullptr);
+  return ioctx.operate(oid, &op, nullptr);
+}
+
+class ClsUserStorageClass : public ::testing::Test {
+  static librados::Rados rados;
+  static std::string pool_name;
+protected:
+  static librados::IoCtx ioctx;
+
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  static void TearDownTestCase() {
+    ioctx.close();
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+  }
+};
+
+librados::Rados ClsUserStorageClass::rados;
+std::string ClsUserStorageClass::pool_name;
+librados::IoCtx ClsUserStorageClass::ioctx;
+
+// Helper: call cls_user_set_buckets() with a single bucket entry
+// This exercises cls_user.cc:cls_user_set_buckets_info()
+static void set_bucket(librados::IoCtx& ioctx, const std::string& oid,
+                       cls_user_bucket_entry& entry, bool add)
+{
+  std::list<cls_user_bucket_entry> entries = {entry};
+  librados::ObjectWriteOperation op;
+  cls_user_set_buckets(op, entries, add, false);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+}
+
+TEST_F(ClsUserStorageClass, LegacyToConverted) {
+  std::string oid = "user.legacy-sc";
+
+  // Start with nullopt (legacy user header)
+  cls_user_header header;
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
+  // Confirm nullopt
+  cls_user_header read_hdr;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  ASSERT_FALSE(read_hdr.storage_class_stats.has_value());
+
+  cls_user_bucket_entry entry;
+  entry.bucket.name = "test-bucket";
+  entry.size = 5120;
+  entry.size_rounded = 5120;
+  entry.count = 1;
+  entry.storage_class_stats = std::unordered_map<std::string, cls_user_bucket_entry>();
+  cls_user_bucket_entry sc_entry;
+  sc_entry.size = 5120;
+  sc_entry.size_rounded = 5120;
+  sc_entry.count = 1;
+  (*entry.storage_class_stats)["STANDARD"] = sc_entry;
+
+  set_bucket(ioctx, oid, entry, true);
+
+  // storage_class_stats must now be initialized by cls_user_set_buckets_info()
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  EXPECT_TRUE(read_hdr.storage_class_stats->count("STANDARD") > 0);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].total_entries, 1u);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].total_bytes, 5120u);
+}
+
+TEST_F(ClsUserStorageClass, LegacyBucketConversion) {
+  // nonzero stats + uninitialized storage_class_stats,
+  // remove bucket (decrement to zero), add bucket with SC,
+  // verify storage_class_stats initialized by that add
+  std::string oid = "user.legacy-convert";
+
+  // Add 3 bucket entries to get nonzero stats
+  for (int i = 0; i < 3; i++) {
+    cls_user_bucket_entry entry;
+    entry.bucket.name = str_int("bucket", i);
+    entry.size = 1024;
+    entry.size_rounded = 1024;
+    entry.count = 1;
+    entry.storage_class_stats = std::unordered_map<std::string, cls_user_bucket_entry>();
+    cls_user_bucket_entry sc_entry;
+    sc_entry.size = 1024;
+    sc_entry.size_rounded = 1024;
+    sc_entry.count = 1;
+    (*entry.storage_class_stats)["STANDARD"] = sc_entry;
+    set_bucket(ioctx, oid, entry, true);
+  }
+
+  // Verify nonzero stats, then clear storage_class_stats (legacy simulation)
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_GT(header.stats.total_entries, 0u);
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
+  // Confirm: nonzero stats, nullopt storage_class_stats
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_FALSE(header.storage_class_stats.has_value());
+  ASSERT_EQ(header.stats.total_entries, 3u);
+
+  // Remove all buckets (decrement stats toward zero)
+  for (int i = 0; i < 3; i++) {
+    cls_user_bucket_entry entry;
+    entry.bucket.name = str_int("bucket", i);
+    entry.size = 1024;
+    entry.size_rounded = 1024;
+    entry.count = 1;
+    set_bucket(ioctx, oid, entry, false); // add=false means remove
+  }
+
+  // Now add a new bucket with a different storage class
+  cls_user_bucket_entry new_entry;
+  new_entry.bucket.name = "new-bucket";
+  new_entry.size = 2048;
+  new_entry.size_rounded = 2048;
+  new_entry.count = 1;
+  new_entry.storage_class_stats = std::unordered_map<std::string, cls_user_bucket_entry>();
+  cls_user_bucket_entry hdd_entry;
+  hdd_entry.size = 2048;
+  hdd_entry.size_rounded = 2048;
+  hdd_entry.count = 1;
+  (*new_entry.storage_class_stats)["HDD"] = hdd_entry;
+  set_bucket(ioctx, oid, new_entry, true);
+
+  // storage_class_stats must be initialized by that add
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_TRUE(header.storage_class_stats->count("HDD") > 0);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 2048u);
+}
+
+TEST_F(ClsUserStorageClass, MultipleClasses) {
+  std::string oid = "user.multi-sc";
+
+  // Add buckets with different storage classes via cls_user_set_buckets()
+  struct { const char* sc; const char* bucket; uint64_t size; } data[] = {
+    {"STANDARD", "bucket-std", 1024},
+    {"HDD",      "bucket-hdd", 2048},
+  };
+
+  for (auto& d : data) {
+    cls_user_bucket_entry entry;
+    entry.bucket.name = d.bucket;
+    entry.size = d.size;
+    entry.size_rounded = d.size;
+    entry.count = 1;
+    entry.storage_class_stats = std::unordered_map<std::string, cls_user_bucket_entry>();
+    cls_user_bucket_entry sc_entry;
+    sc_entry.size = d.size;
+    sc_entry.size_rounded = d.size;
+    sc_entry.count = 1;
+    (*entry.storage_class_stats)[d.sc] = sc_entry;
+    set_bucket(ioctx, oid, entry, true);
+  }
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ(header.storage_class_stats->size(), 2u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_bytes, 1024u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 2048u);
+}

@@ -6376,8 +6376,21 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
   std::ignore = rgw::check_for_errors(completed);
 }
 
+
+static bool is_empty_stats(const rgw_bucket_dir_header& header) {
+  for (const auto& pair : header.stats) {
+    const rgw_bucket_category_stats& header_stats = pair.second;
+    if (header_stats.num_entries > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
-                                 map<RGWObjCategory, RGWStorageStats>& stats)
+                                 map<RGWObjCategory, RGWStorageStats>& stats,
+                                 std::optional<map<std::string, RGWStorageStats>>& sc_stats)
 {
   for (const auto& pair : header.stats) {
     const RGWObjCategory category = static_cast<RGWObjCategory>(pair.first);
@@ -6391,6 +6404,22 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.size_utilized += header_stats.actual_size;
     s.num_objects += header_stats.num_entries;
   }
+  if (sc_stats.has_value()) {
+    if (header.storage_class_stats.has_value()) {
+      for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
+        std::string storage_class = it->first;
+        rgw_bucket_category_stats stats = it->second;
+        RGWStorageStats& s = sc_stats.value()[storage_class];
+
+        s.size += stats.total_size;
+        s.size_rounded += stats.total_size_rounded;
+        s.size_utilized += stats.actual_size;
+        s.num_objects += stats.num_entries;
+      }
+    } else {
+      sc_stats.reset();
+    }
+  }
 }
 
 int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
@@ -6403,15 +6432,17 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
   if (ret < 0) {
     return ret;
   }
-
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
   try {
     // decode and accumulate the results
     for (const auto& kv : buffers) {
       rgw_cls_check_index_ret result;
       cls_rgw_bucket_check_index_decode(kv.second, result);
 
-      accumulate_raw_stats(result.existing_header, *existing_stats);
-      accumulate_raw_stats(result.calculated_header, *calculated_stats);
+      accumulate_raw_stats(result.existing_header, *existing_stats, sc_stats);
+      accumulate_raw_stats(result.calculated_header, *calculated_stats, sc_stats);
     }
   } catch (const ceph::buffer::error&) {
     return -EIO;
@@ -10123,6 +10154,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       const rgw::bucket_index_layout_generation& idx_layout,
 			       int shard_id, string *bucket_ver, string *master_ver,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
+			       std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			       string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
@@ -10142,7 +10174,10 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
   BucketIndexShardsManager marker_mgr;
   char buf[64];
   for(; iter != headers.end(); ++iter, ++viter) {
-    accumulate_raw_stats(*iter, stats);
+    if (is_empty_stats(*iter)) {
+      iter->storage_class_stats.emplace();
+    }
+    accumulate_raw_stats(*iter, stats, sc_stats);
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
     ver_mgr.add(viter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);

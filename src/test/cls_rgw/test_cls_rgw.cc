@@ -1633,3 +1633,107 @@ TEST_F(cls_rgw, bi_put_entries)
     test_stats(ioctx, dst_bucket, RGWObjCategory::Main, 3, 24576);
   }
 }
+
+// ============================================================================
+// STORAGE CLASS STATS std::optional TESTS
+// ============================================================================
+
+// Helper function to write bucket header
+static int write_header(librados::IoCtx& ioctx, const string& oid,
+                        const rgw_bucket_dir_header& header)
+{
+  librados::ObjectWriteOperation op;
+  bufferlist bl;
+  encode(header, bl);
+  op.omap_set_header(bl);
+  return ioctx.operate(oid, &op);
+}
+
+TEST_F(cls_rgw, StorageClassStats_LegacyToConverted) {
+  string oid = str_int("bucket-sc", 100);
+
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  // Simulate legacy bucket: clear storage_class_stats to nullopt
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+
+  // Confirm nullopt
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_FALSE(header.storage_class_stats.has_value());
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.size = 5120;
+  meta.storage_class = "STANDARD";
+  meta.category = RGWObjCategory::Main;
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD, "tag1", 1,
+                 cls_rgw_obj_key("obj1"), meta);
+
+  // storage_class_stats must now be initialized by the write
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].num_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_size, 5120u);
+}
+
+// nonzero stats + uninitialized storage_class_stats,
+// delete to zero, write with SC, verify storage_class_stats initialized
+TEST_F(cls_rgw, StorageClassStats_LegacyBucketConversion) {
+  string oid = str_int("bucket-sc", 101);
+
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  // Write 3 objects to get nonzero stats
+  for (int i = 0; i < 3; i++) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.size = 1024;
+    meta.storage_class = "STANDARD";
+    meta.category = RGWObjCategory::Main;
+    index_complete(ioctx, oid, CLS_RGW_OP_ADD,
+                   str_int("tag", i), i + 1,
+                   cls_rgw_obj_key(str_int("obj", i)), meta);
+  }
+
+  // Verify nonzero stats, then clear storage_class_stats (legacy simulation)
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_GT(header.stats[RGWObjCategory::Main].num_entries, 0u);
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+
+  // Confirm: nonzero stats, nullopt storage_class_stats
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_FALSE(header.storage_class_stats.has_value());
+  ASSERT_EQ(header.stats[RGWObjCategory::Main].num_entries, 3u);
+
+  // Simulate deletes (decrement stats toward zero)
+  for (int i = 0; i < 3; i++) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.size = 1024;
+    meta.storage_class = "STANDARD";
+    meta.category = RGWObjCategory::Main;
+    index_complete(ioctx, oid, CLS_RGW_OP_DEL,
+                   str_int("tag-del", i), i + 4,
+                   cls_rgw_obj_key(str_int("obj", i)), meta);
+  }
+
+  // Now write a new object with a storage class
+  rgw_bucket_dir_entry_meta new_meta;
+  new_meta.size = 2048;
+  new_meta.storage_class = "HDD";
+  new_meta.category = RGWObjCategory::Main;
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD,
+                 "tag-new", 10, cls_rgw_obj_key("new-obj"), new_meta);
+
+  // storage_class_stats must be initialized by that write
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].num_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_size, 2048u);
+}
