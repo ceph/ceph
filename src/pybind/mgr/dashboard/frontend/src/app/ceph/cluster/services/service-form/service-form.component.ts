@@ -516,6 +516,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       certificateType: ['internal'],
       custom_sans: [null],
+      zonegroup_hostnames: [null],
+      wildcard_enabled: [true],
       ssl_ca_cert: [
         '',
         [
@@ -805,6 +807,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                   }
                 }
                 this.serviceForm.get('ssl_cert').setValue(certValue);
+                if (response[0].spec?.custom_sans) {
+                  this.serviceForm.get('custom_sans').setValue(response[0].spec.custom_sans);
+                }
+                if (response[0].spec?.zonegroup_hostnames) {
+                  this.serviceForm
+                    .get('zonegroup_hostnames')
+                    .setValue(response[0].spec.zonegroup_hostnames);
+                }
+                this.serviceForm
+                  .get('wildcard_enabled')
+                  .setValue(response[0].spec?.wildcard_enabled ?? false);
               }
               break;
             case 'ingress':
@@ -1391,6 +1404,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               sslCertField: 'rgw_frontend_ssl_certificate',
               includeSslKey: false
             });
+            if (
+              values['certificateType'] === 'internal' &&
+              values['zonegroup_hostnames']?.length > 0
+            ) {
+              serviceSpec['zonegroup_hostnames'] = values['zonegroup_hostnames'];
+              serviceSpec['wildcard_enabled'] = values['wildcard_enabled'];
+            }
           }
           break;
         case 'iscsi':

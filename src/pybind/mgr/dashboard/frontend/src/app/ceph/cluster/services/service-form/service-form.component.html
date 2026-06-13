@@ -1253,6 +1253,25 @@
                               i18n-helperText>
           </cd-text-label-list>
         </div>
+        @if (serviceForm.controls.service_type.value === 'rgw') {
+        <div class="form-item">
+          <cd-text-label-list formControlName="zonegroup_hostnames"
+                              label="Zonegroup Hostnames"
+                              i18n-label
+                              helperText="Hostnames for virtual-host style bucket access."
+                              i18n-helperText>
+          </cd-text-label-list>
+        </div>
+        <div class="form-item">
+          <cds-checkbox i18n-label
+                        formControlName="wildcard_enabled">
+            Enable wildcard SANs
+            <cd-help-text i18n>
+              When enabled, wildcard SANs (e.g. *.s3.example.com) are generated for each zonegroup hostname.
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+        }
         }
       </div>
       }
