@@ -163,6 +163,30 @@ class TestDevice(object):
         assert disk.is_device is True
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    def test_crypt_device_is_device(self, fake_call, device_info):
+        data = {"/dev/mapper/luks2-r-data-0": {"foo": "bar"}}
+        lsblk = {"TYPE": "crypt", "NAME": "dm-2"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/mapper/luks2-r-data-0")
+        assert disk.is_device is True
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    def test_crypt_device_is_acceptable(self, fake_call, device_info):
+        data = {"/dev/mapper/luks2-r-data-0": {"foo": "bar"}}
+        lsblk = {"TYPE": "crypt", "NAME": "dm-2"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/mapper/luks2-r-data-0")
+        assert disk.is_acceptable_device is True
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    def test_crypt_device_is_available(self, fake_call, device_info):
+        data = {"/dev/mapper/luks2-r-data-0": {"ro": "0", "size": 5368709120}}
+        lsblk = {"TYPE": "crypt", "NAME": "dm-2"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/mapper/luks2-r-data-0")
+        assert disk.available
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_not_lvm_member(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "NAME": "sda1", "PKNAME": "sda"}
