@@ -3,12 +3,15 @@
 
 #include "Header.h"
 
+#include <endian.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <openssl/evp.h>
 #include "common/dout.h"
 #include "common/errno.h"
+#include "json_spirit/json_spirit.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -192,6 +195,207 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
   return 0;
 }
 
+// Post-process a LUKS2 header (already formatted via crypt_format() with a
+// placeholder cipher) to produce output equivalent to crypt_format_inline().
+// We cannot call crypt_format_inline() directly because it requires NOP DIF
+// hardware, which is unavailable on a memfd.
+//
+// Assumes:
+//   - Called after crypt_format() and add_keyslot() on this Header's memfd
+//   - The header is LUKS2 (not LUKS1) — LUKS1 has no JSON area
+//   - There is exactly one segment ("0") — crypt_format() always creates one
+//   - The checksum algorithm is SHA-256 — the LUKS2 default
+//   - The added fields (integrity section + requirements) fit within the
+//     existing JSON area allocated by crypt_format() — the area is typically
+//     ~12KB and we only modify the JSON string in-place without resizing it
+//
+// The memfd contains two LUKS2 headers (primary at offset 0, secondary at
+// offset hdr_size). Each header is: a 4096-byte binary header followed by a
+// JSON metadata area. For each copy we:
+//   1. Parse the JSON and rewrite the segment with the real cipher/mode
+//   2. Add the integrity section and "inline-hw-tags" requirement
+//   3. Recalculate the SHA-256 checksum over (binary header + JSON area)
+int Header::rewrite_segment_for_inline(const char* cipher,
+                                       const char* cipher_mode,
+                                       const char* integrity) {
+  ceph_assert(m_fd != -1);
+
+  // read the entire memfd
+  struct stat st;
+  if (fstat(m_fd, &st) < 0) {
+    auto r = -errno;
+    lderr(m_cct) << "failed to stat memfd: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (st.st_size <= 0) {
+    lderr(m_cct) << "memfd is empty" << dendl;
+    return -EINVAL;
+  }
+
+  std::vector<char> buf(st.st_size);
+  if (lseek(m_fd, 0, SEEK_SET) < 0) {
+    auto r = -errno;
+    lderr(m_cct) << "failed to seek memfd: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ssize_t bytes_read = ::read(m_fd, buf.data(), buf.size());
+  if (bytes_read < 0 || static_cast<size_t>(bytes_read) != buf.size()) {
+    lderr(m_cct) << "failed to read memfd" << dendl;
+    return -EIO;
+  }
+
+  // LUKS2 binary header constants — from struct luks2_hdr_disk in
+  // cryptsetup lib/luks2/luks2.h (LUKS2_HDR_BIN_LEN, LUKS2_CHECKSUM_L)
+  static constexpr size_t LUKS2_HDR_BIN_LEN = 4096;      // sizeof(luks2_hdr_disk) 
+  // LUKS_HDR_BIN is a fixed binary header that precedes the JSON metadata area in a LUKS2 header.
+  static constexpr size_t LUKS2_HDR_SIZE_OFFSET = 8;      // offset of hdr_size field
+  static constexpr size_t LUKS2_CHECKSUM_OFFSET = 0x01c0; // offset of csum field
+  static constexpr size_t LUKS2_CHECKSUM_LEN = 64;        // LUKS2_CHECKSUM_L
+
+  // LUKS2 spec: device must be large enough to hold at least the binary header
+  if (buf.size() < LUKS2_HDR_BIN_LEN + 1) {
+    lderr(m_cct) << "memfd too small for LUKS2 header" << dendl;
+    return -EINVAL;
+  }
+
+  // LUKS2 spec: hdr_size is a big-endian uint64 at offset 8 in the
+  // 4096-byte fixed binary header (struct luks2_hdr_disk). It gives the
+  // total size of one header copy: the binary header + the JSON metadata
+  // area that follows it. See hdr_from_disk() in luks2_disk_metadata.c.
+  uint64_t hdr_size;
+  memcpy(&hdr_size, buf.data() + LUKS2_HDR_SIZE_OFFSET, sizeof(hdr_size));
+  hdr_size = be64toh(hdr_size);
+
+  // Note: cryptsetup validates the LUKS2 spec limits on hdr_size in
+  // hdr_disk_sanity_check_pre() (>= 16KB, <= 4MB). Since crypt_format()
+  // already enforced those limits when creating this header, we only need
+  // to verify our buffer is self-consistent: hdr_size must cover at least
+  // the binary header, and the memfd must be large enough to hold both
+  // back-to-back copies (primary at offset 0, secondary at offset hdr_size)
+  // that we're about to modify.
+  if (hdr_size < LUKS2_HDR_BIN_LEN || hdr_size * 2 > buf.size()) {
+    lderr(m_cct) << "invalid LUKS2 header size: " << hdr_size << dendl;
+    return -EINVAL;
+  }
+
+  std::string encryption = std::string(cipher) + "-" + cipher_mode;
+
+  // LUKS2 spec: both header copies must be kept in sync. Process primary
+  // (offset 0) and secondary (offset hdr_size) identically.
+  // See hdr_write_disk() in luks2_disk_metadata.c.
+  for (int h = 0; h < 2; h++) {
+    size_t hdr_offset = h * hdr_size;
+    // LUKS2 spec: JSON area starts immediately after the 4096-byte binary
+    // header and extends to hdr_size. See hdr_read_disk() in
+    // luks2_disk_metadata.c.
+    char* json_area = buf.data() + hdr_offset + LUKS2_HDR_BIN_LEN;
+    size_t json_area_size = hdr_size - LUKS2_HDR_BIN_LEN;
+
+    // parse JSON
+    json_spirit::mValue root;
+    std::string json_str(json_area, strnlen(json_area, json_area_size));
+    if (!json_spirit::read(json_str, root)) {
+      lderr(m_cct) << "failed to parse LUKS2 JSON in header " << h << dendl;
+      return -EINVAL;
+    }
+
+    auto& root_obj = root.get_obj();
+
+    // modify segments.0.encryption and add integrity
+    auto seg_it = root_obj.find("segments");
+    if (seg_it == root_obj.end()) {
+      lderr(m_cct) << "missing segments in LUKS2 JSON" << dendl;
+      return -EINVAL;
+    }
+    auto& segments = seg_it->second.get_obj();
+    auto seg0_it = segments.find("0");
+    if (seg0_it == segments.end()) {
+      lderr(m_cct) << "missing segment 0 in LUKS2 JSON" << dendl;
+      return -EINVAL;
+    }
+    auto& seg0 = seg0_it->second.get_obj();
+    seg0["encryption"] = json_spirit::mValue(encryption);
+
+    json_spirit::mObject integrity_obj;
+    integrity_obj["type"] = json_spirit::mValue(std::string(integrity));
+    integrity_obj["journal_encryption"] = json_spirit::mValue(std::string("none"));
+    integrity_obj["journal_integrity"] = json_spirit::mValue(std::string("none"));
+    seg0["integrity"] = json_spirit::mValue(integrity_obj);
+
+    // add config.requirements.mandatory = ["inline-hw-tags"]
+    auto config_it = root_obj.find("config");
+    if (config_it == root_obj.end()) {
+      lderr(m_cct) << "missing config in LUKS2 JSON" << dendl;
+      return -EINVAL;
+    }
+    auto& config = config_it->second.get_obj();
+
+    json_spirit::mObject requirements;
+    json_spirit::mArray mandatory;
+    mandatory.push_back(json_spirit::mValue(std::string("inline-hw-tags")));
+    requirements["mandatory"] = json_spirit::mValue(mandatory);
+    config["requirements"] = json_spirit::mValue(requirements);
+
+    // serialize JSON
+    std::string new_json = json_spirit::write(root);
+
+    // LUKS2 spec: JSON must fit within the JSON area (hdr_size - 4096 bytes).
+    // See LUKS2_disk_hdr_write() in luks2_disk_metadata.c.
+    if (new_json.size() >= json_area_size) {
+      lderr(m_cct) << "rewritten JSON exceeds area size" << dendl;
+      return -ENOSPC;
+    }
+
+    // LUKS2 spec: JSON area is null-terminated and zero-padded.
+    // See validate_json_area() in luks2_disk_metadata.c.
+    memset(json_area, 0, json_area_size);
+    memcpy(json_area, new_json.data(), new_json.size());
+
+    // LUKS2 spec: checksum is computed over the binary header (with the
+    // csum field zeroed) concatenated with the full JSON area (including
+    // padding). See hdr_checksum_calculate() in luks2_disk_metadata.c.
+    char* binary_hdr = buf.data() + hdr_offset;
+    memset(binary_hdr + LUKS2_CHECKSUM_OFFSET, 0, LUKS2_CHECKSUM_LEN);
+
+    unsigned char checksum[EVP_MAX_MD_SIZE];
+    unsigned int md_len = 0;
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+      lderr(m_cct) << "failed to create EVP_MD_CTX" << dendl;
+      return -ENOMEM;
+    }
+    EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
+    EVP_DigestUpdate(mdctx, binary_hdr, LUKS2_HDR_BIN_LEN);
+    EVP_DigestUpdate(mdctx, json_area, json_area_size);
+    EVP_DigestFinal_ex(mdctx, checksum, &md_len);
+    EVP_MD_CTX_free(mdctx);
+
+    memcpy(binary_hdr + LUKS2_CHECKSUM_OFFSET, checksum, md_len);
+  }
+
+  // write back to memfd
+  if (lseek(m_fd, 0, SEEK_SET) < 0) {
+    auto r = -errno;
+    lderr(m_cct) << "failed to seek memfd for write: " << cpp_strerror(r)
+                 << dendl;
+    return r;
+  }
+  ssize_t bytes_written = ::write(m_fd, buf.data(), buf.size());
+  if (bytes_written < 0 || static_cast<size_t>(bytes_written) != buf.size()) {
+    lderr(m_cct) << "failed to write memfd" << dendl;
+    return -EIO;
+  }
+
+  // reset file position so subsequent Header::read() works correctly
+  lseek(m_fd, 0, SEEK_SET);
+
+  ldout(m_cct, 20) << "rewrote segment for inline integrity: "
+                   << encryption << " + " << integrity << dendl;
+  return 0;
+}
+
 int Header::load(const char* type) {
   ceph_assert(m_cd != nullptr);
 
@@ -254,6 +458,11 @@ const char* Header::get_cipher_mode() {
 const char* Header::get_format_name() {
   ceph_assert(m_cd != nullptr);
   return crypt_get_type(m_cd);
+}
+
+int Header::get_integrity_info(struct crypt_params_integrity* ip) {
+  ceph_assert(m_cd != nullptr);
+  return crypt_get_integrity_info(m_cd, ip);
 }
 
 } // namespace luks

@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <openssl/rand.h>
+#include "acconfig.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/compat.h"
@@ -44,6 +45,8 @@ template <typename I>
 void FormatRequest<I>::send() {
   const char* type;
   size_t sector_size;
+  // TODO: Figure out how to handle storing
+  //    metadata size on disk
   switch (m_format) {
     case RBD_ENCRYPTION_FORMAT_LUKS1:
       type = CRYPT_LUKS1;
@@ -61,16 +64,32 @@ void FormatRequest<I>::send() {
   }
 
   const char* cipher;
+  const char* cipher_mode;
+  const char* openssl_cipher;
+  uint32_t meta_size = 0;
   size_t key_size;
   switch (m_alg) {
     case RBD_ENCRYPTION_ALGORITHM_AES128:
       cipher = "aes";
+      cipher_mode = "xts-plain64";
+      openssl_cipher = "aes-128-xts";
       key_size = 32;
       break;
     case RBD_ENCRYPTION_ALGORITHM_AES256:
       cipher = "aes";
+      cipher_mode = "xts-plain64";
+      openssl_cipher = "aes-256-xts";
       key_size = 64;
       break;
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+    case RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256:
+      cipher = "cipher_null";
+      cipher_mode = "ecb";
+      openssl_cipher = "aes-256-xts";
+      key_size = 96;
+      meta_size = 48;
+      break;
+#endif
     default:
       lderr(m_image_ctx->cct) << "unsupported cipher algorithm: " << m_alg
                               << dendl;
@@ -97,7 +116,7 @@ void FormatRequest<I>::send() {
   // format (create LUKS header)
   auto stripe_period = m_image_ctx->get_stripe_period();
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
-                      "xts-plain64", sector_size, stripe_period,
+                      cipher_mode, sector_size, stripe_period,
                       m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
@@ -122,9 +141,23 @@ void FormatRequest<I>::send() {
     return;
   }
 
-  r = util::build_crypto(m_image_ctx->cct, key, key_size,
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+  if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 &&
+      m_alg == RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256) {
+    // rewrite the LUKS2 JSON to match crypt_format_inline() output:
+    // proper segment cipher/mode, integrity section, inline-hw-tags
+    r = m_header.rewrite_segment_for_inline("aes", "xts-random",
+                                            "hmac(sha256)");
+    if (r != 0) {
+      finish(r);
+      return;
+    }
+  }
+#endif
+
+  r = util::build_crypto(m_image_ctx->cct, openssl_cipher, key, key_size,
                          m_header.get_sector_size(),
-                         m_header.get_data_offset(), m_result_crypto);
+                         m_header.get_data_offset(), meta_size, m_result_crypto);
   ceph_memzero_s(key, key_size, key_size);
   if (r != 0) {
     finish(r);

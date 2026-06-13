@@ -25,6 +25,8 @@ public:
                size_t key_size, const char* cipher_mode, uint32_t sector_size,
                uint32_t data_alignment, bool insecure_fast_mode);
     int add_keyslot(const char* passphrase, size_t passphrase_size);
+    int rewrite_segment_for_inline(const char* cipher, const char* cipher_mode,
+                                   const char* integrity);
     int load(const char* type);
     int read_volume_key(const char* passphrase, size_t passphrase_size,
                         char* volume_key, size_t* volume_key_size);
@@ -34,6 +36,7 @@ public:
     const char* get_cipher();
     const char* get_cipher_mode();
     const char* get_format_name();
+    int get_integrity_info(struct crypt_params_integrity* ip);
 
 private:
     void libcryptsetup_log(int level, const char* msg);
