@@ -518,6 +518,97 @@ or::
 
   Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.foo/store.db/1234567.ldb
 
+Recovery Using Mon Backup
+-------------------------
+
+If Monitor backups are enabled, backups can be found in the configured
+``mon_backup_path``. To list the available backup versions, run:
+
+.. code-block:: bash
+
+   ceph-mon -i [num] --list-backups /path/to/backups
+
+In containerized deployments, run this from inside the Monitor
+container (``cephadm shell --name mon.<id>``), or install
+``ceph-common`` on the host.
+
+This invokes the RocksDB ``BackupEngine`` to enumerate the logical
+backup versions at the path. Output looks like::
+
+   ID:     Time:                           Size:
+   1       Sun May 18 03:00:01 2026         4 MiB
+   2       Sun May 18 04:00:02 2026         12 KiB
+   3       Sun May 18 05:00:01 2026         16 KiB
+
+The ``ID`` column is the value to pass as ``--backup-version`` when
+restoring. A plain ``ls`` of the backup path shows the BackupEngine's
+internal ``meta/``, ``private/``, and ``shared_checksum/`` directories,
+which are not directly usable for restore; always use ``--list-backups``
+to obtain the IDs.
+
+To restore a backup, stop the monitor and run:
+
+.. code-block:: bash
+
+   ceph-mon -i [num] --restore-backup /path/to/backups --backup-version <version> --yes-i-really-mean-it
+
+The ``--yes-i-really-mean-it`` flag is required because restore overwrites the existing monitor store.
+If the ``--backup-version`` argument is omitted, the latest version will be restored.
+The restored store contains everything that was in the mon at the time the backup was taken,
+including auth records; any changes (auth, pools, CRUSH, etc.) made after that point are lost.
+OSDs will reconcile their state with the restored osdmap as the cluster comes back up.
+
+If ``ceph-mon --restore-backup`` is invoked as ``root`` (typical when running
+from a service shell), the restored ``kv_backend`` file and the rehydrated
+``keyring`` will be owned by ``root``. Before starting the monitor daemon,
+``chown -R ceph:ceph <mon_data>`` so the unprivileged ``ceph`` user can read
+them.
+
+Restoring a multi-monitor cluster
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each monitor has its own Paxos state (rank, accepted proposal numbers,
+``last_committed``), so backups are per-monitor: a backup taken from
+``mon.a`` should be restored into ``mon.a``'s ``mon_data``, not copied
+onto ``mon.b`` or ``mon.c``.
+
+To recover a cluster from monitor backups:
+
+#. Stop all monitors.
+#. Restore each monitor you have a backup for from its own backup path
+   using the ``--restore-backup`` command above.
+#. Start the restored monitors. Quorum forms once a majority of the
+   monmap members are running. Restoring and starting a majority is the
+   simplest path: the recovered monmap is the original one, and the
+   monitors elect among themselves as normal.
+
+If you cannot bring back a majority of monitors (because backups are
+missing or storage is lost on the other hosts), the restored seed will
+not form quorum on its own. The monmap recovered from the backup still
+lists every monitor in the original cluster, and Paxos requires a
+majority to elect. The seed will sit in ``probing`` / ``electing``
+indefinitely.
+
+To reduce the monmap on the offline seed so it can elect itself:
+
+#. Stop all monitors.
+#. Restore the seed monitor from its backup as above.
+#. Edit the monmap directly in the offline mon store::
+
+     # extract from the offline mon store
+     ceph-mon -i <seed-id> --extract-monmap /tmp/monmap
+     # drop monitors that will not come back
+     monmaptool /tmp/monmap --rm <other-id-1> --rm <other-id-2>
+     # write it back into the store
+     ceph-mon -i <seed-id> --inject-monmap /tmp/monmap
+
+#. Start the seed monitor. With the reduced monmap it can elect itself
+   and form a single-member quorum.
+#. Re-add any remaining monitors as new sync members per
+   :ref:`adding-and-removing-monitors`; they will synchronize from the
+   recovered seed rather than reusing their old backups.
+
+
 Recovery Using Healthy Monitor(s)
 ---------------------------------
 
