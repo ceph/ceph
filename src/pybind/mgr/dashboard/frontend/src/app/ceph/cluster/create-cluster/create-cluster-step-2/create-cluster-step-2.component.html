@@ -13,9 +13,11 @@
                      (emitDriveGroup)="setDriveGroup($event)"
                      (emitDeploymentOption)="setDeploymentOptions($event)"
                      (emitMode)="setDeploymentMode($event)"
-                     (osdCreated)="onOsdCreated()"></cd-osd-form>
+                     (osdCreated)="onOsdCreated()"
+                     (cancelled)="onFormCancelled()"></cd-osd-form>
       } @else {
         <cd-osd-list [showTabs]="false"
+                     [inlineCreate]="true"
                      (createAction)="onCreateAction()"></cd-osd-list>
       }
     </div>

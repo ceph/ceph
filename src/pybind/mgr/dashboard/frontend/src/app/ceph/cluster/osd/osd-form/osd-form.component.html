@@ -6,10 +6,11 @@
   [steps]="steps"
   [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
   (submitRequested)="submit()"
+  (closeRequested)="onCancel()"
   (stepChanged)="populateReviewData()"
   [isSubmitLoading]="isSubmitLoading"
   [submitButtonLabel]="simpleDeployment ? createOsdsLabel : actionLabels.PREVIEW"
-  type="full">
+  type="wide">
 
   <cd-tearsheet-step>
   <div class="osd-tearsheet-content">

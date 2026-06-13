@@ -73,7 +73,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
   @Input() overflowScroll?: TearsheetOverflowScroll;
 
-  @Output() submitRequested = new EventEmitter<void>();
+  @Output() submitRequested = new EventEmitter<any>();
   @Output() closeRequested = new EventEmitter<void>();
   @Output() stepChanged = new EventEmitter<{ current: number }>();
 
@@ -154,6 +154,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   closeWideTearsheet() {
     this.closeRequested.emit();
     this.isOpen = false;
+    if (this.closeRequested.observers.length > 0) {
+      return;
+    }
     if (this.hasModalOutlet) {
       this.location.back();
     } else {
@@ -186,7 +189,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
+      const stepFormValue = wrapper.stepComponent?.formGroup?.value ?? {};
       return { ...acc, ...stepFormValue };
     }, {});
   }
