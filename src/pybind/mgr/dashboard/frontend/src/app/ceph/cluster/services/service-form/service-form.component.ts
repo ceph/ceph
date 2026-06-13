@@ -8,7 +8,7 @@ import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, Observable, Subject, Subscription } from 'rxjs';
-import { map } from 'rxjs/operators';
+
 import { Pool } from '~/app/ceph/pool/pool';
 import { CreateRgwServiceEntitiesComponent } from '~/app/ceph/rgw/create-rgw-service-entities/create-rgw-service-entities.component';
 import { RgwRealm, RgwZonegroup, RgwZone, RgwEntities } from '~/app/ceph/rgw/models/rgw-multisite';
@@ -121,7 +121,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     { value: QatOptions.none, label: 'None' }
   ];
   open: boolean = false;
-  hostsAndLabels$: Observable<{ hosts: { content: string }[]; labels: { content: string }[] }>;
+  hostsAndLabels$: Observable<{ hosts: Host[]; labels: string[] }>;
+  hostOptions: ListItem[] = [];
+  labelOptions: ListItem[] = [];
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource: string = null;
   statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
@@ -708,12 +710,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.hostsAndLabels$ = forkJoin({
       hosts: this.hostService.getAllHosts(),
       labels: this.hostService.getLabels()
-    }).pipe(
-      map(({ hosts, labels }) => ({
-        hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
-        labels: labels.map((label: string) => ({ content: label }))
-      }))
-    );
+    });
+    this.hostsAndLabels$.subscribe(({ hosts, labels }) => {
+      this.hostOptions = hosts.map((host: Host) => ({
+        content: host.hostname,
+        selected: this.selectedHosts.includes(host.hostname)
+      }));
+      this.labelOptions = labels.map((label: string) => ({
+        content: label,
+        selected: this.serviceForm.get('label').value === label
+      }));
+      if (this.selectedHosts.length > 0) {
+        this.serviceForm.get('hosts').setValue(this.selectedHosts);
+      }
+    });
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.pools = resp;
       this.rbdPools = this.pools.filter(this.rbdService.isRBDPool);
@@ -739,24 +749,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             this.currentSpecCertificateSource = response[0].spec.certificate_source;
           }
           if (!response[0]['unmanaged']) {
-            const placementKey = Object.keys(response[0]['placement'])[0];
-            let placementValue: string;
-            ['hosts', 'label'].indexOf(placementKey) >= 0
-              ? (placementValue = placementKey)
-              : (placementValue = 'hosts');
+            const placement = response[0].placement ?? {};
+            let placementValue = 'hosts';
+            if (placement.label) {
+              placementValue = 'label';
+            } else if (placement.hosts) {
+              placementValue = 'hosts';
+            }
             this.serviceForm.get('placement').setValue(placementValue);
             this.serviceForm.get('count').setValue(response[0]['placement']['count']);
             if (placementValue === 'hosts' && response[0]?.placement?.hosts) {
-              this.serviceForm.get('hosts').setValue(
-                response[0].placement.hosts.map((host: string) => ({
-                  content: host,
-                  selected: true
-                }))
-              );
+              this.selectedHosts = response[0].placement.hosts;
+              this.serviceForm.get('hosts').setValue(this.selectedHosts);
+              if (this.hostOptions.length > 0) {
+                this.hostOptions = this.hostOptions.map((item: ListItem) => ({
+                  ...item,
+                  selected: this.selectedHosts.includes(item.content)
+                }));
+              }
             } else if (placementValue === 'label' && response[0]?.placement?.label) {
-              this.serviceForm
-                .get('label')
-                .setValue({ content: response[0].placement.label, selected: true });
+              const placementLabel = response[0].placement.label;
+              if (placementLabel) {
+                this.serviceForm.get('label').setValue(placementLabel);
+                if (this.labelOptions.length > 0) {
+                  this.labelOptions = this.labelOptions.map((item: ListItem) => ({
+                    ...item,
+                    selected: item.content === placementLabel
+                  }));
+                }
+              }
             }
           }
           switch (this.serviceType) {
@@ -1365,15 +1386,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     if (!values['unmanaged']) {
       switch (values['placement']) {
         case 'hosts':
-          if (values['hosts'].length > 0) {
-            serviceSpec['placement']['hosts'] = values['hosts']
-              .filter((host: { content: string; selected: boolean }) => host.selected)
-              .map((host: { content: string }) => host.content);
+          if (values['hosts']?.length > 0) {
+            serviceSpec['placement']['hosts'] = values['hosts'];
           }
           break;
         case 'label':
           if (!_.isEmpty(values['label'])) {
-            serviceSpec['placement']['label'] = values['label']?.content;
+            serviceSpec['placement']['label'] = values['label'];
           }
           break;
       }
@@ -1525,6 +1544,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   multiSelector(event: any) {
     this.selectedHosts = event.map((host: any) => host.content);
+    this.serviceForm.get('hosts').setValue(this.selectedHosts);
   }
 
   get isPrefixedNamedService(): boolean {
