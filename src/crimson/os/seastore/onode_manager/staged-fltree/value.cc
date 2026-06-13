@@ -37,6 +37,11 @@ bool Value::is_tracked() const
   return p_cursor->is_tracked();
 }
 
+bool Value::is_cursor_tracked() const
+{
+  return p_cursor && p_cursor->is_tracked();
+}
+
 void Value::invalidate()
 {
   p_cursor.reset();

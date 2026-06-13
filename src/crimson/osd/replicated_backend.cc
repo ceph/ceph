@@ -180,12 +180,24 @@ ReplicatedBackend::submit_transaction(
     txn,
     false);
 
+  // store the onode cached during obc load to avoid addtional lookups.
+  // See: get_attrs_with_onode
+  auto onode_slot = std::make_shared<ceph::os::Transaction::OnodeCacheSlot>();
+  onode_slot->oid = ghobject_t{hoid};
+  onode_slot->onode = obc->cached_onode;
+  txn.onode_cache = onode_slot;
+
   auto all_completed = interruptor::make_interruptible(
     crimson::os::with_store_do_transaction(
       shard_services.get_store(pg.get_store_index()),
       coll, std::move(txn))
-   ).then_interruptible([FNAME, this,
+   ).then_interruptible([FNAME, this, obc, onode_slot,
 			peers=pending_txn->second.weak_from_this()] {
+    // if the miss path resolved a new onode, store in the
+    // obc now that the transaction has committed.
+    if (onode_slot->resolved_onode) {
+      obc->cached_onode = onode_slot->resolved_onode;
+    }
     if (!peers) {
       // for now, only actingset_changed can cause peers
       // to be nullptr

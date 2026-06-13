@@ -133,6 +133,12 @@ public:
       const ghobject_t& oid,
       uint32_t op_flags = 0) override final;
 
+    get_attrs_ertr::future<std::pair<attrs_t, std::shared_ptr<void>>>
+    get_attrs_with_onode(
+      CollectionRef c,
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) override final;
+
     read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,

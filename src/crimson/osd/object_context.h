@@ -81,6 +81,10 @@ public:
 
   CommonOBCPipeline obc_pipeline;
 
+  // live SeaStore onode cached during obc load. SeaStore validates it with
+  // is_reusable() before each write to skip tree lookups.
+  std::shared_ptr<void> cached_onode;
+
   ObjectContext(hobject_t hoid) : lock(hoid.to_str()),
                                   obs(std::move(hoid)) {}
 
