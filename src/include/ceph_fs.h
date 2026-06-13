@@ -15,6 +15,7 @@
 #include "msgr.h"
 #include "rados.h"
 #include "include/buffer.h" // for ceph::buffer::list
+#include "include/cephfs/snap_types.h"
 
 /*
  * The data structures defined here are shared between Linux kernel and
@@ -428,6 +429,7 @@ enum {
 	CEPH_MDS_OP_RENAMESNAP = 0x01403,
 	CEPH_MDS_OP_READDIR_SNAPDIFF   = 0x01404,
 	CEPH_MDS_OP_FILE_BLOCKDIFF = 0x01405,
+	CEPH_MDS_OP_SNAP_METADATA = 0x1406,
 
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
