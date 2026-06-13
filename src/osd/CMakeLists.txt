@@ -65,6 +65,7 @@ if(HAS_VTA)
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
 add_library(osd STATIC ${osd_srcs})
+target_compile_options(osd PRIVATE -fno-omit-frame-pointer)
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE
