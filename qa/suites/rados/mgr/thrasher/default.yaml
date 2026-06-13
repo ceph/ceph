@@ -1,0 +1,4 @@
+tasks:
+- mgr_thrash:
+    thrash_delay: 5
+    duration: 300
