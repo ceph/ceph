@@ -1,4 +1,9 @@
 .cd-nvmeof-subsystem-step-two {
+  // Full width of the tearsheet content column; min-inline-size allows nested
+  // Carbon grid rows to shrink instead of bleeding into the right influencer.
+  inline-size: 100%;
+  min-inline-size: 0;
+
   &-manual-hosts {
     align-items: flex-start;
     display: flex;

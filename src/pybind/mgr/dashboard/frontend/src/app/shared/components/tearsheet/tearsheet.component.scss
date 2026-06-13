@@ -2,21 +2,22 @@
 // No css variable to apply css to modal div.
 // This is needed to set the width of tearsheet as per carbon standards.
 .cds--modal-container.cds--modal-container--lg {
-  // Fill remaining viewport height
   block-size: calc(100vh - 88px);
   display: flex;
   flex-direction: column;
   inline-size: auto;
-
-  // 88px from top
   inset-block-start: 88px;
   inset-inline-end: 64px;
-
-  // 64px margins left & right
   inset-inline-start: 64px;
   max-block-size: calc(100vh - 88px);
   max-inline-size: none;
   position: fixed;
+
+  // Keep header from shrinking; body row must be allowed to shrink below content height
+  // so inner .tearsheet-content can scroll (default min-height: auto prevents this).
+  > .tearsheet-header {
+    flex-shrink: 0;
+  }
 }
 
 // Global Carbon override sets .cds--modal-scroll-content to max-height: 70vh.
@@ -54,10 +55,7 @@
 // HEADER
 .tearsheet-header {
   background-color: var(--cds-background);
-  border-block-end: 1px solid var(--cds-border-subtle-01);
   fill: var(--cds-icon-primary);
-  fill: var(--cds-icon-primary);
-  padding: var(--cds-spacing-06) var(--cds-spacing-07);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &-title {
@@ -66,7 +64,6 @@
 
   &-description {
     color: var(--cds-text-secondary);
-    margin-top: var(--cds-spacing-04);
     margin-top: var(--cds-spacing-04);
   }
 
@@ -79,19 +76,24 @@
 // BODY
 .tearsheet-body {
   height: 100%;
-  height: 100%;
-  margin: 0;
   margin: 0;
   padding: 0;
-  padding: 0;
-  padding-block: 0;
-  padding-inline: 0;
+}
+
+// Wide tearsheet: body is a flex child of .cds--modal-container--lg; must shrink so
+// .tearsheet-content scrolls and the footer stays in view on tall steps (e.g. Review).
+.cds--modal-container.cds--modal-container--lg > .tearsheet-body {
+  flex: 1 1 auto;
+  height: auto;
+  min-block-size: 0;
+  min-height: 0;
 }
 
 .tearsheet-left-influencer {
   background-color: var(--cds-background);
-  border-inline-end: 1px solid var(--cds-border-subtle-01);
   margin: 0;
+  min-block-size: 0;
+  min-height: 0;
   overflow-block: auto;
   overflow-y: auto;
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
@@ -99,7 +101,29 @@
 
 .tearsheet-right-influencer {
   background-color: var(--cds-background);
+  border-inline-start: 1px solid var(--cds-border-subtle-01);
+  min-block-size: 0;
+  min-inline-size: 0;
   padding: var(--cds-spacing-05) var(--cds-spacing-05);
+}
+
+// Two-column body (main content + right influencer): bound the inner grid so
+// nested form rows and dividers stay in the left column (host access step).
+.tearsheet-main > .cds--css-grid {
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-block-size: 0;
+  min-height: 0;
+}
+
+.tearsheet-main > .cds--css-grid > .tearsheet-content {
+  max-block-size: none;
+  min-block-size: 0;
+  min-height: 0;
+  min-inline-size: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .tearsheet-main {
@@ -107,6 +131,8 @@
   flex-direction: column;
   height: 100%;
   margin: 0;
+  min-block-size: 0;
+  min-height: 0;
 
   > div {
     flex: 1;
@@ -136,7 +162,7 @@
 //FOOTER
 .tearsheet-footer {
   background-color: var(--cds-layer-01);
-  border-top: 1px solid var(--cds-border-subtle);
+  flex-shrink: 0;
 
   &-submit {
     display: flex;

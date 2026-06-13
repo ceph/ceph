@@ -174,9 +174,13 @@ describe('NvmeofService', () => {
 
     it('should call deleteSubsystem', () => {
       service.deleteSubsystem(mockNQN, mockGroupName).subscribe();
-      const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/${mockNQN}?gw_group=${mockGroupName}`
-      );
+      const req = httpTesting.expectOne((request) => {
+        return (
+          request.url === `${API_PATH}/subsystem/${mockNQN}` &&
+          request.params.get('gw_group') === mockGroupName &&
+          request.params.get('force') === 'true'
+        );
+      });
       expect(req.request.method).toBe('DELETE');
     });
     it('should call isSubsystemPresent', () => {
