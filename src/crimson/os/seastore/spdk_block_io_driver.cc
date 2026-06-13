@@ -55,28 +55,14 @@ SPDKBlockIODriver::write_ertr::future<> SPDKBlockIODriver::write(
 }
 
 SPDKBlockIODriver::write_ertr::future<> SPDKBlockIODriver::writev(
-  device_id_t device_id, uint64_t offset, bufferlist &&bl, size_t block_size)
+  device_id_t /*device_id*/, uint64_t offset, bufferlist &&bl,
+  size_t /*block_size*/)
 {
-  bl.rebuild_aligned(block_size);
-  return seastar::do_with(
-    std::move(bl),
-    [this, device_id, offset](bufferlist &bl)
-  {
-    // Submit each contiguous buffer of the (now aligned) bufferlist in order.
-    return seastar::do_with(
-      (uint64_t)offset,
-      [this, device_id, &bl](uint64_t &off)
-    {
-      return write_ertr::parallel_for_each(
-        bl.buffers(),
-        [this, device_id, &off](const bufferptr &p) {
-        auto at = off;
-        off += p.length();
-        // const_cast: write path only reads from the buffer.
-        return nvme.do_io(true, at, const_cast<char*>(p.c_str()), p.length());
-      });
-    });
-  });
+  // One write per record: zero-copy when the record is already a single DMA
+  // buffer, otherwise a single gathered DMA write. Replaces the rebuild_aligned
+  // + per-fragment-bounce path, which rebuilt every buffer into non-DMA memory
+  // and issued a separate command per fragment.
+  return nvme.do_writev(offset, std::move(bl));
 }
 
 SPDKBlockIODriver::read_ertr::future<> SPDKBlockIODriver::read(

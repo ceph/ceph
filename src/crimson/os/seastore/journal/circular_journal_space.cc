@@ -163,10 +163,15 @@ CircularJournalSpace::device_write_bl(
     "overwrite in CircularJournalSpace, offset {}, length {}",
     offset,
     length);
+  // Hand the block-aligned record straight to writev: the SPDK driver routes it
+  // through do_writev (sector-aligned DMA data extents go zero-copy, only the
+  // sub-sector metadata is coalesced), and the kernel driver issues a vectored
+  // dma_write. Gathering into one buffer here would memcpy the whole record and
+  // defeat that.
   co_await device->writev(offset, bl
   ).handle_error(
     submit_ertr::pass_further{},
-    crimson::ct_error::assert_all( "Invalid error device->write" )
+    crimson::ct_error::assert_all( "Invalid error device->writev" )
   );
 }
 

@@ -118,23 +118,14 @@ SPDKNVMeIODriver::write_ertr::future<> SPDKNVMeIODriver::write(
 }
 
 SPDKNVMeIODriver::write_ertr::future<> SPDKNVMeIODriver::writev(
-  device_id_t device_id, uint64_t offset,
-  bufferlist &&bl, size_t block_size, uint16_t /*stream*/)
+  device_id_t /*device_id*/, uint64_t offset,
+  bufferlist &&bl, size_t /*block_size*/, uint16_t /*stream*/)
 {
-  bl.rebuild_aligned(block_size);
-  return seastar::do_with(
-    std::move(bl), (uint64_t)offset,
-    [this, device_id](bufferlist &bl, uint64_t &off)
-  {
-    return write_ertr::parallel_for_each(
-      bl.buffers(),
-      [this, &off](const bufferptr &p) {
-      auto at = off;
-      off += p.length();
-      return nvme.do_io(true, at, const_cast<char*>(p.c_str()), p.length(),
-                        pi_flags());
-    });
-  });
+  // One write per record: zero-copy when the record is already a single DMA
+  // buffer (the common RBM case), otherwise a single gathered DMA write.
+  // Replaces the rebuild_aligned + per-fragment-bounce path, which rebuilt every
+  // buffer into non-DMA memory and issued a separate command per fragment.
+  return nvme.do_writev(offset, std::move(bl), pi_flags());
 }
 
 seastar::future<std::optional<nvme_identify_controller_data_t>>
