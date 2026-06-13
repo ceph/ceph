@@ -8717,6 +8717,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   string val;
   string interr, floaterr;
   int64_t n = 0;
+  int64_t round_prev = 0;
   double f = 0;
   int64_t uf = 0;  // micro-f
   cmd_getval(cmdmap, "val", val);
@@ -9424,6 +9425,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "error parsing int value '" << val << "': " << interr;
         return -EINVAL;
       }
+      if (var == "compression_min_blob_size" && (n > 2) && (n < (1LL << 62))) {
+        round_prev = n;
+        n = 1ULL << (64 - __builtin_clzll(n - 1));
+        if (n != round_prev) {
+          dout(1) << "OSDMonitor: Original value was not a power of 2 and therefore invalid, was replaced with automatically with: " << n << ". " << dendl;
+          ss << "WARNING: The value you chose was invalid, as it is not a power of 2. It was rounded up to " << n << ". ";
+        }        
+      }
     } else if (var == "fingerprint_algorithm") {
       if (!unset) {
         auto alg = pg_pool_t::get_fingerprint_from_str(val);
@@ -9569,7 +9578,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
   if (val != "unset") {
-    ss << "set pool " << pool << " " << var << " to " << val;
+    if (var == "compression_min_blob_size" && (n != round_prev)) { 
+      round_prev = 0;
+    }
+    else {
+      ss << "set pool " << pool << " " << var << " to " << val;
+    }     
   } else {
     ss << "unset pool " << pool << " " << var;
   }
