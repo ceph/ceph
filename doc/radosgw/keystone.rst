@@ -212,3 +212,21 @@ Enabling this will cause an expired token given in the ``X-Auth-Token`` header t
 if coupled with a ``X-Service-Token`` header that contains a valid token with the accepted
 roles. This can allow long running processes using a user token in ``X-Auth-Token`` to function
 beyond the expiration of the token.
+
+Swift and S3 ACL Interoperability
+---------------------------------
+
+When Keystone is the identity provider, ACLs set via the Swift API are
+automatically honored by S3 API requests (and vice versa). This enables
+mixed deployments where some clients use Swift and others use S3 to access
+the same buckets/containers.
+
+The following ACL grant formats are supported for cross-API access:
+
+- **Project:User grants** (e.g., ``project_id:user_id``): ACLs using the
+  ``project:user`` format set via Swift container ACLs are matched against
+  S3 Keystone-authenticated requests by comparing all combinations of
+  project/user UUIDs and names.
+
+- **Wildcard grants**: Standard Swift wildcards (``project_id:*``,
+  ``*:user_id``) are supported for both Swift and S3 access.
