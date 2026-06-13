@@ -1,13 +1,15 @@
 ==========================
  Journal Config Reference
 ==========================
-.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
+.. warning:: Filestore was deprecated in the Reef release and is no longer
+   supported. Do not use Filestore for new deployments. Use BlueStore instead.
+
 .. index:: journal; journal configuration
 
-Filestore OSDs use a journal for two reasons: speed and consistency.  Note
-that since Luminous, the BlueStore OSD back end has been preferred and default.
-This information is provided for pre-existing OSDs and for rare situations where
-Filestore is preferred for new deployments.
+Filestore OSDs use a journal for two reasons: speed and consistency.
+BlueStore has been the default and recommended OSD back end since Luminous.
+This information is provided for reference for clusters with pre-existing
+Filestore OSDs that have not yet been migrated to BlueStore.
 
 - **Speed:** The journal enables the Ceph OSD Daemon to commit small writes 
   quickly. Ceph writes small, random I/O to the journal sequentially, which 
