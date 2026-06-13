@@ -419,7 +419,8 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 		!dir->is_ambiguous_dir_auth() &&
 		!dir->state_test(CDir::STATE_EXPORTBOUND) &&
 		!dir->state_test(CDir::STATE_AUXSUBTREE) &&
-		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH) && 
+                dir->get_rank_mask(false).size() == 0) {
 	      dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
 	      ceph_abort();
 	    }
