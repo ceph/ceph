@@ -48,9 +48,7 @@
              *ngIf="peerConfigured$ | async as peerConfigured">
           <cds-checkbox id="mirrorImageSnapshot"
                         formControlName="mirrorImageSnapshot"
-                        name="mirrorImageSnapshot"
                         (checkedChange)="onMirrorCheckBoxChange()"
-                        [attr.disabled]="!peerConfigured.length > 0 ? true : null"
                         i18n>Mirror Image Snapshot
           </cds-checkbox>
         </div>
