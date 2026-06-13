@@ -3574,6 +3574,33 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  // We should not allow booting of pre-umbrella OSDs once you have set require_osd_release
+  if (!HAVE_FEATURE(m->osd_features, SERVER_UMBRELLA) &&
+    osdmap.require_osd_release >= ceph_release_t::umbrella) {
+    mon.clog->info() << "disallowing boot of pre-umbrella OSDs "
+                      << m->get_orig_source_inst()
+                      << " because require_osd_release = umbrella";
+    goto ignore;
+  }
+
+  // We should not allow booting of pre-tentacle OSDs once you have set require_osd_release
+  if (!HAVE_FEATURE(m->osd_features, SERVER_TENTACLE) &&
+    osdmap.require_osd_release >= ceph_release_t::tentacle) {
+    mon.clog->info() << "disallowing boot of pre-tentacle OSDs "
+                      << m->get_orig_source_inst()
+                      << " because require_osd_release = tentacle";
+    goto ignore;
+  }
+
+  // We should not allow booting of pre-squid OSDs once you have set require_osd_release
+  if (!HAVE_FEATURE(m->osd_features, SERVER_SQUID) &&
+    osdmap.require_osd_release >= ceph_release_t::squid) {
+    mon.clog->info() << "disallowing boot of pre-squid OSDs "
+                      << m->get_orig_source_inst()
+                      << " because require_osd_release = squid";
+    goto ignore;
+  }
+
   // See crimson/osd/osd.cc: OSD::_send_boot
   if (auto type_iter = m->metadata.find("osd_type");
       type_iter != m->metadata.end()) {
