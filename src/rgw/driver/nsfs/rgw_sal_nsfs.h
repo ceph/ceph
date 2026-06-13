@@ -530,38 +530,38 @@ public:
 			       optional_yield y,
 			       std::string_view id,
 			       RGWGroupInfo& info, Attrs& attrs,
-			       RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			       RGWObjVersionTracker& objv) override;
   virtual int load_group_by_name(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view account_id,
 				 std::string_view name,
 				 RGWGroupInfo& info, Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int store_group(const DoutPrefixProvider* dpp, optional_yield y,
 			  const RGWGroupInfo& info, const Attrs& attrs,
 			  RGWObjVersionTracker& objv, bool exclusive,
-			  const RGWGroupInfo* old_info) override { return -ENOTSUP; }
+			  const RGWGroupInfo* old_info) override;
   virtual int remove_group(const DoutPrefixProvider* dpp, optional_yield y,
 			   const RGWGroupInfo& info,
-			   RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			   RGWObjVersionTracker& objv) override;
   virtual int list_group_users(const DoutPrefixProvider* dpp,
 			       optional_yield y,
 			       std::string_view tenant,
 			       std::string_view id,
 			       std::string_view marker,
 			       uint32_t max_items,
-			       UserList& listing) override { return -ENOTSUP; }
+			       UserList& listing) override;
   virtual int count_account_groups(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   std::string_view account_id,
-				   uint32_t& count) override { return -ENOTSUP; }
+				   uint32_t& count) override;
   virtual int list_account_groups(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
 				  std::string_view path_prefix,
 				  std::string_view marker,
 				  uint32_t max_items,
-				  GroupList& listing) override { return -ENOTSUP; }
+				  GroupList& listing) override;
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
