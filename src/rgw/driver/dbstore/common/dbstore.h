@@ -282,6 +282,7 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* user_quota = ":user_quota";
   static constexpr const char* type = ":type";
   static constexpr const char* mfa_ids = ":mfa_ids";
+  static constexpr const char* account_id = ":user_account_id";
   static constexpr const char* user_attrs = ":user_attrs";
   static constexpr const char* user_ver = ":user_vers";
   static constexpr const char* user_ver_tag = ":user_ver_tag";
@@ -457,6 +458,8 @@ struct DBOps {
   std::shared_ptr<class InsertGroupUserOp> InsertGroupUser;
   std::shared_ptr<class RemoveGroupUserOp> RemoveGroupUser;
   std::shared_ptr<class ListGroupUsersOp> ListGroupUsers;
+  std::shared_ptr<class GetAccountUserOp> GetAccountUser;
+  std::shared_ptr<class ListAccountUsersOp> ListAccountUsers;
   std::shared_ptr<class InsertUserOp> InsertUser;
   std::shared_ptr<class RemoveUserOp> RemoveUser;
   std::shared_ptr<class GetUserOp> GetUser;
@@ -607,6 +610,7 @@ class DBOp {
       TYPE INTEGER ,		\
       MfaIDs BLOB ,	\
       AssumedRoleARN TEXT , \
+      AccountID TEXT , \
       UserAttrs   BLOB,   \
       UserVersion   INTEGER,    \
       UserVersionTag TEXT,      \
@@ -1275,6 +1279,56 @@ class ListGroupUsersOp : virtual public DBOp {
     }
 };
 
+class GetAccountUserOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          UserID, Tenant, NS, DisplayName, UserEmail, \
+                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
+                          System, PlacementName, PlacementStorageClass, PlacementTags, \
+                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                          UserAttrs, UserVersion, UserVersionTag \
+                          from '{}' where AccountID = {} AND DisplayName = {}";
+
+  public:
+    virtual ~GetAccountUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.user_table,
+          params.op.user.account_id, params.op.user.display_name);
+    }
+};
+
+class ListAccountUsersOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          UserID, Tenant, NS, DisplayName, UserEmail, \
+                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
+                          System, PlacementName, PlacementStorageClass, PlacementTags, \
+                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                          UserAttrs, UserVersion, UserVersionTag \
+                          from '{}' where AccountID = {} AND DisplayName > {} \
+                          ORDER BY DisplayName ASC LIMIT {}";
+
+    static constexpr std::string_view CountQuery =
+      "SELECT COUNT(*) from '{}' where AccountID = {}";
+
+  public:
+    virtual ~ListAccountUsersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "count") {
+        return fmt::format(CountQuery, params.user_table,
+            params.op.user.account_id);
+      } else {
+        return fmt::format(Query, params.user_table,
+            params.op.user.account_id, params.op.user.display_name,
+            params.op.list_max_count);
+      }
+    }
+};
+
 class InsertUserOp : virtual public DBOp {
   private:
     /* For existing entires, -
@@ -1294,9 +1348,9 @@ class InsertUserOp : virtual public DBOp {
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
                            BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
-                           UserAttrs, UserVersion, UserVersionTag) \
+                           AccountID, UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -1314,6 +1368,7 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.placement_tags, params.op.user.bucket_quota,
           params.op.user.temp_url_keys, params.op.user.user_quota,
           params.op.user.type, params.op.user.mfa_ids,
+          params.op.user.account_id,
           params.op.user.user_attrs, params.op.user.user_ver,
           params.op.user.user_ver_tag);
     }
@@ -2262,6 +2317,14 @@ class DB {
         std::vector<RGWGroupInfo>& groups);
     int count_account_groups(const DoutPrefixProvider *dpp,
         const std::string& account_id, uint32_t& count);
+    int get_account_user_by_name(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& username,
+        RGWUserInfo& uinfo);
+    int count_account_users(const DoutPrefixProvider *dpp,
+        const std::string& account_id, uint32_t& count);
+    int list_account_users(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& marker,
+        uint32_t max_items, std::vector<RGWUserInfo>& users);
     int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
