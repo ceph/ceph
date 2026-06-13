@@ -1,7 +1,14 @@
-import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
 import { Router } from '@angular/router';
-import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
+import { catchError, finalize, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -13,7 +20,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -24,6 +30,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -35,7 +42,9 @@ const BASE_URL = 'block/nvmeof/gateways';
   encapsulation: ViewEncapsulation.None,
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class NvmeofGatewayGroupComponent implements OnInit {
+export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
@@ -62,10 +71,10 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   gatewayGroupName: string;
   subsystemCount: number;
   gatewayCount: number;
+  private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
-
   iconSize = IconSize;
 
   constructor(
@@ -78,7 +87,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     public taskWrapper: TaskWrapperService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
-    private router: Router
+    private router: Router,
+    private nvmeofStateService: NvmeofStateService
   ) {}
 
   ngOnInit(): void {
@@ -141,7 +151,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
               return of([]);
             }
             return forkJoin(
-              groups.map((group: NvmeofGatewayGroup) => {
+              groups.map((group: CephServiceSpec) => {
                 const isRunning = (group.status?.running ?? 0) > 0;
                 const subsystemsObservable = isRunning
                   ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
@@ -169,15 +179,34 @@ export class NvmeofGatewayGroupComponent implements OnInit {
           }),
           catchError(() => {
             return of([]);
-          })
+          }),
+          finalize(() => this.setTableLoading(false))
         )
-      )
+      ),
+      shareReplay({ bufferSize: 1, refCount: true }),
+      tap((groups) => {
+        const wasNonEmpty = this.lastGroupCount > 0;
+        this.lastGroupCount = groups.length;
+        if (wasNonEmpty && groups.length === 0) {
+          this.nvmeofStateService.requestRefresh();
+        }
+      })
     );
     this.checkNodesAvailability();
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.fetchData());
   }
   fetchData(): void {
+    this.setTableLoading(true);
     this.subject.next([]);
     this.checkNodesAvailability();
+  }
+
+  private setTableLoading(loading: boolean): void {
+    if (this.table) {
+      this.table.loadingIndicator = loading;
+    }
   }
 
   updateSelection(selection: CdTableSelection): void {
@@ -213,17 +242,19 @@ export class NvmeofGatewayGroupComponent implements OnInit {
             call: this.cephServiceService.delete(serviceName)
           })
           .pipe(
-            map(() => {
-              this.table.refreshBtn();
+            tap({
+              complete: () => {
+                this.nvmeofStateService.requestRefresh();
+              }
             }),
             catchError((error) => {
-              this.table.refreshBtn();
               this.notificationService.show(
                 NotificationType.error,
                 $localize`${`Failed to delete gateway group ${selectedGroup.spec.group}: ${error.message}`}`
               );
               return of(null);
-            })
+            }),
+            finalize(() => this.table?.refreshBtn())
           );
       }
     });
@@ -271,5 +302,10 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       return;
     }
     this.router.navigate([this.viewUrl, groupName]);
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }
