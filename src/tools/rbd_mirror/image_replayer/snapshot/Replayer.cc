@@ -794,7 +794,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
   ceph_assert(m_state == STATE_REPLAYING);
   m_state = STATE_IDLE;
 
-  notify_status_updated();
+  notify_status_updated(true);
 }
 
 template <typename I>
@@ -867,6 +867,8 @@ void Replayer<I>::copy_snapshots() {
     false, m_threads->work_queue, &m_local_mirror_snap_ns.snap_seqs,
     ctx);
   req->send();
+
+  m_replayer_listener->refresh_mirror_image_status(true);
 }
 
 template <typename I>
@@ -1574,13 +1576,13 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
 }
 
 template <typename I>
-void Replayer<I>::notify_status_updated() {
+void Replayer<I>::notify_status_updated(bool force) {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   dout(10) << dendl;
   auto ctx = new C_TrackedOp(m_in_flight_op_tracker, new LambdaContext(
-    [this](int) {
-      m_replayer_listener->handle_notification();
+    [this, force](int) {
+      m_replayer_listener->handle_notification(force);
     }));
   m_threads->work_queue->queue(ctx, 0);
 }

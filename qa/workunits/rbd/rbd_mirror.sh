@@ -212,6 +212,15 @@ write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  testlog "TEST: replay_state transition while syncing snapshot"
+  enable_mirror ${CLUSTER2} ${POOL} ${image}
+  mirror_image_snapshot ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_state ${CLUSTER1} ${POOL} ${image} 'syncing'
+  wait_for_snapshot_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
+  wait_for_replay_state ${CLUSTER1} ${POOL} ${image} 'idle'
+fi
+
 testlog "TEST: failover and failback"
 start_mirrors ${CLUSTER2}
 
