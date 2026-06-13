@@ -1632,15 +1632,64 @@ def send_command(cluster,
                 cluster.pg_command, pgid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mon':
-            if verbose:
-                print('{0} to {1}'.format(cmd, target[0]),
-                      file=sys.stderr)
-            if len(target) < 2 or target[1] == '':
-                ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout=timeout)
-            else:
-                ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout=timeout, target=target[1])
+            if cmd:
+                cmddict = json.loads(cmd)
+                if cmddict['prefix'] == "fs snapdiff":
+                    fsname = cmddict['fs_name']
+                    root_path = cmddict['root_path']
+                    rel_path = cmddict['rel_path']
+                    snap1 = cmddict['snap1']
+                    snap2 = cmddict['snap2']
+                    try:
+                        from cephfs import LibCephFS
+                    except ImportError:
+                        raise RuntimeError("CephFS unavailable, have you installed libcephfs?")
+                    fs = LibCephFS(conffile='')
+                    fs.mount(filesystem_name=fsname)
+                    diff = fs.opensnapdiff(root_path, rel_path, snap1, snap2)
+                    if not diff:
+                        raise RuntimeError("Error getting snapdiff handle")
+                    entry = diff.readdir()
+                    while entry is not None:
+                        d_name = entry.d_name.decode("utf-8")
+                        if (d_name != '.' and d_name != '..'):
+                            print(d_name)
+                        entry = diff.readdir()
+                    diff.close()
+                    ret, outbuf, outs = 0, "", ""
+                elif cmddict['prefix'] == "fs blockdiff":
+                    fsname = cmddict['fs_name']
+                    root_path = cmddict['root_path']
+                    rel_path = cmddict['rel_path']
+                    snap1 = cmddict['snap1']
+                    snap2 = cmddict['snap2']
+                    try:
+                        from cephfs import LibCephFS
+                    except ImportError:
+                        raise RuntimeError("CephFS unavailable, have you installed libcephfs?")
+                    fs = LibCephFS(conffile='')
+                    fs.mount(filesystem_name=fsname)
+                    diff = fs.openblockdiff(root_path, rel_path, snap1, snap2)
+                    if not diff:
+                        raise RuntimeError("Error getting blockdiff handle")
+                    entry = diff.readblock()
+                    while not entry.count(None):
+                        print(json.loads(f'{{"numblocks":{entry[0]}, '
+                                         f'"offset":{entry[1]}, '
+                                         f'"length":{entry[2]}}}'))
+                        entry = diff.readblock()
+                    diff.closeblockdiff()
+                    ret, outbuf, outs = 0, "", ""
+                else:
+                    if verbose:
+                        print('{0} to {1}'.format(cmd, target[0]),
+                              file=sys.stderr)
+                    if len(target) < 2 or target[1] == '':
+                        ret, outbuf, outs = run_in_thread(
+                            cluster.mon_command, cmd, inbuf, timeout=timeout)
+                    else:
+                        ret, outbuf, outs = run_in_thread(
+                            cluster.mon_command, cmd, inbuf, timeout=timeout, target=target[1])
         elif target[0] == 'mds':
             mds_spec = target[1]
 
