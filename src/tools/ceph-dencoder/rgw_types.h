@@ -261,4 +261,7 @@ TYPE(rgwrados::roles::resource_metadata)
 #include "driver/rados/users.h"
 TYPE(rgwrados::users::resource_metadata)
 
+#include "rgw_iam_managed_policy.h"
+TYPE(rgw::IAM::ManagedPolicyInfo)
+
 #endif
