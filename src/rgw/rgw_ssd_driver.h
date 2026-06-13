@@ -3,13 +3,19 @@
 #include <aio.h>
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
+#include <filesystem>
+#include <shared_mutex>
+#include <boost/asio.hpp>
 
+namespace efs = std::filesystem;
 namespace rgw { namespace cache {
+
+static constexpr size_t XATTR_OVERHEAD_ESTIMATE = 4096;
 
 class SSDDriver : public CacheDriver {
 public:
-  SSDDriver(Partition& partition_info, bool admin) : partition_info(partition_info), admin(admin) {}
-  virtual ~SSDDriver() {}
+  SSDDriver(Partition& partition_info, boost::asio::io_context& io_context, bool admin) : partition_info(partition_info), io_context(io_context), admin(admin) {}
+  virtual ~SSDDriver() { quit = true; }
 
   virtual int initialize(const DoutPrefixProvider* dpp) override;
   virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override;
@@ -30,15 +36,22 @@ public:
   /* Partition */
   virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
   virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) override;
-  void set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space);
+  virtual int reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
+  virtual int check_and_reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
+  virtual int release_reservation(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
 
   virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override;
 
 private:
   Partition partition_info;
-  uint64_t free_space;
+  uint64_t free_space{0};
+  uint64_t reserved_space{0};
+  boost::asio::io_context& io_context;
   CephContext* cct;
-  std::mutex cache_lock;
+  std::shared_mutex cache_lock;
+  std::optional<boost::asio::steady_timer> free_space_timer;
+  std::promise<void> free_space_done_promise;
+  inline static std::atomic<bool> quit{false};
   bool admin;
 
   struct libaio_read_handler {
@@ -72,6 +85,8 @@ private:
       delete c;
     }
   };
+
+  void background_free_space_sync_worker(const DoutPrefixProvider* dpp, optional_yield y);
 
   template <typename Executor, typename CompletionToken>
     auto get_async(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& key,
