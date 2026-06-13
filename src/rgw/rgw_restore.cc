@@ -724,7 +724,7 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   // set restore_status as RESTORE_ALREADY_IN_PROGRESS
   ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress);
   if (ret < 0) {
-    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << pobj->get_key() << " failed, ret=" << ret << dendl;	  
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << pobj->get_key() << " failed, ret=" << ret << dendl;
     return ret;
   }
 

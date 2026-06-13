@@ -2890,6 +2890,21 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   return ret;
 }
 
+int RadosObject::get_current_version(const DoutPrefixProvider* dpp, optional_yield y,
+                                     std::string& instance)
+{
+  RGWObjState* pstate = nullptr;
+  RGWObjManifest* pmanifest = nullptr;
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(),
+                                             get_obj(), &pstate, &pmanifest,
+                                             /*follow_olh=*/true, y);
+  if (ret < 0) {
+    return ret;
+  }
+  instance = pstate->obj.key.instance;
+  return 0;
+}
+
 int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
 {
   read_op.params.attrs = &state.attrset;
@@ -3217,6 +3232,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   tier_ctx.restore_storage_class = rtier->get_rt().restore_storage_class;
   tier_ctx.tier_type = rtier->get_rt().tier_type;
   tier_ctx.location_constraint = rtier->get_rt().t.s3.location_constraint;
+  tier_ctx.retain_current_version = rtier->get_rt().retain_current_version;
 
   ldpp_dout(dpp, 20) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
@@ -3296,6 +3312,7 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
   tier_ctx.storage_class = tier->get_storage_class();
   tier_ctx.location_constraint = rtier->get_rt().t.s3.location_constraint;
+  tier_ctx.retain_current_version = rtier->get_rt().retain_current_version;
 
   ldpp_dout(dpp, 0) << "Transitioning object(" << o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
 

@@ -32,6 +32,7 @@ public:
   virtual bool is_tier_type_s3() { return next->is_tier_type_s3(); }
   virtual const std::string& get_storage_class() override { return next->get_storage_class(); }
   virtual bool retain_head_object() override { return next->retain_head_object(); }
+  virtual bool retain_current_version() override { return next->retain_current_version(); }
   virtual bool allow_read_through() { return next->allow_read_through(); }
   virtual uint64_t get_read_through_restore_days() { return next->get_read_through_restore_days(); }
 
@@ -811,6 +812,10 @@ public:
 
   virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
                              bool follow_olh = true) override;
+  virtual int get_current_version(const DoutPrefixProvider* dpp, optional_yield y,
+                                  std::string& instance) override {
+    return next->get_current_version(dpp, y, instance);
+  }
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;

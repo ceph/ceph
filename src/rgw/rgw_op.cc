@@ -1184,6 +1184,58 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       auto iter = bl.cbegin();
       decode(restore_status, iter);
     }
+
+    // Non-versioned bucket: only the implicit version exists.
+    if (!s->bucket->versioned() && s->object->have_instance()) {
+      if (!s->object->get_key().have_null_instance()) {
+        s->err.message = "versionId is not allowed for a non-versioned bucket";
+        return -ERR_INVALID_REQUEST;
+      }
+      s->object->set_instance("");
+    }
+
+    // If no versionId was passed and this object was transitioned with
+    // retain_current_version=true, the cloud-tier stub is at the OLH's
+    // real-instance target (the retained original head), not the
+    // null-version slot. Resolve the current version via the OLH so
+    // restore/read-through paths write to the right instance.
+    //
+    // When retain_current_version=false (default), the stub is at the
+    // null-version slot already, so the URL's empty instance points at
+    // the right object; the OLH read would just return "" or a delete
+    // marker. Skip it.
+    if (s->bucket->versioned() && s->info.args.get("versionId").empty() &&
+        tier_config.tier_placement.retain_current_version) {
+      std::string resolved;
+      op_ret = s->object->get_current_version(dpp, y, resolved);
+      if (op_ret < 0) {
+        ldpp_dout(dpp, 0) << "Restore: failed to resolve current version for "
+                          << s->object->get_key() << ": " << cpp_strerror(-op_ret) << dendl;
+        s->err.message = "failed to resolve current version";
+        return op_ret;
+      }
+      if (!resolved.empty() && resolved != s->object->get_key().instance) {
+        s->object->set_instance(resolved);
+        // The caller's attrs (and restore_status derived above) are for the
+        // pre-resolve OLH target, which may have moved. Reload state for
+        // the resolved version so downstream decisions are self-consistent.
+        op_ret = s->object->load_obj_state(dpp, y, /*follow_olh=*/false);
+        if (op_ret < 0) {
+          ldpp_dout(dpp, 0) << "Restore: failed to reload attrs for resolved version "
+                            << s->object->get_key() << ": " << cpp_strerror(-op_ret) << dendl;
+          s->err.message = "failed to reload attrs for resolved version";
+          return op_ret;
+        }
+        attrs = s->object->get_attrs();
+        restore_status = rgw::sal::RGWRestoreStatus::None;
+        if (auto it = attrs.find(RGW_ATTR_RESTORE_STATUS); it != attrs.end()) {
+          bufferlist bl = it->second;
+          auto iter = bl.cbegin();
+          decode(restore_status, iter);
+        }
+      }
+    }
+
     if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
       if (read_through) {
         // For glacier tier, fail immediately as restores can take hours/days
@@ -2861,6 +2913,10 @@ void RGWGetObj::execute(optional_yield y)
                        <<". Failing with " << op_ret << dendl;
       goto done_err;
     }
+    // handle_cloudtier_obj may have resolved the current version for a
+    // versionless read-through on a retain_current_version tier; refresh
+    // version_id so the response header reflects the version served.
+    version_id = s->object->get_instance();
     // If restore completed (via wait), invalidate cache and reload attrs
     if (op_ret == static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored)) {
       // Invalidate cached state to force fresh read from RADOS with updated manifest
