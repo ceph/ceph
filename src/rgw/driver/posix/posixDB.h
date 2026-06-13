@@ -25,6 +25,10 @@
 
 #include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
+namespace rgw::sal {
+  class DBStoreRole;
+}
+
 namespace rgw { namespace store {
 
 class POSIXUserDB;
@@ -241,3 +245,40 @@ class POSIXAccountDB : public SQLiteDB {
 };
 
 } } // namespace rgw::store
+
+namespace rgw::sal {
+
+class DBStoreRole : public RGWRole {
+  rgw::store::DB* db;
+
+public:
+  DBStoreRole(rgw::store::DB* _db,
+              std::string name,
+              std::string tenant,
+              rgw_account_id account_id,
+              std::string path,
+              std::string trust_policy,
+              std::string description,
+              std::string max_session_duration_str,
+              std::multimap<std::string,std::string> tags)
+    : RGWRole(std::move(name), std::move(tenant), std::move(account_id),
+              std::move(path), std::move(trust_policy), std::move(description),
+              std::move(max_session_duration_str), std::move(tags)),
+      db(_db) {}
+
+  explicit DBStoreRole(rgw::store::DB* _db, std::string id)
+    : RGWRole(std::move(id)), db(_db) {}
+
+  explicit DBStoreRole(rgw::store::DB* _db, const RGWRoleInfo& info)
+    : RGWRole(info), db(_db) {}
+
+  DBStoreRole(rgw::store::DB* _db)
+    : RGWRole(), db(_db) {}
+
+  int load_by_name(const DoutPrefixProvider *dpp, optional_yield y) override;
+  int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override;
+  int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
+  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
+};
+
+} // namespace rgw::sal
