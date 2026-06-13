@@ -86,11 +86,11 @@ common_args: Dict[str, Any] = {
     },
     '--dmcrypt-format-opts': {
         'default': None,
-        'type': Optional[str],
+        'type': str,
     },
     '--dmcrypt-open-opts': {
         'default': None,
-        'type': Optional[str],
+        'type': str,
     },
     '--with-tpm': {
         'dest': 'with_tpm',
