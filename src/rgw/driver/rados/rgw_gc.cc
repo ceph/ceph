@@ -50,8 +50,8 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
     //version = 1 -> marked ready for transition
     librados::ObjectWriteOperation op;
     op.create(false);
-    const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
-    gc_log_init2(op, queue_size, num_deferred_entries);
+    const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size;
+    gc_log_init2(op, queue_size, 0);
     store->gc_operate(this, obj_names[i], std::move(op), y);
   }
 }
@@ -137,90 +137,6 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
   return store->gc_operate(this, obj_names[i], std::move(set_entry_op), y);
-}
-
-struct defer_chain_state {
-  librados::AioCompletion* completion = nullptr;
-  // TODO: hold a reference on the state in RGWGC to avoid use-after-free if
-  // RGWGC destructs before this completion fires
-  RGWGC* gc = nullptr;
-  cls_rgw_gc_obj_info info;
-
-  ~defer_chain_state() {
-    if (completion) {
-      completion->release();
-    }
-  }
-};
-
-static void async_defer_callback(librados::completion_t, void* arg)
-{
-  std::unique_ptr<defer_chain_state> state{static_cast<defer_chain_state*>(arg)};
-  if (state->completion->get_return_value() == -ECANCELED) {
-    state->gc->on_defer_canceled(state->info);
-  }
-}
-
-void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
-{
-  const std::string& tag = info.tag;
-  const int i = tag_index(tag);
-
-  // ECANCELED from cls_version_check() tells us that we've transitioned
-  transitioned_objects_cache[i] = true;
-
-  ObjectWriteOperation op;
-  cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
-  cls_rgw_gc_remove(op, {tag});
-
-  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
-
-  store->gc_aio_operate(obj_names[i], c.get(), &op);
-}
-
-int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
-{
-  const int i = tag_index(tag);
-  cls_rgw_gc_obj_info info;
-  info.chain = chain;
-  info.tag = tag;
-
-  // if we've transitioned this shard object, we can rely on the cls_rgw_gc queue
-  if (transitioned_objects_cache[i]) {
-    ObjectWriteOperation op;
-    cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
-
-    // this tag may still be present in omap, so remove it once the cls_rgw_gc
-    // enqueue succeeds
-    cls_rgw_gc_remove(op, {tag});
-
-    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
-
-    int ret = store->gc_aio_operate(obj_names[i], c.get(), &op);
-    return ret;
-  }
-
-  // if we haven't seen the transition yet, write the defer to omap with cls_rgw
-  ObjectWriteOperation op;
-
-  // assert that we haven't initialized cls_rgw_gc queue. this prevents us
-  // from writing new entries to omap after the transition
-  gc_log_defer1(op, cct->_conf->rgw_gc_obj_min_wait, info);
-
-  // prepare a callback to detect the transition via ECANCELED from cls_version_check()
-  auto state = std::make_unique<defer_chain_state>();
-  state->gc = this;
-  state->info.chain = chain;
-  state->info.tag = tag;
-  state->completion = librados::Rados::aio_create_completion(
-      state.get(), async_defer_callback);
-
-  int ret = store->gc_aio_operate(obj_names[i], state->completion, &op);
-  if (ret == 0) {
-    // coverity[leaked_storage:SUPPRESS]
-    state.release(); // release ownership until async_defer_callback()
-  }
-  return ret;
 }
 
 int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc, optional_yield y)

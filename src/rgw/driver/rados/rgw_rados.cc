@@ -6553,43 +6553,6 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RGWRados::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y)
-{
-  std::string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
-  if (!octx)
-    return 0;
-
-  RGWObjState *state = NULL;
-  RGWObjManifest *manifest = nullptr;
-
-  int r = get_obj_state(dpp, octx, bucket_info, obj, &state, &manifest, false, y);
-  if (r < 0)
-    return r;
-
-  if (!state->is_atomic) {
-    ldpp_dout(dpp, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
-    return -EINVAL;
-  }
-
-  string tag;
-
-  if (state->tail_tag.length() > 0) {
-    tag = state->tail_tag.c_str();
-  } else if (state->obj_tag.length() > 0) {
-    tag = state->obj_tag.c_str();
-  } else {
-    ldpp_dout(dpp, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
-    return -EINVAL;
-  }
-
-  ldpp_dout(dpp, 0) << "defer chain tag=" << tag << dendl;
-
-  cls_rgw_obj_chain chain;
-  update_gc_chain(dpp, state->obj, *manifest, &chain);
-  return gc->async_defer_chain(tag, chain);
-}
-
 void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
 {
   list<string> prefixes;
