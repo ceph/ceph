@@ -2611,20 +2611,80 @@ std::unique_ptr<RGWRole> NSFSDriver::get_role(std::string name,
     std::string max_session_duration_str,
     std::multimap<std::string,std::string> tags)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(
+      get_account_db(), std::move(name), std::move(tenant),
+      std::move(account_id), std::move(path), std::move(trust_policy),
+      std::move(description), std::move(max_session_duration_str),
+      std::move(tags));
 }
 
 std::unique_ptr<RGWRole> NSFSDriver::get_role(std::string id)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(get_account_db(), std::move(id));
 }
 
 std::unique_ptr<RGWRole> NSFSDriver::get_role(const RGWRoleInfo& info)
 {
-  RGWRole* p = nullptr;
-  return std::unique_ptr<RGWRole>(p);
+  return std::make_unique<DBStoreRole>(get_account_db(), info);
+}
+
+int NSFSDriver::count_account_roles(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    uint32_t& count)
+{
+  return get_account_db()->count_account_roles(dpp,
+      std::string(account_id), count);
+}
+
+int NSFSDriver::list_account_roles(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view account_id,
+				   std::string_view path_prefix,
+				   std::string_view marker,
+				   uint32_t max_items,
+				   RoleList& listing)
+{
+  std::vector<RGWRoleInfo> roles;
+  int ret = get_account_db()->list_roles(dpp, "account",
+      "", std::string(account_id),
+      std::string(path_prefix), std::string(marker),
+      max_items + 1, roles);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (roles.size() > max_items) {
+    listing.next_marker = roles[max_items].name;
+    roles.resize(max_items);
+  }
+  listing.roles = std::move(roles);
+  return 0;
+}
+
+int NSFSDriver::list_roles(const DoutPrefixProvider *dpp,
+			   optional_yield y,
+			   const std::string& tenant,
+			   const std::string& path_prefix,
+			   const std::string& marker,
+			   uint32_t max_items,
+			   RoleList& listing)
+{
+  std::vector<RGWRoleInfo> roles;
+  int ret = get_account_db()->list_roles(dpp, "tenant",
+      tenant, "",
+      path_prefix, marker,
+      max_items + 1, roles);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (roles.size() > max_items) {
+    listing.next_marker = roles[max_items].name;
+    roles.resize(max_items);
+  }
+  listing.roles = std::move(roles);
+  return 0;
 }
 
 struct meta_list_handle {
