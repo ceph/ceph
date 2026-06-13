@@ -104,6 +104,18 @@ options:
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_live_metrics_persist_interval
+  type: secs
+  level: advanced
+  desc: interval to persist live mirror sync metrics to the local RADOS object
+  long_desc: interval in seconds to persist live synchronization metrics for directories
+    actively being synchronized to the cephfs_mirror object omap. The value is re-read
+    each iteration of the metrics-persist thread so configuration changes take effect
+    without restarting the daemon.
+  default: 5
+  services:
+  - cephfs-mirror
+  min: 1
 - name: cephfs_mirror_max_consecutive_failures_per_directory
   type: uint
   level: advanced
