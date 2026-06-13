@@ -1138,6 +1138,13 @@ void BtreeLBAManager::update_paddr_sync(
   auto btree = get_btree_sync<LBABtree>(c);
   auto iter = btree.lower_bound_sync(c, laddr);
   assert(iter.get_leaf_node()->is_pending());
+  auto child = iter.get_leaf_node()->get_child_sync<LogicalChildNode>(
+    c.trans, c.cache, iter.get_leaf_pos(), iter.get_key());
+  ceph_assert(child);
+  if (child->is_initial_pending()) {
+    return;
+  }
+  ceph_assert(child->is_exist_clean());
   auto cursor = iter.get_cursor(c);
   assert(cursor->get_laddr() == laddr);
   btree.update(
