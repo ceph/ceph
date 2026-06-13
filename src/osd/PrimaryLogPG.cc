@@ -13499,8 +13499,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   int skipped = 0;
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
   while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
@@ -13807,7 +13806,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
     // oldest first!
     const pg_missing_t &m(pm->second);
-    for (map<eversion_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
+    for (auto p = m.get_rmissing().begin();
 	 p != m.get_rmissing().end() && started < max;
 	   ++p) {
       handle.reset_tp_timeout();
