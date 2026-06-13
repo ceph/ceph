@@ -14,7 +14,7 @@ import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.componen
 
 const mockInitiators = [
   {
-    nqn: '*',
+    nqn: 'nqn.2023-01.com.example:host1',
     use_dhchap: false
   }
 ];
@@ -22,7 +22,8 @@ const mockInitiators = [
 const mockSubsystem = {
   nqn: 'nqn.2016-06.io.spdk:cnode1',
   serial_number: '12345',
-  has_dhchap_key: false
+  has_dhchap_key: false,
+  allow_any_host: false
 };
 
 class MockNvmeOfService {

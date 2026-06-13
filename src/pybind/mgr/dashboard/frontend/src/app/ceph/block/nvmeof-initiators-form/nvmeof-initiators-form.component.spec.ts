@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 
@@ -31,7 +31,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            queryParams: of({ group: 'test-group' }),
+            queryParamMap: of(convertToParamMap({ group: 'test-group' })),
             params: of({ subsystem_nqn: 'nqn.test' }),
             parent: {
               params: of({ subsystem_nqn: 'nqn.test' })

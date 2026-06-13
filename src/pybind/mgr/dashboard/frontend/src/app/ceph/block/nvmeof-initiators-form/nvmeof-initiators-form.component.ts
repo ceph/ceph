@@ -9,7 +9,7 @@ import {
   NvmeofSubsystemInitiator
 } from '~/app/shared/models/nvmeof';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Params, Router } from '@angular/router';
 import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
 
 type InitiatorsFormPayload = Pick<HostStepType, 'hostType' | 'addedHosts'> &
@@ -32,6 +32,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   isSubmitLoading = false;
   existingHosts: string[] = [];
   showAuthStep = true;
+  allowAllHosts = true;
   stepTwoValue: HostStepType = null;
 
   @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
@@ -50,21 +51,29 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.route.queryParams.subscribe((params) => {
-      this.group = params?.['group'];
+    this.route.queryParamMap.subscribe((params) => {
+      this.group = params.get('group');
     });
-    this.route.parent.params.subscribe((params: any) => {
+    this.allowAllHosts = !this.getDisableAllowAllState();
+    this.route.parent.params.subscribe((params: Params) => {
       if (params.subsystem_nqn) {
         this.subsystemNQN = params.subsystem_nqn;
       }
     });
-    this.route.params.subscribe((params: any) => {
+    this.route.params.subscribe((params: Params) => {
       if (!this.subsystemNQN && params.subsystem_nqn) {
         this.subsystemNQN = params.subsystem_nqn;
       }
       this.fetchExistingHosts();
     });
     this.rebuildSteps();
+  }
+
+  private getDisableAllowAllState(): boolean {
+    return (
+      this.router.getCurrentNavigation()?.extras?.state?.['disableAllowAll'] === true ||
+      history.state?.disableAllowAll === true
+    );
   }
 
   rebuildSteps() {
