@@ -1370,6 +1370,24 @@ class Module(MgrModule):
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
+        # -- Dashboard metrics --
+        try:
+            r, outb, outs = self.mon_command({
+                'prefix': 'config-key get',
+                'key': 'mgr/dashboard/telemetry/metrics/adoption'
+            })
+
+            adoption_raw = outb.strip() if r == 0 and outb else None
+
+            report['dashboard'] = {
+                'adoption': json.loads(adoption_raw or '{}'),
+            }
+
+        except Exception as e:  # pylint: disable=broad-except
+            self.log.warning(
+                'telemetry: failed to attach dashboard section: %s',
+                e
+            )
 
         return report
 
