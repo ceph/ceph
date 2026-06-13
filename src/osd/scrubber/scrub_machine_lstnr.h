@@ -6,6 +6,7 @@
  * \file the PgScrubber interface used by the scrub FSM
  */
 #include "common/LogClient.h"
+#include "common/tracer.h"
 #include "common/version.h"
 #include "include/Context.h"
 #include "osd/osd_types.h"
@@ -162,7 +163,8 @@ struct ScrubMachineListener {
   /**
    * Ask all replicas for their scrub maps for the current chunk.
    */
-  virtual void get_replicas_maps(bool replica_can_preempt) = 0;
+  virtual void get_replicas_maps(bool replica_can_preempt,
+				 const jspan_context& parent_ctx) = 0;
 
   virtual void on_digest_updates() = 0;
 

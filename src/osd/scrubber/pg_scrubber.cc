@@ -29,6 +29,8 @@
 #include "scrub_backend.h"
 #include "scrub_machine.h"
 
+#include "scrubber_tracer.h"
+
 using std::list;
 using std::pair;
 using std::stringstream;
@@ -1171,7 +1173,8 @@ eversion_t PgScrubber::search_log_for_updates() const
     return p->version;
 }
 
-void PgScrubber::get_replicas_maps(bool replica_can_preempt)
+void PgScrubber::get_replicas_maps(bool replica_can_preempt,
+				   const jspan_context& parent_ctx)
 {
   dout(10) << __func__ << " started in epoch/interval: " << m_epoch_start << "/"
 	   << m_interval_start << " pg same_interval_since: "
@@ -1191,7 +1194,8 @@ void PgScrubber::get_replicas_maps(bool replica_can_preempt)
 		       m_start,
 		       m_end,
 		       m_is_deep,
-		       replica_can_preempt);
+		       replica_can_preempt,
+		       parent_ctx);
   }
 
   dout(10) << __func__ << " awaiting" << m_maps_status << dendl;
@@ -1243,7 +1247,8 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				    hobject_t start,
 				    hobject_t end,
 				    bool deep,
-				    bool allow_preemption)
+				    bool allow_preemption,
+				    const jspan_context& parent_ctx)
 {
   ceph_assert(replica != m_pg_whoami);
   dout(10) << __func__ << " scrubmap from osd." << replica
@@ -1259,6 +1264,7 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				     allow_preemption,
 				     m_flags.priority,
 				     m_pg->ops_blocked_by_scrub());
+  repscrubop->otel_trace = parent_ctx;
 
   // default priority. We want the replica-scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
@@ -1654,6 +1660,8 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
 
+  // m_fsm->m_replica_parent_ctx = msg->otel_trace;
+  m_fsm->set_replica_parent_ctx(msg->otel_trace);
   m_replica_min_epoch = msg->min_epoch;
   m_start = msg->start;
   m_end = msg->end;
@@ -2675,7 +2683,9 @@ PgScrubber::PgScrubber(PG* pg)
 	m_osds->cct->_conf, "osd_stats_update_period_not_scrubbing"}
     , preemption_data{pg}
 {
-  m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
+  tracing::scrubber::tracer.init(m_osds->cct, "pg_scrubber");
+  auto scrubber_parent_span = tracing::scrubber::tracer.start_trace("pg-scrubber-initialized");
+  m_fsm = std::make_unique<ScrubMachine>(m_pg, this, scrubber_parent_span);
   m_fsm->initiate();
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
