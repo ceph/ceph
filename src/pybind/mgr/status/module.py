@@ -226,7 +226,7 @@ class Module(MgrModule):
                 output += "\n" + pools_table.get_string() + "\n"
 
         if not output and not json_output and fs_filter is not None:
-            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
+            return -errno.EINVAL, "", "Invalid filesystem: " + fs_filter
 
         standby_table = PrettyTable(["STANDBY MDS"], border=False)
         standby_table.left_padding_width = 0
@@ -320,7 +320,7 @@ class Module(MgrModule):
 
             if not found:
                 msg = "Bucket '{0}' not found".format(bucket_filter)
-                return errno.ENOENT, msg, ""
+                return -errno.ENOENT, msg, ""
 
         # Build dict of OSD ID to stats
         osd_stats = dict([(o['osd'], o) for o in self.get("osd_stats")['osd_stats']])
