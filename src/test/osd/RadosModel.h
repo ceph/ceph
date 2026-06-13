@@ -191,7 +191,7 @@ public:
   const uint64_t min_stride_size;
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
-  const bool no_omap;
+  bool no_omap;
   const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
@@ -328,6 +328,11 @@ public:
     if (initialized) {
       rados.shutdown();
     }
+  }
+
+  void set_no_omap(bool value)
+  {
+    no_omap = value;
   }
 
   void loop(TestOpGenerator *gen)
