@@ -14338,6 +14338,9 @@ uint64_t BlueStore::_assign_blobid(TransContext *txc)
 
 void BlueStore::get_db_statistics(Formatter *f)
 {
+  if (db == nullptr) {
+    return;
+  }
   db->get_statistics(f);
 }
 
@@ -19148,6 +19151,10 @@ const string prefix_other = "Z";
 //Itrerates through the db and collects the stats
 void BlueStore::generate_db_histogram(Formatter *f)
 {
+  if (db == nullptr) {
+    return;
+  }
+
   //globals
   uint64_t num_onodes = 0;
   uint64_t num_shards = 0;
