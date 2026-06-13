@@ -19,7 +19,7 @@ from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter
 from ._version import APIVersion
 
-logger = logging.getLogger('controllers.nfs')
+logger = logging.getLogger(__name__)
 
 
 class NFSException(DashboardException):

@@ -35,7 +35,7 @@ In the case of ``lvm`` a call could look like::
 
 Which in turn will call ``ceph-volume`` in the following way::
 
-    ceph-volume lvm trigger  0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
+    ceph-volume lvm trigger 0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
 Any other subcommand will need to have implemented a ``trigger`` command that
 can consume the extra metadata in this format.
@@ -46,10 +46,10 @@ Availability
 
 :program:`ceph-volume-systemd` is part of Ceph, a massively scalable,
 open-source, distributed storage system. Please refer to the documentation at
-http://docs.ceph.com/ for more information.
+https://docs.ceph.com/ for more information.
 
 
 See also
 ========
 
-:doc:`ceph-osd <ceph-osd>`\(8),
+:doc:`ceph-osd <ceph-osd>`\(8)

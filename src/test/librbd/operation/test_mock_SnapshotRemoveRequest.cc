@@ -121,7 +121,7 @@ public:
     }
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq("snapshot_trash_add"),
                                _, _, _, _));
     if (r < 0) {
@@ -139,7 +139,7 @@ public:
 
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                      StrEq("snapshot_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([snap_info, r](bufferlist* bl) {
                              encode(snap_info, *bl);
@@ -155,7 +155,7 @@ public:
 
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                      StrEq("children_list"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([child_images, r](bufferlist* bl) {
                              encode(child_images, *bl);
@@ -171,7 +171,7 @@ public:
     encode(cls::rbd::ChildImageSpec{mock_image_ctx.md_ctx.get_id(), "",
                                     mock_image_ctx.id}, bl);
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(util::header_name(parent_spec.image_id),
+                exec_internal(util::header_name(parent_spec.image_id),
                      _, StrEq("rbd"), StrEq("child_detach"), ContentsEqual(bl),
                      _, _, _))
       .WillOnce(Return(r));
@@ -216,7 +216,7 @@ public:
 
   void expect_snap_remove(MockImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq(mock_image_ctx.old_format ? "snap_remove" :
                                                                   "snapshot_remove"),
                                 _, _, _, _));

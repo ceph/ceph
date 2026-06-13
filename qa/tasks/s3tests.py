@@ -94,12 +94,13 @@ def download(ctx, config):
                         )
 
 
-def _config_user(s3tests_conf, section, user, email):
+def _config_user(s3tests_conf, section, user, email, account):
     """
     Configure users for this section by stashing away keys, ids, and
     email addresses.
     """
     s3tests_conf[section].setdefault('user_id', user)
+    s3tests_conf[section].setdefault('account_id', account)
     s3tests_conf[section].setdefault('email', email)
     s3tests_conf[section].setdefault('display_name', 'Mr.{user}'.format(user=user))
     s3tests_conf[section].setdefault('access_key',
@@ -156,9 +157,9 @@ def create_users(ctx, config, s3tests_conf):
                 if section == 's3 tenant':
                     args += ['--tenant', 'testx']
                 ctx.cluster.only(client).run(args=args)
-                _config_user(conf, section, account_id, account_email)
+                _config_user(conf, section, account_id, account_email, account_id)
             else:
-                _config_user(conf, section, user_id, user_email)
+                _config_user(conf, section, user_id, user_email, None)
 
             # for keystone users, read ec2 credentials into s3tests.conf instead
             # of creating a local user
@@ -403,6 +404,12 @@ def configure(ctx, config):
                 cloud_read_through_restore_days = client_rgw_config.get('cloud_read_through_restore_days')
                 if (cloud_read_through_restore_days != None):
                     s3tests_conf['s3 cloud']['read_through_restore_days'] = cloud_read_through_restore_days
+                cloud_target_by_bucket = client_rgw_config.get('cloud_target_by_bucket')
+                if (cloud_target_by_bucket != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket'] = cloud_target_by_bucket
+                cloud_target_by_bucket_prefix = client_rgw_config.get('cloud_target_by_bucket_prefix')
+                if (cloud_target_by_bucket_prefix != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket_prefix'] = cloud_target_by_bucket_prefix
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf_fp = BytesIO()
@@ -481,6 +488,8 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('s3control', False):
+            attrs += ["not s3control"]
 
         attrs += client_config.get('extra_attrs', [])
         if 'bucket_logging' not in attrs:

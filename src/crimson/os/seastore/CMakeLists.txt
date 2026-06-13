@@ -20,6 +20,8 @@ set(crimson_seastore_srcs
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
+  omap_manager/log/log_node.cc
+  omap_manager/log/log_manager.cc
   onode.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc

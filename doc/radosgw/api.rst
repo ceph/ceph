@@ -6,7 +6,7 @@ librgw (Python)
 
 .. highlight:: python
 
-The `rgw` python module provides file-like access to rgw.
+The `rgw` Python module provides file-like access to RGW.
 
 API Reference
 =============

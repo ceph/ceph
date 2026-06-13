@@ -61,6 +61,8 @@ int main(int argc, char** argv)
           return tp->stop();
         });
       });
+    }).then([] {
+      std::cout << "All tests succeeded" << std::endl;
     }).finally([] {
       return crimson::common::sharded_conf().stop();
     }).handle_exception([](auto e) {

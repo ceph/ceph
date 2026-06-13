@@ -7,8 +7,8 @@ SMB Service
 .. warning::
 
     SMB support is under active development and many features may be
-    missing or immature. A Ceph MGR module, named smb, is available to help
-    organize and manage SMB related featues. Unless the smb module
+    missing or immature. A Ceph Manager module, named smb, is available to help
+    organize and manage SMB-related features. Unless the smb module
     has been determined to be unsuitable for your needs we recommend using that
     module over directly using the smb service spec.
 
@@ -19,20 +19,20 @@ Deploying Samba Containers
 Cephadm deploys `Samba <http://www.samba.org>`_ servers using container images
 built by the `samba-container project <http://github.com/samba-in-kubernetes/samba-container>`_.
 
-In order to host SMB Shares with access to CephFS file systems, deploy
-Samba Containers with the following command:
+In order to host SMB shares with access to CephFS file systems, deploy
+Samba containers with the following command:
 
 .. prompt:: bash #
 
     ceph orch apply smb <cluster_id> <config_uri> [--features ...] [--placement ...] ...
 
 There are a number of additional parameters that the command accepts. See
-the Service Specification for a description of these options.
+the Service Specification section for a description of these options.
 
 Service Specification
 =====================
 
-An SMB Service can be applied using a specification. An example in YAML follows:
+An SMB service can be applied using a specification. An example in YAML follows:
 
 .. code-block:: yaml
 
@@ -63,7 +63,7 @@ The specification can then be applied by running the following command:
 Service Spec Options
 --------------------
 
-Fields specific to the ``spec`` section of the SMB Service are described below.
+Fields specific to the ``spec`` section of the SMB service are described below.
 
 cluster_id
     A short name identifying the SMB "cluster". In this case a cluster is
@@ -80,7 +80,7 @@ features
 
 config_uri
     A string containing a (standard or de-facto) URI that identifies a
-    configuration source that should be loaded by the samba-container as the
+    configuration source that should be loaded by the Samba container as the
     primary configuration file.
     Supported URI schemes include ``http:``, ``https:``, ``rados:``, and
     ``rados:mon-config-key:``.
@@ -99,7 +99,7 @@ join_sources
 
 custom_dns
     A list of IP addresses that will be used as the DNS servers for a Samba
-    container. This features allows Samba Containers to integrate with
+    container. This feature allows Samba containers to integrate with
     Active Directory even if the Ceph host nodes are not tied into the Active
     Directory DNS domain(s).
 
@@ -128,7 +128,7 @@ bind_addrs
         For example, ``192.168.7.0/24``.
 
 include_ceph_users
-    A list of cephx user (aka entity) names that the Samba Containers may use.
+    A list of cephx user (aka entity) names that the Samba containers may use.
     The cephx keys for each user in the list will automatically be added to
     the keyring in the container.
 
@@ -171,11 +171,11 @@ cluster_public_addrs
    High-Availability or "transparent state migration") the feature flag
    ``clustered`` is needed. If this flag is not specified cephadm may deploy
    multiple smb servers but they will lack the coordination needed of an actual
-   Highly-Avaiable cluster. When the ``clustered`` flag is specified cephadm
+   Highly-Available cluster. When the ``clustered`` flag is specified cephadm
    will deploy additional containers that manage this coordination.
    Additionally, the cluster_meta_uri and cluster_lock_uri values must be
    specified. The former is used by cephadm to describe the smb cluster layout
-   to the samba containers. The latter is used by Samba's CTDB component to
+   to the Samba containers. The latter is used by Samba's CTDB component to
    manage an internal cluster lock.
 
 
@@ -189,22 +189,22 @@ Configuring an SMB Service
    in an end-to-end manner. The following discussion is provided for the sake
    of completeness and to explain how the software layers interact.
 
-Creating an SMB Service spec is not sufficient for complete operation of a
-Samba Container on Ceph. It is important to create valid configurations and
+Creating an SMB service spec is not sufficient for complete operation of a
+Samba container on Ceph. It is important to create valid configurations and
 place them in locations that the container can read. The complete specification
 of these configurations is out of scope for this document. You can refer to the
 `documentation for Samba <https://wiki.samba.org/index.php/Main_Page>`_ as
-well as the `samba server container
+well as the `Samba server container
 <https://github.com/samba-in-kubernetes/samba-container/blob/master/docs/server.md>`_
-and the `configuation file
+and the `configuration file
 <https://github.com/samba-in-kubernetes/sambacc/blob/master/docs/configuration.md>`_
 it accepts.
 
 When one has composed a configuration it should be stored in a location
-that the Samba Container can access. The recommended approach for running
-Samba Containers within Ceph orchestration is to store the configuration
+that the Samba container can access. The recommended approach for running
+Samba containers within Ceph orchestration is to store the configuration
 in the Ceph cluster. There are a few ways to store the configuration
-in ceph:
+in Ceph:
 
 RADOS
 ~~~~~
@@ -254,7 +254,7 @@ HTTP/HTTPS
 ~~~~~~~~~~
 
 A configuration file can be stored on an HTTP(S) server and automatically read
-by the Samba Container. Managing a configuration file on HTTP(S) is left as an
+by the Samba container. Managing a configuration file on HTTP(S) is left as an
 exercise for the reader.
 
 .. note:: All URI schemes are supported by parameters that accept URIs. Each
@@ -270,6 +270,6 @@ A non-exhaustive list of important limitations for the SMB service follows:
   SMB service for domain membership, either the Ceph host node must be
   configured so that it can resolve the Active Directory (AD) domain or the
   ``custom_dns`` option may be used. In both cases DNS hosts for the AD domain
-  must still be reachable from whatever network segment the ceph cluster is on.
+  must still be reachable from whatever network segment the Ceph cluster is on.
 * Services must bind to TCP port 445. Running multiple SMB services on the same
   node is not yet supported and will trigger a port-in-use conflict.

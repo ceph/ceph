@@ -2,7 +2,7 @@
 Bucket Logging
 ==============
 
-.. versionadded:: T
+.. versionadded:: Tentacle
 
 .. contents::
 
@@ -230,7 +230,7 @@ possible formats:
 
 Journal
 ```````
-The "Journal" record format uses minimum amount of data for journaling
+The "Journal" record format uses a minimum amount of data for journaling
 bucket changes (this is a Ceph extension).
 
   - bucket owner (or dash if empty)
@@ -252,7 +252,7 @@ For example:
 
 Standard
 ````````
-The "Standard" record format is based on `AWS Logging Record Format`_.
+The "Standard" record format is based on the `AWS Logging Record Format`_.
 
   - bucket owner (or dash if empty)
   - bucket name (or dash if empty) in the format: ``[tenant:]<bucket name>``

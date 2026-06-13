@@ -1073,7 +1073,9 @@ public:
 
   TestDriver(std::string _base_path) : POSIXDriver(nullptr), driver_base(_base_path)
   { }
-  virtual ~TestDriver() = default;
+  virtual ~TestDriver() {
+    RGWQuotaHandler::free_handler(quota_handler);
+  }
 
   int init(const DoutPrefixProvider* dpp)
   {
@@ -1097,7 +1099,7 @@ public:
         }
       }
     }
-
+    quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     /* ordered listing cache */
     bucket_cache.reset(new BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));

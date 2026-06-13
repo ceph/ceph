@@ -63,9 +63,9 @@ SegmentAllocator::do_open(bool is_mkfs)
   return sm_group.open(new_segment_id
   ).handle_error(
     open_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SegmentAllocator::do_open open"
-    }
+    )
   ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
     segment_id_t segment_id = sref->get_segment_id();
@@ -125,9 +125,9 @@ SegmentAllocator::do_open(bool is_mkfs)
     return sref->write(0, std::move(bl)
     ).handle_error(
       open_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
         "Invalid error in SegmentAllocator::do_open write"
-      }
+      )
     ).safe_then([this,
                  FNAME,
                  new_journal_seq,
@@ -205,9 +205,9 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
     write_start_offset, std::move(to_write)
   ).handle_error(
     write_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in SegmentAllocator::write"
-    }
+    )
   ).finally([cs=current_segment] {});
 }
 
@@ -278,9 +278,8 @@ SegmentAllocator::close_segment()
     segment_provider.close_segment(seg_to_close->get_segment_id());
   }).handle_error(
     close_segment_ertr::pass_further{},
-    crimson::ct_error::assert_all {
-    "Invalid error in SegmentAllocator::close_segment"
-  });
+    crimson::ct_error::assert_all(
+    "Invalid error in SegmentAllocator::close_segment"));
 
 }
 

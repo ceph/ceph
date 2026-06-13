@@ -1,10 +1,15 @@
 .. _hardware-monitoring:
 
-Hardware monitoring
+===================
+Hardware Monitoring
 ===================
 
-`node-proxy` is the internal name to designate the running agent which inventories a machine's hardware, provides the different statuses and enable the operator to perform some actions.
-It gathers details from the RedFish API, processes and pushes data to agent endpoint in the Ceph manager daemon.
+``node-proxy`` is the internal name of the agent which inventories a machine's
+hardware, provides different statuses, and enables the operator to perform
+some actions.
+It gathers details from the Redfish API that is often provided by an
+out-of-band management interface present on server systems. The data is then
+processed and pushed to an agent endpoint in the Ceph Manager.
 
 .. graphviz::
 
@@ -17,31 +22,33 @@ It gathers details from the RedFish API, processes and pushes data to agent endp
      
          agent -> redfish [label=" 1." color=green];
          agent -> mgr [label=" 2." color=orange];
-         dashboard:dashboard -> mgr [label=" 3."color=lightgreen];
+         dashboard:dashboard -> mgr [label=" 3." color=lightgreen];
          node [shape=plaintext];
          legend [label=<<table border="0" cellborder="1" cellspacing="0">
              <tr><td bgcolor="lightgrey">Legend</td></tr>
-             <tr><td align="center">1. Collects data from redfish API</td></tr>
-             <tr><td align="left">2. Pushes data to ceph mgr</td></tr>
-             <tr><td align="left">3. Query ceph mgr</td></tr>
+             <tr><td align="center">1. Collects data from Redfish API</td></tr>
+             <tr><td align="left">2. Pushes data to Ceph Manager</td></tr>
+             <tr><td align="left">3. Queries Ceph Manager</td></tr>
          </table>>];
      }
 
 
 Limitations
------------
+===========
 
-For the time being, the `node-proxy` agent relies on the RedFish API.
-It implies both `node-proxy` agent and `ceph-mgr` daemon need to be able to access the Out-Of-Band network to work.
+For the time being, the ``node-proxy`` agent relies on the Redfish API.
+This implies that both ``node-proxy`` agent and the Ceph Manager need to be
+able to access the out-of-band network.
 
 
-Deploying the agent
--------------------
+Deploying the Agent
+===================
 
-| The first step is to provide the out of band management tool credentials.
-| This can be done when adding the host with a service spec file:
+The first step is to provide the out-of-band management tool IP address and
+credentials. This can be done when adding the host with a :ref:`service
+spec <orchestrator-cli-service-spec>` file:
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # cat host.yml
   ---
@@ -55,23 +62,24 @@ Deploying the agent
 
 Apply the spec:
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph orch apply -i host.yml
   Added host 'node-10' with addr '10.10.10.10'
 
 Deploy the agent:
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph config set mgr mgr/cephadm/hw_monitoring true
 
+
 CLI
----
+===
 
 | **orch** **hardware** **status** [hostname] [--category CATEGORY] [--format plain | json]
 
-supported categories are:
+Supported categories are:
 
 * summary (default)
 * memory
@@ -83,14 +91,15 @@ supported categories are:
 * firmwares
 * criticals
 
+
 Examples
-********
+--------
 
 
-hardware health statuses summary 
-++++++++++++++++++++++++++++++++
+Hardware Health Status Summary 
+______________________________
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph orch hardware status
   +------------+---------+-----+-----+--------+-------+------+
@@ -100,10 +109,10 @@ hardware health statuses summary
   +------------+---------+-----+-----+--------+-------+------+
 
 
-storage devices report
-++++++++++++++++++++++
+Storage Devices Report
+______________________
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph orch hardware status IBM-Ceph-1 --category storage
   +------------+--------------------------------------------------------+------------------+----------------+----------+----------------+--------+---------+
@@ -129,10 +138,10 @@ storage devices report
 
 
 
-firmwares details
-+++++++++++++++++
+Firmware Details
+________________
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph orch hardware status node-10 --category firmwares
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
@@ -148,10 +157,10 @@ firmwares details
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
 
 
-hardware critical warnings report
-+++++++++++++++++++++++++++++++++
+Hardware Critical Warnings Report
+_________________________________
 
-.. code-block:: bash
+.. prompt:: bash # auto
 
   # ceph orch hardware status --category criticals
   +------------+-----------+------------+----------+-----------------+
@@ -161,8 +170,8 @@ hardware critical warnings report
   +------------+-----------+------------+----------+-----------------+
 
 
-Developpers
------------
+For Developers
+==============
 
 .. py:currentmodule:: cephadm.agent
 .. autoclass:: NodeProxyEndpoint

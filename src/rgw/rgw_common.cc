@@ -7,7 +7,6 @@
 #include <string>
 #include <boost/tokenizer.hpp>
 
-#include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/versioned_variant.h"
@@ -22,8 +21,6 @@
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
 #include "common/openssl_opts_handler.h"
-#include "common/armor.h"
-#include "common/errno.h"
 #include "common/Clock.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
@@ -139,12 +136,13 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
     { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
-    { ECANCELED, {409, "ConcurrentModification"}},
+    { ERR_CONCURRENT_MODIFICATION, {409, "ConcurrentModification"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
     { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
     { ERR_INVALID_BUCKET_ACL, {400, "InvalidBucketAclWithObjectOwnership"}},
     { ERR_NO_SUCH_OWNERSHIP_CONTROLS, {404, "OwnershipControlsNotFoundError"}},
+    { ERR_EXPIRED_TOKEN, {400, "ExpiredToken"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -822,17 +820,18 @@ string calc_hash_sha256_close_stream(SHA256 **phash)
   if (!hash) {
     hash = calc_hash_sha256_open_stream();
   }
-  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  char hash_sha256[CEPH_CRYPTO_SHA256_DIGESTSIZE];
 
   hash->Final((unsigned char *)hash_sha256);
 
-  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+  std::string hex_str;
+  hex_str.reserve(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2);
+  buf_to_hex(hash_sha256, std::back_inserter(hex_str));
 
   delete hash;
   *phash = NULL;
   
-  return std::string(hex_str);
+  return hex_str;
 }
 
 std::string calc_hash_sha256_restart_stream(SHA256 **phash)
@@ -1121,7 +1120,7 @@ struct perm_state_from_req_state : public perm_state_base {
 		      _s->bucket_object_ownership,
 		      _s->perm_mask,
 		      _s->defer_to_bucket_acls,
-		      _s->bucket_access_conf),
+		      _s->public_access_block),
       s(_s) {}
 
   std::optional<bool> get_request_payer() const override {
@@ -1376,8 +1375,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
-  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
-  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+  if (s->public_access_block.RestrictPublicBuckets &&
+      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      !s->identity->is_owner_of(s->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
   }
@@ -1453,8 +1453,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
 
   if (bucket_acl.verify_permission(dpp, *ps->identity, perm, perm,
                                    ps->get_referer(),
-                                   ps->bucket_access_conf &&
-                                   ps->bucket_access_conf->ignore_public_acls())) {
+                                   ps->public_access_block.IgnorePublicAcls)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
@@ -1543,8 +1542,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
-  const bool restrict_public_buckets = ps->bucket_access_conf && ps->bucket_access_conf->restrict_public_buckets();
-  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !ps->identity->is_owner_of(ps->bucket_info.owner)) {
+  if (ps->public_access_block.RestrictPublicBuckets &&
+      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      !ps->identity->is_owner_of(ps->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
   }
@@ -1630,8 +1630,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   if (ps->bucket_object_ownership != rgw::s3::ObjectOwnership::BucketOwnerEnforced &&
       object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
                                    nullptr, /* http referrer */
-                                   ps->bucket_access_conf &&
-                                   ps->bucket_access_conf->ignore_public_acls())) {
+                                   ps->public_access_block.IgnorePublicAcls)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
@@ -2167,7 +2166,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "oidc-provider",
                                     "user-info-without-keys",
                                     "ratelimit",
-                                    "accounts"};
+                                    "accounts",
+                                    "dedup"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
@@ -2180,10 +2180,12 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
 
 void rgw_pool::from_str(const string& s)
 {
-  size_t pos = rgw_unescape_str(s, 0, '\\', ':', &name);
-  if (pos != string::npos) {
-    pos = rgw_unescape_str(s, pos, '\\', ':', &ns);
-    /* ignore return; if pos != string::npos it means that we had a colon
+  name.clear();
+  auto sr = rgw_unescape_str(s, '\\', ':', std::back_inserter(name));
+  if (sr) {
+    ns.clear();
+    rgw_unescape_str(sr, '\\', ':', std::back_inserter(ns));
+    /* ignore return; if nonempty, it means that we had a colon
      * in the middle of ns that wasn't escaped, we're going to stop there
      */
   }
@@ -2192,12 +2194,12 @@ void rgw_pool::from_str(const string& s)
 string rgw_pool::to_str() const
 {
   string esc_name;
-  rgw_escape_str(name, '\\', ':', &esc_name);
+  rgw_escape_str(name, '\\', ':', std::back_inserter(esc_name));
   if (ns.empty()) {
     return esc_name;
   }
   string esc_ns;
-  rgw_escape_str(ns, '\\', ':', &esc_ns);
+  rgw_escape_str(ns, '\\', ':', std::back_inserter(esc_ns));
   return esc_name + ":" + esc_ns;
 }
 
@@ -2260,65 +2262,6 @@ bool match_policy(const std::string& pattern, const std::string& input,
     last_pos_pattern = cur_pos_pattern + 1;
     last_pos_input = cur_pos_input + 1;
   }
-}
-
-/*
- * make attrs look-like-this
- * converts underscores to dashes
- */
-string lowercase_dash_http_attr(const string& orig, bool bidirection)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-        buf[i] = '-';
-        break;
-      case '-':
-        if (bidirection)
-          buf[i] = '_';
-        else
-          buf[i] = tolower(*s);
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
-}
-
-/*
- * make attrs Look-Like-This
- * converts underscores to dashes
- */
-string camelcase_dash_http_attr(const string& orig, bool convert2dash)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  bool last_sep = true;
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-      case '-':
-        buf[i] = convert2dash ? '-' : *s;
-        last_sep = true;
-        break;
-      default:
-        if (last_sep) {
-          buf[i] = toupper(*s);
-        } else {
-          buf[i] = tolower(*s);
-        }
-        last_sep = false;
-    }
-  }
-  return string(buf);
 }
 
 RGWBucketInfo::RGWBucketInfo()
@@ -2883,7 +2826,7 @@ void RGWUserInfo::dump(Formatter *f) const
     encode_json("admin", (bool)admin, f);
   }
   encode_json("default_placement", default_placement.name, f);
-  encode_json("default_storage_class", default_placement.storage_class, f);
+  encode_json("default_storage_class", default_placement.get_storage_class(), f);
   encode_json("placement_tags", placement_tags, f);
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);

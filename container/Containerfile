@@ -14,7 +14,7 @@ ARG CEPH_SHA1
 ARG CEPH_GIT_REPO
 
 # (optional) Define the baseurl= for the ganesha.repo
-ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-5/"
+ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-9/"
 
 # (optional) Set to "crimson" to install crimson packages.
 ARG OSD_FLAVOR="default"
@@ -84,18 +84,13 @@ RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
 # NFS-Ganesha repo
 RUN set -eux; \
-    source /etc/ceph-distro.env; \
-    if [[ "${DIST_PATH}" == rocky/* ]]; then \
-        curl -fs -L "https://shaman.ceph.com/api/repos/nfs-ganesha/main/latest/${DIST_PATH}/repo?arch=$(arch)" -o /etc/yum.repos.d/ganesha.repo; \
-    else \
-      { \
+    { \
         printf '%s\n' '[ganesha]'; \
         printf '%s\n' 'name=ganesha'; \
         printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
         printf '%s\n' 'gpgcheck=0'; \
         printf '%s\n' 'enabled=1'; \
-      } > /etc/yum.repos.d/ganesha.repo; \
-    fi
+    } > /etc/yum.repos.d/ganesha.repo
 
 # ISCSI repo
 RUN set -eux && \
@@ -165,6 +160,8 @@ ceph-mgr-cephadm \
 ceph-mgr-dashboard \
 ceph-mgr-diskprediction-local \
 ceph-mgr-k8sevents \
+ceph-mgr-modules-core \
+ceph-mgr-modules-standard \
 ceph-mgr-rook \
 ceph-mgr \
 ceph-mon \
@@ -185,6 +182,9 @@ RUN set -euo pipefail; \
     source /etc/ceph-distro.env; \
     if [ "$MAJOR" -le 9 ]; then \
         echo "python3-saml" >> packages.txt; \
+    fi ; \
+    if [ "$MAJOR" -ge 10 ]; then \
+        echo "python3-ceph-smb-ctl" >> packages.txt; \
     fi
 
 # NFS-Ganesha

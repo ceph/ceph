@@ -20,6 +20,10 @@
     color: var(--cds-text-secondary);
   }
 
+  &-bold {
+    font-weight: 700 !important;
+  }
+
   &-tab {
     display: flex;
   }
@@ -38,13 +42,26 @@
   }
 
   &-tab-content-item {
-    border-right: 1px solid var(--cds-border-subtle);
     max-block-size: fit-content;
   }
 
   &-tab-content-item-row {
     display: flex;
     justify-content: space-between;
+  }
+
+  &-resiliency-tab-content {
+    display: flex;
+  }
+
+  &-resiliency-chart {
+    flex-grow: 1;
+    flex-shrink: 0;
+  }
+
+  &-resiliency-chart-text {
+    width: 13rem;
+    margin-left: var(--cds-spacing-04);
   }
 
   &-icon-and-text {
@@ -69,12 +86,10 @@
     gap: var(--cds-spacing-03);
     min-width: 0;
     padding-inline-end: var(--cds-spacing-03);
-    border-right: 1px solid var(--cds-border-subtle);
     box-sizing: border-box;
   }
 
   &-hardware-section:last-child {
-    border-right: none;
     padding-inline-end: 0;
   }
 

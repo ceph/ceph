@@ -1070,7 +1070,7 @@ namespace rgw {
 	/* LATCHED, LOCKED */
 	if (! (flags & RGWFileHandle::FLAG_LOCK))
 	  fh->mtx.unlock(); /* ! LOCKED */
-      }
+      } /* fh */
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
       if (fh) {
@@ -1617,7 +1617,8 @@ public:
       void parse_cp() {
 	if (is_cp()) {
 	  /* leading-/ skip case */
-	  if (cp_iter->first == "/") {
+          if (cp_iter->first == "/") {
+	    cp_sref = std::string_view{cp_iter->first};
 	    _skip_cp = true;
 	    return;
 	  } else
@@ -2585,7 +2586,8 @@ public:
     if (rc != 0)
       return rc;
 
-    state->object = RGWHandler::driver->get_object(rgw_obj_key(dst_obj_name));
+    state->object_key = dst_obj_name;
+    state->object = RGWHandler::driver->get_object(state->object_key);
 
     /* XXX and fixup key attr (could optimize w/string ref and
      * dest_obj_name) */
@@ -2610,8 +2612,8 @@ public:
     /* we don't have (any) headers, so just create default ACLs */
     dest_policy.create_default(s->owner.id, s->owner.display_name);
     /* src_object required before RGWCopyObj::verify_permissions() */
-    rgw_obj_key k = rgw_obj_key(src_obj_name);
-    s->src_object = s->bucket->get_object(k);
+    s->src_object_key = src_obj_name;
+    s->src_object = s->bucket->get_object(s->src_object_key);
     return 0;
   }
 

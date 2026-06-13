@@ -105,7 +105,7 @@ public:
 
   virtual int create(const std::string& oid, bool exclusive,
                      const SnapContext &snapc) = 0;
-  virtual int exec(const std::string& oid, TestClassHandler *handler,
+  virtual int exec_internal(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    uint64_t snap_id, const SnapContext &snapc);

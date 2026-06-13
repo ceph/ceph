@@ -17,14 +17,14 @@ class KeyValueDB;
 class StoreTool
 {
   struct Deleter {
-    ObjectStore *store = nullptr;
+    ObjectStore* store = nullptr;
+    std::function<void(ObjectStore*)> cb;
     Deleter() {}
-    Deleter(ObjectStore *_store)
-      : store(_store) {}
+    Deleter(ObjectStore* _store, std::function<void(ObjectStore*)> _cb)
+      : store(_store), cb(_cb) {}
     void operator()(KeyValueDB *db) {
-      if (store) {
-	store->umount();
-	delete store;
+      if (cb) {
+        cb(store);
       } else {
 	delete db;
       }

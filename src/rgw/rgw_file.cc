@@ -1506,11 +1506,8 @@ namespace rgw {
     if (factory == nullptr) {
       return false;
     }
-    /* make sure the reclaiming object is the same partition with newobject factory,
-     * then we can recycle the object, and replace with newobject */
-    if (!fs->fh_cache.is_same_partition(factory->fhk.fh_hk.object, fh.fh_hk.object)) {
-      return false;
-    }
+    /* XXXX seems like we should use a flag rather than is_linked(),
+     * as we now depend on safe_link mode */
     /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
       /* in this case, we are being called from a context which holds
@@ -1957,7 +1954,6 @@ namespace rgw {
   {
     buffer::list bl, aclbl, ux_key, ux_attrs;
     map<string, string>::iterator iter;
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     req_state* state = get_state();
     const req_context rctx{this, state->yield, nullptr};
@@ -2000,8 +1996,9 @@ namespace rgw {
 			<< ", blocks=" << cs_info.blocks.size() << dendl;
     }
 
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-    etag = calc_md5;
+    etag.clear();
+    etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+    buf_to_hex(m, std::back_inserter(etag));
 
     bl.append(etag.c_str(), etag.size() + 1);
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));

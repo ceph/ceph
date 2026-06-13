@@ -25,6 +25,7 @@ overrides:
       - osds down
       - osd down
       - OBJECT_UNFOUND
+      - OSD_HOST_DOWN
 tasks:
 - install:
     branch: squid
@@ -76,7 +77,7 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release tentacle
+            - ceph osd require-osd-release umbrella
 
     - print: "**** done start telemetry x..."
     - workunit:

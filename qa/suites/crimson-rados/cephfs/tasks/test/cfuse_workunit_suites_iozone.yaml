@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - is full \(reached quota
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(POOL_FULL\)
+tasks:
+- ceph-fuse: [client.0]
+- workunit:
+    clients:
+      client.0:
+        - suites/iozone.sh
+    env:
+      RBD_FEATURES: "61"
+

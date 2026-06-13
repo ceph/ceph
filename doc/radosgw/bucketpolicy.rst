@@ -123,6 +123,11 @@ For all requests, condition keys we support are:
 - aws:UserAgent
 - aws:username
 
+Request that authenticate with Keystone also include:
+
+- keystone:role
+- keystone:userid
+
 We support certain S3 condition keys for bucket and object requests.
 
 *Support for the following bucket-related operations was added in the Mimic
@@ -136,7 +141,7 @@ Bucket Related Operations
 +-----------------------+----------------------+----------------+
 |                       | s3:x-amz-acl         |                |
 |                       | s3:x-amz-grant-<perm>|                |
-|s3:createBucket        | where perm is one of |                |
+|s3:CreateBucket        | where perm is one of |                |
 |                       | read/write/read-acp  |                |
 |                       | write-acp/           |                |
 |                       | full-control         |                |
@@ -183,7 +188,7 @@ Object Related Operations
 |                             |s3:RequestObjectTag/<tag-key>                      |                   |
 |                             |                                                   |                   |
 +-----------------------------+---------------------------------------------------+-------------------+
-|s3:PutObjectAcl              |s3:x-amz-acl & s3-amz-grant-<perm>                 |                   |
+|s3:PutObjectAcl              |s3:x-amz-acl & s3:x-amz-grant-<perm>               |                   |
 |s3:PutObjectVersionAcl       |                                                   |                   |
 |                             +---------------------------------------------------+-------------------+
 |                             |s3:ExistingObjectTag/<tag-key>                     |                   |

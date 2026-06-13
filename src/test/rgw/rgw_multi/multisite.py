@@ -14,6 +14,10 @@ class Cluster:
         """ execute a radosgw-admin command """
         pass
 
+    def ceph_admin(self, args = None, **kwargs):
+        """ execute a ceph command """
+        pass
+
 class Gateway:
     """ interface to control a single radosgw instance """
     __metaclass__ = ABCMeta
@@ -285,6 +289,14 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
             zone.zonegroup = None
             self.zones.remove(zone)
         return data, r
+
+    def rename(self, cluster, new_name, args = None, **kwargs):
+        """ rename the zonegroup; 'rename' outputs no JSON so use command() """
+        args = ['--zonegroup-new-name', new_name] + (args or [])
+        _, r = self.command(cluster, 'rename', args, **kwargs)
+        if r == 0:
+            self.name = new_name
+        return r
 
     def realm(self):
         return self.period.realm if self.period else None

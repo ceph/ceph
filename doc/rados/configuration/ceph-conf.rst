@@ -12,7 +12,7 @@ least three types of daemons:
 - :term:`Ceph OSD Daemon` (``ceph-osd``)
 
 A Ceph Storage Cluster that deploys the :term:`Ceph File System` also runs
-at least one :term:`Ceph Metadata Server` (``ceph-mds``). A Cluster that
+at least one :term:`Ceph Metadata Server` (``ceph-mds``). A cluster that
 deploys :term:`Ceph Object Storage` runs Ceph RADOS Gateway daemons
 (``radosgw``).
 
@@ -49,7 +49,7 @@ Config Sources
 
 Each Ceph daemon and client pulls configuration option values from one or more
 of the sources listed below. Option values found via sources later in the list
-will override any found in sources ealier in the list.  In other words,
+will override any found in sources earlier in the list.  In other words,
 the last value wins.
 
 - The compiled-in default value
@@ -73,7 +73,7 @@ Bootstrap Options
 
 Bootstrap options enable each Ceph daemon
 to contact the Monitors, to authenticate, and to retrieve central
-configuration values.  For this reason, these options are ususally stored locally
+configuration values.  For this reason, these options are usually stored locally
 on each node in a local configuration file. These options
 include the following:
 
@@ -266,13 +266,13 @@ following locations:
 Here ``$cluster`` is the cluster's name (default: ``ceph``).
 
 The Ceph configuration file uses an ``ini`` style syntax. One may add comment
-text after a pound sign (#) or a semi-colon semicolon (;). For example:
+text after a pound sign (#) or a semicolon (;). For example:
 
 .. code-block:: ini
 
     # <--A number (#) sign number sign (#) precedes a comment.
     ; A comment may be anything.
-    # Comments always follow a semi-colon semicolon (;) or a pound sign (#) on each line.
+    # Comments always follow a semicolon (;) or a pound sign (#) on each line.
     # The end of the line terminates a comment.
     # We recommend that you provide comments in your configuration file(s).
 
@@ -360,7 +360,7 @@ Each configuration option specifies one of the following types for its value:
 
    A 64-bit signed integer. Some SI suffixes are supported, including ``K``, ``M``,
    ``G``, ``T``, ``P``, and ``E``.  These represent, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
-   10\ :sup:`9`, etc.). ``B`` (bytes)is the only supported unit string. Thus ``1K``, ``1M``,
+   10\ :sup:`9`, etc.). ``B`` (bytes) is the only supported unit string. Thus ``1K``, ``1M``,
    ``128B`` and ``-1`` are all valid option values. When a negative value is
    assigned to an option that defines a threshold or limit, this often indicates that the value is
    "unlimited" -- that is, no threshold or limit will be enforced. Options that
@@ -464,14 +464,14 @@ no different than options set in a node-local configuration file, subject to the
 source precedence.
 
 In addition, options may have a *mask* associated with them to further restrict to
-which daemons or clients the option's value applies.. Masks take two forms:
+which daemons or clients the option's value applies. Masks take two forms:
 
 #. ``type:location`` where ``type`` is a CRUSH bucket type, for example ``rack`` or
    ``host``, and ``location`` is a value for that property. For example,
    ``host:foo`` would limit the option only to daemons or clients
    running on a host named ``foo``. Recent Ceph releases provide functionality
    that obviates most situations that formerly required host-specific configuration
-   values. Examples include OSD device classses, the ``osd_memory_target`` autotuner,
+   values. Examples include OSD device classes, the ``osd_memory_target`` autotuner,
    and options with values that are specific to certain media. Examples
    of the latter include ``osd_recovery_sleep_ssd`` and ``osd_recovery_max_active_hdd``.
 
@@ -719,7 +719,7 @@ values), run a command of the following form:
 You can show all settings for a daemon that is currently running by connecting
 to the admin socket on the host where it runs. For example, to dump all
 current settings for ``osd.1701``, run the following command on the host
-where ``osd.1701`` runs. The host whre a daemon runs can be determined with
+where ``osd.1701`` runs. The host where a daemon runs can be determined with
 the ``ceph osd find`` command or ``ceph orch ps`` commands.
 
 .. prompt:: bash #

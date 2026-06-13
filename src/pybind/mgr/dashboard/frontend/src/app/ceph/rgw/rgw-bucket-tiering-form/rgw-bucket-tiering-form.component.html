@@ -86,7 +86,7 @@
         </ng-template>
       </div>
       <legend class="cds--label">Choose a configuration scope</legend>
-      <div>
+      <div class="form-item">
         <cds-radio-group
           formControlName="hasPrefix"
         >
@@ -126,9 +126,10 @@
       </div>
 
       <!-- tags -->
-      <div *ngIf="tieringForm.controls.hasPrefix.value">
+      <div class="form-item"
+           *ngIf="tieringForm.controls.hasPrefix.value">
         <div class="form-group-header">Tags</div>
-        <div>All the tags must exist in the object's tag set for the rule to apply.</div>
+        <div class="cds-mb-4">All the tags must exist in the object's tag set for the rule to apply.</div>
         <ng-container formArrayName="tags"
                       *ngFor="let tags of tags.controls; index as i">
           <ng-container [formGroupName]="i">
@@ -194,7 +195,7 @@
       </div>
 
       <legend class="cds--label">Status</legend>
-      <div>
+      <div class="form-item">
         <cds-radio-group
           formControlName="status">
         <cds-radio [value]="'Enabled'"
@@ -203,7 +204,7 @@
                      i18n>Disabled </cds-radio>
         </cds-radio-group>
       </div>
-      <div class="form-item">
+      <div>
         <cds-number formControlName="days"
                     label="Number of days"
                     [min]="1"

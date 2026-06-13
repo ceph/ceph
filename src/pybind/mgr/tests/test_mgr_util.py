@@ -85,3 +85,71 @@ class TestCephFsEarmarkResolver:
         mock_parse_earmark.side_effect = mgr_util.EarmarkParseError
         result = resolver.check_earmark("error.test", mgr_util.EarmarkTopScope.SMB)
         assert result is False
+
+
+_SHA256_OK = "a" * 64
+_SHA256_BAD_HEX = "g" * 64
+_SHA256_SHORT = "a" * 63
+_SHA512_OK = "b" * 128
+_SHA512_SHORT = "b" * 127
+_BLAKE3_OK = "c" * 64
+
+
+@pytest.mark.parametrize(
+    "digest, expected",
+    [
+        (f"sha256:{_SHA256_OK}", True),
+        (f"sha512:{_SHA512_OK}", True),
+        (f"blake3:{_BLAKE3_OK}", True),
+        (f"sha256:{_SHA256_BAD_HEX}", False),
+        (f"sha256:{_SHA256_SHORT}", False),
+        (f"sha512:{_SHA512_SHORT}", False),
+        ("notadigest", False),
+        ("", False),
+        ("nocolon", False),
+        # Unknown algorithm: generic descriptor grammar only (no length check).
+        ("foo:bar", True),
+        ("acme:encoded-value_1", True),
+    ],
+)
+def test_is_valid_digest(digest: str, expected: bool):
+    assert mgr_util.is_valid_digest(digest) is expected
+
+
+@pytest.mark.parametrize(
+    "ref, expected",
+    [
+        # Typical registry + path + tag
+        ("quay.io/ceph/ceph", True),
+        ("quay.io/ceph/ceph:v18.2.0", True),
+        ("registry.example.com:5000/foo/bar:latest", True),
+        ("docker.io/library/nginx:1.25", True),
+        ("gcr.io/google-containers/pause:3.1", True),
+        ("mcr.microsoft.com/devcontainers/base:debian", True),
+        (f"quay.io/foo/bar@sha256:{_SHA256_OK}", True),
+        (f"localhost:5000/myapp/service@sha512:{_SHA512_OK}", True),
+        (f"127.0.0.1:5000/img/name@blake3:{_BLAKE3_OK}", True),
+        # Shorthand names (no registry)
+        ("ceph/ceph", True),
+        ("library/nginx:1", True),
+        ("alpine", True),
+        ("postgres:16-alpine", True),
+        # Tag charset (OCI distribution-spec tag)
+        ("quay.io/x/img:v1.2.3-rc.1", True),
+        ("registry.io/a/b/c/d/e:1", True),
+        # Reject common CLI/flag confusions
+        ("--force", False),
+        ("-f", False),
+        ("--image", False),
+        ("", False),
+        # Path traversal–looking strings can still match the permissive REGISTRY/NAME
+        # heuristic (e.g. ".."/"escape"). Use characters NAME/TAG reject instead:
+        ("quay.io/ceph/ceph:bad tag", False),
+        ("!not/valid", False),
+        # Malformed or wrong-length digest
+        (f"quay.io/foo@sha256:{_SHA256_BAD_HEX}", False),
+        (f"docker.io/lib/img@sha256:{_SHA256_SHORT}", False),
+    ],
+)
+def test_is_valid_container_image_ref(ref: str, expected: bool):
+    assert mgr_util.is_valid_container_image_ref(ref) is expected

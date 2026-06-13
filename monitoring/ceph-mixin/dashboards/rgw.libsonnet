@@ -72,19 +72,6 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addClusterTemplate()
     )
-
-    .addTemplate(
-      $.addTemplateSchema(
-        'rgw_servers',
-        '$datasource',
-        'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % $.matchers(),
-        1,
-        true,
-        1,
-        null,
-        'rgw.(.*)'
-      )
-    )
     .addPanels([
       RgwSyncOverviewPanel(
         'Replication (throughput) from Source Zone',
@@ -157,7 +144,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='rate(ceph_rgw_sync_delta_sync_delta{instance_id=~"$rgw_servers", %(matchers)s}[$__rate_interval])',
+            expr='rate(ceph_rgw_sync_delta_sync_delta{%(matchers)s}[$__rate_interval])',
             datasource='$datasource',
             instant=false,
             legendFormat='{{instance_id}} - {{shard_id}}',

@@ -5,8 +5,6 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -48,8 +46,7 @@ describe('InventoryDevicesComponent', () => {
       FormsModule,
       HttpClientTestingModule,
       SharedModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
+      RouterTestingModule
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },

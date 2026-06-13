@@ -51,7 +51,24 @@
                 i18n>The chosen zone name is already in use.</span>
         </div>
       </div>
-
+      <div class="form-group row">
+        <div class="cd-col-form-offset">
+          <div class="custom-control custom-checkbox">
+            <input class="custom-control-input"
+                   id="archive_zone"
+                   type="checkbox"
+                   formControlName="archive_zone">
+            <label class="custom-control-label cds-ml-2"
+                   for="archive_zone"
+                   i18n>Archive</label>
+            <cd-helper i18n>
+            <span
+              >Enable archival storage to keep all object versions and protect data from deletion or corruption.</span
+            >
+          </cd-helper>
+          </div>
+        </div>
+      </div>
       <legend i18n>Service Details</legend>
       <div class="form-group row">
         <div class="cd-col-form-offset">
@@ -60,7 +77,7 @@
                    id="unmanaged"
                    type="checkbox"
                    formControlName="unmanaged">
-            <label class="custom-control-label"
+            <label class="custom-control-label cds-ml-2"
                    for="unmanaged"
                    i18n>Unmanaged</label>
             <cd-helper i18n>If set to true, the orchestrator will not start nor stop any daemon associated with this service.

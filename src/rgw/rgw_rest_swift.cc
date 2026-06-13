@@ -294,7 +294,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user_acl);
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
-    end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
+    end_header(s, this, NULL, NO_CONTENT_LENGTH, true);
   }
 
   if (! op_ret) {
@@ -393,7 +393,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_max_buckets(),
             s->user_acl);
     dump_errno(s);
-    end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
+    end_header(s, this, nullptr, s->formatter->get_len(), true);
   }
 
   if (sent_data || s->cct->_conf->rgw_swift_enforce_content_length) {
@@ -1037,8 +1037,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
       suffix++;
       if (*suffix) {
 	string suffix_str(suffix);
-	const char *mime = rgw_find_mime_by_ext(suffix_str);
-	if (mime) {
+	auto mime = rgw_find_mime_by_ext(suffix_str);
+	if (!mime.empty()) {
 	  s->generic_attrs[RGW_ATTR_CONTENT_TYPE] = mime;
 	}
       }
@@ -2510,10 +2510,11 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
   /* This is okay.  It's an error, so nothing will run after this, and it can be
    * called by abort_early(), which can be called before s->object or s->bucket
    * are set up. */
+  s->object_key = std::to_string(http_ret) + error_doc;
   if (!rgw::sal::Bucket::empty(s->bucket.get())) {
-    s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+    s->object = s->bucket->get_object(s->object_key);
   } else {
-    s->object = driver->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+    s->object = driver->get_object(s->object_key);
   }
 
   RGWOp* newop = &get_errpage_op;
@@ -3057,29 +3058,29 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  char reqbuf[frontend_prefix.length() + s->decoded_uri.length() + 1];
-  sprintf(reqbuf, "%s%s", frontend_prefix.c_str(), s->decoded_uri.c_str());
-  const char *req_name = reqbuf;
+  auto reqbuf = fmt::format("{}{}", frontend_prefix, s->decoded_uri);
+  std::string_view req_name = reqbuf;
 
-  const char *p;
+  // args.set requires a `const std::string&`
+  std::string p;
 
-  if (*req_name == '?') {
+  if (req_name.starts_with('?')) {
     p = req_name;
   } else {
-    p = s->info.request_params.c_str();
+    p = s->info.request_params;
   }
 
   s->info.args.set(p);
   s->info.args.parse(s);
 
   /* Skip the leading slash of URL hierarchy. */
-  if (req_name[0] != '/') {
+  if (!req_name.starts_with('/')) {
     return 0;
   } else {
-    req_name++;
+    req_name.remove_prefix(1);
   }
 
-  if ('\0' == req_name[0]) {
+  if (req_name.empty()) {
     return g_conf()->rgw_swift_url_prefix == "/" ? -ERR_BAD_URL : 0;
   }
 
@@ -3110,16 +3111,12 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
   }
 
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf()->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
-  int blen;
-  if (g_conf()->rgw_swift_url_prefix == "/") {
-    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
-  } else {
-    blen = sprintf(buf, "/%s/v1%s",
-                   g_conf()->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
-  }
+  const std::string swift_url_prefix =
+      (g_conf()->rgw_swift_url_prefix == "/")
+          ? fmt::format("/v1{}", tenant_path)
+          : fmt::format("/{}/v1{}", g_conf()->rgw_swift_url_prefix, tenant_path);
 
-  if (strncmp(reqbuf, buf, blen) != 0) {
+  if (!reqbuf.starts_with(swift_url_prefix)) {
     return -ENOENT;
   }
 
@@ -3166,8 +3163,9 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
   s->init_state.url_bucket = first;
 
   if (req.size()) {
-    s->object = driver->get_object(
-      rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""))); /* rgw swift extension */
+    s->object_key.name = req;
+    s->object_key.instance = s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""); /* rgw swift extension */
+    s->object = driver->get_object(s->object_key);
     s->info.effective_uri.append("/" + s->object->get_name());
   }
 
@@ -3187,6 +3185,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Driver* driver, req_state* s,
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key, s);
     if (!result)
       return -ERR_BAD_URL;
+    s->src_object_key = key;
     s->src_object = driver->get_object(key);
     if (!s->src_object)
       return -ERR_BAD_URL;
@@ -3209,8 +3208,10 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Driver* driver, req_state* s,
 
     /* convert COPY operation into PUT */
     t->src_bucket = t->url_bucket;
+    s->src_object_key = s->object_key;
     s->src_object = s->object->clone();
     t->url_bucket = dest_bucket_name;
+    s->object_key.name = dest_object_name;
     s->object->set_name(dest_object_name);
     s->op = OP_PUT;
   }
@@ -3254,4 +3255,18 @@ RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   s->prot_flags |= RGW_REST_SWIFT;
   const auto& auth_strategy = auth_registry.get_swift();
   return new RGWHandler_REST_SWIFT_Info(auth_strategy);
+}
+
+int RGWHandler_REST_Bucket_SWIFT::error_handler(int err_no,
+						std::string *error_content,
+						optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
+}
+
+int RGWHandler_REST_Obj_SWIFT::error_handler(int err_no,
+					     std::string *error_content,
+					     optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
 }

@@ -3,6 +3,7 @@
   [title]="title"
   [description]="description"
   (submitRequested)="onSubmit($event)"
+  (stepChanged)="onStepChanged()"
   [isSubmitLoading]="isSubmitLoading"
   submitButtonLabel="Add"
   i18n-submitButtonLabel>
@@ -14,4 +15,12 @@
       [group]="group"
       [existingHosts]="existingHosts"></cd-nvmeof-subsystem-step-two>
   </cd-tearsheet-step>
+  @if(showAuthStep) {
+  <cd-tearsheet-step>
+    <cd-nvmeof-subsystem-step-three
+      #tearsheetStep
+      [stepTwoValue]="stepTwoValue"
+      [group]="group"></cd-nvmeof-subsystem-step-three>
+  </cd-tearsheet-step>
+  }
 </cd-tearsheet>

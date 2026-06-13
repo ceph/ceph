@@ -158,11 +158,13 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
       continue;
     }
     const shard_id_t &shard = pg_shard.shard;
+#ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
       dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
       continue;
     }
+#endif
     if (!missing.is_missing(hoid)) {
       ceph_assert(!have.contains(shard));
       have.insert(shard);
@@ -357,7 +359,12 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     read_result_t &read_result,
     read_request_t &read_request,
     const bool for_recovery,
-    bool want_attrs) {
+    bool want_attrs,
+    bool want_omap_header) {
+  if (want_omap_header) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+  }
+  
   set<pg_shard_t> error_shards;
   for (auto &shard: std::views::keys(read_result.errors)) {
     error_shards.insert(shard);
@@ -378,8 +385,9 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     return -EIO;
   }
 
-  bool need_attr_request = want_attrs;
+  bool need_attr_request = want_attrs || want_omap_header;
   read_request.want_attrs = want_attrs;
+  read_request.want_omap_header = want_omap_header;
 
   // Rather than repeating whole read, we can remove everything we already have.
   for (auto iter = read_request.shard_reads.begin();
@@ -468,11 +476,25 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   map<pg_shard_t, ECSubRead> messages;
   for (auto &&[hoid, read_request]: rop.to_read) {
     bool need_attrs = read_request.want_attrs;
+    bool need_omap_header = read_request.want_omap_header;
+    bool need_omap_keys = read_request.want_omap_keys;
+    if (need_omap_header || need_omap_keys) {
+      ceph_assert(get_parent()->get_pool().supports_omap());
+    }
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
         messages[shard_read.pg_shard].attrs_to_read.insert(hoid);
         need_attrs = false;
+      }
+      if (need_omap_header && !sinfo.is_nonprimary_shard(shard)) {
+        messages[shard_read.pg_shard].omap_headers_to_read.insert(hoid);
+        need_omap_header = false;
+      }
+      if (need_omap_keys && !sinfo.is_nonprimary_shard(shard)) {
+        messages[shard_read.pg_shard].omap_read_from.insert(
+          {hoid, {read_request.omap_read_from, read_request.omap_max_bytes}});
+        need_omap_keys = false;
       }
       if (shard_read.subchunk) {
         messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
@@ -494,12 +516,17 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       }
     }
     ceph_assert(!need_attrs);
-    ceph_assert(reads_sent);
+    ceph_assert(!need_omap_header);
+    ceph_assert(!need_omap_keys);
   }
+  ceph_assert(reads_sent);
 
   std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
+  std::pair<int, int> subchunk_info =
+    std::make_pair(ec_impl->get_sub_chunk_count(),
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
@@ -523,9 +550,10 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.init("ec sub read", nullptr, &rop.trace);
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
+    msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
-             << " to osd." << pg_shard << dendl;
+             << " to osd." << pg_shard.osd << dendl;
   }
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
@@ -638,12 +666,15 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
       for (auto &&read: req.to_read) {
         // Return a buffer containing both data and parity
         // if the parity read inject is set
+#ifndef WITH_CRIMSON
         if (cct->_conf->bluestore_debug_inject_read_err &&
             ECInject::test_parity_read(hoid)) {
           bufferlist data_and_parity;
           read_pipeline.create_parity_read_buffer(res.buffers_read, read, &data_and_parity);
           result.insert(read.offset, data_and_parity.length(), data_and_parity);
-        } else {
+        } else
+#endif
+        {
           result.insert(read.offset, read.size,
                         res.buffers_read.get_ro_buffer(read.offset, read.size));
         }
@@ -683,15 +714,20 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
     ECUtil::shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
+#ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
         ECInject::test_parity_read(hoid)) {
       get_want_to_read_all_shards(to_read, want_shard_reads);
-    }
-    else {
+    } else
+#endif
+    {
       get_want_to_read_shards(to_read, want_shard_reads);
     }
 
-    read_request_t read_request(to_read, want_shard_reads, false, object_size);
+    read_request_t read_request(
+      to_read, want_shard_reads, WantAttrs::No, WantOmapHeader::No,
+      WantOmapKeys::No, "", 0, object_size
+    );
     const int r = get_min_avail_to_read_shards(
       hoid,
       false,
@@ -762,11 +798,20 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     dout(10) << __func__ << " want attrs again" << dendl;
   }
 
+  // Check if we need to read omap_header again
+  const bool want_omap_header =
+      rop.to_read.at(hoid).want_omap_header &&
+      !rop.complete.at(hoid).omap_header;
+  if (want_omap_header) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    dout(10) << __func__ << " want omap_header again" << dendl;
+  }
+
   read_request_t &read_request = rop.to_read.at(hoid);
   // reset the old shard reads, we are going to read them again.
   read_request.shard_reads.clear();
   return get_remaining_shards(hoid, rop.complete.at(hoid), read_request,
-                              rop.for_recovery, want_attrs);
+                              rop.for_recovery, want_attrs, want_omap_header);
 }
 
 void ECCommon::ReadPipeline::kick_reads() {
@@ -789,10 +834,14 @@ bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
 
 bool ECCommon::read_request_t::operator==(const read_request_t &other) const {
   return to_read == other.to_read &&
-      flags == other.flags &&
-      shard_want_to_read == other.shard_want_to_read &&
-      shard_reads == other.shard_reads &&
-      want_attrs == other.want_attrs;
+         flags == other.flags &&
+         shard_want_to_read == other.shard_want_to_read &&
+         shard_reads == other.shard_reads &&
+         want_attrs == other.want_attrs &&
+         want_omap_header == other.want_omap_header &&
+         want_omap_keys == other.want_omap_keys &&
+         omap_read_from == other.omap_read_from &&
+         omap_max_bytes == other.omap_max_bytes;
 }
 
 void ECCommon::RMWPipeline::start_rmw(OpRef op) {
@@ -841,7 +890,9 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     &written,
     &trans,
     get_parent()->get_dpp(),
-    get_osdmap());
+    get_osdmap(),
+    first_write_in_interval,
+    ec_backend.ec_omap_journal);
 
   dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
@@ -923,12 +974,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     if (pg_shard == get_parent()->whoami_shard()) {
       should_write_local = true;
       local_write_op.claim(sop);
+#ifndef WITH_CRIMSON
     } else if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_write_error1(ghobject_t(op.hoid,
                                              ghobject_t::NO_GEN,
                                              pg_shard.shard))) {
       dout(0) << " Error inject - Dropping write message to shard " <<
           pg_shard.shard << dendl;
+#endif
     } else {
       auto *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
@@ -965,6 +1018,10 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
 }
 
 struct ECDummyOp final : ECCommon::RMWPipeline::Op {
+  ECDummyOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
   void generate_transactions(
       ceph::ErasureCodeInterfaceRef &ec_impl,
       pg_t pgid,
@@ -972,7 +1029,9 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       map<hobject_t, ECUtil::shard_extent_map_t> *written,
       shard_id_map<ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
-      const OSDMapRef &osdmap
+      const OSDMapRef &osdmap,
+      bool &first_write_in_interval,
+      ECOmapJournal &ec_omap_journal
     ) override {
     // NOP, as -- in contrast to ECClassicalOp -- there is no
     // transaction involved
@@ -1022,7 +1081,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       dout(20) << __func__ << " cache idle " << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
-      const auto nop = std::make_shared<ECDummyOp>();
+      const auto nop = std::make_shared<ECDummyOp>(*this);
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->pg_committed_to = op->version;
@@ -1054,6 +1113,7 @@ void ECCommon::RMWPipeline::on_change() {
   oid_to_version.clear();
   waiting_commit.clear();
   next_write_all_shards = false;
+  first_write_in_interval = true;
 }
 
 void ECCommon::RMWPipeline::on_change2() {
@@ -1106,7 +1166,8 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
     ceph_abort();
   }
 
-  bool oneshot = op.before_progress.first && op.after_progress.data_complete;
+  bool oneshot = op.before_progress.first
+    && op.after_progress.data_complete && op.after_progress.omap_complete;
   ghobject_t tobj;
   if (oneshot) {
     tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
@@ -1150,9 +1211,32 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
       coll,
       tobj,
       op.attrset);
+    if (get_parent()->get_pool().supports_omap() &&
+        !sinfo.is_nonprimary_shard(get_parent()->whoami_shard().shard)) {
+      dout(20) << __func__ << ": recovery_omap_clear tobj=" << tobj << dendl;
+      m->t.omap_clear(
+        coll,
+        tobj);
+      dout(20) << __func__ << ": recovery_omap_setheader tobj=" << tobj
+              << " header_size=" << op.omap_header.length() << dendl;
+      m->t.omap_setheader(
+        coll,
+        tobj,
+        op.omap_header);
+    }
   }
 
-  if (op.after_progress.data_complete) {
+  if (!op.omap_entries.empty()) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    if (!sinfo.is_nonprimary_shard(get_parent()->whoami_shard().shard)) {
+      m->t.omap_setkeys(
+      coll,
+      tobj,
+      op.omap_entries);
+    }
+  }
+
+  if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
       get_parent()->whoami_shard().shard);
     ceph_assert(shard_size >= tobj_size);
@@ -1161,7 +1245,8 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
     }
   }
 
-  if (op.after_progress.data_complete && !oneshot) {
+  if (op.after_progress.data_complete
+    && op.after_progress.omap_complete && !oneshot) {
     dout(10) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
@@ -1173,7 +1258,7 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
       coll, ghobject_t(
         op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
-  if (op.after_progress.data_complete) {
+  if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     if ((get_parent()->pgb_is_primary())) {
       ceph_assert(recovery_ops.count(op.soid));
       ceph_assert(recovery_ops[op.soid].obc);
@@ -1280,10 +1365,37 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
 #endif
     if (empty_obc) {
       update_object_size_after_read(op.recovery_info.size, res, req);
+      
+      // Check if object has omap flag - if not, mark omap_complete
+      if (get_parent()->get_pool().supports_omap()) {
+        if (op.obc && !op.obc->obs.oi.is_omap()) {
+          op.recovery_progress.omap_complete = true;
+          dout(10) << __func__ << ": object " << hoid
+                   << " has no omap flag, marking omap_complete" << dendl;
+        }
+      } else {
+        ceph_assert(op.recovery_progress.omap_complete);
+      }
     }
   }
   ceph_assert(op.xattrs.size());
   ceph_assert(op.obc);
+
+  if (res.omap_header) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    op.omap_header = std::move(res.omap_header);
+  }
+  if (res.omap_entries) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    if (!res.omap_entries->empty()) {
+      op.recovery_progress.omap_recovered_to = res.omap_entries->rbegin()->first;
+    }
+    op.recovery_info.num_omap_keys += res.omap_entries->size();
+    op.omap_entries = std::move(res.omap_entries);
+  }
+  if (res.omap_complete) {
+    op.recovery_progress.omap_complete = true;
+  }
 
   op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
@@ -1399,7 +1511,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
   while (1) {
     switch (op.state) {
     case RecoveryOp::IDLE: {
-      ceph_assert(!op.recovery_progress.data_complete);
+      ceph_assert(!op.recovery_progress.data_complete
+                  || !op.recovery_progress.omap_complete);
       ECUtil::shard_extent_set_t want(sinfo.get_k_plus_m());
 
       op.state = RecoveryOp::READING;
@@ -1410,10 +1523,15 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
        * return truncated reads.  If the object size is known, then attempt
        * correctly sized reads.
        */
-      uint64_t read_size = get_recovery_chunk_size();
+      uint64_t available = get_recovery_chunk_size();
+      uint64_t read_size = available;
       if (op.obc) {
-        uint64_t read_to_end = ECUtil::align_next(op.obc->obs.oi.size) -
-          op.recovery_progress.data_recovered_to;
+        uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
+        uint64_t read_to_end = 0;
+
+        if (aligned_size > op.recovery_progress.data_recovered_to) {
+          read_to_end = aligned_size - op.recovery_progress.data_recovered_to;
+        }
 
         if (read_to_end < read_size) {
           read_size = read_to_end;
@@ -1423,6 +1541,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         op.recovery_progress.data_recovered_to, read_size, want);
 
       op.recovery_progress.data_recovered_to += read_size;
+      available -= read_size;
 
       // We only need to recover shards that are missing.
       for (auto shard : shard_id_set::difference(sinfo.get_all_shards(), op.missing_on_shards)) {
@@ -1433,11 +1552,35 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         op.xattrs = op.obc->attr_cache;
       }
 
-      read_request_t read_request(std::move(want),
-                                  op.recovery_progress.first && !op.obc,
-                                  op.obc
-                                    ? op.obc->obs.oi.size
-                                    : get_recovery_chunk_size());
+      const auto want_attrs = (
+#ifdef WITH_CRIMSON
+        op.recovery_progress.first && op.xattrs.count(OI_ATTR) == 0
+#else
+        op.recovery_progress.first && !op.obc
+#endif
+      ) ? WantAttrs::Yes : WantAttrs::No;
+      const auto want_omap_header = (op.recovery_progress.first && !op.recovery_progress.omap_complete)
+                                      ? WantOmapHeader::Yes
+                                      : WantOmapHeader::No;
+      if (want_omap_header == WantOmapHeader::Yes) {
+        ceph_assert(get_parent()->get_pool().supports_omap());
+      }
+      const auto want_omap_keys = !op.recovery_progress.omap_complete
+                                    ? WantOmapKeys::Yes
+                                    : WantOmapKeys::No;
+      if (want_omap_keys == WantOmapKeys::Yes) {
+        ceph_assert(get_parent()->get_pool().supports_omap());
+      }
+      const auto chunk_size = op.obc ? op.obc->obs.oi.size : get_recovery_chunk_size();
+      read_request_t read_request(
+        std::move(want),
+        want_attrs,
+        want_omap_header,
+        want_omap_keys,
+        op.recovery_progress.omap_recovered_to,
+        available,
+        chunk_size
+      );
 
       int r = read_pipeline.get_min_avail_to_read_shards(
         op.hoid, true, false, read_request);
@@ -1451,6 +1594,37 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         get_parent()->cancel_pull(op.hoid);
         recovery_ops.erase(op.hoid);
         return;
+      }
+      if (get_parent()->get_pool().supports_omap()) {
+        shard_id_set have;
+        shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
+        read_pipeline.get_all_avail_shards(op.hoid, have, pg_shards, true, {});
+        bool found_omap_shard = false;
+        for (const auto shard : have) {
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shards[shard]);
+            auto miter = missing.get_items().find(op.hoid);
+            if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
+              dout(20) << __func__ << ": skipping shard " << shard
+                       << " for " << op.hoid << " due to dirty omap" << dendl;
+              continue;
+            }
+            shard_read_t shard_read;
+            shard_read.pg_shard = pg_shards[shard];
+            read_request.shard_reads.insert(shard, shard_read);
+            found_omap_shard = true;
+            dout(10) << __func__ << ": selected shard " << shard
+                     << " for omap read of " << op.hoid << dendl;
+            break;
+          }
+        }
+        if (!found_omap_shard) {
+          dout(10) << __func__ << ": ERROR: no shard with clean omap found for "
+                  << op.hoid << ", canceling recovery" << dendl;
+          get_parent()->cancel_pull(op.hoid);
+          recovery_ops.erase(op.hoid);
+          return;
+        }
       }
       if (read_request.shard_reads.empty()) {
         ceph_assert(op.obc);
@@ -1523,6 +1697,10 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           } else {
             dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
             pop.attrset = op.xattrs;
+            if (op.omap_header) {
+              ceph_assert(get_parent()->get_pool().supports_omap());
+              pop.omap_header = *(op.omap_header);
+            }
           }
 
           // Following an upgrade, or turning of overwrites, we can take this
@@ -1530,6 +1708,10 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           if (pop.attrset.contains(ECUtil::get_hinfo_key())) {
             pop.attrset.erase(ECUtil::get_hinfo_key());
           }
+        }
+        if (!sinfo.is_nonprimary_shard(pg_shard.shard) && op.omap_entries) {
+          ceph_assert(get_parent()->get_pool().supports_omap());
+          pop.omap_entries = *(op.omap_entries);
         }
         pop.recovery_info = op.recovery_info;
         pop.before_progress = op.recovery_progress;
@@ -1549,7 +1731,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
     }
     case RecoveryOp::WRITING: {
       if (op.waiting_on_pushes.empty()) {
-        if (op.recovery_progress.data_complete) {
+        if (op.recovery_progress.data_complete &&
+            op.recovery_progress.omap_complete) {
           op.state = RecoveryOp::COMPLETE;
           for (set<pg_shard_t>::iterator i = op.missing_on.begin();
                i != op.missing_on.end();
@@ -1565,7 +1748,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           }
           object_stat_sum_t stat;
           stat.num_bytes_recovered = op.recovery_info.size;
-          stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
+          stat.num_keys_recovered = op.recovery_info.num_omap_keys;
           stat.num_objects_recovered = 1;
           // TODO: not in crimson yet
           if (get_parent()->pg_is_repair())
@@ -1619,15 +1802,42 @@ ECCommon::RecoveryBackend::recover_object(
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
-  op.recovery_progress.omap_complete = true;
+  bool omap_dirty_in_missing = false;
+  bool omap_shard_missing = false;
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
-    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
+    const auto& missing = get_parent()->get_shard_missing(*i);
+    if (auto it = missing.get_items().find(hoid);
+          it != missing.get_items().end()) {
       op.missing_on.insert(*i);
       op.missing_on_shards.insert(i->shard);
+      if (get_parent()->get_pool().supports_omap()) {
+        if (it->second.clean_regions.omap_is_dirty()) {
+          omap_dirty_in_missing = true;
+        }
+        if (!sinfo.is_nonprimary_shard(i->shard)) {
+          omap_shard_missing = true;
+        }
+      }
+    }
+  }
+  if (!get_parent()->get_pool().supports_omap()) {
+    op.recovery_progress.omap_complete = true;
+  } else {
+    if (!obc) {
+      op.recovery_progress.omap_complete = false;
+    } else {
+      op.recovery_progress.omap_complete = !(
+        op.recovery_info.oi.is_omap()
+        || omap_dirty_in_missing
+        || omap_shard_missing
+      );
+    }
+    if (!op.recovery_progress.omap_complete) {
+      ceph_assert(get_parent()->get_pool().supports_omap());
     }
   }
   dout(10) << __func__ << ": built op " << op << dendl;

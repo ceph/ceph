@@ -5,9 +5,10 @@ import {
   ViewEncapsulation,
   inject,
   signal,
-  computed
+  computed,
+  Input
 } from '@angular/core';
-import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { EMPTY_STATE_IMAGE, Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import {
   METRIC_UNIT_MAP,
@@ -23,6 +24,7 @@ import { ProductiveCardComponent } from '../productive-card/productive-card.comp
 import { CommonModule } from '@angular/common';
 import { TimePickerComponent } from '../time-picker/time-picker.component';
 import { AreaChartComponent } from '../area-chart/area-chart.component';
+import { EmptyStateComponent } from '../empty-state/empty-state.component';
 
 @Component({
   selector: 'cd-performance-card',
@@ -36,11 +38,15 @@ import { AreaChartComponent } from '../area-chart/area-chart.component';
     AreaChartComponent,
     TimePickerComponent,
     LayoutModule,
-    GridModule
+    GridModule,
+    EmptyStateComponent
   ],
   encapsulation: ViewEncapsulation.None
 })
 export class PerformanceCardComponent implements OnInit, OnDestroy {
+  @Input() prometheusEmptyState: boolean = false;
+  @Input() storageEmptyState: boolean = false;
+
   chartDataSignal = signal<PerformanceData | null>(null);
   chartDataLengthSignal = computed(() => {
     const data = this.chartDataSignal();
@@ -50,6 +56,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   metricUnitMap = METRIC_UNIT_MAP;
   icons = Icons;
   iconSize = IconSize;
+  emptyState = EMPTY_STATE_IMAGE;
 
   private destroy$ = new Subject<void>();
 
@@ -72,7 +79,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     }
   ];
 
-  selectedStorageType = StorageType.All;
+  role: string = '';
 
   private prometheusService = inject(PrometheusService);
   private performanceCardService = inject(PerformanceCardService);
@@ -89,17 +96,17 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
     this.chartSub?.unsubscribe();
 
+    if (this.storageEmptyState || this.prometheusEmptyState) {
+      this.chartDataSignal.set(null);
+      return;
+    }
+
     this.chartSub = this.performanceCardService
-      .getChartData(time, this.selectedStorageType)
+      .getChartData(time)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
         this.chartDataSignal.set(data);
       });
-  }
-
-  onStorageTypeSelection(event: any) {
-    this.selectedStorageType = event.item.value;
-    this.loadCharts(this.time);
   }
 
   ngOnDestroy(): void {

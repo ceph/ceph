@@ -46,9 +46,9 @@ void rgw_get_token_id(const string& token, string& token_id)
   hash.Update((const unsigned char *)token.c_str(), token.size());
   hash.Final(m);
 
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-  token_id = calc_md5;
+  token_id.clear();
+  token_id.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1);
+  buf_to_hex(m, std::back_inserter(token_id));
 }
 
 
@@ -337,7 +337,7 @@ bool TokenCache::find_locked(const std::string& token_id, rgw::keystone::TokenEn
 
   if (entry.token.expired()) {
     tokens.erase(iter);
-    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
+    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
     return false;
   }
   token = entry.token;

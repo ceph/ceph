@@ -6,6 +6,7 @@
 
 #include "include/rados/librados_fwd.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/journal/cls_journal_ops.h"
 #include <set>
 #include <boost/optional.hpp>
 

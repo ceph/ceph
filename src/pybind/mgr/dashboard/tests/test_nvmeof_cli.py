@@ -10,10 +10,11 @@ from mgr_module import HandleCommandResult
 
 from ..cli import DBCLICommand
 from ..controllers import EndpointDoc
+from ..exceptions import DashboardException
 from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
     NvmeofCLICommand, convert_from_bytes, convert_to_bytes, \
-    format_host_updates
+    format_host_updates, resolve_nvmeof_server_address
 from ..tests import CLICommandTestMixin
 
 
@@ -1295,3 +1296,57 @@ class TestFormatHostUpdates:
             template_item="H {host_nqn} {nqn}",
         )
         assert out == "H h1 nqn.test\nW nqn.test"
+
+
+class TestResolveNvmeofServerAddress:
+    def test_resolve_returns_server_address_when_set(self):
+        assert resolve_nvmeof_server_address(
+            server_address="10.0.0.1",
+            traddr=None,
+            require=False,
+        ) == "10.0.0.1"
+
+    def test_resolve_uses_traddr_fallback_when_server_address_missing(self):
+        assert resolve_nvmeof_server_address(
+            server_address=None,
+            traddr="10.0.0.2",
+            require=False,
+        ) == "10.0.0.2"
+
+    def test_resolve_strips_whitespace_and_treats_empty_as_none(self):
+        assert resolve_nvmeof_server_address(
+            server_address="  ",
+            traddr=" 10.0.0.2 ",
+            require=False,
+        ) == "10.0.0.2"
+
+    def test_resolve_rejects_both_server_address_and_traddr(self):
+        with pytest.raises(DashboardException) as excinfo:
+            resolve_nvmeof_server_address(
+                server_address="10.0.0.1",
+                traddr="10.0.0.2",
+                require=False,
+            )
+
+        err = excinfo.value
+        assert err.status == 400
+        assert err.code == "server_address_and_traddr_mutually_exclusive"
+
+    def test_resolve_require_true_rejects_missing(self):
+        with pytest.raises(DashboardException) as excinfo:
+            resolve_nvmeof_server_address(
+                server_address=None,
+                traddr=None,
+                require=True,
+            )
+
+        err = excinfo.value
+        assert err.status == 400
+        assert err.code == "missing_server_address"
+
+    def test_resolve_require_false_allows_missing(self):
+        assert resolve_nvmeof_server_address(
+            server_address=None,
+            traddr=None,
+            require=False,
+        ) is None

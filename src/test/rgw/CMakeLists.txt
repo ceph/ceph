@@ -141,6 +141,19 @@ target_link_libraries(bench_rgw_ratelimit ${rgw_libs})
 add_executable(bench_rgw_ratelimit_gc bench_rgw_ratelimit_gc.cc )
 target_link_libraries(bench_rgw_ratelimit_gc ${rgw_libs})
 
+# Crypto benchmark through the BlockCrypt interface (full RGW encrypt path).
+# Uses the plugin system to load the configured accelerator (ISA-L or OpenSSL).
+# Run with --accel crypto_isal or --accel crypto_openssl to compare backends.
+add_executable(bench_rgw_crypto_accel bench_rgw_crypto_accel.cc)
+target_link_libraries(bench_rgw_crypto_accel
+  ${rgw_libs}
+  global
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS})
+add_dependencies(bench_rgw_crypto_accel crypto_plugins)
+
 add_executable(unittest_rgw_ratelimit test_rgw_ratelimit.cc $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_rgw_ratelimit ${rgw_libs})
 add_ceph_unittest(unittest_rgw_ratelimit)
@@ -215,6 +228,13 @@ target_link_libraries(unittest_rgw_crypto
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
+  )
+
+add_executable(unittest_rgw_range_projection test_rgw_range_projection.cc)
+add_ceph_unittest(unittest_rgw_range_projection)
+target_link_libraries(unittest_rgw_range_projection
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
   )
 
 if(WITH_RADOSGW_RADOS)
@@ -315,12 +335,26 @@ target_include_directories(unittest_rgw_kms
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_kms ${rgw_libs})
 
+# unittest_rgw_kms_cache
+add_executable(unittest_rgw_kms_cache test_rgw_kms_cache.cc)
+add_ceph_unittest(unittest_rgw_kms_cache)
+target_include_directories(unittest_rgw_kms_cache
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_kms_cache ${rgw_libs})
+
 # unittest_rgw_url
 add_executable(unittest_rgw_url test_rgw_url.cc)
 add_ceph_unittest(unittest_rgw_url)
 target_include_directories(unittest_rgw_url
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
+
+# unittest_rgw_sync_trace
+add_executable(unittest_rgw_sync_trace test_rgw_sync_trace.cc)
+add_ceph_unittest(unittest_rgw_sync_trace)
+target_include_directories(unittest_rgw_sync_trace
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sync_trace rgw_common ${rgw_libs})
 
 if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
@@ -438,3 +472,7 @@ add_catch2_test_rgw(rgw_hex)
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_tag test_rgw_tag.cc)
+add_ceph_unittest(unittest_rgw_tag)
+target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})

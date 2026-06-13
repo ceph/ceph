@@ -25,7 +25,7 @@ In commands of this form, the arguments ``host-pattern``, ``label``, and
   against name, label and status simultaneously, or to filter against any
   proper subset of name, label and status.
 
-The ``detail`` parameter provides more host related information for cephadm-based
+The ``detail`` parameter provides more host-related information for cephadm-based
 clusters. For example:
 
 .. prompt:: bash #
@@ -152,7 +152,7 @@ cluster by running a command of the following form:
 Offline Host Removal
 --------------------
 
-If a host is offline and can not be recovered, it can be removed from the
+If a host is offline and cannot be recovered, it can be removed from the
 cluster by running a command of the following form:
 
 .. prompt:: bash #
@@ -171,7 +171,7 @@ Host Labels
 ===========
 
 The orchestrator supports assigning labels to hosts. Labels
-are free-form and have no particular meaning by itself and each host
+are free-form and have no particular meaning by themselves. Each host
 can have multiple labels. They can be used to specify the placement
 of daemons. For more information, see :ref:`orch-placement-by-labels`.
 
@@ -182,7 +182,7 @@ Labels can be added when adding a host with the ``--labels`` flag:
    ceph orch host add my_hostname --labels=my_label1
    ceph orch host add my_hostname --labels=my_label1,my_label2
 
-To add a label a existing host, run:
+To add a label to an existing host, run:
 
 .. prompt:: bash #
 
@@ -226,7 +226,7 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   bootstrap was originally run), and the ``client.admin`` key is set to be distributed
   to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
   to additional hosts will normally cause cephadm to deploy configuration and keyring files
-  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy) in
+  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy), in
   addition to the default location ``/etc/ceph/`` cephadm also stores config and keyring
   files in the ``/var/lib/ceph/<fsid>/config`` directory.
 
@@ -371,7 +371,7 @@ cephadm control.
 
   Removal from the CRUSH map will fail if there are OSDs deployed on the
   host. If you would like to remove all the host's OSDs as well, please start
-  by using  the ``ceph orch host drain`` command to do so. Once the OSDs
+  by using the ``ceph orch host drain`` command to do so. Once the OSDs
   have been removed, then you may direct cephadm to remove the CRUSH bucket
   along with the host using the ``--rm-crush-entry`` flag.
 

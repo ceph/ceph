@@ -3,8 +3,11 @@
 
 #include <string.h>
 
+#include <algorithm>
 #include <iostream>
+#include <unordered_map>
 
+#include "common/async/spawn_throttle.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "include/types.h"
 
@@ -95,3 +98,65 @@ XMLObj *RGWMultiDelXMLParser::alloc_obj(const char *el) {
   return obj;
 }
 
+void rgw::multi_delete::dispatch(const std::vector<Item>& items,
+                                 bool bucket_versioned,
+                                 uint32_t max_aio,
+                                 boost::asio::yield_context yield,
+                                 Exec exec,
+                                 OnDispatch on_dispatch)
+{
+  auto group = ceph::async::spawn_throttle{yield, std::max<uint32_t>(1, max_aio)};
+
+  if (!bucket_versioned) {
+    for (size_t i = 0; i < items.size(); ++i) {
+      group.spawn([&exec, &items, i] (boost::asio::yield_context y) {
+        exec(items[i], false, y);
+      });
+      if (on_dispatch) {
+        on_dispatch();
+      }
+    }
+    group.wait();
+    return;
+  }
+
+  // Preserve first-seen order within each key group so callers can keep
+  // request/result ordering stable while coalescing intermediate OLH updates.
+  std::vector<std::vector<size_t>> grouped_items;
+  grouped_items.reserve(items.size());
+  std::unordered_map<std::string, size_t> group_index;
+  group_index.reserve(items.size());
+
+  for (size_t i = 0; i < items.size(); ++i) {
+    const auto& name = items[i].key.name;
+    auto [it, inserted] = group_index.emplace(name, grouped_items.size());
+    if (inserted) {
+      grouped_items.emplace_back();
+    }
+    grouped_items[it->second].push_back(i);
+  }
+
+  for (const auto& indexes : grouped_items) {
+    for (size_t i = 0; i + 1 < indexes.size(); ++i) {
+      const auto index = indexes[i];
+      group.spawn([&exec, &items, index] (boost::asio::yield_context y) {
+        exec(items[index], true, y);
+      });
+      if (on_dispatch) {
+        on_dispatch();
+      }
+    }
+  }
+  group.wait();
+
+  for (const auto& indexes : grouped_items) {
+    const auto index = indexes.back();
+    group.spawn([&exec, &items, index] (boost::asio::yield_context y) {
+      exec(items[index], false, y);
+    });
+    if (on_dispatch) {
+      on_dispatch();
+    }
+  }
+  group.wait();
+}

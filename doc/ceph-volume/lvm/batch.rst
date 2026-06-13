@@ -7,13 +7,13 @@ an input of devices. The ``batch`` subcommand is closely related to
 drive-groups. One individual drive group specification translates to a single
 ``batch`` invocation.
 
-The subcommand is based to :ref:`ceph-volume-lvm-create`, and will use the very
+The subcommand is based on :ref:`ceph-volume-lvm-create`, and will use the very
 same code path. All ``batch`` does is to calculate the appropriate sizes of all
 volumes and skip over already created volumes.
 
 All the features that ``ceph-volume lvm create`` supports, like ``dmcrypt``,
-avoiding ``systemd`` units from starting, defining bluestore,
-is supported.
+avoiding ``systemd`` units from starting, and defining BlueStore,
+are supported.
 
 
 .. _ceph-volume-lvm-batch_auto:
@@ -21,15 +21,15 @@ is supported.
 Automatic sorting of disks
 --------------------------
 If ``batch`` receives only a single list of data devices and other options are
-passed , ``ceph-volume`` will auto-sort disks by its rotational
+passed, ``ceph-volume`` will auto-sort disks by its rotational
 property and use non-rotating disks for ``block.db`` or ``journal`` depending
 on the objectstore used. If all devices are to be used for standalone OSDs,
 no matter if rotating or solid state, pass ``--no-auto``.
-For example assuming :term:`bluestore` is used and ``--no-auto`` is not passed,
+For example assuming :term:`BlueStore` is used and ``--no-auto`` is not passed,
 the deprecated behavior would deploy the following, depending on the devices
 passed:
 
-#. Devices are all spinning HDDs: 1 OSD is created per device
+#. Devices are all HDDs: 1 OSD is created per device
 #. Devices are all SSDs: 2 OSDs are created per device
 #. Devices are a mix of HDDs and SSDs: data is placed on the spinning device,
    the ``block.db`` is created on the SSD, as large as possible.
@@ -37,11 +37,11 @@ passed:
 .. note:: Although operations in ``ceph-volume lvm create`` allow usage of
           ``block.wal`` it isn't supported with the ``auto`` behavior.
 
-This default auto-sorting behavior is now DEPRECATED and will be changed in future releases.
-Instead devices are not automatically sorted unless the ``--auto`` option is passed
+This default auto-sorting behavior is now **deprecated** and will be changed in future releases.
+Instead, devices are not automatically sorted unless the ``--auto`` option is passed.
 
-It is recommended to make use of the explicit device lists for ``block.db``,
-   ``block.wal`` and ``journal``.
+It is recommended to make use of the explicit device lists
+for ``block.db``, ``block.wal`` and ``journal``.
 
 .. _ceph-volume-lvm-batch_bluestore:
 
@@ -58,7 +58,7 @@ Consider the following invocation::
     $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
 
 This will deploy three OSDs with external ``db`` and ``wal`` volumes on
-an NVME device.
+an NVMe device.
 
 Pretty reporting
 ----------------

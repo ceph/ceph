@@ -28,10 +28,14 @@ overrides:
       mon:
         # cephadm can take up to 5 minutes to bring up remaining mons
         mon down mkfs grace: 300
+        mon nvmeofgw beacon grace: 10
+        nvmeof mon client connect panic: 60
     log-ignorelist:
       - OSD_DOWN
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
       - PG_DEGRADED
       - NVMEOF_SINGLE_GATEWAY
+      - have only 1 nvmeof gateway
+      - has 1 gateway
       - CEPHADM_FAILED_DAEMON

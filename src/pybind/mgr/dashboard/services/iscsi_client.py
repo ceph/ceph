@@ -15,7 +15,7 @@ from ..rest_client import RestClient
 from ..settings import Settings
 from .iscsi_config import IscsiGatewaysConfig
 
-logger = logging.getLogger('iscsi_client')
+logger = logging.getLogger(__name__)
 
 
 class IscsiClient(RestClient):

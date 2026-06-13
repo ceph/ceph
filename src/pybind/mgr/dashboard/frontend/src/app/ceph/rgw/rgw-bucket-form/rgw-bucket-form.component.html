@@ -69,9 +69,11 @@
 
     <!-- Accounts -->
     @if(accounts.length && accountUsers.length > 0){
-      <cds-checkbox formControlName="isAccountOwner"
-                    i18n>Select account user
-      </cds-checkbox>
+      <div class="form-item">
+        <cds-checkbox formControlName="isAccountOwner"
+                      i18n>Select account user
+        </cds-checkbox>
+      </div>
     }
 
     @if (bucketForm.get('isAccountOwner').value) {
@@ -370,11 +372,13 @@
       <div class="form-item">
         <legend class="cd-header"
                 i18n>Replication</legend>
-        <ng-container *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
+        <ng-container *ngIf="{status: multisiteStatus$ | async, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
           <cds-checkbox name="replication"
                         formControlName="replication"
                         id="replication"
-                        [disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus.status.available"
+                        [disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus?.status?.available"
+                        [title]="!multisiteStatus.isDefaultZg && !multisiteStatus?.status?.available ? 'Please enable the multisite configuration' : ''"
+                        i18n-title
                         i18n-helperText
                         i18n>Enable
             <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
@@ -433,6 +437,8 @@
         <cds-textarea-label for="id"
                             [invalid]="!bucketForm.controls.bucket_policy.valid && (bucketForm.controls.bucket_policy.dirty)"
                             [invalidText]="bucketPolicyError"
+                            helperText="Define access permissions for this bucket using an S3-compatible JSON policy. This controls who can access the bucket and what actions they can perform."
+                            i18n-helperText
                             i18n>Bucket Policy
           <textarea cdsTextArea
                     class="textarea-field"

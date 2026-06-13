@@ -287,7 +287,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     });
   }
   seastar::future<> close() {
-    return cbj->close().handle_error(crimson::ct_error::assert_all{});
+    return cbj->close().handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
   auto get_records_available_size() {
     return cbj->get_cjs().get_records_available_size();
@@ -331,7 +331,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   seastar::future<> set_up_fut() final {
     device = random_block_device::create_test_ephemeral(
      random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
-    cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
+    cbj.reset(new CircularBoundedJournal(0, *this, device.get(), std::string()));
     block_size = device->get_block_size();
     cbj->set_write_pipeline(&pipeline);
     return mkfs(
@@ -343,7 +343,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	  return replay();
 	});
       });
-    }).handle_error(crimson::ct_error::assert_all{});
+    }).handle_error(crimson::ct_error::assert_all("unexpected error"));
   }
 };
 

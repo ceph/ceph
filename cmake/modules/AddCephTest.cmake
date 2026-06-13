@@ -3,6 +3,7 @@
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMAND_EXPAND_LISTS)
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
@@ -182,9 +183,9 @@ if(DEFINED catch2_opt_EXTRA_INCS)
 endif()
 
 if(${catch2_opt_NO_CATCH2_MAIN})
-  LIST(APPEND tl_libs Catch2)
+  LIST(APPEND tl_libs Catch2::Catch2)
 else()
-  LIST(APPEND tl_libs Catch2WithMain)
+  LIST(APPEND tl_libs Catch2::Catch2WithMain)
 endif()
 
 target_link_libraries(unittest_${test_name} 

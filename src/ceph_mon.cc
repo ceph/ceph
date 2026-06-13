@@ -24,6 +24,7 @@
 
 #include "common/config.h"
 #include "include/ceph_features.h"
+#include "include/util.h" // for ceph_data_stats_t
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
@@ -35,6 +36,7 @@
 #include "include/CompatSet.h"
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/pick_address.h"
 #include "common/JSONFormatter.h"
 #include "common/Throttle.h"
@@ -903,14 +905,15 @@ int main(int argc, const char **argv)
   msgr->wait();
   mgr_msgr->wait();
 
-  store.close();
-
   unregister_async_signal_handler(SIGHUP, handle_mon_signal);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
   shutdown_async_signal_handler();
 
+  // Destroy the Monitor (and its iterators) before closing the store.
   delete mon;
+  store.close();
+
   delete msgr;
   delete mgr_msgr;
 

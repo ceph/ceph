@@ -1,0 +1,27 @@
+[project]
+name = "ceph"
+description = "Core pure-Python libraries for the Ceph Project"
+version = "1.0.0"  # TODO: Make dynamic
+readme = "README.rst"
+keywords = ["ceph"]
+
+# SETUPTOOLS complains about these values because it still finds
+# setup.py. Can probably be dropped if backend is switched.
+# For example, I briefly experimented with flit as a backend and
+# it did not need these.
+dynamic = ["license", "classifiers", "dependencies"]
+
+[[project.authors]]
+name = "Ceph Project"
+email = "dev@ceph.io"
+
+[project.urls]
+Homepage = "https://ceph.io"
+Repository = "https://github.com/ceph/ceph"
+
+[project.scripts]
+ceph-smb-ctl = "ceph.smb.ctl.__main__:main"
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"

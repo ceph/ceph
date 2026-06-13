@@ -18,6 +18,7 @@
 #include "include/ceph_assert.h"
 #include "bluestore_types.h"
 #include "common/debug.h"
+#include <atomic>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -274,4 +275,96 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
   uint64_t      soffset = words_to_bits(word_idx) + ffs;
   ext.length = (soffset - ext.offset);
   return ext;
+}
+
+//----------------------------------------------------------------------------
+uint64_t SimpleBitmap::set_atomic(uint64_t offset, uint64_t length)
+{
+  if (offset >= m_num_bits) {
+    return 0;
+  }
+  if (offset + length >= m_num_bits) {
+    length = m_num_bits - offset;
+  }
+  if (length == 0) {
+    return 0;
+  }
+
+  auto apply_mask = [&](uint64_t word, uint64_t mask) -> uint64_t {
+    // Bits are completely unrelated to each other
+    // Plus, we do not care who sets the which bits if 2 chains of sets overlap.
+    // So, going for relaxed.
+    uint64_t old_val = std::atomic_ref<uint64_t>(m_arr[word]).fetch_or(mask, std::memory_order::relaxed);
+    // We set b if mask[b] = 1 and old_val[b] = 0.
+    uint64_t we_set_those = ~old_val & mask;
+    return std::popcount(we_set_those);
+  };
+  auto [word_start, bit_start] = split(offset);
+  auto [word_end, bit_end] = split(offset + length - 1);
+
+  uint64_t mask;
+  if (word_start == word_end) {
+    mask = (FULL_MASK << bit_start) &
+           (FULL_MASK >> (MAX_BIT_NO - bit_end));
+    return apply_mask(word_start, mask);
+  }
+  uint64_t bit_set_count = 0;
+  uint64_t word = word_start;
+  mask = FULL_MASK << bit_start;
+  bit_set_count += apply_mask(word, mask);
+  word++;
+  while (word < word_end) {
+    mask = FULL_MASK;
+    bit_set_count += apply_mask(word, mask);
+    word++;
+  }
+  mask = FULL_MASK >> (MAX_BIT_NO - bit_end);
+  bit_set_count += apply_mask(word, mask);
+  return bit_set_count;
+}
+
+//----------------------------------------------------------------------------
+uint64_t SimpleBitmap::clr_atomic(uint64_t offset, uint64_t length)
+{
+  if (offset >= m_num_bits) {
+    return 0;
+  }
+  if (offset + length >= m_num_bits) {
+    length = m_num_bits - offset;
+  }
+  if (length == 0) {
+    return 0;
+  }
+
+  auto apply_mask = [&](uint64_t word, uint64_t mask) -> uint64_t {
+    // Bits are completely unrelated to each other
+    // Plus, we do not care who clears the which bits if 2 chains of sets overlap.
+    // So, going for relaxed.
+    uint64_t old_val = std::atomic_ref<uint64_t>(m_arr[word]).fetch_and(~mask, std::memory_order::relaxed);
+    // We cleared b if mask[b] = 1 and old_val[b] = 1.
+    uint64_t we_cleared_those = old_val & mask;
+    return std::popcount(we_cleared_those);
+  };
+  auto [word_start, bit_start] = split(offset);
+  auto [word_end, bit_end] = split(offset + length - 1);
+
+  uint64_t mask;
+  if (word_start == word_end) {
+    mask = (FULL_MASK << bit_start) &
+           (FULL_MASK >> (MAX_BIT_NO - bit_end));
+    return apply_mask(word_start, mask);
+  }
+  uint64_t bit_set_count = 0;
+  uint64_t word = word_start;
+  mask = FULL_MASK << bit_start;
+  bit_set_count += apply_mask(word, mask);
+  word++;
+  while (word < word_end) {
+    mask = FULL_MASK;
+    bit_set_count += apply_mask(word, mask);
+    word++;
+  }
+  mask = FULL_MASK >> (MAX_BIT_NO - bit_end);
+  bit_set_count += apply_mask(word, mask);
+  return bit_set_count;
 }

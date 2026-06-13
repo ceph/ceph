@@ -28,7 +28,7 @@
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
 #include "mgr/MDSPerfMetricTypes.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -38,6 +38,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 
 class health_check_map_t;
 class DaemonServer;
@@ -49,6 +50,11 @@ class ActivePyModules
 {
   // module class instances not yet created
   std::set<std::string, std::less<>> pending_modules;
+  // This context is set during mgr initialization when
+  // modules need more time to finish starting up.
+  // See ActivePyModules::check_all_modules_started() and
+  // ActivePyModules::start_one().
+  Context *recheck_modules_start = nullptr;
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
@@ -61,7 +67,8 @@ class ActivePyModules
   LogChannelRef clog, audit_clog;
   Objecter &objecter;
   Finisher &finisher;
-  TTLCache<std::string, PyObject*> ttl_cache;
+  ThreadMonitor* m_thread_monitor = nullptr;
+  MgrMapCache<PyObject*> api_cache;
 public:
   Finisher cmd_finisher;
 private:
@@ -79,15 +86,18 @@ public:
     bool mon_provides_kv_sub,
     DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
     LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_,
-    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr, ThreadMonitor *monitor = nullptr);
 
   ~ActivePyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
-  PyObject *cacheable_get_python(const std::string &what);
-  PyObject *get_python(const std::string &what);
+  PyObject *cacheable_get_python(std::string_view what,
+    const bool get_mutable = false);
+  PyObject *get_python(std::string_view what,
+    const bool get_mutable = false);
+  int ceph_cache_map_erase(std::string_view what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
@@ -221,6 +231,11 @@ public:
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }
+
+  // Return set of active modules where class instances are not yet created
+  const std::set<std::string, std::less<>>& get_pending_modules() const {
+    return pending_modules;
+  }
   bool module_exists(const std::string &name) const
   {
     return modules.count(name) > 0;
@@ -233,11 +248,11 @@ public:
     return modules.at(module_name)->method_exists(method_name);
   }
 
-  PyObject *dispatch_remote(
+  std::optional<std::vector<std::byte>> dispatch_remote(
       const std::string &other_module,
       const std::string &method,
-      PyObject *args,
-      PyObject *kwargs,
+      std::span<std::byte const> pickled_args,
+      std::span<std::byte const> pickled_kwargs,
       std::string *err);
 
   int init();
@@ -254,5 +269,11 @@ public:
 
   bool inject_python_on() const;
   void update_cache_metrics();
+  // Sends the "active" beacon right away if all mgr modules
+  // have finished startup. If some modules are still pending
+  // startup, the "active" beacon is scheduled to send later
+  // only after all modules are ready.
+  // See "PyModuleRegistry::check_all_modules_started()".
+  void check_all_modules_started(Context *modules_start_complete);
 };
 

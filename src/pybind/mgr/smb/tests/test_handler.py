@@ -1794,10 +1794,10 @@ def test_apply_share_with_qos(thandler):
             qos=smb.resources.QoSConfig(
                 read_iops_limit=100,
                 write_iops_limit=200,
-                read_bw_limit=1048576,
-                write_bw_limit=2097152,
-                read_delay_max=20,
-                write_delay_max=30,
+                read_bw_limit="1048576",
+                write_bw_limit="2097152",
+                read_burst_mult=20,
+                write_burst_mult=15,
             ),
         ),
     )
@@ -1810,7 +1810,7 @@ def test_apply_share_with_qos(thandler):
     ]
     assert share_dict['cephfs']['qos']['read_iops_limit'] == 100
     assert share_dict['cephfs']['qos']['write_iops_limit'] == 200
-    assert share_dict['cephfs']['qos']['read_bw_limit'] == 1048576
-    assert share_dict['cephfs']['qos']['write_bw_limit'] == 2097152
-    assert share_dict['cephfs']['qos']['read_delay_max'] == 20
-    assert share_dict['cephfs']['qos']['write_delay_max'] == 30
+    assert share_dict['cephfs']['qos']['read_bw_limit'] == "1048576"
+    assert share_dict['cephfs']['qos']['write_bw_limit'] == "2097152"
+    assert share_dict['cephfs']['qos']['read_burst_mult'] == 20
+    assert share_dict['cephfs']['qos']['write_burst_mult'] == 15

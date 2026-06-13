@@ -26,6 +26,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
+  ${PROJECT_SOURCE_DIR}/src/auth/Auth.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
@@ -119,6 +120,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc

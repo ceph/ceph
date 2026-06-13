@@ -20,6 +20,8 @@ For general object store configuration, refer to the following:
    :maxdepth: 1
 
    Storage devices <storage-devices>
+   BlueStore RocksDB cache <../bluestore/rocksdb-config>
+   BlueFS Spillover Cleaner <../bluestore/bluefs-spillover-cleaner>
    ceph-conf
 
 

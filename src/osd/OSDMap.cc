@@ -3241,6 +3241,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < ceph_release_t::umbrella) {
+    f &= ~CEPH_FEATURE_SERVER_UMBRELLA;
+  }
   if (require_osd_release < ceph_release_t::tentacle) {
     f &= ~CEPH_FEATURE_SERVER_TENTACLE;
   }
@@ -5901,7 +5904,7 @@ int OSDMap::calc_pg_upmaps(
       }
       // look for remaps we can un-remap
       if (try_drop_remap_overfull(cct, pgs, tmp_osd_map, osd,
-				  temp_pgs_by_osd, to_unmap, to_upmap))
+				  temp_pgs_by_osd, to_unmap, to_upmap, osd_deviation))
 	goto test_change;
 
       // try upmap
@@ -6352,23 +6355,27 @@ bool OSDMap::try_drop_remap_overfull(
   int osd,
   map<int,std::set<pg_t>>& temp_pgs_by_osd,
   set<pg_t>& to_unmap,
-  map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap)
+  map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap,
+  const map<int,float>& osd_deviation)
 {
   //
   // This function tries to drop existimg upmap items which map data to overfull 
   // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
   // if it found an item that can be dropped, false if not. 
   //
+  const float osd_dev = osd_deviation.at(osd);
   for (auto pg : pgs) {
     auto p = tmp_osd_map.pg_upmap_items.find(pg);
     if (p == tmp_osd_map.pg_upmap_items.end())
       continue;
     mempool::osdmap::vector<pair<int32_t,int32_t>> new_upmap_items;
     auto& pg_upmap_items = p->second;
-    for (auto um_pair : pg_upmap_items) {
+    for (auto& um_pair : pg_upmap_items) {
       auto& um_from = um_pair.first;
       auto& um_to = um_pair.second;
-      if (um_to == osd) {
+      // +1: dropping this pair moves one PG from um_to back to um_from. Skip
+      // the drop if it would leave um_from at least as overfull as osd is today.
+      if (um_to == osd && osd_deviation.at(um_from) + 1 < osd_dev) {
         ldout(cct, 10) << " will try dropping existing"
                        << " remapping pair "
                        << um_from << " -> " << um_to
@@ -7030,6 +7037,29 @@ public:
     average_util = average_utilization();
   }
 
+  void dump(F *f) {
+    if (tree) {
+      CrushTreeDumper::Dumper<F>::dump(f);
+    } else {
+      this->reset();
+      CrushTreeDumper::Item qi;
+      std::vector<CrushTreeDumper::Item> flat_items;
+
+      while (this->next(qi)) {
+        if (!qi.is_bucket()) {
+          flat_items.push_back(qi);
+        }
+      }
+
+      std::sort(flat_items.begin(), flat_items.end(),
+                [](const auto& a, const auto& b) { return a.id < b.id; });
+
+      for (const auto& item : flat_items) {
+        this->dump_item(item, f);
+      }
+    }
+  }
+
 protected:
 
   bool should_dump(int id) const {
@@ -7253,6 +7283,7 @@ public:
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
 	 << ""
+   << sum.num_pgs
 	 << TextTable::endrow;
   }
 
@@ -7943,7 +7974,7 @@ void OSDMap::check_health(CephContext *cct,
 			    ss.str(), 0);
     }
   }
-  // UNEQUAL_WEIGHT
+  // INCORRECT_NUM_BUCKETS_STRETCH_MODE
   if (stretch_mode_enabled) {
     vector<int> subtrees;
     crush->get_subtree_of_type(stretch_mode_bucket, &subtrees);
@@ -7953,12 +7984,15 @@ void OSDMap::check_health(CephContext *cct,
       checks->add("INCORRECT_NUM_BUCKETS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
       return;
     }
+    // STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE
     int weight1 = crush->get_item_weight(subtrees[0]);
     int weight2 = crush->get_item_weight(subtrees[1]);
+    double stretch_max_weight_delta = cct->_conf.get_val<double>("mon_stretch_max_bucket_weight_delta");
     stringstream ss;
-    if (weight1 != weight2) {
-      ss << "Stretch mode buckets have different weights!";
-      checks->add("UNEVEN_WEIGHTS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
+    if (abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2))) {
+      ss << "Stretch mode buckets differ in weight by more than " << (stretch_max_weight_delta * 100) << "%";
+      checks->add("STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE", HEALTH_WARN, ss.str(), 0);
     }
   }
 
@@ -8112,6 +8146,10 @@ unsigned OSDMap::get_device_class_flags(int id) const
 
 std::optional<std::string> OSDMap::pending_require_osd_release() const
 {
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_UMBRELLA) &&
+      require_osd_release < ceph_release_t::umbrella) {
+    return "umbrella";
+  }
   if (HAVE_FEATURE(get_up_osd_features(), SERVER_TENTACLE) &&
       require_osd_release < ceph_release_t::tentacle) {
     return "tentacle";

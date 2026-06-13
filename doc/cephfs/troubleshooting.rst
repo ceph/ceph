@@ -156,10 +156,10 @@ Do the following when restoring your file system:
 
       ceph config set mds mds_heartbeat_grace 3600
 
-  .. note:: This causes the MDS to continue to send beacons to the monitors
+  .. note:: This causes the MDS to continue to send beacons to the Monitors
      even when its internal "heartbeat" mechanism has not been reset (it has
      not beaten) in one hour. In the past, this was achieved with the
-     ``mds_beacon_grace`` monitor setting.
+     ``mds_beacon_grace`` Monitor setting.
 
 * **Disable open-file-table prefetch.** Under normal circumstances, the MDS
   prefetches directory contents during recovery as a way of heating up its
@@ -320,7 +320,7 @@ the foreground while logging to the console (``-d``), enabling client debug
 
    ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1
 
-If you suspect a potential monitor issue, enable monitor debugging as well
+If you suspect a potential Monitor issue, enable Monitor debugging as well
 (``--debug-monc=20``) by running a command of the following form:
 
 .. prompt:: bash #
@@ -348,7 +348,7 @@ Slow requests
 -------------
 
 Unfortunately, the kernel client does not provide an admin socket. However,
-the the kernel on the client has `debugfs
+if the kernel on the client has `debugfs
 <https://docs.kernel.org/filesystems/debugfs.html>`_ enabled, interfaces
 similar to the admin socket are available. 
 
@@ -367,8 +367,8 @@ requests are the ``mdsc`` (current requests to the MDS) and the ``osdc``
 * ``mdsc``: Dumps current requests to the MDS
 * ``mdsmap``: Dumps the current MDSMap epoch and MDSes
 * ``mds_sessions``: Dumps the current sessions to MDSes
-* ``monc``: Dumps the current maps from the monitor, and any "subscriptions" held
-* ``monmap``: Dumps the current monitor map epoch and monitors
+* ``monc``: Dumps the current maps from the Monitor, and any "subscriptions" held
+* ``monmap``: Dumps the current monitor map epoch and Monitors
 * ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data IO)
 * ``osdmap``: Dumps the current OSDMap epoch, pools, and OSDs
 
@@ -470,7 +470,7 @@ dumping the recent in-memory logs when there is an extraordinary event.
 Extraordinary events include the following:
 
 * Client Eviction
-* Missed Beacon ACK from the monitors
+* Missed Beacon ACK from the Monitors
 * Missed Internal Heartbeats
 
 In-memory log dump is disabled by default. This prevents production
@@ -498,8 +498,8 @@ Run the following two commands in order to enable in-memory log dumping:
 
 .. note:: When higher log levels are set (``log_level`` greater than or equal
    to ``10``) there is no reason to dump the in-memory logs. A lower gather
-   level (``gather_level`` less than ``10``) is insufficient to gather in-
-   memory logs. This means that a log level of greater than or equal to ``10``
+   level (``gather_level`` less than ``10``) is insufficient to gather
+   in-memory logs. This means that a log level of greater than or equal to ``10``
    or a gather level of less than ``10`` in ``debug_mds`` prevents enabling
    in-memory-log dumping. In such cases, if there is a failure, you must reset
    the value of ``mds_extraordinary_events_dump_interval`` to ``0`` before
@@ -572,7 +572,7 @@ data=....``
 Disabling the Volumes Plugin
 ============================
 In certain scenarios, the Volumes plugin may need to be disabled to prevent
-compromise for rest of the Ceph cluster. For details see:
+compromise for the rest of the Ceph cluster. For details see:
 :ref:`disabling-volumes-plugin`
 
 Reporting Issues
@@ -582,7 +582,7 @@ If you have identified a specific issue, please report it with as much
 information as possible. Especially important information:
 
 * Ceph versions installed on client and server
-* Whether you are using the kernel or fuse client
+* Whether you are using the kernel or FUSE client
 * If you are using the kernel client, what kernel version?
 * How many clients are in play, doing what kind of workload?
 * If a system is 'stuck', is that affecting all clients or just one?

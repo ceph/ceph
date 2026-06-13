@@ -8,7 +8,10 @@ import { ConfigurationFormComponent } from './ceph/cluster/configuration/configu
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
+import { HostDetailsComponent } from './ceph/cluster/hosts/host-details/host-details.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
+import { HostDetailsBreadcrumbResolver } from './ceph/cluster/hosts/host-details/host-details-breadcrumb.resolver';
+import { HostDetailsSectionComponent } from './ceph/cluster/hosts/host-details/host-details-section.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
@@ -24,7 +27,6 @@ import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/sil
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
@@ -67,6 +69,7 @@ import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-lis
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { OverviewComponent } from './ceph/overview/overview.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -110,7 +113,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-      { path: 'overview', component: DashboardComponent },
+      { path: 'overview', component: OverviewComponent },
       { path: 'error', component: ErrorComponent },
       {
         path: 'cephfs/mirroring/error',
@@ -130,7 +133,7 @@ const routes: Routes = [
         component: NotificationsPageComponent
       },
       {
-        path: 'expand-cluster',
+        path: 'add-storage',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
         data: {
@@ -138,8 +141,7 @@ const routes: Routes = [
             uiApiPath: 'orchestrator',
             redirectTo: 'overview',
             backend: 'cephadm'
-          },
-          breadcrumbs: 'Cluster/Expand Cluster'
+          }
         }
       },
       {
@@ -151,6 +153,39 @@ const routes: Routes = [
             path: URLVerbs.ADD,
             component: HostFormComponent,
             outlet: 'modal'
+          }
+        ]
+      },
+      {
+        path: 'hosts/:hostname',
+        component: HostDetailsComponent,
+        data: { breadcrumbs: HostDetailsBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'devices', pathMatch: 'full' },
+          {
+            path: 'devices',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Devices', section: 'devices' }
+          },
+          {
+            path: 'physical-disks',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Physical Disks', section: 'physical-disks' }
+          },
+          {
+            path: 'daemons',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Daemons', section: 'daemons' }
+          },
+          {
+            path: 'performance-details',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Performance Details', section: 'performance-details' }
+          },
+          {
+            path: 'device-health',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Device health', section: 'device-health' }
           }
         ]
       },
@@ -321,7 +356,7 @@ const routes: Routes = [
           },
           {
             path: 'alerts',
-            data: { breadcrumbs: 'Alerts' },
+            data: { breadcrumbs: 'Alert Rules' },
             component: RulesListComponent
           },
           {

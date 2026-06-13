@@ -289,7 +289,8 @@ class ZoneOp:
 
     def create(self, realm: EntityKey, zonegroup: EntityKey, zone: EntityKey = None,
                endpoints=None, is_master=True,
-               access_key=None, secret=None):
+               access_key=None, secret=None,
+               tier_type=None, master_zone_name=None):
 
         ze = ZoneEnv(self.env, realm=realm, zg=zonegroup).init_zone(zone, gen=True)
 
@@ -300,6 +301,11 @@ class ZoneOp:
         opt_arg(params, '--access-key', access_key)
         opt_arg(params, '--secret', secret)
         opt_arg(params, '--endpoints', endpoints)
+        opt_arg(params, '--tier-type', tier_type)
+
+        if tier_type == 'archive':
+            opt_arg(params, '--sync-from-all', 'false')
+            opt_arg(params, '--sync-from', master_zone_name)
 
         return RGWAdminJSONCmd(ze).run(params)
 
@@ -486,14 +492,17 @@ class RGWAM:
             raise RGWAMException('failed to create zonegroup', e)
 
     def create_zone(self, realm, zg, zone_name, zone_is_master, access_key=None,
-                    secret=None, endpoints=None):
+                    secret=None, endpoints=None, tier_type=None,
+                    master_zone_name=None):
         try:
             zone_info = self.zone_op().create(realm, zg,
                                               EntityName(zone_name),
                                               endpoints,
                                               is_master=zone_is_master,
                                               access_key=access_key,
-                                              secret=secret)
+                                              secret=secret,
+                                              tier_type=tier_type,
+                                              master_zone_name=master_zone_name)
 
             zone = EntityKey(zone_info['name'], zone_info['id'])
             logging.info(f'Created zone name={zone.name} id={zone.id}')
@@ -850,7 +859,8 @@ class RGWAM:
                     return zone.get('name')
         return None
 
-    def zone_create(self, rgw_spec, start_radosgw, secondary_zone_period_retry_limit=5):
+    def zone_create(self, rgw_spec, start_radosgw, secondary_zone_period_retry_limit=5,
+                    tier_type=None):
 
         if not rgw_spec.rgw_realm_token:
             raise RGWAMException('missing realm token')
@@ -881,12 +891,15 @@ class RGWAM:
         logging.info('Period: ' + period.id)
 
         zonegroup = period.get_master_zonegroup()
+        master_zone = self.period_op().get_master_zone(realm, zonegroup)
+        master_zone_name = master_zone['name'] if master_zone else None
         if not zonegroup:
             raise RGWAMException(f'Cannot find master zonegroup of realm {realm_name}')
 
         zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone,
                                 False,  # secondary zone
-                                access_key, secret, endpoints=rgw_spec.zone_endpoints)
+                                access_key, secret, endpoints=rgw_spec.zone_endpoints,
+                                tier_type=tier_type, master_zone_name=master_zone_name)
 
         # Adding a retry limit for period update in case the default 10s timeout is not sufficient
         rgw_limit = 0

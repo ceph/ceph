@@ -23,9 +23,6 @@ export type PromqlGuageMetric = {
   result: PromethuesGaugeMetricResult[];
 };
 
-export const STORAGE_TYPE_WARNING =
-  'Storage type details are unavailable. Upgrade this cluster to version 9.0 or later to access them.';
-
 @Injectable({
   providedIn: 'root'
 })
@@ -42,7 +39,7 @@ export class PrometheusService {
     alertmanager: 'ui-api/prometheus/alertmanager-api-host',
     prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
-  private settings: { [url: string]: string } = {};
+  private settings: Record<string, string | undefined> = {};
   updatedChrtData = new Subject<any>();
 
   constructor(private http: HttpClient) {}
@@ -63,20 +60,63 @@ export class PrometheusService {
     return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
-  ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
-  }
-
   disableAlertmanagerConfig(): void {
     this.disableSetting(this.settingsKey.alertmanager);
   }
 
-  ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
-  }
-
   disablePrometheusConfig(): void {
     this.disableSetting(this.settingsKey.prometheus);
+  }
+
+  isPrometheusUsable(): Observable<boolean> {
+    return this.isSettingConfigured(this.settingsKey.prometheus).pipe(
+      map((isConfigured) => isConfigured),
+      catchError(() => of(false))
+    );
+  }
+
+  refreshPrometheusUsable(): Observable<boolean> {
+    delete this.settings[this.settingsKey.prometheus];
+    return this.isPrometheusUsable();
+  }
+
+  isAlertmanagerUsable(): Observable<boolean> {
+    return this.isSettingConfigured(this.settingsKey.alertmanager).pipe(
+      map((isConfigured) => isConfigured),
+      catchError(() => of(false))
+    );
+  }
+
+  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
+    const setting = this.settings[url];
+
+    if (setting === undefined) {
+      this.http.get(url).subscribe(
+        (data: any) => {
+          this.settings[url] = this.getSettingsValue(data);
+          this.ifSettingConfigured(url, fn, elseFn);
+        },
+        (resp) => {
+          if (resp.status !== 401) {
+            this.settings[url] = '';
+          }
+        }
+      );
+    } else if (setting !== '') {
+      fn(setting);
+    } else {
+      if (elseFn) {
+        elseFn();
+      }
+    }
+  }
+
+  ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
+    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
+  }
+
+  ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
+    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
   }
 
   getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
@@ -125,27 +165,30 @@ export class PrometheusService {
     return this.http.get<AlertmanagerNotification[]>(url);
   }
 
-  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
-    const setting = this.settings[url];
-    if (setting === undefined) {
-      this.http.get(url).subscribe(
-        (data: any) => {
-          this.settings[url] = this.getSettingsValue(data);
-          this.ifSettingConfigured(url, fn, elseFn);
-        },
-        (resp) => {
-          if (resp.status !== 401) {
-            this.settings[url] = '';
-          }
-        }
-      );
-    } else if (setting !== '') {
-      fn(setting);
-    } else {
-      if (elseFn) {
-        elseFn();
-      }
+  getConfiguredSetting(url: string): Observable<string | null> {
+    const cached = this.settings[url];
+
+    if (cached !== undefined) {
+      return of(cached || null);
     }
+
+    return this.http.get(url).pipe(
+      map((data: any) => {
+        const value = this.getSettingsValue(data);
+        this.settings[url] = value;
+        return value || null;
+      }),
+      catchError((resp) => {
+        if (resp.status !== 401) {
+          this.settings[url] = '';
+        }
+        return of(null);
+      })
+    );
+  }
+
+  isSettingConfigured(url: string): Observable<boolean> {
+    return this.getConfiguredSetting(url).pipe(map((value) => !!value));
   }
 
   // Easiest way to stop reloading external content that can't be reached
@@ -158,16 +201,17 @@ export class PrometheusService {
   }
 
   getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
-    let result$: Observable<PromqlGuageMetric> = of({ result: [] } as PromqlGuageMetric);
+    return this.isPrometheusUsable().pipe(
+      switchMap((usable) => {
+        if (!usable) {
+          return of({ result: [] } as PromqlGuageMetric);
+        }
 
-    this.ifPrometheusConfigured(() => {
-      result$ = this.getPrometheusQueryData({ params: query }).pipe(
-        map((result: PromqlGuageMetric) => result),
-        catchError(() => of({ result: [] } as PromqlGuageMetric))
-      );
-    });
-
-    return result$;
+        return this.getPrometheusQueryData({ params: query }).pipe(
+          catchError(() => of({ result: [] } as PromqlGuageMetric))
+        );
+      })
+    );
   }
 
   formatGuageMetric(data: string): number {
@@ -206,14 +250,19 @@ export class PrometheusService {
     allMultiClusterQueries: string[]
   ) {
     return new Observable((observer) => {
-      this.ifPrometheusConfigured(() => {
+      this.isPrometheusUsable().subscribe((usable) => {
+        if (!usable) {
+          observer.complete();
+          return;
+        }
+
         if (this.timerGetPrometheusDataSub) {
           this.timerGetPrometheusDataSub.unsubscribe();
         }
 
         this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-          let requests: any[] = [];
-          let queryNames: string[] = [];
+          const requests: any[] = [];
+          const queryNames: string[] = [];
 
           Object.entries(multiClusterQueries).forEach(([key, _value]) => {
             for (const queryName in multiClusterQueries[key].queries) {
@@ -284,27 +333,33 @@ export class PrometheusService {
     checkNan?: boolean
   ): Observable<Record<string, [number, string][]>> {
     return timer(0, this.timerTime).pipe(
-      switchMap(() => {
-        this.ifPrometheusConfigured(() => {});
+      switchMap(() =>
+        this.isPrometheusUsable().pipe(
+          switchMap((usable) => {
+            if (!usable) {
+              return of([] as Array<{ queryName: string; values: any[] }>);
+            }
 
-        const updatedTime = this.updateTimeStamp(selectedTime);
+            const updatedTime = this.updateTimeStamp(selectedTime);
 
-        const observables = Object.entries(queries).map(([queryName, query]) =>
-          this.getPrometheusData({
-            params: encodeURIComponent(query),
-            start: updatedTime.start,
-            end: updatedTime.end,
-            step: updatedTime.step
-          }).pipe(
-            map((data: any) => ({
-              queryName,
-              values: data.result?.length ? data.result[0].values : []
-            }))
-          )
-        );
+            const observables = Object.entries(queries).map(([queryName, query]) =>
+              this.getPrometheusData({
+                params: encodeURIComponent(query),
+                start: updatedTime.start,
+                end: updatedTime.end,
+                step: updatedTime.step
+              }).pipe(
+                map((data: any) => ({
+                  queryName,
+                  values: data.result?.length ? data.result[0].values : []
+                }))
+              )
+            );
 
-        return forkJoin(observables) as Observable<Array<{ queryName: string; values: any[] }>>;
-      }),
+            return forkJoin(observables) as Observable<Array<{ queryName: string; values: any[] }>>;
+          })
+        )
+      ),
       map((results) => {
         const formattedResults: Record<string, [number, string][]> = {};
 

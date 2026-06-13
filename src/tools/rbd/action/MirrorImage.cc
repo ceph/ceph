@@ -35,16 +35,26 @@ namespace po = boost::program_options;
 namespace {
 
 int validate_mirroring_enabled(librbd::Image &image, bool snapshot = false) {
+  std::string image_name;
+  int r = image.get_name(&image_name);
+  ceph_assert(r == 0);
+
   librbd::mirror_image_info_t mirror_image;
-  int r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+  r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
   if (r < 0) {
-    std::cerr << "rbd: failed to retrieve mirror info: "
-              << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: failed to get mirror info for image '" << image_name
+              << "': " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  if (mirror_image.state != RBD_MIRROR_IMAGE_ENABLED) {
-    std::cerr << "rbd: mirroring not enabled on the image" << std::endl;
+  if (mirror_image.state == RBD_MIRROR_IMAGE_DISABLED) {
+    std::cerr << "rbd: mirroring disabled on image '" << image_name
+              << "'" << std::endl;
+    return -EINVAL;
+  } else if (mirror_image.state != RBD_MIRROR_IMAGE_ENABLED) {
+    std::cerr << "rbd: mirroring not enabled on image '" << image_name
+              << "' (state: " << utils::mirror_image_state(mirror_image.state)
+              << ")" << std::endl;
     return -EINVAL;
   }
 
@@ -52,13 +62,15 @@ int validate_mirroring_enabled(librbd::Image &image, bool snapshot = false) {
     librbd::mirror_image_mode_t mode;
     r = image.mirror_image_get_mode(&mode);
     if (r < 0) {
-      std::cerr << "rbd: failed to retrieve mirror mode: "
-                << cpp_strerror(r) << std::endl;
+      std::cerr << "rbd: failed to get mirror mode for image '"
+                << image_name << "': " << cpp_strerror(r) << std::endl;
       return r;
     }
 
     if (mode != RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
-      std::cerr << "rbd: snapshot based mirroring not enabled on the image"
+      std::cerr << "rbd: snapshot based mirroring not enabled on image '"
+                << image_name << "' (mirroring mode: "
+                << utils::mirror_image_mode(mode) << ")"
                 << std::endl;
       return -EINVAL;
     }

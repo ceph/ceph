@@ -451,8 +451,8 @@ of two kinds of custom container registry can be used in this scenario: (1) a
 Podman-based or Docker-based insecure registry, or (2) a secure registry.
 
 The practice of installing software on systems that are not connected directly
-to the internet is called "airgapping" and registries that are not connected
-directly to the internet are referred to as "airgapped".
+to the Internet is called "airgapping" and registries that are not connected
+directly to the Internet are referred to as "airgapped".
 
 Make sure that your container image is inside the registry. Make sure that you
 have access to all hosts that you plan to add to the cluster.
@@ -488,7 +488,7 @@ have access to all hosts that you plan to add to the cluster.
       mgr/cephadm/container_image_prometheus = <hostname>:5000/prometheus
       mgr/cephadm/container_image_node_exporter = <hostname>:5000/node_exporter
       mgr/cephadm/container_image_grafana = <hostname>:5000/grafana
-      mgr/cephadm/container_image_alertmanager = <hostname>:5000/alertmanger
+      mgr/cephadm/container_image_alertmanager = <hostname>:5000/alertmanager
       EOF
 
 #. Run bootstrap using the temporary configuration file and pass the name of your

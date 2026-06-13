@@ -32,7 +32,7 @@ class FileSystemAuthorizer:
         # to have more restricted defaults in the future
         assert entity.startswith('client.')
         if not caps:
-            caps = ['/', 'rw']
+            caps = ['/', '*']
         cmd = {
             'prefix': 'fs authorize',
             'filesystem': volume,

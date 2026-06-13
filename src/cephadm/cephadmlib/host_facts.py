@@ -16,7 +16,7 @@ from typing import Any, cast, Dict, List, Optional, Set, Union
 
 from cephadmlib.call_wrappers import call, call_throws, CallVerbosity
 from cephadmlib.context import CephadmContext
-from cephadmlib.data_utils import bytes_to_human
+from ceph.utils import bytes_to_human
 from cephadmlib.exe_utils import find_executable
 from cephadmlib.file_utils import read_file
 from cephadmlib.net_utils import get_fqdn, get_ipv4_address, get_ipv6_address
@@ -222,6 +222,13 @@ class HostFacts:
             dev
             for dev in os.listdir('/sys/block')
             if not dev.startswith(HostFacts._excluded_block_devices)
+            # Some systems expose multiple /sys/block entries for the same NVMe drive
+            # (ex: nvme2n1 (the real disk) and nvme2c2n1(an extra sysfs alias).
+            # To avoid counting the same disk twice,only consider entries that
+            # represent a real block device (the one with a valid sysfs 'dev'
+            # attribute and a corresponding /dev node).
+            and os.path.exists(os.path.join('/sys/block', dev, 'dev'))
+            and os.path.exists(os.path.join('/dev', dev))
         ]
 
     @property
@@ -851,6 +858,51 @@ def list_networks(ctx):
     res = _list_ipv4_networks(ctx)
     res.update(_list_ipv6_networks(ctx))
     return res
+
+
+def list_rdma(ctx: CephadmContext) -> List[Dict[str, str]]:
+    """List RDMA devices by parsing 'rdma link show' output.
+    Returns a list of dicts with keys: link, state, physical_state, netdev.
+    Returns empty list if rdma tool is not installed or command fails.
+    """
+    execstr: Optional[str] = find_executable('rdma')
+    if not execstr:
+        logger.error("'rdma' command not found, no RDMA devices listed")
+        return []
+    try:
+        out, _, _ = call_throws(
+            ctx,
+            [execstr, 'link', 'show'],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+    except Exception as e:
+        logger.error('rdma link show failed: %s', e)
+        return []
+    # Format: link <name> state <state> physical_state <phys> netdev <netdev>
+    pattern = re.compile(
+        r'link\s+(\S+)\s+state\s+(\S+)\s+physical_state\s+(\S+)\s+netdev\s+'
+        r'(\S+)'
+    )
+    result: List[Dict[str, str]] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = pattern.search(line)
+        if m:
+            result.append(
+                {
+                    'link': m.group(1),
+                    'state': m.group(2),
+                    'physical_state': m.group(3),
+                    'netdev': m.group(4),
+                }
+            )
+        else:
+            logger.debug(
+                "Skipped RDMA device '%s', as pattern did not match", line
+            )
+    return result
 
 
 def _list_ipv4_networks(

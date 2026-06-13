@@ -16,6 +16,13 @@ export enum CephCertificateStatus {
   invalid = 'invalid'
 }
 
+export enum DaemonAction {
+  START = 'start',
+  STOP = 'stop',
+  RESTART = 'restart',
+  REDEPLOY = 'redeploy'
+}
+
 export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
   valid: 'success',
   expiring: 'warning',
@@ -49,12 +56,14 @@ export interface CephServiceSpec {
   certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
+  events?: string[];
 }
 
 // Type for service spec update payload (excludes read-only status field)
 export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
   backend_service: string;
   api_user: string;
   api_password: string;
@@ -107,6 +116,7 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+  locations?: Record<string, string[]>;
 }
 
 export interface QatSepcs {

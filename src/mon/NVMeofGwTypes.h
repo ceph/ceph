@@ -26,6 +26,8 @@
 #include "msg/msg_types.h"
 
 using NvmeGwId = std::string;
+using FailbackLocation = std::string;
+using NvmeLocation = std::string;
 using NvmeGroupKey = std::pair<std::string, std::string>;
 using NvmeNqnId = std::string;
 using NvmeAnaGrpId = uint32_t;
@@ -51,6 +53,11 @@ enum class gw_availability_t {
   GW_UNAVAILABLE,
   GW_DELETING,
   GW_DELETED
+};
+
+enum class gw_admin_state_t {
+  GW_ADMIN_ENABLED = 0,
+  GW_ADMIN_DISABLED,
 };
 
 enum class subsystem_change_t {
@@ -167,10 +174,14 @@ struct NvmeGwMonState {
    * it from being overriden by new epochs in monitor's function create_pending -
    * function restore_pending_map_info is called for this purpose
   */
+  gw_admin_state_t gw_admin_state = gw_admin_state_t::GW_ADMIN_ENABLED;
+  std::string location = "";
   std::chrono::system_clock::time_point allow_failovers_ts =
              std::chrono::system_clock::now();
   std::chrono::system_clock::time_point last_gw_down_ts =
              std::chrono::system_clock::now() - std::chrono::seconds(30);
+  std::chrono::system_clock::time_point delay_failbacks_ts =
+             std::chrono::system_clock::now();
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
@@ -251,14 +262,16 @@ struct NvmeGwClientState {
   gw_availability_t availability;
   uint64_t last_beacon_seq_number;
   bool last_beacon_seq_ooo; //out of order sequence
+  uint64_t map_features; // last map features
   NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available,
-     uint64_t sequence, bool sequence_ooo)
+     uint64_t sequence, bool sequence_ooo, uint64_t last_published_features)
     : group_id(id), gw_map_epoch(epoch), availability(available),
-      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo) {}
+      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo),
+	  map_features(last_published_features) {}
 
   NvmeGwClientState()
     : NvmeGwClientState(
-      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0) {}
+      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0, 0) {}
 };
 
 struct Tmdata {
@@ -278,8 +291,16 @@ struct NvmeGwTimerState {
   NvmeGwTimerState() {};
 };
 
+struct LocationState {
+  bool failbacks_in_process; //failbacks allowed in recovering state
+  LocationState() {
+    failbacks_in_process = 0;
+  }
+};
+
 using NvmeGwMonClientStates = std::map<NvmeGwId, NvmeGwClientState>;
 using NvmeGwTimers = std::map<NvmeGwId, NvmeGwTimerState>;
 using NvmeGwMonStates = std::map<NvmeGwId, NvmeGwMonState>;
+using LocationStates = std::map<NvmeLocation, LocationState>;
 
 #endif /* SRC_MON_NVMEOFGWTYPES_H_ */

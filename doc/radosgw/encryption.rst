@@ -18,6 +18,72 @@ Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
 
 .. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
 
+Encryption Algorithm
+====================
+
+.. versionadded:: Umbrella
+
+The Ceph Object Gateway supports two AES-256 encryption algorithms for
+server-side encryption:
+
+**AES-256-CBC** (Cipher Block Chaining)
+  The legacy encryption algorithm. This mode is compatible with older Ceph
+  releases and is the default for backward compatibility. CBC mode encrypts
+  data but does not provide built-in integrity verification.
+
+**AES-256-GCM** (Galois/Counter Mode)
+  A modern authenticated encryption algorithm that provides both
+  confidentiality and integrity protection. GCM mode detects any tampering
+  or corruption of encrypted data. This is the recommended algorithm for
+  new deployments.
+
+The encryption algorithm for new objects can be configured with::
+
+  rgw crypt sse algorithm = aes-256-cbc    # default, for backward compatibility
+  rgw crypt sse algorithm = aes-256-gcm    # recommended for new deployments
+
+.. note:: This setting only affects newly encrypted objects. Existing objects
+          are always decrypted using the algorithm that was used when they
+          were encrypted, regardless of the current setting. This allows
+          CBC-encrypted and GCM-encrypted objects to coexist in the same
+          cluster.
+
+.. important:: When upgrading from an older Ceph release, keep the default
+               ``aes-256-cbc`` setting until all RGW instances have been
+               upgraded. Once all instances support GCM, you can enable
+               ``aes-256-gcm`` for new uploads.
+
+GCM Encryption Format
+---------------------
+
+AES-256-GCM encrypts data in 4 KB (4096 byte) chunks. Each chunk produces
+4112 bytes of ciphertext (4096 bytes of encrypted data plus a 16-byte
+authentication tag).
+
+.. list-table:: GCM Size Calculation Example
+   :header-rows: 1
+   :widths: 40 30 30
+
+   * - Description
+     - Size
+     - Notes
+   * - Original plaintext
+     - 10,000 bytes
+     - User's data
+   * - Number of chunks
+     - 3
+     - ⌈10000 ÷ 4096⌉
+   * - Authentication tags
+     - 48 bytes
+     - 3 chunks × 16 bytes
+   * - **Encrypted on disk**
+     - **10,048 bytes**
+     - plaintext + tags
+
+The storage overhead is approximately 0.4% (16 bytes per 4 KB). S3 API
+responses always report the original plaintext size, so this overhead is
+transparent to clients.
+
 Customer-Provided Keys
 ======================
 
@@ -83,7 +149,53 @@ The configuration expects a base64-encoded 256 bit key. For example::
    file is not a secure method for storing encryption keys. Keys that are
    accidentally exposed in this way should be considered compromised.
 
+Caching
+=======
 
+The caching feature for Key Management Service (KMS) secrets greatly
+improves the performance of server-side encryption and lessens the
+load on the KMS.
+
+Secrets are stored using the `Linux Kernel Key Retention Service`_ in
+the RGW processes' process keyring. This is subject to a global quota
+and must be set in accordance with the configured cache size.
+Depending on whether RGW runs as root, these quotas can be managed by adjusting:
+- ``/proc/sys/kernel/keys/root_maxkeys`` and ``/proc/sys/kernel/keys/root_maxbytes``
+- ``/proc/sys/kernel/keys/maxkeys`` and ``/proc/sys/kernel/keys/maxbytes``
+
+Exceeding a quota will disable the cache, fail the request with an
+internal error, and log a failure message.
+
+Three different Cache Time-to-Live (TTL) values can be set:
+- **Positive TTL**: How long a successfully retrieved secret remains
+  in the cache.
+- **Negative TTL**: How long to remember that a key does not exist,
+  preventing unnecessary requests to the KMS.
+- **Transient Error TTL**: How long to cache failures due to temporary
+  issues like KMS timeouts.
+
+Metrics
+---------
+
+The cache exports metrics under the ``kms-cache`` collection.
+- ``hit``: Hit counter
+- ``miss``:  Miss counter
+- ``expired``: Number of TTL expired entries
+- ``size``: Current cache size
+- ``capacity``: Cache maximum size
+- ``clear``: Number of cache clears. Resets ``size``, ``hit``,
+  ``miss``, ``expired``
+
+In addition the ``rgw`` collection has:
+- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a
+  successful request counter. Each event results in a positive cache
+  entry.
+- ``kms_error_transient``: Transient KMS fetch error counter. Each
+  event results in a transient error cache entry.
+- ``kms_error_permanent``: Permanent KMS fetch error counter. Each
+  event results in a negative cache cache entry.
+
+.. _Linux Kernel Key Retention Service:  https://www.kernel.org/doc/html/latest/security/keys/core.html
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
 .. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html

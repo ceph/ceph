@@ -37,9 +37,13 @@
 
 #include "osd/OSDMap.h"
 
+#include "health_check.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
+#include "Paxos.h"
 
 #include "messages/PaxosServiceMessage.h"
+#include "messages/MMonCommand.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
@@ -64,6 +68,8 @@
 #include "messages/MTimeCheck2.h"
 #include "messages/MPing.h"
 
+#include "msg/Messenger.h"
+
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
@@ -77,6 +83,7 @@
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
+#include "include/util.h" // for collect_sys_info(), dump_services()
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -93,6 +100,7 @@
 #include "common/cmdparse.h"
 #include "include/ceph_assert.h"
 #include "include/compat.h"
+#include "mgr/DaemonHealthMetric.h"
 #include "perfglue/heap_profiler.h"
 
 #include "auth/none/AuthNoneClientHandler.h"
@@ -142,6 +150,42 @@ using ceph::timespan_str;
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
+}
+
+void Monitor::C_Command::_finish(int r) {
+  auto m = op->get_req<MMonCommand>();
+  if (r >= 0) {
+    std::ostringstream ss;
+    if (!op->get_req()->get_connection()) {
+      ss << "connection dropped for command ";
+    } else {
+      MonSession *s = op->get_session();
+
+      // if client drops we may not have a session to draw information from.
+      if (s) {
+	ss << "from='" << s->name << " " << s->addrs << "' "
+	   << "entity='" << s->entity_name << "' ";
+      } else {
+	ss << "session dropped for command ";
+      }
+    }
+    cmdmap_t cmdmap;
+    std::ostringstream ds;
+    std::string prefix;
+    cmdmap_from_json(m->cmd, &cmdmap, ds);
+    cmd_getval(cmdmap, "prefix", prefix);
+    if (prefix != "config set" && prefix != "config-key set")
+      ss << "cmd='" << m->cmd << "': finished";
+
+    mon.audit_clog->info() << ss.str();
+    mon.reply_command(op, rc, rs, rdata, version);
+  }
+  else if (r == -ECANCELED)
+    return;
+  else if (r == -EAGAIN)
+    mon.dispatch_op(op);
+  else
+    ceph_abort_msg("bad C_Command return value");
 }
 
 const string Monitor::MONITOR_NAME = "monitor";
@@ -564,6 +608,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA);
 
   // Release-independent features
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
@@ -2252,6 +2297,21 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
+std::string Monitor::get_leader_name() {
+  return quorum.empty() ? std::string() : monmap->get_name(leader);
+}
+
+std::list<std::string> Monitor::get_quorum_names() {
+  std::list<std::string> q;
+  for (auto p = quorum.begin(); p != quorum.end(); ++p)
+    q.push_back(monmap->get_name(*p));
+  return q;
+}
+
+mon_feature_t Monitor::get_required_mon_features() const {
+  return monmap->get_required_features();
+}
+
 void Monitor::_finish_svc_election()
 {
   ceph_assert(state == STATE_LEADER || state == STATE_PEON);
@@ -2575,6 +2635,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_TENTACLE));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_UMBRELLA)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_UMBRELLA));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_UMBRELLA));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA);
+  }
 
 
   // Release-independent features
@@ -2582,7 +2649,6 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF));
     // this feature should only ever be set if the quorum supports it.
-    ceph_assert(HAVE_FEATURE(quorum_con_features, NVMEOF_BEACON_DIFF));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
   }
 
@@ -2629,6 +2695,9 @@ void Monitor::calc_quorum_requirements()
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_TENTACLE)) {
     required_features |= CEPH_FEATUREMASK_SERVER_TENTACLE;
   }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_UMBRELLA;
+  }
 
   // monmap
   if (monmap->get_required_features().contains_all(
@@ -2647,12 +2716,6 @@ void Monitor::calc_quorum_requirements()
 	ceph::features::mon::FEATURE_NAUTILUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS |
       CEPH_FEATUREMASK_CEPHX_V2;
-  }
-
-  // Release-independent features
-  if (monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
-    required_features |= CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF;
   }
 
   dout(10) << __func__ << " required_features " << required_features << dendl;
@@ -4719,6 +4782,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_REMOVE_SNAPS:
     case MSG_MON_GET_PURGED_SNAPS:
     case MSG_OSD_PG_READY_TO_MERGE:
+    case MSG_OSD_PG_STOP_MERGE:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;
 
@@ -6091,6 +6155,13 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
     metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
   }
   return metrics;
+}
+
+bool Monitor::is_mon_down() const {
+  int max = monmap->size();
+  int actual = get_quorum().size();
+  auto now = ceph::real_clock::now();
+  return actual < max && now > monmap->created.to_real_time();
 }
 
 void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)

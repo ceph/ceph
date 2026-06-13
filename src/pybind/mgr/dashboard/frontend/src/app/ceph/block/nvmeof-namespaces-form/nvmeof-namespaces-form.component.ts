@@ -45,7 +45,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
 
   nsForm: CdFormGroup;
   subsystemNQN: string;
-  subsystems: NvmeofSubsystem[] = [];
+  subsystems: NvmeofSubsystem[] | null = null;
   rbdPools: Array<Pool> = null;
   rbdImages: any[] = [];
   initiatorCandidates: { content: string; selected: boolean }[] = [];
@@ -74,7 +74,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`Namespace`;
-    this.pageURL = 'block/nvmeof/gateways';
+    this.pageURL = 'block/nvmeof/namespaces';
   }
 
   init() {
@@ -92,7 +92,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         this.group = params['group'];
       }
       if (this.subsystemNQN && this.group) {
-        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/${this.group}`;
+        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
         this.action = this.actionLabels.ADD;
         this.title = this.action + ' ' + this.resource;
         this.description = $localize`Create a new namespace associated with this subsystem.`;
@@ -249,9 +249,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
           return /^[^@/]+$/.test(value) ? null : { rbdImageName: true };
         })
       ]),
-      namespace_size: new UntypedFormControl(null, {
-        validators: [CdValidators.blockSizeMultiple()]
-      }), // UI only - not sent to backend
+      namespace_size: new UntypedFormControl(512), // Block size in bytes; default 512
       host_access: new UntypedFormControl('all'), // UI only - determines visibility
       initiators: new UntypedFormControl([]) // UI only - selected hosts
     });
@@ -332,6 +330,8 @@ export class NvmeofNamespacesFormComponent implements OnInit {
 
     const loopCount = isGatewayProvisioned ? nsCount : 1;
 
+    const blockSize = this.nsForm.getValue('namespace_size');
+
     for (let i = 1; i <= loopCount; i++) {
       const request: NamespaceCreateRequest = {
         gw_group: this.group,
@@ -340,7 +340,6 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         no_auto_visible: noAutoVisible
       };
 
-      const blockSize = this.nsForm.getValue('namespace_size');
       if (blockSize) {
         request.block_size = blockSize;
       }
@@ -443,7 +442,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group, tab: 'namespace' }
+          queryParams: { group: this.group }
         });
       }
     });

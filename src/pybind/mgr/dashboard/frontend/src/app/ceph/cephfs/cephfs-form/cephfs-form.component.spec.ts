@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { CephfsVolumeFormComponent } from './cephfs-form.component';
 import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -31,7 +31,6 @@ describe('CephfsVolumeFormComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       GridModule,
       InputModule,
       SelectModule,

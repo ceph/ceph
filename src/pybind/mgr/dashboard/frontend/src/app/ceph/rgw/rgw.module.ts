@@ -85,7 +85,8 @@ import {
   ToggletipModule,
   IconService,
   LayoutModule,
-  SkeletonModule
+  SkeletonModule,
+  TilesModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -97,9 +98,11 @@ import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
-import ParentChild from '@carbon/icons/es/parent-child/20';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
@@ -116,6 +119,7 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
 
 @NgModule({
   imports: [
@@ -154,7 +158,12 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     RadioModule,
     SelectModule,
     LayoutModule,
-    SkeletonModule
+    SkeletonModule,
+    TilesModule,
+    ProductiveCardComponent,
+    TimePickerComponent,
+    AreaChartComponent,
+    ComponentsModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -237,7 +246,6 @@ export class RgwModule {
       ArrowDownIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild,
       UserAccessLocked
     ]);
   }

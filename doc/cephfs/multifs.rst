@@ -40,7 +40,7 @@ Securing access
 ---------------
 
 The ``fs authorize`` command allows configuring the client's access to a
-particular file system. See also in :ref:`fs-authorize-multifs`. The client will
+particular file system. See also :ref:`fs-authorize-multifs`. The client will
 only have visibility of authorized file systems and the Monitors/MDS will
 reject access to clients without authorization.
 

@@ -7,8 +7,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -24,7 +22,6 @@ describe('RbdTrashRestoreModalComponent', () => {
     imports: [
       ReactiveFormsModule,
       HttpClientTestingModule,
-      ToastrModule.forRoot(),
       SharedModule,
       RouterTestingModule,
       InputModule,

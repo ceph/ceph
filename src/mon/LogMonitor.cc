@@ -50,6 +50,7 @@
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
@@ -58,6 +59,7 @@
 #include "common/Graylog.h"
 #include "common/Journald.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 #include "common/strtol.h"
 #include "include/ceph_assert.h"
 #include "include/str_list.h"

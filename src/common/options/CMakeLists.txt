@@ -82,6 +82,8 @@ if(WITH_MGR)
   endif()
 endif()
 
+set(mgr_subinterpreter_modules "")
+
 add_options(global)
 add_options(cephfs-mirror)
 add_options(crimson)

@@ -16,10 +16,12 @@
 #include "MonmapMonitor.h"
 #include "Monitor.h"
 #include "OSDMonitor.h"
+#include "Paxos.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include <sstream>
 #include "common/config.h"
@@ -1139,76 +1141,80 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       mon.osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(&mon, op));
       return false;  /* do not propose, yet */
     }
-    {
-      if (monmap.stretch_mode_enabled) {
-	ss << "stretch mode is already engaged";
-	err = -EINVAL;
-        goto reply_no_propose;
-      }
-      if (pending_map.stretch_mode_enabled) {
-	ss << "stretch mode currently committing";
-	err = 0;
-        goto reply_no_propose;
-      }
-      string tiebreaker_mon;
-      if (!cmd_getval(cmdmap, "tiebreaker_mon", tiebreaker_mon)) {
-	ss << "must specify a tiebreaker monitor";
-	err = -EINVAL;
-        goto reply_no_propose;
-      }
-      string new_crush_rule;
-      if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
-	ss << "must specify a new crush rule that spreads out copies over multiple sites";
-	err = -EINVAL;
-        goto reply_no_propose;
-      }
-      string dividing_bucket;
-      if (!cmd_getval(cmdmap, "dividing_bucket", dividing_bucket)) {
-	ss << "must specify a dividing bucket";
-	err = -EINVAL;
-        goto reply_no_propose;
-      }
-      //okay, initial arguments make sense, check pools and cluster state
-      err = mon.osdmon()->check_cluster_features(CEPH_FEATUREMASK_STRETCH_MODE, ss);
-      if (err)
-        goto reply_no_propose;
-      struct Plugger {
-	Paxos &p;
-	Plugger(Paxos &p) : p(p) { p.plug(); }
-	~Plugger() { p.unplug(); }
-      } plugger(paxos);
-
-      set<pg_pool_t*> pools;
-      bool okay = false;
-      int errcode = 0;
-
-      mon.osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
-						   &pools, new_crush_rule);
-      if (!okay) {
-	err = errcode;
-        goto reply_no_propose;
-      }
-      try_enable_stretch_mode(ss, &okay, &errcode, false,
-			      tiebreaker_mon, dividing_bucket);
-      if (!okay) {
-	err = errcode;
-        goto reply_no_propose;
-      }
-      mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
-					     dividing_bucket, 2, pools, new_crush_rule);
-      if (!okay) {
-	err = errcode;
-        goto reply_no_propose;
-      }
-      // everything looks good, actually commit the changes!
-      try_enable_stretch_mode(ss, &okay, &errcode, true,
-			      tiebreaker_mon, dividing_bucket);
-      mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
-					     dividing_bucket,
-					     2, // right now we only support 2 sites
-					     pools, new_crush_rule);
-      ceph_assert(okay == true);
+    if (monmap.stretch_mode_enabled) {
+      ss << "stretch mode is already engaged";
+      err = -EINVAL;
+      goto reply_no_propose;
     }
+    if (pending_map.stretch_mode_enabled) {
+      ss << "stretch mode currently committing";
+      err = 0;
+      goto reply_no_propose;
+    }
+    string new_crush_rule;
+    if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
+      ss << "must specify a new crush rule that spreads out copies over multiple sites";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    string dividing_bucket;
+    if (!cmd_getval(cmdmap, "dividing_bucket", dividing_bucket)) {
+      ss << "must specify a dividing bucket";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    string tiebreaker_mon;
+    if (!cmd_getval(cmdmap, "tiebreaker_mon", tiebreaker_mon)) {
+      tiebreaker_mon = "";
+    }
+    //okay, initial arguments make sense, check pools and cluster state
+    err = mon.osdmon()->check_cluster_features(CEPH_FEATUREMASK_STRETCH_MODE, ss);
+    if (err) goto reply_no_propose;
+    
+    // Get pending CRUSH once for validation
+    CrushWrapper crush = mon.osdmon()->_get_pending_crush();
+    
+    set<pg_pool_t*> pools;
+    bool okay = false;
+    int errcode = 0;
+    struct Plugger {
+      // RAII helper to make sure no paxos commits during critical section.
+      // Auto unplug upon destruction.
+      public:
+        explicit Plugger(Paxos &p) : paxos(p) { paxos.plug(); }
+        ~Plugger() { paxos.unplug(); }
+        Plugger(const Plugger&) = delete; // prevent copying
+        Plugger& operator=(const Plugger&) = delete; // prevent object assignment
+      private:
+        Paxos &paxos;
+    };
+    Plugger plugger(paxos);
+    mon.osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
+              &pools, new_crush_rule);
+    if (!okay) {
+      err = errcode;
+      goto reply_no_propose;
+    }
+    try_enable_stretch_mode(ss, &okay, &errcode, false,
+          tiebreaker_mon, dividing_bucket, crush);
+    if (!okay) {
+      err = errcode;
+      goto reply_no_propose;
+    }
+    mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
+              dividing_bucket, 2, pools, new_crush_rule, crush);
+    if (!okay) {
+      err = errcode;
+      goto reply_no_propose;
+    }
+    // everything looks good, actually commit the changes!
+    try_enable_stretch_mode(ss, &okay, &errcode, true,
+          tiebreaker_mon, dividing_bucket, crush);
+    mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
+              dividing_bucket,
+              2, // right now we only support 2 sites
+              pools, new_crush_rule, crush);
+    ceph_assert(okay == true);
     request_proposal(mon.osdmon());
   } else if (prefix == "mon disable_stretch_mode") {
     if (!mon.osdmon()->is_writeable()) {
@@ -1274,83 +1280,207 @@ reply_propose:
   }
 }
 
-void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
-					    int *errcode, bool commit,
-					    const string& tiebreaker_mon,
-					    const string& dividing_bucket)
+void MonmapMonitor::validate_and_enable_stretch_mode(
+    const MonMap& monmap, // passed as arg for unittest
+    MonMap& pending_map, // passed as arg for unittest
+    stringstream& ss, bool *okay,
+    int *errcode, bool commit,
+    string tiebreaker_mon,
+    const string& dividing_bucket,
+    const CrushWrapper& crush)
 {
-  dout(20) << __func__ << dendl;
+  /* A helper function so that we can unittest
+  *  the logic of going into stretch mode.
+  *  Validates against the current committed monmap state,
+  *  but modifies pending_map only when commit=true.
+  */
   *okay = false;
-  if (pending_map.strategy != MonMap::CONNECTIVITY) {
-    ss << "Monitors must use the connectivity strategy to enable stretch mode";
-    *errcode = -EINVAL;
-    ceph_assert(!commit);
-    return;
+  MonMap::election_strategy strategy = pending_map.strategy;
+  if (strategy != MonMap::CONNECTIVITY) {
+    strategy = MonMap::CONNECTIVITY;
   }
-  if (!pending_map.contains(tiebreaker_mon)) {
-    ss << "mon " << tiebreaker_mon << "does not seem to exist";
+  // Validate tiebreaker_mon only if explicitly specified
+  if (!tiebreaker_mon.empty() && !monmap.contains(tiebreaker_mon)) {
+    ss << "mon " << tiebreaker_mon << " does not seem to exist";
     *errcode = -ENOENT;
-    ceph_assert(!commit);
     return;
   }
-  map<string,string> buckets;
-  for (const auto&mii : mon.monmap->mon_info) {
-    const auto& mi = mii.second;
-    const auto& bi = mi.crush_loc.find(dividing_bucket);
-    if (bi == mi.crush_loc.end()) {
+  
+  // Get CRUSH subtrees and dividing_id
+  int dividing_id = *crush.get_validated_type_id(dividing_bucket);
+  vector<int> subtrees;
+  crush.get_subtree_of_type(dividing_id, &subtrees);
+  if (subtrees.size() != 2) {
+    ss << "there are " << subtrees.size() << " " << dividing_bucket
+       << "'s in the cluster but stretch mode currently only works with 2!";
+    *errcode = -EINVAL;
+    return;
+  }
+
+  // Get subtree names from CRUSH
+  set<string> subtree_names;
+  for (int subtree_id : subtrees) {
+    const char *subtree_name = crush.get_item_name(subtree_id);
+    if (subtree_name) {
+      subtree_names.insert(subtree_name);
+    }
+  }
+  
+  if (subtree_names.size() != 2) {
+    ss << "Could not get names for both CRUSH subtrees";
+    *errcode = -EINVAL;
+    return;
+  }
+  
+  // Build map of monitor names to their location at dividing_bucket level
+  map<string,string> mon_name_to_crush_loc;
+  for (const auto& [mon_name, mon_info] : monmap.mon_info) {
+    auto loc_it = mon_info.crush_loc.find(dividing_bucket);
+    if (loc_it == mon_info.crush_loc.end()) {
       ss << "Could not find location entry for " << dividing_bucket
-	 << " on monitor " << mi.name;
+	       << " on monitor " << mon_name;
       *errcode = -EINVAL;
-      ceph_assert(!commit);
       return;
     }
-    buckets[mii.first] = bi->second;
+    mon_name_to_crush_loc.emplace(mon_name, loc_it->second);
   }
-  string bucket1, bucket2, tiebreaker_bucket;
-  for (auto& i : buckets) {
-    if (i.first == tiebreaker_mon) {
-      tiebreaker_bucket = i.second;
-      continue;
+
+  // Identify the two data zones - they must match the CRUSH subtree names
+  map<string, set<string>> location_to_mons;
+  for (const auto& [mon_name, loc_name] : mon_name_to_crush_loc) {
+    location_to_mons[loc_name].insert(mon_name);
+  }
+
+  vector<string> data_zones;
+  for (const string& subtree_name : subtree_names) {
+    if (location_to_mons.count(subtree_name)) {
+      data_zones.push_back(subtree_name);
     }
-    if (bucket1.empty()) {
-      bucket1 = i.second;
+  }
+
+  if (data_zones.size() != 2) {
+    ss << "Could not find monitors in both CRUSH subtrees (";
+    for (auto it = subtree_names.begin(); it != subtree_names.end(); ++it) {
+      if (it != subtree_names.begin()) ss << ", ";
+      ss << *it;
     }
-    if (bucket1 != i.second &&
-	bucket2.empty()) {
-      bucket2 = i.second;
+    ss << "); found monitors only in: ";
+    for (size_t i = 0; i < data_zones.size(); ++i) {
+      if (i > 0) ss << ", ";
+      ss << data_zones[i];
     }
-    if (bucket1 != i.second &&
-	bucket2 != i.second) {
-      ss << "There are too many monitor buckets for stretch mode, found "
-	 << bucket1 << "," << bucket2 << "," << i.second;
+    *errcode = -EINVAL;
+    return;
+  }
+
+  string data_zone1 = data_zones[0];
+  string data_zone2 = data_zones[1];
+
+  // Verify each data zone has at least 1 monitor
+  size_t zone1_mon_count = location_to_mons[data_zone1].size();
+  size_t zone2_mon_count = location_to_mons[data_zone2].size();
+
+  if (zone1_mon_count == 0 || zone2_mon_count == 0) {
+    ss << "Each data zone must have at least 1 monitor; "
+       << data_zone1 << " has " << zone1_mon_count << ", "
+       << data_zone2 << " has " << zone2_mon_count;
+    *errcode = -EINVAL;
+    return;
+  }
+
+  // Auto-select tiebreaker monitor if not specified
+  if (tiebreaker_mon.empty()) {
+    // Find tiebreaker monitor(s) - must be exactly one monitor not in data zones
+    vector<string> tiebreaker_mons;
+    for (const auto& [mon_name, loc_name] : mon_name_to_crush_loc) {
+      if (loc_name != data_zone1 && loc_name != data_zone2) {
+        tiebreaker_mons.push_back(mon_name);
+      }
+    }
+
+    if (tiebreaker_mons.empty()) {
+      ss << "Could not auto-select a tiebreaker monitor; "
+         << "must have a monitor in a third " << dividing_bucket
+         << " location (found only " << data_zone1 << " and " << data_zone2 << ")";
       *errcode = -EINVAL;
-      ceph_assert(!commit);
+      return;
+    }
+
+    if (tiebreaker_mons.size() > 1) {
+      ss << "Could not auto-select a tiebreaker monitor; "
+         << "found " << tiebreaker_mons.size() << " monitors (" << tiebreaker_mons
+         << ") not in the 2 data zones "
+         << data_zone1 << " and " << data_zone2 << ", need exactly 1";
+      *errcode = -EINVAL;
+      return;
+    }
+
+    // Exactly one tiebreaker monitor found
+    tiebreaker_mon = tiebreaker_mons[0];
+  } else {
+    // Validate explicitly specified tiebreaker monitor
+    auto tiebreaker_loc_it = mon_name_to_crush_loc.find(tiebreaker_mon);
+    if (tiebreaker_loc_it == mon_name_to_crush_loc.end()) {
+      // tiebreaker doesn't belong to any of the dividing_bucket locations
+      ss << "tiebreaker monitor " << tiebreaker_mon
+         << " does not have a location specified for " << dividing_bucket;
+      *errcode = -EINVAL;
+      return;
+    }
+
+    const string& tiebreaker_location = tiebreaker_loc_it->second;
+    if (tiebreaker_location == data_zone1 || tiebreaker_location == data_zone2) {
+      ss << "tiebreaker monitor " << tiebreaker_mon
+         << " is in " << tiebreaker_location
+         << ", which is one of the two data zones ("
+         << data_zone1 << ", " << data_zone2
+         << "); tiebreaker must be in a third location";
+      *errcode = -EINVAL;
       return;
     }
   }
-  if (bucket1.empty() || bucket2.empty()) {
-    ss << "There are not enough monitor buckets for stretch mode;"
-       << " must have at least 2 plus the tiebreaker but only found "
-       << (bucket1.empty() ? bucket1 : bucket2);
-    *errcode = -EINVAL;
-    ceph_assert(!commit);
-    return;
-  }
-  if (tiebreaker_bucket == bucket1 ||
-      tiebreaker_bucket == bucket2) {
-    ss << "The named tiebreaker monitor " << tiebreaker_mon
-       << " is in the same CRUSH bucket " << tiebreaker_bucket
-       << " as other monitors";
-    *errcode = -EINVAL;
-    ceph_assert(!commit);
-    return;
-  }
+
   if (commit) {
+    pending_map.strategy = strategy;
     pending_map.disallowed_leaders.insert(tiebreaker_mon);
     pending_map.tiebreaker_mon = tiebreaker_mon;
     pending_map.stretch_mode_enabled = true;
   }
   *okay = true;
+}
+
+void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
+					    int *errcode, bool commit,
+					    string tiebreaker_mon,
+					    const string& dividing_bucket,
+					    const CrushWrapper& crush)
+{
+  dout(20) << __func__ << dendl;
+  
+  // Check if monitors support connectivity election strategy if not already using it
+  if (pending_map.strategy != MonMap::CONNECTIVITY) {
+    if (!mon.get_quorum_mon_features().contains_all(
+        ceph::features::mon::FEATURE_PINGING)) {
+      *okay = false;
+      *errcode = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      return;
+    }
+  }
+  
+  validate_and_enable_stretch_mode(*mon.monmap, pending_map, ss, okay, errcode, commit,
+                                     tiebreaker_mon, dividing_bucket, crush);
+
+  // Add debug logging if successful
+  if (*okay && !tiebreaker_mon.empty()) {
+    // Note: tiebreaker_mon may have been auto-selected, but we can't easily retrieve it here
+    // The validate_and_enable_stretch_mode function modifies it internally
+    dout(20) << __func__ << " stretch mode validation succeeded" << dendl;
+  }
+
+  if (!*okay) {
+    ceph_assert(!commit);
+  }
 }
 
 void MonmapMonitor::trigger_degraded_stretch_mode(const set<string>& dead_mons)

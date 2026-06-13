@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -10,7 +11,8 @@ import {
   DestroyRef,
   OnDestroy,
   ChangeDetectionStrategy,
-  TemplateRef
+  TemplateRef,
+  ViewEncapsulation
 } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
@@ -21,6 +23,8 @@ import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject } from 'rxjs';
+
+export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
 /**
 <cd-tearsheet
@@ -54,7 +58,8 @@ formgroup: CdFormGroup;
   standalone: false,
   templateUrl: './tearsheet.component.html',
   styleUrls: ['./tearsheet.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
@@ -64,7 +69,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
-  @Input() isSubmitLoading: boolean = true;
+  @Input() isSubmitLoading: boolean = false;
+  /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
+  @Input() overflowScroll?: TearsheetOverflowScroll;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
@@ -85,6 +92,13 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
   }
 
+  get contentOverflowStyle(): { overflow: TearsheetOverflowScroll } | null {
+    if (!this.overflowScroll) {
+      return null;
+    }
+    return { overflow: this.overflowScroll };
+  }
+
   getStepValue<T = any>(index: number): T | null {
     const wrapper = this.stepContents?.toArray()?.[index];
     return wrapper?.stepComponent?.formGroup?.value ?? null;
@@ -101,7 +115,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   currentStep: number = 0;
-  lastStep: number = null;
+  lastStep: number | null = null;
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
   private destroy$ = new Subject<void>();
@@ -111,7 +125,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
     private location: Location,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -150,26 +165,42 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
   onNext() {
-    const formEl = document.querySelector('form');
-    formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
+    const currentForm = this.stepContents?.toArray()?.[this.currentStep]?.stepComponent?.formGroup;
+    currentForm?.markAllAsTouched();
+    currentForm?.updateValueAndValidity({ emitEvent: true });
+    if (currentForm) {
+      this._updateStepInvalid(this.currentStep, currentForm.invalid);
+    }
+
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
     }
   }
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent.formGroup.value;
+      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
       return { ...acc, ...stepFormValue };
     }, {});
   }
 
-  handleSubmit() {
+  onSubmit() {
+    this.stepContents?.forEach((wrapper, index) => {
+      const form = wrapper.stepComponent?.formGroup;
+      if (!form) return;
+
+      form.markAllAsTouched();
+      form.updateValueAndValidity({ emitEvent: true });
+      this._updateStepInvalid(index, form.invalid);
+    });
+
     if (this.steps.some((step) => step?.invalid)) return;
 
     const mergedPayloads = this.getMergedPayload();

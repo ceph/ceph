@@ -35,6 +35,10 @@ public:
       return true;
     return false;
   }
+
+  void set_interrupt() {
+    interrupt = true;
+  }
 private:
   bool interrupt = false;
 };
@@ -262,6 +266,66 @@ TEST_F(seastar_test_suite_t, interruptible_async)
       return fut;
     }, [](std::exception_ptr) {}, false).get();
   });
+
+}
+
+TEST_F(seastar_test_suite_t, interruptible_yield)
+{
+  using interruptor =
+    interruptible::interruptor<TestInterruptCondition>;
+
+  run_async([] {
+    bool interrupted = false;
+    auto fut = interruptor::with_interruption([] {
+      return interruptor::async([] {
+        interruptible::interrupt_cond<
+	  TestInterruptCondition>.interrupt_cond->set_interrupt();
+        interruptor::yield();
+        // the execution should be interrupted, the run should
+        // never reach here.
+        ceph_abort();
+      });
+    }, [&interrupted](std::exception_ptr) {
+      std::cout << "interrupted" << std::endl;
+      interrupted = true;
+    }, false);
+    fut.wait();
+    ceph_assert(interrupted);
+
+    interrupted = false;
+    fut = interruptor::with_interruption([] {
+      return interruptor::async([] {
+        interruptible::interrupt_cond<
+	  TestInterruptCondition>.interrupt_cond->set_interrupt();
+        interruptor::green_get(seastar::yield());
+        // the execution should be interrupted, the run should
+        // never reach here.
+        ceph_abort();
+      });
+    }, [&interrupted](std::exception_ptr) {
+      std::cout << "interrupted" << std::endl;
+      interrupted = true;
+    }, false);
+    fut.wait();
+    ceph_assert(interrupted);
+
+    interrupted = false;
+    fut = interruptor::with_interruption([] {
+      return interruptor::async([] {
+        interruptible::interrupt_cond<
+	  TestInterruptCondition>.interrupt_cond->set_interrupt();
+        interruptor::make_interruptible(seastar::yield()).get();
+        // the execution should be interrupted, the run should
+        // never reach here.
+        ceph_abort();
+      });
+    }, [&interrupted](std::exception_ptr) {
+      std::cout << "interrupted" << std::endl;
+      interrupted = true;
+    }, false);
+    fut.wait();
+    ceph_assert(interrupted);
+  });
 }
 
 TEST_F(seastar_test_suite_t, DISABLED_nested_interruptors)
@@ -314,7 +378,7 @@ TEST_F(seastar_test_suite_t, handle_error)
 	  1
 	).handle_error_interruptible(
 	  base_iertr::pass_further{},
-	  ct_error::assert_all{"crash on eio"}
+	  ct_error::assert_all("crash on eio")
 	).si_then([](auto) {
 	  return base_iertr::now();
 	});

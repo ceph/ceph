@@ -51,7 +51,7 @@ Non Trivial Configuration
           "access_key": <access>,
           "secret": <secret>,
           "endpoint": <endpoint>,
-          "host_style" <path | virtual>,
+          "host_style": <path | virtual>,
         },
         "acls": [
           {
@@ -67,7 +67,7 @@ Non Trivial Configuration
             "access_key": <access>,
             "secret": <secret>,
             "endpoint": <endpoint>,
-            "host_style" <path | virtual>,  # optional
+            "host_style": <path | virtual>,  # optional
           } ... ],
       "acl_profiles": [
           {

@@ -173,7 +173,9 @@ def create_barbican_conf(ctx, cclient):
 
     run_in_barbican_dir(ctx, cclient,
                         ['bash', '-c',
-                         'echo -n -e "[DEFAULT]\nhost_href=' + barbican_url + '\n" ' + \
+                         'echo -n -e "[DEFAULT]\nhost_href = ' + barbican_url + \
+                         '\n[simple_crypto_plugin]\n' + \
+                         'kek =  UGxlYXNlIG1ha2UgYmFyYmljYW4gZ3JlYXQgYWdhaW4=\n" ' + \
                          '>barbican.conf'])
 
     log.info("run barbican db upgrade")

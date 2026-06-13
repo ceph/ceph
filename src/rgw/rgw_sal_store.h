@@ -430,7 +430,7 @@ public:
 
 class StoreMPSerializer : public MPSerializer {
 protected:
-  bool locked;
+  std::atomic<bool> locked;
   std::string oid;
 public:
   StoreMPSerializer() : locked(false) {}
@@ -534,7 +534,7 @@ public:
 
   StoreLuaManager() = default;
   StoreLuaManager(const std::string& __luarocks_path) :
-    _luarocks_path(__luarocks_path) {}
+    _luarocks_path(__luarocks_path), lua_background(nullptr) {}
   virtual ~StoreLuaManager() = default;
 };
 

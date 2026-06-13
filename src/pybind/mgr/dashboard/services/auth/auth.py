@@ -106,7 +106,7 @@ class JwtManager(object):
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('jwt')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         # generate a new secret if it does not exist
         secret = mgr.get_store('jwt_secret')
         if secret is None:
@@ -227,16 +227,19 @@ class JwtManager(object):
     def get_user(cls, token):
         try:
             dtoken = cls.decode_token(token)
-            if 'jti' in dtoken and not cls.is_blocklisted(dtoken['jti']):
-                user = AuthManager.get_user(dtoken['username'])
-                if 'iat' in dtoken and user.last_update <= dtoken['iat']:
-                    return user
-                cls.logger.debug(  # type: ignore
-                    "user info changed after token was issued, iat=%s last_update=%s",
-                    dtoken['iat'], user.last_update
-                )
+            if 'jti' in dtoken:
+                if not cls.is_blocklisted(dtoken['jti']):
+                    user = AuthManager.get_user(dtoken['username'])
+                    if 'iat' in dtoken and user.last_update <= dtoken['iat']:
+                        return user
+                    cls.logger.debug(  # type: ignore
+                        "user info changed after token was issued, iat=%s last_update=%s",
+                        dtoken['iat'], user.last_update
+                    )
+                else:
+                    cls.logger.debug('Token is block-listed')  # type: ignore
             else:
-                cls.logger.debug('Token is block-listed')  # type: ignore
+                cls.logger.debug('Missing jti claim in token')  # type: ignore
         except ExpiredSignatureError:
             cls.logger.debug("Token has expired")  # type: ignore
         except InvalidTokenError:
@@ -302,7 +305,7 @@ class AuthManagerTool(cherrypy.Tool):
     def __init__(self):
         super(AuthManagerTool, self).__init__(
             'before_handler', self._check_authentication, priority=20)
-        self.logger = logging.getLogger('auth')
+        self.logger = logging.getLogger(__name__)
 
     def _check_authentication(self):
         JwtManager.reset_user()

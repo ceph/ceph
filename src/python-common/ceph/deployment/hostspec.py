@@ -4,16 +4,25 @@ import re
 from typing import Optional, List, Any, Dict
 
 
+def normalize_hostname(hostname: str) -> str:
+    """Normalize hostname to lowercase for case-insensitive matching."""
+    return hostname.lower()
+
+
 def assert_valid_host(name: str) -> None:
     p = re.compile('^[a-zA-Z0-9-]+$')
-    try:
-        assert len(name) <= 250, 'name is too long (max 250 chars)'
-        for part in name.split('.'):
-            assert len(part) > 0, '.-delimited name component must not be empty'
-            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
-            assert p.match(part), 'name component must include only a-z, 0-9, and -'
-    except AssertionError as e:
-        raise SpecValidationError(str(e) + f'. Got "{name}"')
+    if len(name) > 250:
+        raise AssertionError(f'{name}: name is too long (max 250 chars)') from None
+    for part in name.split('.'):
+        if len(part) == 0:
+            raise AssertionError('.-delimited name component must not be empty '
+                                 f'but got {name}') from None
+        if len(part) > 63:
+            raise AssertionError('.-delimited name component must not be more '
+                                 f'than 63 chars but got {name}') from None
+        if not p.match(part):
+            raise AssertionError('name component must include only a-z, 0-9, '
+                                 f'and - but got {name}') from None
 
 
 def assert_valid_oob(oob: Dict[str, str]) -> None:
@@ -52,16 +61,16 @@ class HostSpec(object):
         self.service_type = 'host'
 
         #: the bare hostname on the host. Not the FQDN.
-        self.hostname = hostname  # type: str
+        self.hostname = normalize_hostname(hostname)
 
         #: DNS name or IP address to reach it
-        self.addr = addr or hostname  # type: str
+        self.addr = addr or normalize_hostname(hostname)
 
         #: label(s), if any
-        self.labels = labels or []  # type: List[str]
+        self.labels = labels or []
 
         #: human readable status
-        self.status = status or ''  # type: str
+        self.status = status or ''
 
         self.location = location
 
@@ -102,6 +111,8 @@ class HostSpec(object):
 
     @staticmethod
     def normalize_json(host_spec: dict) -> dict:
+        if 'hostname' in host_spec:
+            host_spec['hostname'] = normalize_hostname(host_spec['hostname'])
         labels = host_spec.get('labels')
         if labels is not None:
             if isinstance(labels, str):

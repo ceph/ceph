@@ -11,7 +11,7 @@ from ._version import APIVersion
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
-logger = logging.getLogger('controllers.docs')
+logger = logging.getLogger(__name__)
 
 
 @Router('/docs', secure=False)

@@ -51,7 +51,7 @@ namespace neorados::cls::version {
   call.objv = ver;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "set", in);
+    op.exec(::cls::version::method::set, in);
   }};
 }
 
@@ -67,7 +67,7 @@ namespace neorados::cls::version {
   cls_version_inc_op call;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "inc", in);
+    op.exec(::cls::version::method::inc, in);
   }};
 }
 
@@ -95,7 +95,7 @@ namespace neorados::cls::version {
 
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "inc_conds", in);
+    op.exec(::cls::version::method::inc_conds, in);
   }};
 }
 
@@ -124,7 +124,7 @@ namespace neorados::cls::version {
 
   encode(call, in);
   return ClsOp{[in = std::move(in)](Op& op) {
-    op.exec("version", "check_conds", in);
+    op.exec(::cls::version::method::check_conds, in);
   }};
 }
 
@@ -138,9 +138,10 @@ namespace neorados::cls::version {
 [[nodiscard]] inline auto read(obj_version* const objv)
 {
   using boost::system::error_code;
-  return ClsReadOp{[objv](Op& op) {
+  return ClsReadOp{[objv](ReadOp& op) {
     namespace sys = boost::system;
-    op.exec("version", "read", {},
+    bufferlist inbl;
+    op.exec(::cls::version::method::read, std::move(inbl),
 	    [objv](error_code ec,
 		   const buffer::list& bl) {
 	      cls_version_read_ret ret;
@@ -186,7 +187,7 @@ inline auto read(RADOS& r, Object o, IOContext ioc,
   using namespace std::literals;
   return exec<cls_version_read_ret>(
     r, std::move(o), std::move(ioc),
-    "version"s, "read"s, nullptr,
+    ::cls::version::method::read, nullptr,
     [](cls_version_read_ret&& ret) {
       return std::move(ret.objv);
     }, std::forward<CompletionToken>(token));

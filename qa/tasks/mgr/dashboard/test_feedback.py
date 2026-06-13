@@ -7,6 +7,14 @@ class FeedbackTest(MgrModuleTestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback'], wait=3)
+        # Point the feedback module at an unreachable host so the test
+        # does not depend on tracker.ceph.com being available. Any
+        # create_issue call will fail fast with a ConnectionError
+        # (a RequestException subclass) which the dashboard controller
+        # is expected to surface as HTTP 400.
+        cls._ceph_cmd(['config', 'set', 'mgr',
+                       'mgr/feedback/tracker_url',
+                       'invalid.example.invalid'])
         cls._get(
             '/api/mgr/module',
             retries=5,

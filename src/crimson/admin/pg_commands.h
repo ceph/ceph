@@ -5,7 +5,10 @@
 
 namespace crimson::admin::pg {
 
+class PGOldFormCommand;
 class QueryCommand;
+class LogCommand;
+class ListUnfoundCommand;
 class MarkUnfoundLostCommand;
 template <bool deep>
 class ScrubCommand;

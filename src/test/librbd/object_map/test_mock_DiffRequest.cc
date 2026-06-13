@@ -190,7 +190,7 @@ public:
     std::string snap_oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                       snap_id));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _,
+                exec_internal(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _,
                      _, _, _))
       .WillOnce(WithArg<5>(Invoke([object_map, r, lambda=std::move(lambda)]
                                   (bufferlist* out_bl) {

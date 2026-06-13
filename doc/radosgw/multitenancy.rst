@@ -25,8 +25,8 @@ Administering Users With Explicit Tenants
 Tenants as such do not have any operations on them. They appear and
 disappear as needed, when users are administered. In order to create,
 modify, and remove users with explicit tenants, either an additional
-option --tenant is supplied, or a syntax '<tenant>$<user>' is used
-in the parameters of the radosgw-admin command.
+option ``--tenant`` is supplied, or a syntax ``<tenant>$<user>`` is used
+in the parameters of the ``radosgw-admin`` command.
 
 Examples
 --------
@@ -142,11 +142,11 @@ configuration option::
 
 Once you enable this option, any newly connecting user (whether they
 are using the Swift API, or Keystone-authenticated S3) will prompt
-radosgw to create a user named ``<tenant_id>$<tenant_id``, where
+radosgw to create a user named ``<tenant_id>$<tenant_id>``, where
 ``<tenant_id>`` is a Keystone tenant (project) UUID --- for example,
 ``7188e165c0ae4424ac68ae2e89a05c50$7188e165c0ae4424ac68ae2e89a05c50``.
 
-Whenever that user then creates an Swift container, radosgw internally
+Whenever that user then creates a Swift container, radosgw internally
 translates the given container name into
 ``<tenant_id>/<container_name>``, such as
 ``7188e165c0ae4424ac68ae2e89a05c50/foo``. This ensures that if there
@@ -155,11 +155,11 @@ are two or more different tenants all creating a container named
 prefix.
 
 It is also possible to limit the effects of implicit tenants
-to only apply to swift or s3, by setting ``rgw keystone implicit tenants``
+to only apply to Swift or S3, by setting ``rgw keystone implicit tenants``
 to either ``s3`` or ``swift``.  This will likely primarily
 be of use to users who had previously used implicit tenants
 with older versions of ceph, where implicit tenants
-only applied to the swift protocol.
+only applied to the Swift protocol.
 
 Notes and known issues
 ----------------------

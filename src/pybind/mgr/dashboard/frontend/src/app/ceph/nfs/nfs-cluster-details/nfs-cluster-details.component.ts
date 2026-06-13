@@ -8,7 +8,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
   standalone: false
 })
 export class NfsClusterDetailsComponent {
-  title = $localize`Export`;
+  title = $localize`Share`;
   @Input()
   selection: CdTableSelection;
 }

@@ -156,10 +156,6 @@ const BackgroundMapValue& Background::get_table_value(const std::string& key) co
 void Background::run() {
   ceph_pthread_setname("lua_background");
   const DoutPrefixProvider* const dpp = &dp;
-  std::unique_ptr<lua_state_guard> lguard = initialize_lguard_state();
-  if (!lguard) {
-    return;
-  }
 
   while (!stopped) {
     if (paused) {
@@ -172,20 +168,10 @@ void Background::run() {
       }
       ldpp_dout(dpp, 10) << "Lua background thread resumed" << dendl;
     }
-    const std::size_t max_memory = cct->_conf->rgw_lua_max_memory_per_state;
-    const std::uint64_t max_runtime = cct->_conf->rgw_lua_max_runtime_per_state;
-    auto res = lguard->set_max_memory(max_memory);
-    if (!res) {
-      ldpp_dout(dpp, 10)
-          << "Lua state required reset due to memory limit change" << dendl;
-      lguard = initialize_lguard_state();
-      if (!lguard) {
-        return;
-      }
-      ldpp_dout(dpp, 10) << "Lua state restarted successfully." << dendl;
+    std::unique_ptr<lua_state_guard> lguard = initialize_lguard_state();
+    if (!lguard) {
+      return;
     }
-    lguard->set_max_runtime(max_runtime);
-    lguard->reset_start_time();
     const auto rc = read_script();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do

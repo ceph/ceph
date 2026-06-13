@@ -374,6 +374,10 @@ struct BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
+  virtual void send_recovery_deletes(
+    const hobject_t& obj,
+    const std::vector<pg_shard_t>& peers) = 0;
+
   virtual void maybe_flush() = 0;
 
   virtual void update_peers_last_backfill(

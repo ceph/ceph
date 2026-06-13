@@ -68,6 +68,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   placementTargets: object[] = [];
   isVersioningAlreadyEnabled = false;
   isMfaDeleteAlreadyEnabled = false;
+  initialVersioningStatus: string | null = null;
   icons = Icons;
   kmsConfigured = false;
   s3Configured = false;
@@ -267,6 +268,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
         if (data['getBid']) {
           const bidResp = data['getBid'];
+          if (this.editing) {
+            this.initialVersioningStatus = bidResp['versioning'] ?? null;
+          }
           // Get the default values (incl. the values from disabled fields).
           const defaults = _.clone(this.bucketForm.getRawValue());
 
@@ -327,11 +331,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             }
             if (value['replication']) {
               const replicationConfig = value['replication'];
-              if (replicationConfig?.['Rule']?.['Status'] === 'Enabled') {
-                this.bucketForm.get('replication').setValue(true);
-              } else {
-                this.bucketForm.get('replication').setValue(false);
-              }
+              // Only consider S3 replication rules, not sync policies (managed on sync-policy page)
+              const hasReplicationRules =
+                replicationConfig?.['replication_rules_configured'] === true &&
+                replicationConfig?.['policy']?.['Rule']?.['Status'] === 'Enabled';
+
+              this.bucketForm.get('replication').setValue(hasReplicationRules);
             }
             this.filterAclPermissions();
           }
@@ -526,8 +531,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     mfaTokenPinControl.updateValueAndValidity();
   }
 
-  getVersioningStatus() {
-    return this.isVersioningEnabled ? RgwBucketVersioning.ENABLED : RgwBucketVersioning.SUSPENDED;
+  getVersioningStatus(): string {
+    if (this.isVersioningEnabled) {
+      return RgwBucketVersioning.ENABLED;
+    }
+    if (this.editing && this.initialVersioningStatus === RgwBucketVersioning.OFF) {
+      return '';
+    }
+    return RgwBucketVersioning.SUSPENDED;
   }
 
   getMfaDeleteStatus() {

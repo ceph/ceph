@@ -1,0 +1,11 @@
+# TODO: enable once ec is supported https://tracker.ceph.com/issues/75092
+overrides:
+  rgw:
+    ec-data-pool: true
+    erasure_code_profile:
+      name: testprofile
+      k: 3
+      m: 1
+      crush-failure-domain: osd
+  s3tests:
+    slow_backend: true

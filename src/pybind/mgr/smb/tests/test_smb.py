@@ -959,10 +959,10 @@ def test_cmd_share_update_qos(tmodule):
         share_id='qostest',
         read_iops_limit=100,
         write_iops_limit=200,
-        read_bw_limit=1048576,
-        write_bw_limit=2097152,
-        read_delay_max=20,
-        write_delay_max=30,
+        read_bw_limit="1048576",
+        write_bw_limit="2097152",
+        read_burst_mult=20,
+        write_burst_mult=15,
     )
     assert res == 0
     bdata = json.loads(body)
@@ -978,21 +978,19 @@ def test_cmd_share_update_qos(tmodule):
     assert updated_share.cephfs.qos is not None
     assert updated_share.cephfs.qos.read_iops_limit == 100
     assert updated_share.cephfs.qos.write_iops_limit == 200
-    assert updated_share.cephfs.qos.read_bw_limit == 1048576
-    assert updated_share.cephfs.qos.write_bw_limit == 2097152
-    assert updated_share.cephfs.qos.read_delay_max == 20
-    assert updated_share.cephfs.qos.write_delay_max == 30
+    assert updated_share.cephfs.qos.read_bw_limit == "1048576"
+    assert updated_share.cephfs.qos.write_bw_limit == "2097152"
+    assert updated_share.cephfs.qos.read_burst_mult == 20
+    assert updated_share.cephfs.qos.write_burst_mult == 15
 
-    # Test updating with None values (should remove QoS)
+    # Test updating with 0 values (should remove QoS)
     res, body, status = tmodule.share_update_qos.command(
         cluster_id='qoscluster',
         share_id='qostest',
         read_iops_limit=0,
         write_iops_limit=0,
-        read_bw_limit=0,
-        write_bw_limit=0,
-        read_delay_max=0,
-        write_delay_max=0,
+        read_bw_limit="0",
+        write_bw_limit="0",
     )
     assert res == 0
     bdata = json.loads(body)
@@ -1011,7 +1009,7 @@ def test_cmd_share_update_qos(tmodule):
         cluster_id='qoscluster',
         share_id='qostest',
         read_iops_limit=500,
-        write_bw_limit=524288,
+        write_bw_limit="524288",
     )
     assert res == 0
     bdata = json.loads(body)
@@ -1027,6 +1025,302 @@ def test_cmd_share_update_qos(tmodule):
     assert updated_share.cephfs.qos.read_iops_limit == 500
     assert updated_share.cephfs.qos.write_iops_limit is None
     assert updated_share.cephfs.qos.read_bw_limit is None
-    assert updated_share.cephfs.qos.write_bw_limit == 524288
-    assert updated_share.cephfs.qos.read_delay_max == 30
-    assert updated_share.cephfs.qos.write_delay_max == 30
+    assert updated_share.cephfs.qos.write_bw_limit == "524288"
+    assert updated_share.cephfs.qos.read_burst_mult == 15  # Default
+    assert updated_share.cephfs.qos.write_burst_mult == 15  # Default
+
+
+def test_cmd_cluster_update_qos(tmodule):
+    cluster = _cluster(
+        cluster_id='qoscluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    share1 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share1',
+        name='Share One',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share1',
+        ),
+    )
+    share2 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share2',
+        name='Share Two',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share2',
+        ),
+    )
+    share3 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share3',
+        name='Share Three',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share3',
+        ),
+    )
+
+    rg = tmodule._handler.apply([cluster, share1, share2, share3])
+    assert rg.success, rg.to_simplified()
+
+    res, body, status = tmodule.cluster_update_qos.command(
+        cluster_id='qoscluster',
+        read_iops_limit=100,
+        write_iops_limit=200,
+        read_bw_limit="1048576",
+        write_bw_limit="2097152",
+        read_burst_mult=20,
+        write_burst_mult=15,
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+    assert bdata['cluster_id'] == 'qoscluster'
+    assert bdata['total_shares'] == 3
+    assert len(bdata['successful_updates']) == 3
+    assert len(bdata['failed_updates']) == 0
+
+    for share_id in ['share1', 'share2', 'share3']:
+        updated_shares = tmodule._handler.matching_resources(
+            [f'ceph.smb.share.qoscluster.{share_id}']
+        )
+        assert len(updated_shares) == 1
+        updated_share = updated_shares[0]
+        assert updated_share.cephfs.qos is not None
+        assert updated_share.cephfs.qos.read_iops_limit == 100
+        assert updated_share.cephfs.qos.write_iops_limit == 200
+        assert updated_share.cephfs.qos.read_bw_limit == "1048576"
+        assert updated_share.cephfs.qos.write_bw_limit == "2097152"
+        assert updated_share.cephfs.qos.read_burst_mult == 20
+        assert updated_share.cephfs.qos.write_burst_mult == 15
+
+
+def _keybridge_example():
+    return [
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cert1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'key1',
+            'intent': 'present',
+            'credential_type': 'key',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cacert1',
+            'intent': 'present',
+            'credential_type': 'ca-cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'active-directory',
+            'intent': 'present',
+            'clustering': 'never',
+            'domain_settings': {
+                'realm': 'dom1.example.com',
+                'join_sources': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo',
+                    }
+                ],
+            },
+            "keybridge": {
+                "scopes": [
+                    {"name": "mem"},
+                    {
+                        "name": "kmip",
+                        "kmip_hosts": ["zorg.example.net"],
+                        "kmip_port": 78989,
+                        "kmip_cert": {"ref": "cert1"},
+                        "kmip_key": {"ref": "key1"},
+                        "kmip_ca_cert": {"ref": "cacert1"},
+                    },
+                ],
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.join.auth',
+            'auth_id': 'foo',
+            'intent': 'present',
+            'auth': {
+                'username': 'testadmin',
+                'password': 'Passw0rd',
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'name': 'Ess One',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+                "fscrypt_key": {
+                    "scope": "mem",
+                    "name": "bob",
+                },
+            },
+        },
+    ]
+
+
+def test_keybridge_config(tmodule):
+    txt = json.dumps(_keybridge_example())
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(scopes=[{'name': 'joe'}], expected='invalid scope type'),
+        dict(scopes=[{'name': 'mem.joe'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.00'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip._'}], expected='invalid scope name'),
+        dict(scopes=[], enabled=True, expected='at least one scope'),
+        dict(scopes=[{'name': 'kmip'}], expected='kmip hostname'),
+        dict(
+            scopes=[{'name': 'kmip', 'kmip_hosts': ['foo.example.org']}],
+            expected='kmip default port',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'kmip',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='cert',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'mem',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='mem',
+        ),
+    ],
+)
+def test_keybridge_config_scope_error(tmodule, params):
+    example = _keybridge_example()
+    if enabled := params.get('enabled'):
+        example[3]['keybridge']['enabled'] = enabled
+    example[3]['keybridge']['scopes'] = params['scopes']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(fkey={'scope': 'mem', 'name': ''}, expected='valid'),
+        dict(fkey={'scope': 'mem', 'name': '-'}, expected='valid'),
+        dict(fkey={'scope': '-', 'name': 'foo'}, expected='valid'),
+        dict(
+            fkey={'scope': 'mim', 'name': 'foo'},
+            expected='invalid scope type',
+        ),
+        dict(
+            fkey={'scope': 'mem.bob', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.-', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.foo', 'name': 'foo'},
+            expected='scope name not known',
+        ),
+    ],
+)
+def test_share_fscrypt_config_error(tmodule, params):
+    example = _keybridge_example()
+    example[-1]['cephfs']['fscrypt_key'] = params['fkey']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
+
+
+def test_share_rm_wildcard(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.share_rm('foo', 's*', wildcard=True)
+    assert result.success
+    assert len(list(result)) == 2
+
+
+def test_share_rm_wildcard_one_match(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.share_rm('foo', 'st*', wildcard=True)
+    assert result.success
+    assert len(list(result)) == 1
+
+
+def test_share_rm_wildcard_no_match(tmodule):
+    _example_cfg_1(tmodule)
+
+    with pytest.raises(smb.cli.NoMatchingValue):
+        tmodule.share_rm('foo', 'q*', wildcard=True)
+
+
+def test_cluster_rm_recursive(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.cluster_rm('foo', recursive=True)
+    assert result.success
+
+
+def test_cluster_rm_recursive_wildcard(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.cluster_rm('*', recursive=True, wildcard=True)
+    assert result.success
+    assert len(list(result)) == 3  # 1 cluster + 2 share
+
+
+def test_cluster_rm_wildcard_no_match(tmodule):
+    _example_cfg_1(tmodule)
+
+    with pytest.raises(smb.cli.NoMatchingValue):
+        tmodule.cluster_rm('gonk', wildcard=True)

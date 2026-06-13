@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { CdForm } from '~/app/shared/forms/cd-form';
 import _ from 'lodash';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -18,9 +18,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   styleUrls: ['./osd-flags-indiv-modal.component.scss'],
   standalone: false
 })
-export class OsdFlagsIndivModalComponent implements OnInit {
+export class OsdFlagsIndivModalComponent extends CdForm implements OnInit {
   permissions: Permissions;
-  selected: object[];
   initialSelection: Flag[] = [];
   osdFlagsForm = new UntypedFormGroup({});
   flags: Flag[] = [
@@ -60,13 +59,15 @@ export class OsdFlagsIndivModalComponent implements OnInit {
   clusterWideTooltip: string = $localize`The flag has been enabled for the entire cluster.`;
 
   constructor(
-    public activeModal: NgbActiveModal,
+    @Optional() @Inject('selected') public selected: object[] = [],
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private notificationService: NotificationService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
+    this.selected = this.selected || [];
   }
 
   ngOnInit() {
@@ -125,10 +126,10 @@ export class OsdFlagsIndivModalComponent implements OnInit {
     this.osdService.updateIndividualFlags(activeFlags, selectedIds).subscribe(
       () => {
         this.notificationService.show(NotificationType.success, $localize`Updated OSD Flags`);
-        this.activeModal.close();
+        this.closeModal();
       },
       () => {
-        this.activeModal.close();
+        this.closeModal();
       }
     );
   }

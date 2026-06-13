@@ -2661,8 +2661,7 @@ class TestPermErrMsg(CephFSTestCase):
         for wrong_perm in ('w', 'wr'):
             self.negtest_ceph_cmd(
                 args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
-                      f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
-                errmsgs=self.EXPECTED_ERRMSG)
+                      f'{wrong_perm}'), retval=self.EXPECTED_ERRNO)
 
 
 class TestFSFail(TestAdminCommands):

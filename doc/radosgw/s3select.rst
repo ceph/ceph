@@ -15,7 +15,7 @@ The S3 Select engine makes it possible to use an SQL-like syntax to select a
 restricted subset of data stored in an S3 object. The S3 Select engine
 facilitates the use of higher level, analytic applications (for example:
 SPARK-SQL). The ability of the S3 Select engine to target a proper subset of
-structed data within an S3 object decreases latency and increases throughput.
+structured data within an S3 object decreases latency and increases throughput.
 
 For example: assume that a user needs to extract a single column that is
 filtered by another column, and that these colums are stored in a CSV file in
@@ -72,7 +72,7 @@ review the below s3-select-feature-table_.
 Error Handling
 ~~~~~~~~~~~~~~
 
-Upon an error being detected, RGW returns 400-Bad-Request and a specific error message sends back to the client.
+Upon an error being detected, RGW returns 400-Bad-Request and a specific error message is sent back to the client.
 Currently, there are 2 main types of error.
 
 **Syntax error**: the s3select parser rejects user requests that are not aligned with parser syntax definitions, as     
@@ -485,7 +485,7 @@ the following queries will produce identical results.
 Additional Syntax Support
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-S3select syntax supports table-alias ``select s._1 from s3object s where s._2 = ‘4’;``
+S3select syntax supports table-alias ``select s._1 from s3object s where s._2 = '4';``
 
 S3select syntax supports case insensitive ``Select SUM(Cast(_1 as int)) FROM S3Object;``
 
@@ -677,7 +677,7 @@ A JSON Query Example
 
   # the from-clause define a single row.
   # _1 points to root object level.
-  # _1.age appears twice in Documnet-row, the last value is used for the operation.  
+  # _1.age appears twice in Document row, the last value is used for the operation.
   query = "select _1.firstname,_1.key_after_array,_1.age+4,_1.description.main_desc,_1.description.second_desc from s3object[*];";
   expected_result = Joe_2,XXX,25,value_1,value_2
 
@@ -693,7 +693,7 @@ A JSON Query Example
 BOTO3
 -----
 
-using BOTO3 is "natural" and easy due to AWS-cli support. 
+Using BOTO3 is "natural" and easy due to AWS-cli support.
 
 ::
 

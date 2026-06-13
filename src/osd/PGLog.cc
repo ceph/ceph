@@ -305,7 +305,7 @@ void PGLog::proc_replica_log(
     omissing,
     nullptr,
     ec_optimizations_enabled,
-    to.shard,
+    from.shard,
     this);
 
   if (lu < oinfo.last_update) {
@@ -526,9 +526,16 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     changed = true;
   }
 
+  if (changed && pool.is_crimson()) {
+    mark_dirty_to(eversion_t::max());
+  }
+
   // now handle dups
   if (merge_log_dups(olog)) {
     changed = true;
+    if (pool.is_crimson()) {
+      mark_dirty_to_dups(eversion_t::max());
+    }
   }
 
   dout(10) << "merge_log result " << log << " " << missing <<
@@ -1099,7 +1106,7 @@ void PGLog::rebuild_missing_set_with_deletes(
 
 namespace {
   struct FuturizedShardStoreLogReader {
-    crimson::os::FuturizedStore::Shard &store;
+    crimson::os::BackendStore store;
     const pg_info_t &info;
     PGLog::IndexedLog &log;
     std::set<std::string>* log_keys_debug = NULL;
@@ -1172,22 +1179,34 @@ namespace {
 
       ObjectStore::omap_iter_seek_t start_from{"", ObjectStore::omap_iter_seek_t::UPPER_BOUND};
 
+      std::map<std::string, ceph::bufferlist> kvs;
       std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
-        [this] (std::string_view key, std::string_view value)
+        [&kvs] (std::string_view key, std::string_view value)
       {
-        ceph::bufferlist bl;
-        bl.append(value);
-        process_entry(key, bl);
+	ceph::bufferlist bl;
+	bl.append(value);
+	kvs[std::string(key)] = std::move(bl);
         return ObjectStore::omap_iter_ret_t::NEXT;
       };
+      std::function<ObjectStore::omap_iter_ret_t()> on_conflict =
+        [&kvs] ()
+      {
+	kvs.clear();
+	return ObjectStore::omap_iter_ret_t::NEXT;
+      };
 
-      co_await store.omap_iterate(
-        ch, pgmeta_oid, start_from, callback
+      co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+	store,
+        ch, pgmeta_oid, start_from, callback, 0, on_conflict
       ).safe_then([] (auto ret) {
         ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
       }).handle_error(
-        crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+        crimson::os::FuturizedStore::Shard::read_errorator::assert_all("unexpected error")
       );
+
+      for (auto &p : kvs) {
+        process_entry(p.first, p.second);
+      }
 
       if (info.pgid.is_no_shard()) {
         // replicated pool pg does not persist this key
@@ -1206,7 +1225,7 @@ namespace {
 }
 
 seastar::future<> PGLog::read_log_and_missing_crimson(
-  crimson::os::FuturizedStore::Shard &store,
+  crimson::os::BackendStore store,
   crimson::os::CollectionRef ch,
   const pg_info_t &info,
   IndexedLog &log,

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast/try_lexical_convert.hpp>
 
 #include "librbd/io/Types.h"
 #include "librbd/io/IoOperations.h"
@@ -61,10 +61,8 @@ uint64_t rbd_io_operations_from_string(const std::string& orig_value,
     return RBD_IO_OPERATIONS_DEFAULT;
   }
 
-  try {
-    // numeric?
-    operations = boost::lexical_cast<uint64_t>(value);
-
+  // Try to parse as numeric value first
+  if (boost::conversion::try_lexical_convert(value, operations)) {
     // drop unrecognized bits
     uint64_t unsupported_operations = (operations & ~RBD_IO_OPERATIONS_ALL);
     if (unsupported_operations != 0ull) {
@@ -74,7 +72,7 @@ uint64_t rbd_io_operations_from_string(const std::string& orig_value,
              << std::hex << unsupported_operations << std::dec;
       }
     }
-  } catch (boost::bad_lexical_cast&) {
+  } else {
     // operation name list?
     bool errors = false;
     std::vector<std::string> operation_names;

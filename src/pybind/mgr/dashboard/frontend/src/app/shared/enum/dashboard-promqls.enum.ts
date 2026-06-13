@@ -58,39 +58,15 @@ export enum MultiClusterPromqlsForPoolUtilization {
 }
 
 export const AllStoragetypesQueries = {
-  READIOPS: `
-    sum(
-      rate(ceph_pool_rd[1m])
-      * on (pool_id, cluster)
-        group_left(application)
-          ceph_pool_metadata{{applicationFilter}}
-    ) OR vector(0)
-  `,
+  READIOPS: `sum(rate(ceph_osd_op_r[1m]))`,
 
-  WRITEIOPS: `
-    sum(
-      rate(ceph_pool_wr[1m])
-      * on (pool_id, cluster)
-        group_left(application)
-          ceph_pool_metadata{{applicationFilter}}
-    ) OR vector(0)
-  `,
+  WRITEIOPS: `sum(rate(ceph_osd_op_w[1m]))`,
 
-  READCLIENTTHROUGHPUT: `
-    sum(
-      rate(ceph_pool_rd_bytes[1m])
-      * on (pool_id, cluster)
-        group_left(application)
-          ceph_pool_metadata{{applicationFilter}}
-    ) OR vector(0)
-  `,
+  READCLIENTTHROUGHPUT: `sum(rate(ceph_osd_op_r_out_bytes[1m]))`,
 
-  WRITECLIENTTHROUGHPUT: `
-    sum(
-      rate(ceph_pool_wr_bytes[1m])
-      * on (pool_id, cluster)
-        group_left(application)
-          ceph_pool_metadata{{applicationFilter}}
-    ) OR vector(0)
-  `
+  WRITECLIENTTHROUGHPUT: `sum(rate(ceph_osd_op_w_in_bytes[1m]))`,
+
+  READLATENCY: 'avg_over_time(ceph_osd_apply_latency_ms[1m])',
+
+  WRITELATENCY: 'avg_over_time(ceph_osd_commit_latency_ms[1m])'
 };

@@ -1,6 +1,11 @@
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { PoolStats } from './pool-stat';
 
+export enum PoolType {
+  ERASURE = 'erasure',
+  REPLICATED = 'replicated'
+}
+
 export class Pool {
   cache_target_full_ratio_micro: number;
   fast_read: boolean;

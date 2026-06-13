@@ -1,5 +1,5 @@
 ===================
-Libcephfs (JavaDoc)
+Libcephfs (Javadoc)
 ===================
 
 .. warning::
@@ -11,8 +11,8 @@ Libcephfs (JavaDoc)
     are encouraged to contribute!
 
 ..
-    The admin/build-docs script runs Ant to build the JavaDoc files, and
+    The admin/build-docs script runs Ant to build the Javadoc files, and
     copies them to api/libcephfs-java/javadoc/.
 
 
-View the auto-generated `JavaDoc pages for the CephFS Java bindings <javadoc/>`_.
+View the auto-generated `Javadoc pages for the CephFS Java bindings <javadoc/>`_.

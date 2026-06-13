@@ -6,7 +6,7 @@ import {
   Output,
   ViewChild
 } from '@angular/core';
-import { FormGroupDirective, Validators } from '@angular/forms';
+import { AbstractControl, FormGroupDirective, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -42,10 +42,10 @@ export class ErasureCodeProfileFormModalComponent
     LRC: 'lrc', // Locally Repairable Erasure Code
     SHEC: 'shec', // Shingled Erasure Code
     CLAY: 'clay', // Coupled LAYer
-    JERASURE: 'jerasure', // default
-    ISA: 'isa' // Intel Storage Acceleration
+    JERASURE: 'jerasure',
+    ISA: 'isa' // Intel Storage Acceleration - default
   };
-  plugin = this.PLUGIN.JERASURE;
+  plugin = this.PLUGIN.ISA;
   icons = Icons;
 
   form: CdFormGroup;
@@ -73,7 +73,7 @@ export class ErasureCodeProfileFormModalComponent
     this.action = this.actionLabels.CREATE;
     this.resource = $localize`EC Profile`;
     this.createForm();
-    this.setJerasureDefaults();
+    this.setIsaDefaults();
   }
 
   createForm() {
@@ -89,9 +89,9 @@ export class ErasureCodeProfileFormModalComponent
           )
         ]
       ],
-      plugin: [this.PLUGIN.JERASURE, [Validators.required]],
+      plugin: [this.PLUGIN.ISA, [Validators.required]],
       k: [
-        4, // Will be overwritten with plugin defaults
+        7, // Will be overwritten with plugin defaults
         [
           Validators.required,
           Validators.min(2),
@@ -101,21 +101,28 @@ export class ErasureCodeProfileFormModalComponent
         ]
       ],
       m: [
-        2, // Will be overwritten with plugin defaults
+        3, // Will be overwritten with plugin defaults
         [
           Validators.required,
           Validators.min(1),
           CdValidators.custom('max', () => this.baseValueValidation())
         ]
       ],
-      crushFailureDomain: '', // Will be preselected
+      crushFailureDomain: CrushFailureDomains.Host, // Will be preselected
       crushNumFailureDomains: [
         0,
-        CdValidators.requiredIf({ crushOsdsPerFailureDomain: { op: 'minValue', arg1: 1 } })
+        [
+          CdValidators.requiredIf({ crushOsdsPerFailureDomain: { op: 'minValue', arg1: 1 } }),
+          CdValidators.number(false),
+          this.crushNumFailureDomainsValidator()
+        ]
       ],
       crushOsdsPerFailureDomain: [
         0,
-        CdValidators.requiredIf({ crushNumFailureDomains: { op: 'minValue', arg1: 1 } })
+        [
+          CdValidators.requiredIf({ crushNumFailureDomains: { op: 'minValue', arg1: 1 } }),
+          CdValidators.number(false)
+        ]
       ],
       crushRoot: null, // Will be preselected
       crushDeviceClass: '', // Will be preselected
@@ -151,7 +158,7 @@ export class ErasureCodeProfileFormModalComponent
           CdValidators.custom('dMax', (v: number) => this.dMaxValidation(v))
         ]
       ],
-      scalar_mds: [this.PLUGIN.JERASURE, [Validators.required]] // jerasure or isa or shec
+      scalar_mds: [this.PLUGIN.ISA, [Validators.required]] // jerasure or isa or shec
     });
     this.toggleDCalc();
     this.form.get('k').valueChanges.subscribe(() => this.updateValidityOnChange(['m', 'l', 'd']));
@@ -164,17 +171,36 @@ export class ErasureCodeProfileFormModalComponent
     });
     this.form.get('plugin').valueChanges.subscribe((plugin) => this.onPluginChange(plugin));
     this.form.get('scalar_mds').valueChanges.subscribe(() => this.setClayDefaultsForScalar());
+    this.form.get('crushFailureDomain').valueChanges.subscribe(() => {
+      this.form.get('crushNumFailureDomains').updateValueAndValidity();
+      this.form.get('crushOsdsPerFailureDomain').updateValueAndValidity();
+    });
+    this.form.get('crushNumFailureDomains').valueChanges.subscribe(() => {
+      this.form.get('k').updateValueAndValidity();
+      this.form.get('m').updateValueAndValidity();
+    });
+    this.form.get('crushOsdsPerFailureDomain').valueChanges.subscribe(() => {
+      this.form.get('k').updateValueAndValidity();
+      this.form.get('m').updateValueAndValidity();
+    });
   }
 
   private baseValueValidation(dataChunk: boolean = false): boolean {
     return this.validValidation(() => {
-      const kMSum =
-        this.form.get('crushFailureDomain').value === CrushFailureDomains.Host
-          ? this.getKMSum() + 1
-          : this.getKMSum();
-      return (
-        kMSum > this.deviceCount && this.form.getValue('k') > this.form.getValue('m') === dataChunk
-      );
+      const crushnumfailuredomain = this.form.get('crushNumFailureDomains').value;
+      const crushosdfailuredomain = this.form.get('crushOsdsPerFailureDomain').value;
+      if (crushnumfailuredomain > 0 || crushosdfailuredomain > 0) {
+        return false;
+      } else {
+        const kMSum =
+          this.form.get('crushFailureDomain').value === CrushFailureDomains.Host
+            ? this.getKMSum() + 1
+            : this.getKMSum();
+        return (
+          kMSum > this.deviceCount &&
+          this.form.getValue('k') > this.form.getValue('m') === dataChunk
+        );
+      }
     });
   }
 
@@ -219,6 +245,45 @@ export class ErasureCodeProfileFormModalComponent
       const m = this.form.getValue('m');
       return c > m;
     }, 'shec');
+  }
+
+  /*
+  Following function is written to implement MSR EC profile validation
+  1. When 'Crush num failure domain' >= 1  or 'Crush osds per failue domain' >= 1, it is MSR EC Profile
+  2. k+m+1 rule does not applies to MSR EC Profiles
+  3. 'Crush num failure domain' <= 'Crush failure domain' (host)
+  The function validates 3rd condition
+  */
+  private crushNumFailureDomainsValidator(): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } | null => {
+      const v = control.value;
+      if (!v || v === 0) {
+        return null;
+      }
+
+      if (!control.parent) {
+        return null;
+      }
+
+      const crushFailureDomainControl = control.parent.get('crushFailureDomain');
+      if (!crushFailureDomainControl) {
+        return null; // No validation if crushFailureDomain control doesn't exist
+      }
+
+      const crushFailureDomain = crushFailureDomainControl.value;
+
+      // Validate that we have a selected failure domain and it exists in failureDomains
+      if (!crushFailureDomain || !this.failureDomains || !this.failureDomains[crushFailureDomain]) {
+        return null; // No validation if failure domain is not selected or failureDomains not initialized
+      }
+
+      // Get the count for the currently selected failure domain (dynamically based on user selection)
+      const availableCount = this.failureDomains[crushFailureDomain].length;
+      if (v > availableCount) {
+        return { maxFailureDomains: true };
+      }
+      return null;
+    };
   }
 
   private dMinValidation(d: number): boolean {
@@ -427,6 +492,12 @@ export class ErasureCodeProfileFormModalComponent
             }
             this.cdr.detectChanges();
           }, 0);
+
+          if (this.plugins.includes(this.PLUGIN.ISA)) {
+            this.setIsaDefaults();
+          } else if (this.plugins.includes(this.PLUGIN.JERASURE)) {
+            this.setJerasureDefaults();
+          }
         }
       );
   }
@@ -508,5 +579,7 @@ export class ErasureCodeProfileFormModalComponent
   onCrushFailureDomainChane() {
     this.form.get('k').updateValueAndValidity();
     this.form.get('m').updateValueAndValidity();
+    this.form.get('crushNumFailureDomains').updateValueAndValidity();
+    this.form.get('crushOsdsPerFailureDomain').updateValueAndValidity();
   }
 }

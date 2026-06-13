@@ -18,7 +18,7 @@ Description
 ===========
 
 **ceph-fuse** is a FUSE ("Filesystem in USErspace") client for Ceph
-distributed file system. It will mount a ceph file system specified via the -m
+distributed file system. It will mount a Ceph file system specified via the -m
 option or described by ceph.conf (see below) at the specific mount point. See
 `Mount CephFS using FUSE`_ for detailed information.
 
@@ -41,19 +41,19 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through ceph.conf).
+   Connect to specified Monitor (instead of looking through ceph.conf).
 
 .. option:: -n client.{cephx-username}
 
-   Pass the name of CephX user whose secret key is be to used for mounting.
+   Pass the name of CephX user whose secret key is to be used for mounting.
 
 .. option:: --id <client-id>
 
-   Pass the name of CephX user whose secret key is be to used for mounting.
+   Pass the name of CephX user whose secret key is to be used for mounting.
    ``--id`` takes just the ID of the client in contrast to ``-n``. For
    example, ``--id 0`` for using ``client.0``.
 

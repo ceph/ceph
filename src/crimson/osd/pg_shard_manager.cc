@@ -20,19 +20,20 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
     return seastar::parallel_for_each(
       colls_cores,
       [this](auto coll_core) {
-        auto[coll, shard_core] = coll_core;
+        auto[coll, shard_core_index] = coll_core;
+        auto[shard_core, store_index] = shard_core_index;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
           return get_pg_to_shard_mapping().get_or_create_pg_mapping(
-            pgid, shard_core
-          ).then([this, pgid] (auto core) {
+            pgid, shard_core, store_index
+          ).then([this, pgid] (auto core_store) {
             return this->with_remote_shard_state(
-              core,
-              [pgid](
+              core_store.first,
+              [pgid, core_store](
 	      PerShardState &per_shard_state,
 	      ShardServices &shard_services) {
 	      return shard_services.load_pg(
-		pgid
+		pgid, core_store.second
 	      ).then([pgid, &per_shard_state](auto &&pg) {
 		logger().info("load_pgs: loaded {}", pgid);
 		return pg->clear_temp_objects(
@@ -114,6 +115,18 @@ seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
   [superblock = std::move(superblock)](auto &local_service) {
     return local_service.local_state.update_shard_superblock(superblock);
   });
+}
+
+seastar::future<uint64_t>
+PGShardManager::calc_snap_trim_queue_total() const
+{
+  uint64_t total = 0;
+  co_await for_each_pg([&total](const auto&, const auto &pg) {
+    if (pg->is_primary()) {
+      total += pg->get_snap_trimq_size();
+    }
+  });
+  co_return total;
 }
 
 }

@@ -17,6 +17,7 @@ import errno
 import socket
 import time
 import logging
+import re
 import sys
 from ipaddress import ip_address
 from threading import Lock, Condition
@@ -61,6 +62,67 @@ BOLD_SEQ = "\033[1m"
 UNDERLINE_SEQ = "\033[4m"
 
 logger = logging.getLogger(__name__)
+
+# NAME and TAG are taken verbatim from the OCI distribution spec:
+#   https://github.com/opencontainers/distribution-spec/blob/main/spec.md
+# DIGEST is based on the OCI image-spec descriptor grammar:
+#   https://github.com/opencontainers/image-spec/blob/main/descriptor.md
+# REGISTRY is a practical heuristic, not defined by either spec.
+#
+# Catches malformed input.
+# Not a full OCI image reference parser.
+
+# distribution-spec, verbatim:
+NAME = r"[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*"
+
+# distribution-spec, verbatim:
+TAG = r"[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}"
+
+# image-spec descriptor grammar translated literally:
+GENERIC_DIGEST_RE = re.compile(
+    r"^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$",
+    re.ASCII,
+)
+
+# Practical heuristic for hostname[:port].
+REGISTRY = r"(?:[a-zA-Z0-9.-]+(?::[0-9]+)?)"
+
+STRICT_KNOWN_DIGESTS = {
+    "sha256": re.compile(r"^[a-f0-9]{64}$", re.ASCII),
+    "sha512": re.compile(r"^[a-f0-9]{128}$", re.ASCII),
+    "blake3": re.compile(r"^[a-f0-9]{64}$", re.ASCII),
+}
+
+IMAGE_RE = re.compile(
+    rf"""
+        ^
+        (?:{REGISTRY}/)?
+        {NAME}
+        (?::{TAG})?
+        (?:@(?P<digest>[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9=_-]+))?
+        $
+    """,
+    re.VERBOSE | re.ASCII,
+)
+
+
+def is_valid_digest(digest: str) -> bool:
+    if not GENERIC_DIGEST_RE.fullmatch(digest):
+        return False
+    algorithm, encoded = digest.split(":", 1)
+    checker = STRICT_KNOWN_DIGESTS.get(algorithm)
+    if checker is None:
+        return True
+    return checker.fullmatch(encoded) is not None
+
+
+def is_valid_container_image_ref(ref: str) -> bool:
+    """Basic sanity check for OCI/Docker-style container image references."""
+    m = IMAGE_RE.fullmatch(ref)
+    if m is None:
+        return False
+    digest = m.group("digest")
+    return digest is None or is_valid_digest(digest)
 
 
 class PortAlreadyInUse(Exception):
@@ -227,16 +289,20 @@ class CephfsConnectionPool(object):
 
     def cleanup_connections(self) -> None:
         with self.lock:
-            logger.info("scanning for idle connections..")
+            logger.debug("scanning for idle connections...")
             idle_conns = []
             for fs_name, connections in self.connections.items():
                 logger.debug(f'fs_name ({fs_name}) connections ({connections})')
                 for connection in connections:
                     if connection.is_connection_idle(CephfsConnectionPool.CONNECTION_IDLE_INTERVAL):
                         idle_conns.append((fs_name, connection))
-            logger.info(f'cleaning up connections: {idle_conns}')
-            for idle_conn in idle_conns:
-                self._del_connection(idle_conn[0], idle_conn[1])
+            # Log only if there are idle connections to clean up
+            if len(idle_conns) > 0:
+                logger.debug(f'cleaning up connections: {idle_conns}')
+                for idle_conn in idle_conns:
+                    self._del_connection(idle_conn[0], idle_conn[1])
+            else:
+                logger.debug("No idle connections to clean up.")
 
     def get_fs_handle(self, fs_name: str) -> "cephfs.LibCephFS":
         with self.lock:
@@ -438,6 +504,28 @@ class CephFSEarmarkResolver:
             return parsed.top == top_level_scope
         except EarmarkParseError:
             return False
+
+
+class NvmeofMetadataPoolHelper:
+    def __init__(self, mgr: "MgrModule") -> None:
+        self.mgr = mgr
+
+    def is_module_enabled(self, module: str) -> bool:
+        mgr_map = self.mgr.get('mgr_map')
+        return (
+            module in mgr_map.get('modules', [])
+            or module in mgr_map.get('always_on_modules', {}).get(self.mgr.release_name, [])
+        )
+
+    def create_pool_if_needed(self) -> None:
+        from orchestrator import OrchestratorError
+
+        if not self.is_module_enabled('nvmeof'):
+            raise OrchestratorError(
+                'NVMe-oF support requires the nvmeof manager module to be enabled before proceeding. '
+                'Enable it with: ceph mgr module enable nvmeof'
+            )
+        self.mgr.remote('nvmeof', 'create_pool_if_not_exists')
 
 
 @contextlib.contextmanager

@@ -2,11 +2,11 @@ import { PageHelper } from '../page-helper.po';
 
 export class NavigationPageHelper extends PageHelper {
   pages = {
-    index: { url: '#/overview', id: 'cd-dashboard' }
+    index: { url: '#/overview', id: 'cd-overview' }
   };
 
   navigations = [
-    { menu: 'Overview', component: 'cd-dashboard' },
+    { menu: 'Overview', component: 'cd-overview' },
     {
       menu: 'Multi-Cluster',
       submenus: [
@@ -88,7 +88,7 @@ export class NavigationPageHelper extends PageHelper {
     navs.forEach((nav: any) => {
       cy.get('cds-sidenav-item').each(($link) => {
         if ($link.text().trim() === nav.menu.trim()) {
-          cy.wrap($link).click();
+          cy.wrap($link).click({ force: true });
         }
       });
       if (nav.submenus) {

@@ -188,7 +188,7 @@ between distinct pairs of OSDs are detected, this might indicate a failed
 network switch, a NIC failure, or a layer 1 failure.
 
 By default, a heartbeat time that exceeds 1 second (1000 milliseconds) raises a
-health check (a ``HEALTH_WARN``. For example:
+health check (a ``HEALTH_WARN``). For example:
 
 ::
 

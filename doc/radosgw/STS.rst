@@ -40,7 +40,7 @@ The following STS REST APIs have been implemented in Ceph Object Gateway:
     trust policy of the role being assumed requires MFA.
 
 #. AssumeRoleWithWebIdentity: Returns a set of temporary credentials for users that
-   have been authenticated by a web/mobile app by an OpenID Connect /OAuth2.0 Identity Provider.
+   have been authenticated by a web/mobile app by an OpenID Connect/OAuth 2.0 Identity Provider.
    Currently Keycloak has been tested and integrated with RGW.
 
    Parameters:
@@ -55,19 +55,19 @@ The following STS REST APIs have been implemented in Ceph Object Gateway:
     Its default value is 3600.
 
     **ProviderId** (String/ Optional): Fully qualified host component of the domain name
-    of the IDP. Valid only for OAuth2.0 tokens (not for OpenID Connect tokens).
+    of the IDP. Valid only for OAuth 2.0 tokens (not for OpenID Connect tokens).
 
-    **WebIdentityToken** (String/ Required): The OpenID Connect/ OAuth2.0 token, which the
+    **WebIdentityToken** (String/ Required): The OpenID Connect/OAuth 2.0 token, which the
     application gets in return after authenticating its user with an IDP.
 
 #. GetCallerIdentity: Returns details about the IAM user or role whose credentials are used to call the operation.
 
    Response:
-    **Account** (The account ID that owns or contains the calling entity.
+    **Account** The account ID that owns or contains the calling entity.
 
     **Arn** The ARN associated with the calling entity.
 
-    **UserId** The unique identifier of the calling entity(user or assumed role).
+    **UserId** The unique identifier of the calling entity (user or assumed role).
 
 .. note:: No permissions are required to perform GetCallerIdentity.
 
@@ -175,7 +175,7 @@ Examples
     resp = s3client.list_buckets()
 
 #. The following is an example of AssumeRoleWithWebIdentity API call, where an external app that has users authenticated with
-   an OpenID Connect/ OAuth2 IDP (Keycloak in this example), assumes a role to get back temporary credentials and access S3 resources
+   an OpenID Connect/OAuth 2.0 IDP (Keycloak in this example), assumes a role to get back temporary credentials and access S3 resources
    according to permission policy of the role.
 
    .. code-block:: python
@@ -190,7 +190,7 @@ Examples
     )
 
     oidc_response = iam_client.create_open_id_connect_provider(
-        Url=<URL of the OpenID Connect Provider,
+        Url=<URL of the OpenID Connect Provider>,
         ClientIDList=[
             <Client id registered with the IDP>
         ],
@@ -221,7 +221,7 @@ Examples
     region_name='',
     )
 
-    response = client.assume_role_with_web_identity(
+    response = sts_client.assume_role_with_web_identity(
     RoleArn=role_response['Role']['Arn'],
     RoleSessionName='Bob',
     DurationSeconds=3600,

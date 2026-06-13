@@ -5,7 +5,7 @@
 When checking a cluster's status (e.g., running ``ceph -w`` or ``ceph -s``), 
 Ceph will report on the status of the placement groups. A placement group has 
 one or more states. The optimum state for placement groups in the placement group
-map is ``active + clean``. 
+map is ``active+clean``. 
 
 *creating*
   Ceph is still creating the placement group.
@@ -38,11 +38,11 @@ map is ``active + clean``.
   Ceph has not replicated some objects in the placement group the correct number of times yet.
 
 *inconsistent*
-  Ceph detects inconsistencies in the one or more replicas of an object in the placement group
+  Ceph detects inconsistencies in one or more replicas of an object in the placement group
   (e.g. objects are the wrong size, objects are missing from one replica *after* recovery finished, etc.).
 
 *peering*
-  The placement group is undergoing the peering process
+  The placement group is undergoing the peering process.
 
 *repair*
   Ceph is checking the placement group and repairing any inconsistencies it finds (if possible).
@@ -51,10 +51,10 @@ map is ``active + clean``.
   Ceph is migrating/synchronizing objects and their replicas.
 
 *forced_recovery*
-  High recovery priority of that PG is enforced by user.
+  High recovery priority of the PG is enforced by the user.
 
 *recovery_wait*
-  The placement group is waiting in line to start recover.
+  The placement group is waiting in line to start recovery.
 
 *recovery_toofull*
   A recovery operation is waiting because the destination OSD is over its
@@ -69,7 +69,7 @@ map is ``active + clean``.
   recent operations. Backfill is a special case of recovery.
 
 *forced_backfill*
-  High backfill priority of that PG is enforced by user.
+  High backfill priority of the PG is enforced by user.
 
 *backfill_wait*
   The placement group is waiting in line to start backfill.

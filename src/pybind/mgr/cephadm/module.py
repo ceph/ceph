@@ -62,7 +62,7 @@ from mgr_module import (
     NotifyType,
     MonCommandFailed,
 )
-from mgr_util import build_url
+from mgr_util import build_url, is_valid_container_image_ref, NvmeofMetadataPoolHelper
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -84,6 +84,7 @@ from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import AlertmanagerService, PrometheusService
 from .services.node_proxy import NodeProxy
 from .services.smb import SMBService
+from .services.nvmeof import NvmeofService
 from .schedule import HostAssignment
 from .inventory import (
     Inventory,
@@ -412,6 +413,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'pg_autoscale_during_upgrade',
+            type='bool',
+            default=False,
+            desc='Opt-in to keep PG autoscaling enabled during OSD upgrades. '
+            'When False (default), cephadm disables pool autoscaling (sets noautoscale) '
+            'before OSD upgrades and restores it on completion/stop/failure. '
+            'Set to true to keep autoscaling on during upgrade.'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -500,6 +510,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             enum_allowed=['file', 'syslog', 'file,syslog'],
         ),
         Option(
+            'cephadm_binary_logging_level',
+            type='str',
+            default='debug',
+            desc='Logging verbosity for the cephadm binary when invoked by the mgr (e.g. check-host, gather-facts).',
+            enum_allowed=['info', 'debug', 'error', 'warning']
+        ),
+        Option(
             'oob_default_addr',
             type='str',
             default='169.254.1.1',
@@ -578,6 +595,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
+            self.pg_autoscale_during_upgrade = False
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
@@ -611,6 +629,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.cephadm_binary_logging_level = 'debug'
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -2494,13 +2513,14 @@ Then run the following:
             else:
                 size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
+            deleted_ts = self.spec_store.spec_deleted.get(nm)
             svc_desc = orchestrator.ServiceDescription(
                 spec=spec,
                 size=size,
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
-                deleted=self.spec_store.spec_deleted.get(nm, None),
+                deleted=deleted_ts[0] if deleted_ts else None,
                 virtual_ip=spec.get_virtual_ip(),
                 ports=spec.get_port_start(),
             )
@@ -2666,6 +2686,36 @@ Then run the following:
 
         return f'Rotated key for {daemon_spec.name()}'
 
+    def _mon_public_network_changed(self, daemon_spec: CephadmDaemonDeploySpec) -> bool:
+        if daemon_spec.daemon_type != 'mon':
+            return False
+
+        rc_get, out_get, err_get = self.mon_command({
+            'prefix': 'config get',
+            'who': f'mon.{daemon_spec.daemon_id}',
+            'key': 'public_network'
+        })
+
+        if rc_get:
+            self.log.error(f'cmd: config get failed with: {err_get}, (errno:{rc_get})')
+            return False
+
+        rc_show, out_show, err_show = self.mon_command({
+            'prefix': 'config show',
+            'who': f'mon.{daemon_spec.daemon_id}',
+            'key': 'public_network'
+        })
+
+        if rc_show:
+            self.log.error(f'cmd: config show failed with: {err_show}, (errno:{rc_show})')
+            return False
+
+        if out_get == out_show:
+            return False
+
+        self.log.debug(f'mon.{daemon_spec.daemon_id} public network changed, redeploy instead of restart')
+        return True
+
     def _daemon_action(self,
                        daemon_spec: CephadmDaemonDeploySpec,
                        action: str,
@@ -2681,7 +2731,9 @@ Then run the following:
         if action == 'rotate-key':
             return self._rotate_daemon_key(daemon_spec)
 
-        if action == 'redeploy' or action == 'reconfig':
+        if action == 'redeploy' or action == 'reconfig' or (action == 'restart' and self._mon_public_network_changed(daemon_spec)):
+            if action == 'restart':
+                action = 'redeploy'  # to ensure proper behavior since we want redeploy
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = service_registry.get_service(daemon_type_to_service(
                     daemon_spec.daemon_type)).prepare_create(daemon_spec)
@@ -2722,6 +2774,9 @@ Then run the following:
                 raise OrchestratorError(
                     f'Cannot redeploy {daemon_type}.{daemon_id} with a new image: Supported '
                     f'types are: {", ".join(CEPH_IMAGE_TYPES)}')
+            if not is_valid_container_image_ref(image):
+                raise OrchestratorError(
+                    f'Invalid container image {image!r} (not a valid container image reference)')
 
             self.check_mon_command({
                 'prefix': 'config set',
@@ -2786,28 +2841,61 @@ Then run the following:
         return msg
 
     @handle_orch_error
-    def remove_daemons(self, names):
-        # type: (List[str]) -> List[str]
+    def remove_daemons(self,
+                       names: List[str],
+                       force_delete_data: bool = False) -> List[str]:
+        """
+        Remove specific daemon(s).
+
+        :param names: daemon names to remove
+        :param force: skip safety checks (PRECIOUS DATA warning)
+        :param force_delete_data: if True, request that cephadm delete the
+                                  daemon data instead of moving it under
+                                  <fsid>/removed/.
+        """
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
                 if name in dm:
-                    args.append((name, host))
+                    args.append((name, host, force_delete_data))
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names), errno=errno.EINVAL)
         self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
         return self._remove_daemons(args)
 
     @handle_orch_error
-    def remove_service(self, service_name: str, force: bool = False) -> str:
-        self.log.info('Remove service %s' % service_name)
+    def remove_service(
+        self,
+        service_name: str,
+        force: bool = False,
+        force_delete_data: bool = False
+    ) -> str:
+        """
+        Remove a service.
+
+        :param service_name: service to remove
+        :param force: skip safety checks (e.g., leftover OSDs)
+        :param force_delete_data: intent to delete backing daemon data instead
+                                  of moving it under <fsid>/removed/.
+                                  (actual effect depends on lower layers)
+        """
+        self.log.info(
+            'Remove service %s (force=%s, force_delete_data=%s)' %
+            (service_name, force, force_delete_data)
+        )
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
-                return f'Unable to remove {service_name} service.\n' \
-                       f'Note, you might want to mark the {service_name} service as "unmanaged"'
+                return (
+                    f'Unable to remove {service_name} service.\n'
+                    f'Note, you might want to mark the {service_name} '
+                    f'service as "unmanaged"'
+                )
         else:
-            return f"Invalid service '{service_name}'. Use 'ceph orch ls' to list available services.\n"
+            return (
+                f"Invalid service '{service_name}'. Use 'ceph orch ls' to "
+                f"list available services.\n"
+            )
 
         # Report list of affected OSDs?
         if not force and service_name.startswith('osd.'):
@@ -2824,9 +2912,11 @@ Then run the following:
                 for h, ls in osds_msg.items():
                     msg += f'\thost {h}: {" ".join([f"osd.{id}" for id in ls])}'
                 raise OrchestratorError(
-                    f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
+                    f'If {service_name} is removed then the following OSDs '
+                    f'will remain, --force to proceed anyway\n{msg}'
+                )
 
-        found = self.spec_store.rm(service_name)
+        found = self.spec_store.rm(service_name, force_delete_data)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
         self._kick_serve_loop()
@@ -2988,13 +3078,16 @@ Then run the following:
         osd_map = self.get('osd_map')
         r = {}
         for o in osd_map['osds']:
-            # only include OSDs that have ever started in this map.  this way
-            # an interrupted osd create can be repeated and succeed the second
-            # time around.
+            # when only_up, only include OSDs that are currently up, so we do not
+            # treat a "just created" (still down) osd as "already present" for
+            # deploy_osd_daemons_for_existing_osds().
             osd_id = o.get('osd')
             if osd_id is None:
                 raise OrchestratorError("Could not retrieve osd_id from osd_map")
-            if not only_up:
+            if only_up:
+                if o.get('up') == 1:
+                    r[str(osd_id)] = o.get('uuid', '')
+            else:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
@@ -3040,6 +3133,23 @@ Then run the following:
         """
         return [self._apply(spec) for spec in specs]
 
+    @staticmethod
+    def device_selection_from_explicit_paths(sel: Optional[DeviceSelection]) -> Optional[DeviceSelection]:
+        """
+        Build a new DeviceSelection from explicit paths, preserving 'per path'
+        crush_device_class. Used when persisting osd.default so all device roles
+        are stored consistently (no shared references with the incoming spec).
+        """
+        if sel is None or not sel.paths:
+            return None
+        path_specs: List[Dict[str, Any]] = []
+        for d in sel.paths:
+            spec: Dict[str, Any] = {"path": d.path}
+            if d.crush_device_class:
+                spec["crush_device_class"] = d.crush_device_class
+            path_specs.append(spec)
+        return DeviceSelection(paths=path_specs)
+
     def create_osd_default_spec(self, drive_group: DriveGroupSpec) -> None:
         # Create the default osd and attach a valid spec to it.
 
@@ -3047,13 +3157,17 @@ Then run the following:
 
         host_pattern_obj = drive_group.placement.host_pattern
         host = str(host_pattern_obj.pattern)
+        data_devices = self.device_selection_from_explicit_paths(drive_group.data_devices)
+        assert data_devices is not None
         device_list = [d.path for d in drive_group.data_devices.paths] if drive_group.data_devices else []
-        devices = [{"path": d} for d in device_list]
 
         osd_default_spec = DriveGroupSpec(
             service_id="default",
             placement=PlacementSpec(host_pattern=host),
-            data_devices=DeviceSelection(paths=devices),
+            data_devices=data_devices,
+            db_devices=self.device_selection_from_explicit_paths(drive_group.db_devices),
+            wal_devices=self.device_selection_from_explicit_paths(drive_group.wal_devices),
+            journal_devices=self.device_selection_from_explicit_paths(drive_group.journal_devices),
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
@@ -3063,6 +3177,44 @@ Then run the following:
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
         self.spec_store.save(osd_default_spec)
         self.apply([osd_default_spec])
+
+    @staticmethod
+    def is_path_lists_only(drive_group: DriveGroupSpec) -> bool:
+        """
+        Return True if every non null data/db/wal/journal device selection is only
+        non empty paths (no 'all').
+        """
+
+        def path_list_only(sel: Optional[DeviceSelection]) -> bool:
+            if sel is None:
+                return True
+            if sel.all:
+                return False
+            return bool(sel.paths)
+
+        dd = drive_group.data_devices
+        if dd is None or dd.all or not dd.paths:
+            return False
+        for name in ('db_devices', 'wal_devices', 'journal_devices'):
+            if not path_list_only(getattr(drive_group, name, None)):
+                return False
+        return True
+
+    @staticmethod
+    def validate_no_empty_device_paths(drive_group: DriveGroupSpec) -> str:
+        """Reject empty device paths before cache checks (avoids silent ceph-volume failures)."""
+        for selection in (
+                drive_group.data_devices,
+                drive_group.db_devices,
+                drive_group.wal_devices,
+                drive_group.journal_devices,
+        ):
+            if not selection or not selection.paths:
+                continue
+            for device in selection.paths:
+                if device.path is None or not str(device.path).strip():
+                    return "Error: Device path is empty."
+        return ""
 
     def validate_device(self, host_name: str, drive_group: DriveGroupSpec) -> str:
         """
@@ -3078,23 +3230,43 @@ Then run the following:
             if self.cache.is_host_unreachable(host_name):
                 return f"Host {host_name} is not reachable (it may be offline or in maintenance mode)."
 
+            explicit_paths_only = self.is_path_lists_only(drive_group)
+
+            path_fmt_err = self.validate_no_empty_device_paths(drive_group)
+            if path_fmt_err:
+                return path_fmt_err
+
             host_cache = self.cache.devices.get(host_name, [])
             if not host_cache:
+                if explicit_paths_only:
+                    return ""
                 return (f"Error: No devices found for host {host_name}. "
                         "You can check known devices with 'ceph orch device ls'. "
                         "If no devices appear, wait for an automatic refresh.")
 
-            available_devices = {
-                dev.path: dev for dev in host_cache if dev.available
-            }
-            self.log.debug(f"Host {host_name} has {len(available_devices)} available devices.")
+            devices_by_path = {dev.path: dev for dev in host_cache}
+            available_count = sum(1 for dev in host_cache if dev.available)
+            self.log.debug(f"Host {host_name} has {available_count} available devices.")
 
-            for device in drive_group.data_devices.paths:
-                matching_device = next((dev for dev in host_cache if dev.path == device.path), None)
-                if not matching_device:
-                    return f"Error: Device {device.path} is not found on host {host_name}"
-                if not matching_device.available:
-                    return (f"Error: Device {device.path} is present but unavailable for OSD creation. "
+            for selection in (
+                drive_group.data_devices,
+                drive_group.db_devices,
+                drive_group.wal_devices,
+                drive_group.journal_devices,
+            ):
+                if not selection or not selection.paths:
+                    continue
+
+                for device in selection.paths:
+                    matching_device = devices_by_path.get(device.path)
+                    if matching_device is None:
+                        if not explicit_paths_only:
+                            return f"Error: Device {device.path} is not found on host {host_name}"
+                        continue
+
+                    if not matching_device.available:
+                        return (
+                            f"Error: Device {device.path} is present but unavailable for OSD creation. "
                             f"Reason: {', '.join(matching_device.rejected_reasons) if matching_device.rejected_reasons else 'Unknown'}")
 
             return ""
@@ -3111,19 +3283,26 @@ Then run the following:
         if not drive_group.service_id:
             drive_group.service_id = "default"
 
-        if drive_group.service_id not in self.spec_store.all_specs:
-            self.log.info("osd.default does not exist. Creating it now.")
-            self.create_osd_default_spec(drive_group)
-        else:
-            self.log.info("osd.default already exists.")
         host_name = filtered_hosts[0]
         if not skip_validation:
-            self.log.warning("Skipping the validation of device paths for osd daemon add command. Please make sure that the osd path is valid")
             err_msg = self.validate_device(host_name, drive_group)
             if err_msg:
                 return err_msg
 
-        return self.osd_service.create_from_spec(drive_group)
+        # Only save/apply osd.default after validation passes. Otherwise the serve loop
+        # would still apply the spec and create an OSD while the CLI returns an error.
+        # Spec store keys are full service names (example: "osd.default"), not service_id alone.
+        if drive_group.service_name() not in self.spec_store.all_specs:
+            self.log.info("osd.default does not exist. Creating it now.")
+            self.create_osd_default_spec(drive_group)
+        else:
+            self.log.info(
+                "Service osd.default is already registered; continuing with this "
+                "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
+
+        # 'ceph orch daemon add osd' must always run ceph-volume for this request.
+        # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
+        return self.osd_service.create_from_spec(drive_group, force_apply=True)
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None
@@ -3154,18 +3333,11 @@ Then run the following:
             previews_for_specs.update({host: osd_reports})
         return previews_for_specs
 
-    def _calc_daemon_deps(self,
-                          spec: Optional[ServiceSpec],
-                          daemon_type: str,
-                          daemon_id: str) -> List[str]:
-        svc_type = daemon_type_to_service(daemon_type)
-        svc_cls = service_registry.get_service(svc_type)
-        deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
-        return sorted(deps)
-
     @forall_hosts
-    def _remove_daemons(self, name: str, host: str) -> str:
-        return CephadmServe(self)._remove_daemon(name, host)
+    def _remove_daemons(self, name: str, host: str, force_delete_data: bool = False) -> str:
+        # pass force_delete_data by keyword: third positional arg is no_post_remove
+        return CephadmServe(self)._remove_daemon(
+            name, host, force_delete_data=force_delete_data)
 
     def _check_pool_exists(self, pool: str, service_name: str) -> None:
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')
@@ -3348,6 +3520,55 @@ Then run the following:
         return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
+    def set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        try:
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+
+            if parsed_url.scheme not in ('http', 'https'):
+                return 'Invalid URL. Scheme must be http or https.'
+            if not host:
+                return 'Invalid URL. Hostname is missing.'
+        except ValueError as e:
+            return f'Invalid url. {str(e)}'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        if url == prometheus_spec.remote_write_url:
+            return f"Remote write URL '{url}' already exists.\n"
+
+        prometheus_spec.remote_write_url = url
+        prometheus_spec.remote_write_allowed_metrics = '|'.join(remote_write_allowed_metrics)
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+
+        return 'prometheus remote write updated'
+
+    @handle_orch_error
+    def remove_prometheus_remote_write(self, url: str) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url == prometheus_spec.remote_write_url:
+            prometheus_spec.remote_write_url = ''
+            prometheus_spec.remote_write_allowed_metrics = ''
+        else:
+            return f"Remote write URL '{url}' does not exist.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        return 'prometheus remote write removed'
+
+    @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
         self.set_store(AlertmanagerService.USER_CFG_KEY, user)
         self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
@@ -3410,6 +3631,12 @@ Then run the following:
     @handle_orch_error
     def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> Dict[str, Any]:
         return self.cert_mgr.key_ls(include_cephadm_generated_keys)
+
+    @handle_orch_error
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> Dict[str, str]:
+        nvmeof_svc = cast(NvmeofService, service_registry.get_service('nvmeof'))
+        tls_bundle = nvmeof_svc.get_nvmeof_tls_bundle(service_name, daemon_name)
+        return tls_bundle._asdict() if tls_bundle else {}
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3774,17 +4001,55 @@ Then run the following:
 
     def _check_cert_source(self, spec: ServiceSpec) -> str:
         cert_warning = ''
+        # Warn the user when certificate_source is changing, as this will
+        # trigger a service reconfiguration that may cause client disconnections,
+        # CA trust chain changes, or temporary TLS downtime.
+        if spec.service_name() in self.spec_store:
+            old_spec = self.spec_store[spec.service_name()].spec
+            old_source = getattr(old_spec, 'certificate_source', None)
+            new_source = getattr(spec, 'certificate_source', None)
+            if old_source and new_source and old_source != new_source:
+                cert_warning = (
+                    f"\n\nWarning: 'certificate_source' changed from '{old_source}' to "
+                    f"'{new_source}' for service '{spec.service_name()}'.\n"
+                    f"This will trigger a service reconfiguration on the next reconciliation cycle, which may cause\n"
+                    f"temporary client disconnections and/or a change in the TLS certificate authority trust chain.\n"
+                )
+                self.log.warning(
+                    f"certificate_source changed from '{old_source}' to '{new_source}' "
+                    f"for service '{spec.service_name()}'. This will trigger a service "
+                    f"reconfiguration."
+                )
+
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):
             svc = service_registry.get_service(spec.service_type)
             if svc.SCOPE == TLSObjectScope.SERVICE:
+                # If the service was previously configured with INLINE, the cert/key
+                # may exist in the certmgr store as non-editable (inline-saved).
+                # When switching to REFERENCE, those inline-saved entries must be
+                # removed to avoid "pinning" the service to the old inline values and
+                # to allow the user to provision editable entries via the certmgr CLI.
+                if self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None) and \
+                        not self.cert_mgr.is_cert_editable(svc.cert_name, service_name=spec.service_name(), host=None):
+                    self.log.info(
+                        f"Removing inline-saved (non-editable) cert/key for '{spec.service_name()}' "
+                        f"before switching to '{CertificateSource.REFERENCE.value}'."
+                    )
+                    self.cert_mgr.rm_inline_saved_cert_key_pair(
+                        svc.cert_name,
+                        svc.key_name,
+                        service_name=spec.service_name(),
+                        host=None,
+                        ca_cert_name=getattr(svc, 'ca_cert_name', None),
+                    )
                 if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
                     raise OrchestratorError(
                         f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
                         f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
-                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
+                        f"\n  > ceph orch certmgr cert-key set --consumer {spec.service_type} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
                     )
             else:
-                cert_warning = (
+                cert_warning += (
                     f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
                     f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
                     f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
@@ -3794,6 +4059,30 @@ Then run the following:
                     f"to reconfigure the service with the certificates."
                 )
         return cert_warning
+
+    def _is_adding_nvmeof_group_to_existing_service(self, nvmeof_spec: NvmeofServiceSpec) -> bool:
+        """
+        Check whether this spec is assigning a group to an existing NVMe-oF
+        service that does not have a group yet.
+
+        This allows an existing service to keep its current service_id while adding
+        a group for the first time. New services and services that already have a
+        group must still follow the normal service_id/group validation.
+        """
+        existing_spec = self.spec_store.active_specs.get(nvmeof_spec.service_name())
+        if existing_spec is None:
+            return False
+
+        if existing_spec.service_type != 'nvmeof':
+            return False
+
+        existing_nvmeof_spec = cast(NvmeofServiceSpec, existing_spec)
+
+        return (
+            existing_nvmeof_spec.service_id == nvmeof_spec.service_id
+            and not existing_nvmeof_spec.group
+            and bool(nvmeof_spec.group)
+        )
 
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
@@ -3845,16 +4134,20 @@ Then run the following:
             nvmeof_spec = cast(NvmeofServiceSpec, spec)
             assert nvmeof_spec.pool is not None, "Pool cannot be None for nvmeof services"
             assert nvmeof_spec.service_id is not None  # for mypy
+            if nvmeof_spec.pool == '.nvmeof':
+                NvmeofMetadataPoolHelper(self).create_pool_if_needed()
             try:
                 self._check_pool_exists(nvmeof_spec.pool, nvmeof_spec.service_name())
             except OrchestratorError as e:
                 self.log.debug(f"{e}")
                 raise
-            nvmeof_spec = cast(NvmeofServiceSpec, spec)
             assert nvmeof_spec.service_id is not None  # for mypy
             if nvmeof_spec.group and not nvmeof_spec.service_id.endswith(nvmeof_spec.group):
-                raise OrchestratorError("The 'nvmeof' service id/name must end with '.<nvmeof-group-name>'. Found "
-                                        f"group name '{nvmeof_spec.group}' and service id '{nvmeof_spec.service_id}'")
+                if not self._is_adding_nvmeof_group_to_existing_service(nvmeof_spec):
+                    raise OrchestratorError(
+                        "The 'nvmeof' service id/name must end with '.<nvmeof-group-name>'. Found "
+                        f"group name '{nvmeof_spec.group}' and service id '{nvmeof_spec.service_id}'"
+                    )
             for sspec in [s.spec for s in self.spec_store.get_by_service_type('nvmeof')]:
                 nspec = cast(NvmeofServiceSpec, sspec)
                 if nvmeof_spec.group == nspec.group and nvmeof_spec.service_id != nspec.service_id:
@@ -4080,7 +4373,8 @@ Then run the following:
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
-                      services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      services: Optional[List[str]] = None, limit: Optional[int] = None,
+                      bucket_type: Optional[str] = None, bucket_name: Optional[str] = None) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
         if self.offline_hosts:
@@ -4089,6 +4383,9 @@ Then run the following:
         if daemon_types is not None and services is not None:
             raise OrchestratorError('--daemon-types and --services are mutually exclusive')
         if daemon_types is not None:
+            # Strip any whitespace around daemon types provided via the CLI so that
+            # `--daemon_types "mon, crash"` is treated the same as `--daemon_types "mon,crash"`.
+            daemon_types = [dtype.strip() for dtype in daemon_types]
             for dtype in daemon_types:
                 if dtype not in utils.CEPH_IMAGE_TYPES:
                     raise OrchestratorError(f'Upgrade aborted - Got unexpected daemon type "{dtype}".\n'
@@ -4107,12 +4404,21 @@ Then run the following:
                 raise OrchestratorError(
                     f'Upgrade aborted - hosts parameter "{host_placement}" provided did not match any hosts')
 
+        if hosts and (bucket_type is not None or bucket_name is not None):
+            raise OrchestratorError(
+                '--hosts cannot be combined with --crush_bucket_type or --crush_bucket_name')
+
+        if services is not None and (bucket_type is not None or bucket_name is not None):
+            raise OrchestratorError(
+                '--services cannot be combined with --crush_bucket_type or --crush_bucket_name')
+
         if limit is not None:
             if limit < 1:
                 raise OrchestratorError(
                     f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
 
-        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit)
+        return self.upgrade.upgrade_start(
+            image, version, daemon_types, hosts, services, limit, bucket_type, bucket_name)
 
     @handle_orch_error
     def upgrade_pause(self) -> str:
@@ -4238,11 +4544,11 @@ Then run the following:
         return "Stopped OSD(s) removal"
 
     @handle_orch_error
-    def remove_osds_status(self) -> List[OSD]:
+    def remove_osds_status(self) -> List[Dict[str, Any]]:
         """
         The CLI call to retrieve an osd removal report
         """
-        return self.to_remove_osds.all_osds()
+        return self.to_remove_osds.all_osds_status_json()
 
     @handle_orch_error
     def set_osd_spec(self, service_name: str, osd_ids: List[str]) -> str:

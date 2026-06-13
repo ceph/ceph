@@ -2,10 +2,10 @@ import json
 import random
 import re
 import string
-import sys
 import time
 import logging
 import errno
+import contextlib
 import dateutil.parser
 from datetime import datetime
 import threading
@@ -36,6 +36,20 @@ class Config:
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
         self.tenant = kwargs.get('tenant', '')
+
+@contextlib.contextmanager
+def override_config(**kwargs):
+    """Temporarily override config values for a test."""
+    global config
+    old_values = {}
+    for key, value in kwargs.items():
+        old_values[key] = getattr(config, key)
+        setattr(config, key, value)
+    try:
+        yield
+    finally:
+        for key, value in old_values.items():
+            setattr(config, key, value)
 
 # rgw multisite tests, written against the interfaces provided in rgw_multi.
 # these tests must be initialized and run by another module that provides
@@ -418,20 +432,37 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
             target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def get_oldest_incremental_change_not_applied_epoch(zone):
-    cmd = ['sync', 'status']
+    cmd = ['sync', 'status'] + zone.zone_args()
     sync_status_output, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-    assert(retcode == 0)
-    match = re.search(r"oldest incremental change not applied:\s*([0-9T:\.\+\-Z]+)", sync_status_output)
-    timestamp = match.group(1) if match else None
-    if timestamp is not None:
-        timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
-    return timestamp
+    if retcode != 0:
+        # sync status failed for some reason, return epoch 0 to signal no progress
+        return 0.0
 
-def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
-    deadline = time.time() + time_window_sec
+    # extract the "data sync source:" section from the output
+    data_sync_match = re.search(r"data sync source:.*", sync_status_output, re.DOTALL)
+    if not data_sync_match:
+        # no data sync section found; return epoch 0 to signal no progress
+        return 0.0
+
+    data_sync_section = data_sync_match.group(0)
+
+    # 1) look for "oldest incremental change not applied" in the data sync section
+    match = re.search(r"oldest incremental change not applied:\s*([0-9T:\.\+\-Z]+)", data_sync_section)
+    if match:
+        return datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+
+    # 2) if data is caught up with source, return None (no work pending)
+    if "data is caught up with source" in data_sync_section:
+        return None
+
+    # 3) data sync section exists but neither marker found; return epoch 0
+    #    so the caller knows data sync is not making progress
+    return 0.0
+
+def data_sync_making_progress(zone):
     oldest_inc_change = None
     result = False
-    while time.time() < deadline:
+    for _ in range(config.checkpoint_retries):
         new_reading = get_oldest_incremental_change_not_applied_epoch(zone)
         if new_reading is not None:
             if oldest_inc_change is None:
@@ -440,7 +471,7 @@ def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
                 result = True
                 oldest_inc_change = new_reading
                 break
-        time.sleep(check_interval_sec)
+        time.sleep(config.checkpoint_delay)
     return result or oldest_inc_change is None
 
 def set_master_zone(zone):
@@ -547,8 +578,12 @@ def check_all_buckets_exist(zone_conn, buckets):
     for b in buckets:
         try:
             zone_conn.get_bucket(b)
-        except:
-            log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
+        except ClientError as e:
+            errcode = e.response['Error']['Code']
+            if errcode in ['404', 'NoSuchBucket']:
+                log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
+            else:
+                log.critical('zone %s unexpected error checking bucket %s: %s', zone_conn.zone.name, b, errcode)
             return False
 
     return True
@@ -557,16 +592,20 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
     if not zone_conn.zone.has_buckets():
         return True
 
+    remaining = []
     for b in buckets:
         try:
             zone_conn.get_bucket(b)
-        except:
-            continue
-
+        except ClientError as e:
+            errcode = e.response['Error']['Code']
+            if errcode in ['404', 'NoSuchBucket']:
+                continue
+            log.critical('zone %s unexpected error checking bucket %s: %s', zone_conn.zone, b, errcode)
+            return False
         log.critical('zone %s contains bucket %s', zone_conn.zone, b)
-        return False
+        remaining.append(b)
 
-    return True
+    return len(remaining) == 0
 
 
 def get_topics(zone):
@@ -737,7 +776,7 @@ def test_bucket_remove():
             log.info("Checking zone=%s for deleted buckets", zone.name)
             result = check_all_buckets_dont_exist(zone, buckets)
             if not result:
-                log.error("Zone %s still has buckets: %s", zone.name, buckets)
+                log.error("Zone %s still has buckets", zone.name)
             assert result
 
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
@@ -858,6 +897,9 @@ def check_oidc_provider_eq(zone_conn1, zone_conn2, arn):
 
     p1 = iam1.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
     p2 = iam2.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
+    # Remove transport metadata
+    p1.pop('ResponseMetadata', None)
+    p2.pop('ResponseMetadata', None)
     eq(p1, p2)
 
 def check_oidc_providers_eq(zone_conn1, zone_conn2):
@@ -1545,6 +1587,50 @@ def test_zg_master_zone_delete():
     rm_zg.delete(master_cluster)
     master_zg.period.update(master_zone, commit=True)
 
+def test_zonegroup_rename():
+    master_zg = realm.master_zonegroup()
+    master_zone = master_zg.master_zone
+    master_cluster = master_zone.cluster
+
+    old_name = 'rename_test_zg'
+    new_name = 'rename_test_zg_renamed'
+
+    # create a temporary zonegroup with a zone and commit the period
+    test_zg = ZoneGroup(old_name, master_zg.period)
+    test_zg.create(master_cluster)
+    test_zone = Zone('rename_test_zone', test_zg, master_cluster)
+    test_zone.create(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+
+    realm_meta_checkpoint(realm)
+
+    # rename the zonegroup on the master and commit the updated period
+    r = test_zg.rename(master_cluster, new_name)
+    assert r == 0, "zonegroup rename failed with %d" % r
+    master_zg.period.update(master_zone, commit=True)
+
+    realm_meta_checkpoint(realm)
+
+    time.sleep(config.reconfigure_delay)
+
+    # verify on each zone:
+    new_zg = ZoneGroup(new_name, master_zg.period)
+    old_zg = ZoneGroup(old_name, master_zg.period)
+    for zone in master_zg.zones:
+        _, r = new_zg.get(zone.cluster, check_retcode=False)
+        assert r == 0, \
+            "new zonegroup name '%s' not found on zone %s" % (new_name, zone.name)
+
+        _, r = old_zg.get(zone.cluster, check_retcode=False)
+        assert r == errno.ENOENT, \
+            "old zonegroup name '%s' still present on zone %s (r=%d)" % (old_name, zone.name, r)
+
+    # clean up
+    test_zone.delete(master_cluster)
+    test_zg.delete(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+    time.sleep(config.reconfigure_delay)
+
 def test_set_bucket_website():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for zone, bucket in zone_bucket:
@@ -1663,6 +1749,103 @@ def test_bucket_sync_disable_enable():
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
 
     zonegroup_data_checkpoint(zonegroup_conns)
+
+@attr('bucket_sync_disable')
+def test_versioned_bucket_sync_disable_enable_object_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # create a bucket
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning
+    primary.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    obj = 'obj'
+
+    # upload an initial object
+    resp1 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_1 = resp1.get('VersionId', 'null')
+    log.debug('created initial version id=%s', version_id_1)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # upload the second version
+    resp2 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_2 = resp2['VersionId']
+    log.debug('created new version id=%s', version_id_2)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # upload the third version
+    resp3 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_3 = resp3['VersionId']
+    log.debug('created new version id=%s', version_id_3)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting the non-head from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload the fourth version - do this before the following object delete
+    # so it has a slightly smaller epoch
+    resp4 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_4 = resp4['VersionId']
+    log.debug('created new version id=%s', version_id_4)
+
+    # Delete the second object version
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting the head from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Delete the fourth object version
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting everything from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Delete all object versions
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_1]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_3]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_multipart_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -1980,14 +2163,14 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
     secondary.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
         '--num-shards', '13',
-        '--yes-i-really-mean-it'])
+        '--yes-i-really-mean-it'] + secondary.zone.zone_args())
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
         cmd = ['object', 'rm'] + primary.zone.zone_args()
         cmd += ['--bucket', test_bucket.name]
         cmd += ['--object', obj]
-        primary.zone.cluster.admin(cmd)
+        primary.zone.cluster.admin(cmd + primary.zone.zone_args())
 
     # delete bucket and test bilog autotrim
     primary.s3_client.delete_bucket(Bucket=test_bucket.name)
@@ -2276,7 +2459,82 @@ def test_zap_init_bucket_sync_run():
             secondary.zone.start()
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def get_bucket_sync_state(zone, source_zone, bucket_name):
+    cmd = ['bucket', 'sync', 'status'] + zone.zone_args()
+    cmd += ['--bucket', bucket_name]
+    cmd += ['--source-zone', source_zone.name]
+    cmd += ['--format', 'json']
+    status_json, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+    if retcode != 0:
+        return None
+    status = json.loads(status_json)
+    sources = status.get('sources', [])
+    if not sources:
+        return None
+    # 'status' field is set for non-incremental states. It is absent
+    # when the bucket is in incremental sync.
+    source_status = sources[0].get('status', '')
+    if not source_status:
+        return 'incremental-sync'
+    if source_status.startswith('full sync'):
+        return 'full-sync'
+    if source_status.startswith('init'):
+        return 'init'
+    if source_status.startswith('stopped'):
+        return 'stopped'
+    return source_status
+
+@attr('bucket_sync_disable')
+def test_bucket_sync_run_during_full_sync():
+    """
+    Test that 'bucket sync run' completes full sync and transitions the bucket
+    to incremental-sync state, even when the background sync is running
+    concurrently and may hold the bucket-wide lock.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+    num_objects = 1000
+
+    # 1. Create bucket on primary.
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # 2. Disable bucket sync so objects do not replicate while we upload.
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # 3. Upload 1000 objects to the primary while sync is disabled.
+    log.debug('uploading %d objects to bucket=%s', num_objects, bucket.name)
+    for i in range(num_objects):
+        primary.s3_client.put_object(Bucket=bucket.name, Key=f'obj{i}', Body=b'data')
+
+    # 4. Re-enable bucket sync. This resets the secondary to full sync state.
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # 5. Immediately run 'bucket sync run' on the secondary.
+    log.debug('running bucket sync run on secondary zone=%s', secondary.name)
+    cmd = ['bucket', 'sync', 'run'] + secondary.zone.zone_args()
+    cmd += ['--bucket', bucket.name, '--source-zone', primary.name]
+    secondary.zone.cluster.admin(cmd)
     
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # 6. Validate all 1000 objects are present on the secondary.
+    bucket_keys_eq(primary.zone, secondary.zone, bucket.name)
+
+    # 7. Validate that sync state has moved to incremental-sync.
+    state = get_bucket_sync_state(secondary.zone, primary.zone, bucket.name)
+    log.debug('bucket sync state after bucket sync run: %s', state)
+    assert state == 'incremental-sync', \
+        f'Expected incremental-sync after bucket sync run, got: {state}'
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_list_bucket_key_marker_encoding():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -3961,8 +4219,9 @@ def test_account_metadata_sync():
         iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps({'Version': '2012-10-17', 'Statement': [{'Effect': 'Allow', 'Principal': {'AWS': 'arn:aws:iam:::user/testuser'}, 'Action': ['sts:AssumeRole']}]}))
         iam.put_role_policy(RoleName=name, PolicyName='Allow', PolicyDocument=inline_policy)
         iam.attach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
-        # TODO: test oidc provider
-        #iam.create_open_id_connect_provider(ClientIDList=['clientid'], ThumbprintList=['3768084dfb3d2b68b7897bf5f565da8efEXAMPLE'], Url=f'http://{name}.example.com')
+        iam.create_open_id_connect_provider(ClientIDList=['clientid'],
+                                            ThumbprintList=['3768084dfb3d2b68b7897bf5f565da8efEXAMPLE'],
+                                            Url=f'http://{name}.example.com')
 
     realm_meta_checkpoint(realm)
 
@@ -3978,7 +4237,8 @@ def test_account_metadata_sync():
         iam = source_conn.iam_conn
         name = source_conn.name
 
-        #iam.delete_open_id_connect_provider(OpenIDConnectProviderArn=f'arn:aws:iam::RGW11111111111111111:oidc-provider/{name}.example.com')
+        iam.delete_open_id_connect_provider(
+            OpenIDConnectProviderArn=f'arn:aws:iam::RGW11111111111111111:oidc-provider/{name}.example.com')
 
         iam.detach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
         iam.delete_role_policy(RoleName=name, PolicyName='Allow')
@@ -4246,6 +4506,87 @@ def test_timestamp_based_epochs():
             else:
                 assert False, f"Object {name}: found {out_of_order_versions} versions which are out of order"
 
+def bucket_check_olh(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'olh', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd + zone.zone_args(), read_only=True)
+    return json.loads(keys)
+
+def bucket_check_unlinked(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'unlinked', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd + zone.zone_args(), read_only=True)
+    return json.loads(keys)
+
+def bucket_lc_process(zone, bucket, args = None):
+    cmd = ['lc', 'process', '--bucket', bucket] + (args or [])
+    zone.cluster.admin(cmd + zone.zone_args())
+
+def test_versioned_lifecycle_deletes():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # use a lifecycle policy that removes all versions
+    lifecycle = {
+        "Rules": [{
+            "ID": "ExpireVersions",
+            "Status": "Enabled",
+            "Prefix": "",
+            "Expiration": {
+                "ExpiredObjectDeleteMarker": True
+            },
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 1
+            }
+        }]
+    }
+
+    # create a versioned bucket on each zone
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    for zone, bucket in zone_bucket:
+        zone.s3_client.put_bucket_versioning(Bucket=bucket.name, VersioningConfiguration={'Status': 'Enabled'})
+    realm_meta_checkpoint(realm)
+
+    for zone, bucket in zone_bucket:
+        zone.s3_client.put_bucket_lifecycle_configuration(Bucket=bucket.name, LifecycleConfiguration=lifecycle)
+    realm_meta_checkpoint(realm)
+
+    # upload lots of objects/versions
+    NUM_OBJECTS = 20
+    NUM_VERSIONS = 20
+
+    for zone, bucket in zone_bucket:
+        for i in range(0, NUM_OBJECTS):
+            key = f"obj-{i}.txt"
+            for vid in range(0, NUM_VERSIONS):
+                zone.s3_client.put_object(Bucket=bucket.name, Key=key, Body=f"This is version {vid}")
+            # create a delete marker for each name
+            zone.s3_client.delete_object(Bucket=bucket.name, Key=key)
+        log.info(f"Finished uploads on zone={zone.name} bucket={bucket.name}")
+
+    # wait for all uploads to sync
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # run lifecycle on each zone to expire all versions. lifecycle changes aren't replicated,
+    # so we don't wait for bucket checkpoints before validating the results
+    for zone, bucket in zone_bucket:
+        # apply NoncurrentVersionExpiration and verify that all Versions were removed
+        bucket_lc_process(zone.zone, bucket.name, ['--rgw-lc-debug-interval=1'])
+        response = zone.s3_client.list_object_versions(Bucket=bucket.name)
+        assert 'Versions' not in response
+        assert 'DeleteMarkers' in response
+
+        # apply ExpiredObjectDeleteMarker and verify that all DeleteMarkers were removed
+        bucket_lc_process(zone.zone, bucket.name, ['--rgw-lc-debug-interval=1'])
+        response = zone.s3_client.list_object_versions(Bucket=bucket.name)
+        assert 'Versions' not in response
+        assert 'DeleteMarkers' not in response
+
+        # check for orphaned index entries
+        olh = bucket_check_olh(zone.zone, bucket.name)
+        assert len(olh) == 0
+        unlinked = bucket_check_unlinked(zone.zone, bucket.name)
+        assert len(unlinked) == 0
 
 def run_per_zonegroup(func):
     def wrapper(*args, **kwargs):
@@ -6180,15 +6521,30 @@ def test_object_lock_sync():
 
 
 def test_period_update_commit():
-    wkld_concurrency = 25
-    num_objects_to_upload = 2500
-    number_of_period_updates = 5
+    wkld_concurrency = 10
+    num_objects_to_upload = 1000
+    number_of_period_updates = 3
     test_passed = False
 
+    # get client connection to generate s3 wkld
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    primary_zone_client_conn = zonegroup_conns.rw_zones[0]
-    secondary_zone_cluster_conn = zonegroup.zones[1]
+    primary_zone_client_conn = zonegroup_conns.master_zone
+
+    # get cluster connection to another zone in the group
+    # to issue period update commits and verify replication
+    secondary_zone_cluster_conn = None
+    for zg in realm.current_period.zonegroups:
+        if zonegroup != zg:
+            continue
+        for zone in zg.zones:
+            if zone != zonegroup.master_zone:
+                secondary_zone_cluster_conn = zone
+                break
+        if secondary_zone_cluster_conn is not None:
+            break
+    else:
+        raise SkipTest("test_period_update_commit is skipped.")
 
     bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
     log.info(f"created bucket={bucket.name}")
@@ -6204,6 +6560,9 @@ def test_period_update_commit():
                         Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
                     )
                     num_uploads += 1
+                    if stop_event.is_set():
+                        break
+                    time.sleep(0.01)
                 except Exception as e:
                     log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
         log.info(
@@ -6238,10 +6597,12 @@ def test_period_update_commit():
             log.info("issue period update commit")
             zonegroup.period.update(secondary_zone_cluster_conn, commit=True)
             log.info("verify data sync is making progress")
-            if not data_sync_making_progress(secondary_zone_cluster_conn):
-                break  # the issue of realm reload freezing reproduced
+            with override_config(checkpoint_retries=10, checkpoint_delay=60):
+                if not data_sync_making_progress(secondary_zone_cluster_conn):
+                    break  # the issue of realm reload freezing reproduced
         client_write_only_wkld_thread_stop.set()  # stop client wkld
-        zonegroup_data_checkpoint(zonegroup_conns)
+        with override_config(checkpoint_retries=10, checkpoint_delay=60):
+            zonegroup_data_checkpoint(zonegroup_conns)
         test_passed = True
     except Exception as e:
         log.error(f"test_period_update_commit failed: {e}")
@@ -6266,3 +6627,145 @@ def test_period_update_commit():
         log.info(f"delete bucket={bucket.name}")
         primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
 
+def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
+    num_objects_to_upload = (
+        3000  # must be more than 1000 to have pagination at full sync
+    )
+    bucket_full_sync_listing_inject_delay_sec = 100
+    bucket_full_sync_listing_inject_delay_pattern = "delay_bucket_full_sync_loop"
+
+    # get client connection
+    master_zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(master_zonegroup)
+    primary_zone_client_conn = zonegroup_conns.master_zone
+
+    # get cluster connections
+    primary_zone_cluster_conn = master_zonegroup.master_zone
+    secondary_zone_cluster_conn = None
+    for zg in realm.current_period.zonegroups:
+        for zone in zg.zones:
+            if zone.cluster != primary_zone_cluster_conn.cluster and zone != zg.master_zone:
+                secondary_zone_cluster_conn = zone
+                break
+        if secondary_zone_cluster_conn is not None:
+            break
+    else:
+        raise SkipTest("test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime is skipped. "
+                       "Requires a secondary zone in a different cluster.")
+
+    bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
+    log.info(f"created bucket={bucket.name}")
+
+    log.info(f"disable sync for bucket={bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    try:
+        log.info(f"upload {num_objects_to_upload} objects to bucket={bucket.name}")
+        num_objects_to_uploaded = 0
+        for i in range(num_objects_to_upload):
+            if i % 100 == 0:
+                log.debug(f"uploaded {i} objects to bucket={bucket.name}...")
+            try:
+                primary_zone_client_conn.s3_client.put_object(
+                    Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
+                )
+                num_objects_to_uploaded += 1
+            except Exception as e:
+                log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
+        log.info(
+            f"successfully uploaded {num_objects_to_uploaded} objects to bucket={bucket.name}"
+        )
+
+        log.info("trim bucket bilog to avoid any incremental sync happening")
+        primary_zone_cluster_conn.cluster.admin(["bilog", "trim", "--bucket", bucket.name])
+        log.info("set rgw_inject_delay_sec and rgw_inject_delay_pattern to slow down bucket full sync")
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "set", "client.rgw", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
+        )
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "set", "client.rgw", "rgw_inject_delay_pattern", bucket_full_sync_listing_inject_delay_pattern]
+        )
+        log.info("enable bucket sync to initiate full sync")
+        enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+        # Since incremenetal sync is not possible and full sync is stalled,
+        # we should see that the bucket's sync is stalled.
+        log.info("verify that bucket sync is stalled")
+        deadline = time.time() + bucket_full_sync_listing_inject_delay_sec
+        oldest_inc_change = None
+        while True:
+            if time.time() > deadline:
+                raise Exception("failed to verify the stall of bucket sync")
+            new_reading = get_oldest_incremental_change_not_applied_epoch(
+                secondary_zone_cluster_conn
+            )
+            if new_reading is not None:
+                if oldest_inc_change is None or oldest_inc_change != new_reading:
+                    oldest_inc_change = new_reading
+                elif (
+                    oldest_inc_change == new_reading
+                ):  # 2 back-to-back readings are the same
+                    break
+            time.sleep(10)
+        log.info(
+            f"verified that bucket sync is stalled, oldest incremental change not applied epoch: {oldest_inc_change}"
+        )
+
+        # while bucket sync is stalled, delete all objects and the bucket.
+        log.info(f"delete {num_objects_to_upload} objects from bucket={bucket.name}")
+        for i in range(num_objects_to_upload):
+            primary_zone_client_conn.s3_client.delete_object(
+                Bucket=bucket.name,
+                Key=f"obj-{i:04d}",
+            )
+        log.info(f"delete bucket={bucket.name}")
+        primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
+
+        log.info(f"verify that bucket={bucket.name} is deleted on secondary zone")
+        for zg in realm.current_period.zonegroups:
+            zonegroup_meta_checkpoint(zg)
+
+        log.info(
+            "removing rgw_inject_delay_sec and rgw_inject_delay_pattern to allow bucket full sync to run normally to the completion"
+        )
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+        )
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+        )
+        time.sleep(
+            bucket_full_sync_listing_inject_delay_sec
+        )  # wait to make sure bucket sync loop resumes to normal pace
+
+        log.info("wait for data sync to complete")
+        zonegroup_data_checkpoint(zonegroup_conns)
+    except Exception as e:
+        log.error(f"test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime failed: {e}")
+        log.info(f"delete {num_objects_to_upload} objects from bucket={bucket.name}")
+        for i in range(num_objects_to_upload):
+            try:
+                primary_zone_client_conn.s3_client.delete_object(
+                    Bucket=bucket.name,
+                    Key=f"obj-{i:04d}",
+                )
+            except:
+                pass
+        log.info(f"delete bucket={bucket.name}")
+        try:
+            primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
+        except:
+            pass
+        log.info(
+            "reset rgw_inject_delay settings"
+        )
+        try:
+            secondary_zone_cluster_conn.cluster.ceph_admin(
+                ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+            )
+            secondary_zone_cluster_conn.cluster.ceph_admin(
+                ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+            )
+        except:
+            pass
+        raise

@@ -640,9 +640,11 @@ ErasureCodeIsaDefault::prepare()
   // setup shared encoding table and coefficients
   unsigned char** p_enc_table =
     tcache.getEncodingTable(matrixtype, k, m);
+  ceph_assert(p_enc_table);
 
   unsigned char** p_enc_coeff =
     tcache.getEncodingCoefficient(matrixtype, k, m);
+  ceph_assert(p_enc_coeff);
 
   if (!*p_enc_coeff) {
     dout(10) << "[ cache tables ] creating coeff for k=" <<
@@ -665,6 +667,7 @@ ErasureCodeIsaDefault::prepare()
   } else {
     encode_coeff = *p_enc_coeff;
   }
+  ceph_assert(encode_coeff);
 
   if (!*p_enc_table) {
     dout(10) << "[ cache tables ] creating tables for k=" <<
@@ -680,6 +683,7 @@ ErasureCodeIsaDefault::prepare()
   } else {
     encode_tbls = *p_enc_table;
   }
+  ceph_assert(encode_tbls);
 
   unsigned memory_lru_cache =
     k * (m + k) * 32 * tcache.decoding_tables_lru_length;

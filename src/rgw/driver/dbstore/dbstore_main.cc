@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
   void *res;
 
   pthread_attr_t attr;
-  int num_thr = 2;
+  static constexpr int num_thr = 2;
   pthread_t threads[num_thr];
   struct thr_args t_args[num_thr];
 

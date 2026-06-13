@@ -95,6 +95,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
     int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
+    int ceph_statxat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
     int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
@@ -111,7 +113,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
     int ceph_unlinkat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
+    int ceph_symlinkat(ceph_mount_info *cmount, const char *existing, int fd, const char *newname)
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
     int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
@@ -143,6 +147,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_openat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode)
 
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_mkdirat(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode)
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata)
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_get_snap_info(ceph_mount_info *cmount, const char *path, snap_info *snap_info)
@@ -172,21 +177,32 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lazyio_propagate(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
+
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
+    int ceph_chmodat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     mode_t mode, int flags)
+
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)
+    int ceph_chownat(ceph_mount_info *cmount, int fd, const char *relpath,
+                     int uid, int gid, int flags)
+
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
+
     int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf)
     int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf)
     int ceph_utimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
+    int ceph_utimensat(ceph_mount_info* cmount, int fd, const char* relpath,
+                       timespec* times, int flags)
+
     int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
     int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)

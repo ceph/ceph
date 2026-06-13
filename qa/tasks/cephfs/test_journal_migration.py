@@ -69,7 +69,7 @@ class TestJournalMigration(CephFSTestCase):
         # Verify that cephfs-journal-tool can now read the rewritten journal
         self.fs.fail()
         inspect_out = self.fs.journal_tool(["journal", "inspect"], 0)
-        if not inspect_out.endswith(": OK"):
+        if inspect_out.find("Overall journal integrity: OK") < 0:
             raise RuntimeError("Unexpected journal-tool result: '{0}'".format(
                 inspect_out
             ))

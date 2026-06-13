@@ -137,9 +137,9 @@ describe('FormatterService', () => {
     });
 
     it('should return a safe tuple when split=true and input is unsupported', () => {
-      expect(service.formatToBinary(undefined as any, true)).toEqual([0, 'B']);
-      expect(service.formatToBinary(null as any, true)).toEqual([0, 'B']);
-      expect(service.formatToBinary(service as any, true)).toEqual([0, 'B']);
+      expect(service.formatToBinary(undefined as any, true)).toEqual([NaN, 'B']);
+      expect(service.formatToBinary(null as any, true)).toEqual([NaN, 'B']);
+      expect(service.formatToBinary(service as any, true)).toEqual([NaN, 'B']);
     });
   });
 

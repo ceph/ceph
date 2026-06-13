@@ -1,0 +1,7 @@
+tasks:
+- s3tests:
+    client.0:
+      sts_tests: True
+      # TODO: https://tracker.ceph.com/issues/74695
+      webidentity_tests: False
+      rgw_server: client.0

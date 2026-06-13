@@ -20,7 +20,7 @@ from . import APIDoc, APIRouter, ControllerAuthMixin, EndpointDoc, RESTControlle
 if sys.version_info < (3, 8):
     http.cookies.Morsel._reserved["samesite"] = "SameSite"  # type: ignore  # pylint: disable=W0212
 
-logger = logging.getLogger('controllers.auth')
+logger = logging.getLogger(__name__)
 
 AUTH_CHECK_SCHEMA = {
     "username": (str, "Username"),

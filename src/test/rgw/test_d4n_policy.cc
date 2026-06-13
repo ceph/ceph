@@ -321,7 +321,7 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
 
     buffer::list attrVal;
     auto length_str = std::to_string(TEST_DATA_LENGTH);
-    attrVal.append(length_str.c_str() + '\0', length_str.length() + 1);
+    attrVal.append(length_str.c_str(), length_str.length() + 1);
     attrs.insert({"accounted_size", std::move(attrVal)});
     attrVal.clear();
     attrVal.append("testBucket\0", 10);

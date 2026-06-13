@@ -595,6 +595,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     if valid_dict.get('poll', False):
         valid_dict['width'] = Termsize().cols
         valid_dict['session_id'] = str(uuid.uuid4())
+        valid_dict['period'] = parsed_args.period
     while True:
         try:
             # Only print the header for polling commands

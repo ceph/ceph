@@ -9,7 +9,7 @@ You can delegate the Ceph Object Gateway authentication to an LDAP server.
 How it works
 ============
 
-The Ceph Object Gateway extracts the users LDAP credentials from a token. A
+The Ceph Object Gateway extracts the user's LDAP credentials from a token. A
 search filter is constructed with the user name. The Ceph Object Gateway uses
 the configured service account to search the directory for a matching entry. If
 an entry is found, the Ceph Object Gateway attempts to bind to the found
@@ -81,7 +81,7 @@ authentication:
 Using a custom search filter to limit user access
 =================================================
 
-There are two ways to use the ``rgw_search_filter`` parameter:
+There are two ways to use the ``rgw_ldap_searchfilter`` parameter:
 
 Specifying a partial filter to further limit the constructed search filter
 --------------------------------------------------------------------------
@@ -94,7 +94,7 @@ An example for a partial filter:
 
 The Ceph Object Gateway will generate the search filter as usual with the
 user name from the token and the value of ``rgw_ldap_dnattr``. The constructed
-filter is then combined with the partial filter from the ``rgw_search_filter``
+filter is then combined with the partial filter from the ``rgw_ldap_searchfilter``
 attribute. Depending on the user name and the settings the final search filter
 might become:
 
@@ -118,8 +118,8 @@ to a specific group, use the following filter:
 
   "(&(uid=@USERNAME@)(memberOf=cn=ceph-users,ou=groups,dc=mycompany,dc=com))"
 
-.. note:: Using the ``memberOf`` attribute in LDAP searches requires server side
-          support from you specific LDAP server implementation.
+.. note:: Using the ``memberOf`` attribute in LDAP searches requires server-side
+          support from your specific LDAP server implementation.
 
 Generating an access token for LDAP authentication
 ==================================================

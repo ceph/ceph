@@ -4,25 +4,25 @@ systemd
 =======
 As part of the activation process (either with :ref:`ceph-volume-lvm-activate`
 or :ref:`ceph-volume-simple-activate`), systemd units will get enabled that
-will use the OSD id and uuid as part of their name. These units will be run
+will use the OSD ID and UUID as part of their name. These units will be run
 when the system boots, and will proceed to activate their corresponding
-volumes via their sub-command implementation.
+volumes via their subcommand implementation.
 
-The API for activation is a bit loose, it only requires two parts: the
+The API for activation is a bit loose. It only requires two parts: the
 subcommand to use and any extra meta information separated by a dash. This
 convention makes the units look like::
 
-    ceph-volume@{command}-{extra metadata}
+    ceph-volume@<command>-<extra metadata>
 
 The *extra metadata* can be anything needed that the subcommand implementing
 the processing might need. In the case of :ref:`ceph-volume-lvm` and
-:ref:`ceph-volume-simple`, both look to consume the :term:`OSD id` and :term:`OSD uuid`,
-but this is not a hard requirement, it is just how the sub-commands are
+:ref:`ceph-volume-simple`, both look to consume the :term:`OSD ID` and :term:`OSD UUID`,
+but this is not a hard requirement, it is just how the subcommands are
 implemented.
 
-Both the command and extra metadata gets persisted by systemd as part of the
+Both the command and extra metadata get persisted by systemd as part of the
 *"instance name"* of the unit.  For example an OSD with an ID of 0, for the
-``lvm`` sub-command would look like::
+``lvm`` subcommand would look like::
 
     systemctl enable ceph-volume@lvm-0-0A3E1ED2-DA8A-4F0E-AA95-61DEC71768D6
 

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include "rgw_account.h"
 #include "rgw_process_env.h"
 #include "rgw_rest_iam_account.h"
 
@@ -12,7 +13,7 @@ int RGWGetAccountSummary::verify_permission(optional_yield y)
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
-  const rgw::ARN arn{"", "root", account_id, true};
+  const auto arn = rgw::account::root_arn(account_id);
   if (verify_user_permission(this, s, arn, rgw::IAM::iamGetAccountSummary)) {
     return 0;
   }

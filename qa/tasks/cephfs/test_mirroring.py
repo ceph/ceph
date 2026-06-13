@@ -76,6 +76,7 @@ class TestMirroring(CephFSTestCase):
         self.secondary_fs_name = self.backup_fs.name
         self.secondary_fs_id = self.backup_fs.id
         self.enable_mirroring_module()
+        self.config_set('client.mirror', 'cephfs_mirror_directory_scan_interval', 1)
 
     def tearDown(self):
         self.disable_mirroring_module()
@@ -772,7 +773,7 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(["mkdir", "d0"])
         for i in range(100):
             filename = f'file.{i}'
-            self.mount_a.write_n_mb(os.path.join('d0', filename), 1024)
+            self.mount_a.write_n_mb(os.path.join('d0', filename), 100)
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
@@ -1636,4 +1637,209 @@ class TestMirroring(CephFSTestCase):
                                     peer_spec, f'/{dir_name}', snap_b, expected_snap_count)
         self.verify_snapshot(dir_name, snap_a)
         self.verify_snapshot(dir_name, snap_b)
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_multithread_snapshot_starvation(self):
+        """
+        Test that newly added mirrored directories are starved until the current syncing one is completed.
+
+        ... when multiple directories are mirrored, with cephfs_mirror_distribute_datasync_threads option
+        disabled, validate that the newly added mirrored directory snapshots are starved until the current
+        syncing one is completed.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        peer_spec = "client.mirror_remote@ceph"
+
+        # create 3 directories to snap
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.run_shell(["mkdir", "d1"])
+        self.mount_a.run_shell(["mkdir", "d2"])
+
+        # Create d1, d2 with small number of files and d0 with large number of files
+        self.mount_a.create_n_files("d0/myfile", 10000)
+        self.mount_a.create_n_files("d1/myfile", 100)
+        self.mount_a.create_n_files("d2/myfile", 100)
+
+        log.debug('enabling mirroring')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        # disable distribute_datasync_threads options
+        log.debug('disabling cephfs_mirror_distribute_datasync_threads config')
+        self.config_set('client.mirror', 'cephfs_mirror_distribute_datasync_threads', 'false')
+
+        log.debug('adding directory paths')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+
+        # take /d0 snapshot first, so that it starts syncing
+        log.debug('take /d0 snapshot first')
+        snap_name = "snap0"
+        self.mount_a.run_shell(["mkdir", f"d0/.snap/{snap_name}"])
+        log.debug('checking /d0/.snap/snap0 in progress')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, '/d0', 'snap0')
+
+        # now that /d0 is in progress, take snaps of /d1 and /d2.
+        self.mount_a.run_shell(["mkdir", f"d1/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d2/.snap/{snap_name}"])
+
+        # Wait for d0, d1, d2 to finish sync
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d2', 'snap0', 1)
+        self.verify_snapshot('d2', 'snap0')
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d1', 'snap0', 1)
+        self.verify_snapshot('d1', 'snap0')
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+
+        # Even though /d1 and /d2 had only 100 files and added while d0 is already syncing, with
+        # cephfs_mirror_distribute_datasync_threads option disabled, /d1 and /d2 syncs after /d0
+        # proving the starvation
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
+                                         'fs', 'mirror', 'peer', 'status',
+                                         f'{self.primary_fs_name}@{self.primary_fs_id}',
+                                         peer_uuid)
+        d0_sync_time_stamp = float(res["/d0"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d1_sync_time_stamp = float(res["/d1"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d2_sync_time_stamp = float(res["/d2"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+
+        self.assertGreaterEqual(d1_sync_time_stamp, d0_sync_time_stamp)
+        self.assertGreaterEqual(d2_sync_time_stamp, d0_sync_time_stamp)
+
+        self.config_set('client.mirror', 'cephfs_mirror_distribute_datasync_threads', 'true')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_multithread_snapshot_no_starvation(self):
+        """
+        Test that newly added mirrored directories are not starved until the current syncing one is completed.
+
+        ... when multiple directories are mirrored, with cephfs_mirror_distribute_datasync_threads option
+        enabled, validate that the newly added mirrored directory snapshots are not starved until the current
+        one is completed.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        peer_spec = "client.mirror_remote@ceph"
+
+        # create 3 directories to snap
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.run_shell(["mkdir", "d1"])
+        self.mount_a.run_shell(["mkdir", "d2"])
+
+        # Idea is d1, d2 with small number of files should not starve while d0 is syncing
+        self.mount_a.create_n_files("d0/myfile", 10000)
+        self.mount_a.create_n_files("d1/myfile", 100)
+        self.mount_a.create_n_files("d2/myfile", 100)
+
+        log.debug('enabling mirroring')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        # distribute_datasync_threads for fair scheduling of sync threads is enabled by default
+        log.debug('cephfs_mirror_distribute_datasync_threads config is enabled by default...')
+
+        log.debug('adding directory paths')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+
+        # take /d0 snapshot first, so that it starts syncing
+        log.debug('take /d0 snapshot first')
+        snap_name = "snap0"
+        self.mount_a.run_shell(["mkdir", f"d0/.snap/{snap_name}"])
+        log.debug('checking /d0/.snap/snap0 in progress')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, '/d0', 'snap0')
+
+        # now that /d0 is in progress, take snaps of /d1 and /d2.
+        self.mount_a.run_shell(["mkdir", f"d1/.snap/{snap_name}"])
+        self.mount_a.run_shell(["mkdir", f"d2/.snap/{snap_name}"])
+
+        # Wait for d0, d1, d2 to finish sync
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d2', 'snap0', 1)
+        self.verify_snapshot('d2', 'snap0')
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d1', 'snap0', 1)
+        self.verify_snapshot('d1', 'snap0')
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+
+        # since /d1 and /d2 had only 100 files and added while d0 is already syncing, with
+        # cephfs_mirror_distribute_datasync_threads option enabled, /d1 and /d2 should have synced ahead of /d0
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
+                                         'fs', 'mirror', 'peer', 'status',
+                                         f'{self.primary_fs_name}@{self.primary_fs_id}',
+                                         peer_uuid)
+        d0_sync_time_stamp = float(res["/d0"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d1_sync_time_stamp = float(res["/d1"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d2_sync_time_stamp = float(res["/d2"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+
+        self.assertLess(d1_sync_time_stamp, d0_sync_time_stamp)
+        self.assertLess(d2_sync_time_stamp, d0_sync_time_stamp)
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_multithread_snapshot_only_dirs_sync(self):
+        """
+        Test that snapshot containing only directories sync and doesn't hang.
+
+        ... When snapshot containing only directories and no files, are queued for syncing, the sync hangs in following scenario.
+            1. Configure say /d0 and /d1 for mirroring.
+            2. Create around 10k files in /d0
+            3. Create a single dir say /d1/dir0 or nothing
+            4. snapshot /d0 and wait for status to change to 'syncing'
+            5. Now, snapshot /d1.
+
+        The /d1 snapshot will be stuck in syncing for ever.
+        See tracker https://tracker.ceph.com/issues/75804 for more details.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        peer_spec = "client.mirror_remote@ceph"
+
+        # create 2 directories to snap
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.run_shell(["mkdir", "d1"])
+
+        self.mount_a.create_n_files("d0/myfile", 10000)
+        self.mount_a.run_shell(["mkdir", "d1/dir0"])
+
+        log.debug('enabling mirroring')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        # The issue happens when the snapshot's syncm object is waiting for datasync threads
+        # at syncm_q and doesn't hit if syncm object is waiting at syncm's data queue for files.
+        # This can be achieved with the following.
+        #  1. Create more files (10k) for /d0 -
+        #       This provides enough time for /d1's crawl to finish before datasync threads picks
+        #       up /d1 for syncing. If the crawl is not finished when data sync threads are available,
+        #       it will go and wait for files at syncm's data queue.
+        #  2. Disable distribute_datasync_threads options. This guarantees that the /d1
+        #       is not picked up for syncing before it's crawling is finished and provides enough
+        #       window for the /d1's crawling to finish as all threads are busy syncing /d0's
+        #       10k files
+        log.debug('disabling cephfs_mirror_distribute_datasync_threads config')
+        self.config_set('client.mirror', 'cephfs_mirror_distribute_datasync_threads', 'false')
+
+        log.debug('adding directory paths')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+
+        # take /d0 snapshot first, so that it starts syncing
+        log.debug('take /d0 snapshot first')
+        snap_name = "snap0"
+        self.mount_a.run_shell(["mkdir", f"d0/.snap/{snap_name}"])
+        log.debug('checking /d0/.snap/snap0 in progress')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, '/d0', 'snap0')
+
+        # now that /d0 is in progress, take snaps of /d1
+        self.mount_a.run_shell(["mkdir", f"d1/.snap/{snap_name}"])
+
+        # Wait for d0, d1
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id, peer_spec, '/d1', 'snap0', 1)
+        self.verify_snapshot('d1', 'snap0')
+
+        self.config_set('client.mirror', 'cephfs_mirror_distribute_datasync_threads', 'true')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)

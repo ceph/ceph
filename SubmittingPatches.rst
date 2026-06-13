@@ -214,9 +214,9 @@ the following difference: the PR title describes the entire set of changes,
 while the `Commit title`_ describes only the changes in a particular commit. 
 
 If GitHub suggests a PR title based on a very long commit message it will split
-the result with an elipsis (...) and fold the remainder into the PR description.
+the result with an ellipsis (...) and fold the remainder into the PR description.
 In such a case, please edit the title to be more concise and the description to
-remove the elipsis.
+remove the ellipsis.
 
 Keep in mind that the PR titles feed directly into the script that generates
 release notes and it is tedious to clean up non-conformant PR titles at release

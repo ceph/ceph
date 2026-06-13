@@ -2,15 +2,15 @@
  Troubleshooting OSDs
 ======================
 
-Before troubleshooting the cluster's OSDs, check the monitors
+Before troubleshooting the cluster's OSDs, check the Monitors
 and the network. 
 
-First, determine whether the monitors have a quorum. Run the ``ceph health``
-command or the ``ceph -s`` command and if Ceph shows ``HEALTH_OK`` then there
-is a monitor quorum. 
+First, determine whether the Monitors have a quorum. Run the ``ceph health``
+command or the ``ceph -s`` command, and if Ceph shows ``HEALTH_OK``, then there
+is a Monitor quorum. 
 
-If the monitors don't have a quorum or if there are errors with the monitor
-status, address the monitor issues before proceeding by consulting the material
+If the Monitors don't have a quorum or if there are errors with the Monitor
+status, address the Monitor issues before proceeding by consulting the material
 in :ref:`rados-troubleshooting-mon`.
 
 Next, check your networks to make sure that they are running properly. Networks
@@ -225,7 +225,7 @@ If the cluster has started but an OSD isn't starting, check the following:
 
      kernel.pid_max = 4194303
 
-- **Check ``nf_conntrack``:** This connection-tracking and connection-limiting
+- **Check nf_conntrack:** This connection-tracking and connection-limiting
   system causes problems for many production Ceph clusters. The problems often
   emerge slowly and subtly. As cluster topology and client workload grow,
   mysterious and intermittent connection failures and performance glitches
@@ -252,15 +252,15 @@ If the cluster has started but an OSD isn't starting, check the following:
   release notes for each Ceph version in order to make sure that you have
   addressed any issues related to your kernel.
 
-- **Segment Fault:** If there is a segment fault, increase log levels and
-  restart the problematic daemon(s). If segment faults recur, search the Ceph
-  bug tracker `https://tracker.ceph/com/projects/ceph
+- **Segmentation Fault:** If there is a segmentation fault, increase log levels and
+  restart the problematic daemon(s). If segmentation faults recur, search the Ceph
+  bug tracker `https://tracker.ceph.com/projects/ceph
   <https://tracker.ceph.com/projects/ceph/>`_ and the ``dev`` and
   ``ceph-users`` mailing list archives `https://ceph.io/resources
   <https://ceph.io/resources>`_ to see if others have experienced and reported
   these issues. If this truly is a new and unique failure, post to the ``dev``
   email list and provide the following information: the specific Ceph release
-  being run, ``ceph.conf`` (with secrets XXX'd out), your monitor status
+  being run, ``ceph.conf`` (with secrets XXX'd out), your Monitor status
   output, and excerpts from your log file(s).
 
 
@@ -269,7 +269,7 @@ An OSD Failed
 
 When an OSD fails, this means that a ``ceph-osd`` process is unresponsive or
 has died and that the corresponding OSD has been marked ``down``. Surviving
-``ceph-osd`` daemons will report to the monitors that the OSD appears to be
+``ceph-osd`` daemons will report to the Monitors that the OSD appears to be
 down, and a new status will be visible in the output of the ``ceph health``
 command, as in the following example:
 
@@ -316,7 +316,7 @@ error or a hardware issue with the host.
 
 If the OSD problem is the result of a software error (for example, a failed
 assertion or another unexpected error), search for reports of the issue in the
-`bug tracker <https://tracker.ceph/com/projects/ceph>`_ , the `dev mailing list
+`bug tracker <https://tracker.ceph.com/projects/ceph>`_, the `dev mailing list
 archives <https://lists.ceph.io/hyperkitty/list/dev@ceph.io/>`_, and the
 `ceph-users mailing list archives
 <https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/>`_.  If there is no
@@ -330,7 +330,7 @@ No Free Drive Space
 -------------------
 
 If an OSD is full, Ceph prevents data loss by ensuring that no new data is
-written to the OSD. In an properly running cluster, health checks are raised
+written to the OSD. In a properly running cluster, health checks are raised
 when the cluster's OSDs and pools approach certain "fullness" ratios. The
 ``mon_osd_full_ratio`` threshold defaults to ``0.95`` (or 95% of capacity):
 this is the point above which clients are prevented from writing data. The
@@ -465,10 +465,10 @@ To check network statistics, run the following command:
 Drive Configuration
 -------------------
 
-An SAS or SATA storage drive should house only one OSD, but a NVMe drive can
+An SAS or SATA storage drive should house only one OSD, but an NVMe drive can
 easily house two or more. However, it is possible for read and write throughput
 to bottleneck if other processes share the drive. Such processes include:
-journals / metadata, operating systems, Ceph monitors, ``syslog`` logs, other
+journals / metadata, operating systems, Ceph Monitors, ``syslog`` logs, other
 OSDs, and non-Ceph processes.
 
 Because Ceph acknowledges writes *after* journaling, fast SSDs are an
@@ -495,18 +495,18 @@ cause significantly degraded performance. Tools that are useful in checking for
 drive errors include ``dmesg``, ``syslog`` logs, and ``smartctl`` (found in the
 ``smartmontools`` package).
 
-.. note:: ``smartmontools`` 7.0 and late provides NVMe stat passthrough and
+.. note:: ``smartmontools`` 7.0 and later provides NVMe stat passthrough and
    JSON output.
 
 
 Co-resident Monitors/OSDs
 -------------------------
 
-Although monitors are relatively lightweight processes, performance issues can
-result when monitors are run on the same host machine as an OSD. Monitors issue
+Although Monitors are relatively lightweight processes, performance issues can
+result when Monitors are run on the same host machine as an OSD. Monitors issue
 many ``fsync()`` calls and this can interfere with other workloads. The danger
-of performance issues is especially acute when the monitors are co-resident on
-the same storage drive as an OSD. In addition, if the monitors are running an
+of performance issues is especially acute when the Monitors are co-resident on
+the same storage drive as an OSD. In addition, if the Monitors are running an
 older kernel (pre-3.0) or a kernel with no ``syncfs(2)`` syscall, then multiple
 OSDs running on the same host might make so many commits as to undermine each
 other's performance.  This problem sometimes results in what is called "the
@@ -733,7 +733,7 @@ The upstream Ceph community has traditionally recommended separate *public*
 provides the following benefits:
 
 #. Segregation of (1) heartbeat traffic and replication/recovery traffic
-   (private) from (2) traffic from clients and between OSDs and monitors
+   (private) from (2) traffic from clients and between OSDs and Monitors
    (public). This helps keep one stream of traffic from DoS-ing the other,
    which could in turn result in a cascading failure.
 
@@ -754,16 +754,16 @@ and reduced OSD flapping.
 When a private network (or even a single host link) fails or degrades while the
 public network continues operating normally, OSDs may not handle this situation
 well. In such situations, OSDs use the public network to report each other
-``down`` to the monitors, while marking themselves ``up``. The monitors then
+``down`` to the Monitors, while marking themselves ``up``. The Monitors then
 send out-- again on the public network--an updated cluster map with the
-affected OSDs marked `down`. These OSDs reply to the monitors "I'm not dead
-yet!", and the cycle repeats. We call this scenario 'flapping`, and it can be
+affected OSDs marked `down`. These OSDs reply to the Monitors "I'm not dead
+yet!", and the cycle repeats. We call this scenario 'flapping', and it can be
 difficult to isolate and remediate. Without a private network, this irksome
 dynamic is avoided: OSDs are generally either ``up`` or ``down`` without
 flapping.
 
 If something does cause OSDs to 'flap' (repeatedly being marked ``down`` and
-then ``up`` again), you can force the monitors to halt the flapping by
+then ``up`` again), you can force the Monitors to halt the flapping by
 temporarily freezing their states:
 
 .. prompt:: bash

@@ -37,15 +37,16 @@ public:
   /*
    * Ondisk layout (TODO)
    *
-   * ---------------------------------------------------------------------------
-   * | rbm_superblock_t | metadatas |        ...      |    data blocks    |
-   * ---------------------------------------------------------------------------
+   * -------------------------------------------------------------------------------
+   * | 23B magic | 37B null padding | DENC-encoded superblock header | data blocks |
+   * |           |                  | header (device_superblock_t)   |             |
+   * -------------------------------------------------------------------------------
    */
 
-  read_ertr::future<> read(paddr_t addr, bufferptr &buffer) final;
-  write_ertr::future<> write(paddr_t addr, bufferptr buf) final;
-  open_ertr::future<> open() final;
-  close_ertr::future<> close() final;
+  read_ertr::future<> read(paddr_t addr, bufferptr &buffer) override;
+  write_ertr::future<> write(paddr_t addr, bufferptr buf) override;
+  open_ertr::future<> open() override;
+  close_ertr::future<> close() override;
 
   /*
    * alloc_extent
@@ -55,19 +56,19 @@ public:
    * and freebitmap blocks.
    *
    */
-  paddr_t alloc_extent(size_t size) final; // allocator, return blocks
+  paddr_t alloc_extent(size_t size) override; // allocator, return blocks
 
-  allocate_ret_bare alloc_extents(size_t size) final; // allocator, return blocks
+  allocate_ret_bare alloc_extents(size_t size) override; // allocator, return blocks
 
-  void complete_allocation(paddr_t addr, size_t size) final;
+  void complete_allocation(paddr_t addr, size_t size) override;
 
   size_t get_start_rbm_addr() const {
     return device->get_shard_journal_start() + device->get_journal_size();
   }
-  size_t get_size() const final {
+  size_t get_size() const override {
     return device->get_shard_end() - get_start_rbm_addr();
   };
-  extent_len_t get_block_size() const final { return device->get_block_size(); }
+  extent_len_t get_block_size() const override { return device->get_block_size(); }
 
   BlockRBManager(RBMDevice * device, std::string path, bool detailed)
     : device(device), path(path) {
@@ -76,24 +77,24 @@ public:
 
   write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
 
-  device_id_t get_device_id() const final {
+  device_id_t get_device_id() const override {
     assert(device);
     return device->get_device_id();
   }
 
-  uint64_t get_free_blocks() const final { 
+  uint64_t get_free_blocks() const override { 
     // TODO: return correct free blocks after block allocator is introduced
     assert(device);
     return get_size() / get_block_size();
   }
-  const seastore_meta_t &get_meta() const final {
+  const seastore_meta_t &get_meta() const override {
     return device->get_meta();
   }
   RBMDevice* get_device() {
     return device;
   }
 
-  void mark_space_used(paddr_t paddr, size_t len) final {
+  void mark_space_used(paddr_t paddr, size_t len) override {
     assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
     assert(addr >= get_start_rbm_addr() &&
@@ -101,7 +102,7 @@ public:
     allocator->mark_extent_used(addr, len);
   }
 
-  void mark_space_free(paddr_t paddr, size_t len) final {
+  void mark_space_free(paddr_t paddr, size_t len) override {
     assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
     assert(addr >= get_start_rbm_addr() &&
@@ -109,13 +110,13 @@ public:
     allocator->free_extent(addr, len);
   }
 
-  paddr_t get_start() final {
+  paddr_t get_start() override {
     return convert_abs_addr_to_paddr(
       get_start_rbm_addr(),
       device->get_device_id());
   }
 
-  rbm_extent_state_t get_extent_state(paddr_t paddr, size_t size) final {
+  rbm_extent_state_t get_extent_state(paddr_t paddr, size_t size) override {
     assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
     assert(addr >= get_start_rbm_addr() &&
@@ -123,14 +124,14 @@ public:
     return allocator->get_extent_state(addr, size);
   }
 
-  size_t get_journal_size() const final {
+  size_t get_journal_size() const override {
     return device->get_journal_size();
   }
 
   bool check_valid_range(rbm_abs_addr paddr, bufferptr &bptr);
 
 #ifdef UNIT_TESTS_BUILT
-  void prefill_fragmented_device() final;
+  void prefill_fragmented_device() override;
 #endif
 
 private:

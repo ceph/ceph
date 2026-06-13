@@ -971,10 +971,10 @@ cephfs:
     qos:
         read_iops_limit: 100
         write_iops_limit: 200
-        read_bw_limit: 1048576
-        write_bw_limit: 2097152
-        read_delay_max: 20
-        write_delay_max: 30
+        read_bw_limit: "1048576"
+        write_bw_limit: "2097152"
+        read_burst_mult: 20
+        write_burst_mult: 15
 """
     data = yaml.safe_load_all(yaml_str)
     loaded = smb.resources.load(data)
@@ -984,10 +984,10 @@ cephfs:
     assert share.cephfs.qos is not None
     assert share.cephfs.qos.read_iops_limit == 100
     assert share.cephfs.qos.write_iops_limit == 200
-    assert share.cephfs.qos.read_bw_limit == 1048576
-    assert share.cephfs.qos.write_bw_limit == 2097152
-    assert share.cephfs.qos.read_delay_max == 20
-    assert share.cephfs.qos.write_delay_max == 30
+    assert share.cephfs.qos.read_bw_limit == "1048576"
+    assert share.cephfs.qos.write_bw_limit == "2097152"
+    assert share.cephfs.qos.read_burst_mult == 20
+    assert share.cephfs.qos.write_burst_mult == 15
 
 
 def test_share_update_qos():
@@ -1001,34 +1001,34 @@ def test_share_update_qos():
             qos=smb.resources.QoSConfig(
                 read_iops_limit=100,
                 write_iops_limit=200,
-                read_delay_max=5,
-                write_delay_max=30,
+                read_burst_mult=20,
+                write_burst_mult=15,
             ),
         ),
     )
 
     # Update with new QoS values
     updated_cephfs = share.cephfs.update_qos(
-        read_bw_limit=1048576,
-        write_bw_limit=2097152,
+        read_bw_limit="1048576",
+        write_bw_limit="2M",
         read_iops_limit=300,
-        read_delay_max=15,
+        read_burst_mult=25,
     )
 
     assert updated_cephfs.qos is not None
     assert updated_cephfs.qos.read_iops_limit == 300  # new value
     assert updated_cephfs.qos.write_iops_limit == 200  # preserved original
-    assert updated_cephfs.qos.read_bw_limit == 1048576  # new value
-    assert updated_cephfs.qos.write_bw_limit == 2097152  # new value
-    assert updated_cephfs.qos.read_delay_max == 15  # new value
-    assert updated_cephfs.qos.write_delay_max == 30  # preserved original
+    assert updated_cephfs.qos.read_bw_limit == "1048576"  # new value
+    assert updated_cephfs.qos.write_bw_limit == "2M"  # new value
+    assert updated_cephfs.qos.read_burst_mult == 25  # new value
+    assert updated_cephfs.qos.write_burst_mult == 15  # preserved original
 
     # Verify share with updated QoS works
     data = share.to_simplified()
     data.pop("resource_type", None)
     updated_share = smb.resources.Share(**{**data, 'cephfs': updated_cephfs})
-    assert updated_share.cephfs.qos.read_bw_limit == 1048576
-    assert updated_share.cephfs.qos.read_delay_max == 15
+    assert updated_share.cephfs.qos.read_bw_limit == "1048576"
+    assert updated_share.cephfs.qos.read_burst_mult == 25
 
 
 def test_share_qos_remove():
@@ -1042,8 +1042,8 @@ def test_share_qos_remove():
             qos=smb.resources.QoSConfig(
                 read_iops_limit=100,
                 write_iops_limit=200,
-                read_delay_max=5,
-                write_delay_max=30,
+                read_burst_mult=20,
+                write_burst_mult=15,
             ),
         ),
     )
@@ -1052,18 +1052,16 @@ def test_share_qos_remove():
     updated_cephfs = share.cephfs.update_qos(
         read_iops_limit=0,
         write_iops_limit=0,
-        read_bw_limit=0,
-        write_bw_limit=0,
-        read_delay_max=0,
-        write_delay_max=0,
+        read_bw_limit="0",
+        write_bw_limit="0",
     )
 
     # Verify QoS is completely removed
     assert updated_cephfs.qos is None
 
 
-def test_share_qos_default_delay():
-    """Test that delay_max defaults to 30 when not specified"""
+def test_share_qos_default_burst_mult():
+    """Test that burst_mult defaults to 15 when not specified"""
     share = smb.resources.Share(
         cluster_id='qoscluster',
         share_id='qostest',
@@ -1072,44 +1070,18 @@ def test_share_qos_default_delay():
             volume='myvol',
             path='/qos',
             qos=smb.resources.QoSConfig(
-                read_iops_limit=100,
-                write_iops_limit=200
-                # delay_max not specified - should use defaults
+                read_iops_limit=100, write_iops_limit=200
             ),
         ),
     )
 
     assert share.cephfs.qos is not None
-    assert share.cephfs.qos.read_delay_max == 30  # Default value
-    assert share.cephfs.qos.write_delay_max == 30  # Default value
-
-
-def test_share_qos_max_allowed_delay():
-    """Test that delay_max values exceeding 300 will be capped to 300"""
-    share = smb.resources.Share(
-        cluster_id='qoscluster',
-        share_id='qostest',
-        name='QoS Test Share',
-        cephfs=smb.resources.CephFSStorage(
-            volume='myvol',
-            path='/qos',
-            qos=smb.resources.QoSConfig(
-                read_iops_limit=100,
-                write_iops_limit=200,
-                read_delay_max=30,
-                write_delay_max=30,
-            ),
-        ),
-    )
-
-    updated_cephfs = share.cephfs.update_qos(read_delay_max=350)
-
-    assert updated_cephfs.qos is not None
-    assert updated_cephfs.qos.read_delay_max == 300  # Capped value
+    assert share.cephfs.qos.read_burst_mult == 15  # Default value
+    assert share.cephfs.qos.write_burst_mult == 15  # Default value
 
 
 def test_share_qos_max_allowed_iops_and_bandwidth():
-    """Test that iops and bandwidth values exceeding limits will be capped to IOPS_LIMIT_MAX and BYTES_LIMIT_MAX"""
+    """Test that IOPS and bandwidth values exceeding limits will be capped"""
     IOPS_LIMIT_MAX = 1_000_000
     BYTES_LIMIT_MAX = 1 << 40  # 1 TB
 
@@ -1123,17 +1095,108 @@ def test_share_qos_max_allowed_iops_and_bandwidth():
             qos=smb.resources.QoSConfig(
                 read_iops_limit=100,
                 write_iops_limit=200,
-                read_delay_max=30,
-                write_delay_max=30,
             ),
         ),
     )
 
     updated_cephfs = share.cephfs.update_qos(
         read_iops_limit=1_500_000_000,  # way above limit
-        write_bw_limit=2_000_000_000_000,  # ~2 TB, way above limit
+        write_bw_limit="2000000000000",  # ~2 TB as string, way above limit
     )
 
     assert updated_cephfs.qos is not None
     assert updated_cephfs.qos.read_iops_limit == IOPS_LIMIT_MAX  # capped
-    assert updated_cephfs.qos.write_bw_limit == BYTES_LIMIT_MAX  # capped
+    assert updated_cephfs.qos.write_bw_limit == str(BYTES_LIMIT_MAX)  # capped
+
+
+def test_share_update_qos_human_readable():
+    """Test update_qos with human-readable bandwidth limits (pass-through to Samba)."""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+        ),
+    )
+
+    # Update with human-readable format (stored as-is)
+    updated_cephfs = share.cephfs.update_qos(
+        read_bw_limit="10M",
+        write_bw_limit="1G",
+        read_iops_limit=100,
+        read_burst_mult=20,
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_bw_limit == "10M"
+    assert updated_cephfs.qos.write_bw_limit == "1G"
+    assert updated_cephfs.qos.read_iops_limit == 100
+    assert updated_cephfs.qos.read_burst_mult == 20
+
+    # Update with byte values (also strings)
+    updated_cephfs2 = share.cephfs.update_qos(
+        read_bw_limit="50M",
+        write_bw_limit="52428800",
+    )
+
+    assert updated_cephfs2.qos.read_bw_limit == "50M"
+    assert updated_cephfs2.qos.write_bw_limit == "52428800"
+
+
+def test_share_qos_backward_compat_integers():
+    """Test backward compatibility with integer bandwidth values from YAML."""
+    import yaml
+
+    # Old-style YAML with integer bandwidth values (pre-human-readable support)
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: qoscluster
+share_id: oldstyle
+name: Old Style Share
+cephfs:
+    volume: myvol
+    path: /old
+    qos:
+        read_iops_limit: 100
+        write_iops_limit: 200
+        read_bw_limit: 1048576
+        write_bw_limit: 2097152
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_bw_limit == "1048576"
+    assert share.cephfs.qos.write_bw_limit == "2097152"
+
+
+def test_share_qos_remove_individual_limit():
+    """Test removing individual limits while keeping others."""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_bw_limit="10M",
+                write_bw_limit="20M",
+            ),
+        ),
+    )
+
+    # Remove only read IOPS limit
+    updated_cephfs = share.cephfs.update_qos(read_iops_limit=0)
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit is None  # Removed
+    assert updated_cephfs.qos.write_iops_limit == 200  # Preserved
+    assert updated_cephfs.qos.read_bw_limit == "10M"  # Preserved
+    assert updated_cephfs.qos.write_bw_limit == "20M"  # Preserved

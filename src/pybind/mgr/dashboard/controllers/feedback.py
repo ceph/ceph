@@ -38,14 +38,11 @@ class FeedbackController(RESTController):
             response = mgr.remote('feedback', 'validate_and_create_issue',
                                   project, tracker, subject, description, api_key)
         except RuntimeError as error:
-            if "Invalid issue tracker API key" in str(error):
-                raise DashboardException(msg='Error in creating tracker issue: Invalid API key',
-                                         component='feedback')
-            if "KeyError" in str(error):
-                raise DashboardException(msg=f'Error in creating tracker issue: {error}',
-                                         component='feedback')
-            raise DashboardException(msg=f'{error}',
-                                     http_status_code=500,
+            # Any failure from the tracker API (invalid key, network error,
+            # upstream 5xx, etc.) is a client/upstream error, not an internal
+            # server error. Surface it as 400 via DashboardException's default
+            # status code.
+            raise DashboardException(msg=f'Error in creating tracker issue: {error}',
                                      component='feedback')
 
         return response

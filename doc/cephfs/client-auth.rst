@@ -59,7 +59,7 @@ This results in::
    caps: [osd] allow rw tag cephfs data=cephfs_a
 
 To completely restrict the client to the ``bar`` directory, omit the
-root directory :
+root directory:
 
 .. prompt:: bash #
 
@@ -163,8 +163,8 @@ Network restriction
    caps: [mon] allow r network 10.0.0.0/8
    caps: [osd] allow rw tag cephfs data=cephfs_a network 10.0.0.0/8
 
-The optional ``{network/prefix}`` is a standard network-name-and-prefix length
-in CIDR notation (for example, ``10.3.0.0/16``). If ``{network/prefix}}`` is
+The optional ``{network/prefix}`` is a standard network-number-and-prefix-length
+in CIDR notation (for example, ``10.3.0.0/16``). If ``{network/prefix}`` is
 present, the use of this capability is restricted to clients connecting from
 this network.
 

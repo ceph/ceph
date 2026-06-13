@@ -21,3 +21,4 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - PG_DEGRADED

@@ -8,6 +8,7 @@ overrides:
   ceph:
     log-ignorelist:
       - CEPHADM_REFRESH_FAILED
+      - CEPHADM_HOST_TIMEOUT_ERROR
     log-only-match:
       - CEPHADM_
 tasks:

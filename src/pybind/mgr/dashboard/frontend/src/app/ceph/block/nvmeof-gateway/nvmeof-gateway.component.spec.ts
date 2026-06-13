@@ -50,13 +50,13 @@ describe('NvmeofGatewayComponent', () => {
   it('should set tab crumb on init', () => {
     spyOn(breadcrumbService, 'setTabCrumb');
     component.ngOnInit();
-    expect(breadcrumbService.setTabCrumb).toHaveBeenCalledWith('Gateways');
+    expect(breadcrumbService.setTabCrumb).toHaveBeenCalledWith('Gateway groups');
   });
 
   it('should update tab crumb on tab switch', () => {
     spyOn(breadcrumbService, 'setTabCrumb');
     component.onSelected(component.Tabs.subsystem);
-    expect(breadcrumbService.setTabCrumb).toHaveBeenCalledWith('Subsystem');
+    expect(breadcrumbService.setTabCrumb).toHaveBeenCalledWith('Subsystems');
   });
 
   it('should clear tab crumb on destroy', () => {

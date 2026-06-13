@@ -341,7 +341,7 @@ public:
     encode(uuid, out_bl);
 
     EXPECT_CALL(*io_ctx_impl,
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),
                      _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
@@ -353,7 +353,7 @@ public:
                               std::atomic<bool>* default_namespace_enabled,
                               int r) {
     EXPECT_CALL(*io_ctx_impl,
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
                      _, _, _, _))
       .WillRepeatedly(DoAll(WithArg<5>(Invoke(
              [io_ctx_impl, default_namespace_enabled](bufferlist* bl) {
@@ -371,7 +371,7 @@ public:
       librados::MockTestMemIoCtxImpl *io_ctx_impl,
       const std::string &remote_namespace, int r) {
     EXPECT_CALL(*io_ctx_impl,
-                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"),
                      StrEq("mirror_remote_namespace_get"), _, _, _, _))
       .WillRepeatedly(DoAll(WithArg<5>(Invoke([remote_namespace](bufferlist *bl) {
                 encode(remote_namespace, *bl);

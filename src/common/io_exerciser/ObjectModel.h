@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <random>
 
 /* Overview
  *
@@ -29,8 +30,7 @@ class ObjectModel : public Model {
   bool secondary_created;
   std::vector<int> primary_contents;
   std::vector<int> secondary_contents;
-  ceph::util::random_number_generator<int> rng =
-      ceph::util::random_number_generator<int>();
+  std::mt19937_64 rng;
 
   // Track read and write I/Os that can be submitted in
   // parallel to detect violations:
@@ -45,7 +45,8 @@ class ObjectModel : public Model {
   interval_set<uint64_t> writes;
 
  public:
-  ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed);
+  ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
+              uint64_t block_size, int seed, bool delete_objects = true);
 
   int get_seed(uint64_t offset) const;
   std::vector<int> get_seed_offsets(int seed) const;

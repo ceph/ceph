@@ -29,6 +29,7 @@ from glob import glob
 from io import StringIO
 from threading import Thread, Event
 from pathlib import Path
+from enum import Enum
 from configparser import ConfigParser
 
 from cephadmlib.constants import (
@@ -37,6 +38,7 @@ from cephadmlib.constants import (
     DEFAULT_IMAGE_IS_MAIN,
     DEFAULT_IMAGE_RELEASE,
     # other constant values
+    ADMIN_LABEL,
     CEPH_CONF,
     CEPH_CONF_DIR,
     CEPH_DEFAULT_CONF,
@@ -153,7 +155,7 @@ from cephadmlib.decorators import (
     executes_early,
     require_image
 )
-from cephadmlib.host_facts import HostFacts, list_networks
+from cephadmlib.host_facts import HostFacts, list_networks, list_rdma
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
@@ -167,6 +169,30 @@ from cephadmlib.container_daemon_form import (
     daemon_to_container,
 )
 from cephadmlib.sysctl import install_sysctl, migrate_sysctl_dir
+from cephadmlib.cluster_ops import (
+    DEFAULT_PARALLEL_HOSTS,
+    cleanup_startup,
+    gather_shutdown_info,
+    get_cephadm_ssh_key,
+    load_cluster_state,
+    load_startup_info,
+    prepare_for_shutdown,
+    print_cluster_status_running,
+    print_cluster_status_shutdown,
+    print_section_footer,
+    print_section_header,
+    print_shutdown_complete,
+    print_shutdown_plan,
+    print_startup_complete,
+    print_startup_plan,
+    restore_cluster_services,
+    save_shutdown_state,
+    start_all_hosts,
+    stop_all_hosts,
+    stop_client_daemons,
+    validate_shutdown_preconditions,
+    wait_for_cluster_ready,
+)
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
 from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons
@@ -203,7 +229,7 @@ from cephadmlib.listing_updaters import (
     VersionStatusUpdater,
 )
 from cephadmlib.container_lookup import infer_local_ceph_image, identify
-
+from ceph.cephadm.d3n_types import D3NCache, D3NCacheError
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -475,9 +501,6 @@ def make_data_dir_base(fsid, data_dir, uid, gid):
     # type: (str, str, int, int) -> str
     data_dir_base = os.path.join(data_dir, fsid)
     makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
-             DATA_DIR_MODE)
     return data_dir_base
 
 
@@ -832,8 +855,10 @@ def get_ceph_volume_container(ctx: CephadmContext,
                               envs: Optional[List[str]] = None) -> 'CephContainer':
     if envs is None:
         envs = []
-    envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
-    envs.append('CEPH_VOLUME_DEBUG=1')
+    if 'CEPH_VOLUME_SKIP_RESTORECON=yes' not in envs:
+        envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
+    if 'CEPH_VOLUME_DEBUG=1' not in envs:
+        envs.append('CEPH_VOLUME_DEBUG=1')
 
     return CephContainer(
         ctx,
@@ -871,6 +896,178 @@ def _update_container_args_for_podman(
     container_args.extend(
         ctx.container_engine.service_args(ctx, ident.service_name)
     )
+
+
+def _d3n_fstab_entry(uuid: str, mountpoint: str, fs_type: str) -> str:
+    return f'UUID={uuid} {mountpoint} {fs_type} defaults,noatime 0 2\n'
+
+
+def _ensure_fstab_entry(ctx: CephadmContext, device: str, mountpoint: str, fs_type: str) -> None:
+    """
+    Ensure the device is present in /etc/fstab for the given mountpoint.
+    If an entry for mountpoint already exists, no changes are made.
+    """
+    out, _, code = call(ctx, ['blkid', '-s', 'UUID', '-o', 'value', device])
+    if code != 0 or not out.strip():
+        raise Error(f'Failed to get UUID for {device}')
+    uuid = out.strip()
+
+    entry = _d3n_fstab_entry(uuid, mountpoint, fs_type)
+
+    # check if mountpoint already present in fstab
+    with open('/etc/fstab', 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == mountpoint:
+                return
+
+    with open('/etc/fstab', 'a') as f:
+        f.write(entry)
+
+
+class D3NStateAction(str, Enum):
+    WRITE = 'write'
+    CLEANUP = 'cleanup'
+
+
+def d3n_state(
+        ctx: CephadmContext,
+        data_dir: str,
+        action: D3NStateAction,
+        d3n: Optional[D3NCache] = None,
+        uid: int = 0,
+        gid: int = 0,
+) -> None:
+    """
+    Persist/read minimal D3N info in the daemon's data directory
+    so that rm-daemon can cleanup properly.
+    """
+    path = os.path.join(data_dir, 'd3n_state.json')
+
+    if action == D3NStateAction.WRITE:
+        if d3n is None:
+            return
+        state = {
+            'cache_path': d3n.cache_path,
+            'mount_path': d3n.mountpoint,
+        }
+        payload = json.dumps(state, sort_keys=True) + '\n'
+        with write_new(path, owner=(uid, gid)) as f:
+            f.write(payload)
+        return
+
+    if action == D3NStateAction.CLEANUP:
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'r') as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+
+        cache_path = state.get('cache_path') if isinstance(state, dict) else None
+        if isinstance(cache_path, str) and cache_path:
+            try:
+                shutil.rmtree(cache_path, ignore_errors=True)
+                logger.info(f'[D3N] removed cache directory: {cache_path}')
+            except Exception as e:
+                logger.warning(f'[D3N] failed to remove cache directory {cache_path}: {e}')
+
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.warning(f'[D3N] failed to remove {path}: {e}')
+        return
+
+    raise Error(f'[D3N] invalid d3n_state action: {action}')
+
+
+def prepare_d3n_cache(ctx: CephadmContext, d3n: D3NCache, uid: int, gid: int) -> None:
+    """
+    Prepare a D3N cache mount and directory.
+
+    Steps:
+      1. Ensure mountpoint directory exists
+      2. Format device if it has no filesystem
+      3. Ensure /etc/fstab entry exists
+      4. Mount if not mounted
+      5. Ensure cache_path exists and is owned by daemon uid/gid
+    """
+    device = d3n.device
+    fs_type = d3n.filesystem
+    mountpoint = d3n.mountpoint
+    cache_path = d3n.cache_path
+    size_bytes = d3n.size_bytes
+
+    logger.debug(
+        f'[D3N] prepare_d3n_cache: device={device!r} fs_type={fs_type!r} mountpoint={mountpoint!r} cache_path={cache_path!r} size_bytes={size_bytes!r}'
+    )
+
+    # Ensure mountpoint exists
+    os.makedirs(mountpoint, mode=0o755, exist_ok=True)
+    logger.debug(f'[D3N] checking filesystem on device {device}')
+
+    # Format the device if needed
+    if not _has_filesystem(ctx, device):
+        logger.debug(f'Formatting {device} with {fs_type} for D3N')
+        call_throws(ctx, ['mkfs', '-t', fs_type, device])
+
+    # Ensure the mount is persistent across reboot by ensuring an /etc/fstab entry exists.
+    _ensure_fstab_entry(ctx, device, mountpoint, fs_type)
+
+    if not _is_mountpoint(ctx, mountpoint):
+        logger.debug(f'[D3N] mountpoint not mounted, running mount {mountpoint}')
+        call_throws(ctx, ['mount', mountpoint])
+    else:
+        logger.debug(f'[D3N] mountpoint already mounted according to _is_mountpoint(): {mountpoint}')
+
+    if size_bytes is not None:
+        avail = _avail_bytes(ctx, mountpoint)
+        if avail < size_bytes:
+            raise Error(
+                f'Not enough free space for D3N cache on {mountpoint}: '
+                f'need {size_bytes} bytes, have {avail} bytes'
+            )
+
+    # Create per-daemon cache directory
+    os.makedirs(cache_path, mode=0o755, exist_ok=True)
+    call_throws(ctx, ['chown', '-R', f'{uid}:{gid}', cache_path])
+
+
+def _has_filesystem(ctx: CephadmContext, device: str) -> bool:
+    if not os.path.exists(device):
+        raise Error(f'D3N device does not exist: {device}')
+    out, _, code = call(ctx, ['blkid', '-o', 'value', '-s', 'TYPE', device])
+    return code == 0 and bool(out.strip())
+
+
+def _is_mountpoint(ctx: CephadmContext, path: str) -> bool:
+    out, err, code = call(
+        ctx,
+        ['findmnt', '-n', '-o', 'TARGET,SOURCE,FSTYPE', '--mountpoint', path],
+    )
+    logger.debug(
+        f'[D3N] _is_mountpoint({path}): code={code} out={out.strip()!r} err={err.strip()!r}'
+    )
+    return code == 0
+
+
+def _avail_bytes(ctx: CephadmContext, path: str) -> int:
+    out, _, code = call(ctx, ['df', '-B1', '--output=avail', path])
+    if code != 0:
+        raise Error(f'Failed to check free space for {path}')
+    lines = [line.strip() for line in out.splitlines() if line.strip()]
+    if len(lines) < 2:
+        raise Error(f'Unexpected df output for {path}: {out!r}')
+    logger.debug(f'[D3N] df avail bytes for {path}: {lines[1]!r}')
+
+    return int(lines[1])
 
 
 def deploy_daemon(
@@ -945,6 +1142,21 @@ def deploy_daemon(
         # dirs, conf, keyring
         create_daemon_dirs(ctx, ident, uid, gid, config, keyring)
 
+        if ident.daemon_type == 'rgw':
+            config_json = fetch_configs(ctx)
+            d3n_cache: Any = config_json.get('d3n_cache')
+
+            if d3n_cache:
+                try:
+                    d3n = D3NCache.from_json(d3n_cache)
+                except D3NCacheError as e:
+                    raise Error(str(e))
+                prepare_d3n_cache(ctx, d3n, uid, gid)
+                try:
+                    d3n_state(ctx, data_dir, D3NStateAction.WRITE, d3n, uid, gid)
+                except Exception as e:
+                    logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
+
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
     if deployment_type != DeploymentType.RECONFIG:
@@ -1015,10 +1227,18 @@ def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
             if p.is_dir():
                 cg_trim(p)
         path.rmdir()
-    try:
-        cg_trim(cg_path)
-    except OSError:
-        logger.warning(f'Failed to trim old cgroups {cg_path}')
+
+    for s in [0.5, 1.0, 2.0, False]:
+        try:
+            cg_trim(cg_path)
+        except OSError:
+            if not s:
+                logger.warning(f'Failed 4 times to trim old cgroups <{cg_path}>. Giving up!')
+            else:
+                logger.warning(f'Failed to trim old cgroups <{cg_path}>. Retrying in {s} seconds...')
+                time.sleep(s)
+        else:
+            break
 
 
 def deploy_daemon_units(
@@ -1057,6 +1277,17 @@ def deploy_daemon_units(
         post_stop_commands.append(
             CephIscsi.configfs_mount_umount(data_dir, mount=False)
         )
+    daemon = daemon_form_create(ctx, ident)
+    if ident.daemon_type == 'nvmeof':
+        hp = '4096'
+        files = getattr(daemon, 'files', None)
+        if isinstance(files, dict):
+            val = files.get('spdk_huge_pages')
+            if isinstance(val, int):
+                hp = str(val)
+            elif isinstance(val, str) and val.isdigit():
+                hp = val
+        pre_start_commands.append(f'/usr/sbin/sysctl -w vm.nr_hugepages={hp} || true\n')
 
     runscripts.write_service_scripts(
         ctx,
@@ -1071,7 +1302,7 @@ def deploy_daemon_units(
     )
 
     # sysctl
-    install_sysctl(ctx, ident.fsid, daemon_form_create(ctx, ident))
+    install_sysctl(ctx, ident.fsid, daemon)
 
     # systemd
     ic_ids = [
@@ -1820,7 +2051,7 @@ def _pull_image(ctx, image, insecure=False):
 @infer_image
 def command_inspect_image(ctx):
     # type: (CephadmContext) -> int
-    out, err, ret = call_throws(ctx, [
+    out, err, ret = call(ctx, [
         ctx.container_engine.path, 'inspect',
         '--format', '{{.ID}},{{.RepoDigests}}',
         ctx.image])
@@ -2806,8 +3037,8 @@ def command_bootstrap(ctx):
     if ctx.output_config == CEPH_DEFAULT_CONF and not ctx.skip_admin_label and not ctx.no_minimize_config:
         logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
         try:
-            cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
-            cli(['orch', 'host', 'label', 'add', get_hostname(), '_admin'])
+            cli(['orch', 'client-keyring', 'set', 'client.admin', f'label:{ADMIN_LABEL}'])
+            cli(['orch', 'host', 'label', 'add', get_hostname(), ADMIN_LABEL])
         except Exception:
             logger.info('Unable to set up "admin" label; assuming older version of Ceph')
 
@@ -3145,6 +3376,8 @@ def command_shell(ctx):
                 mounts[mount] = dst
             else:
                 mounts[mount] = '/mnt/{}'.format(filename)
+    if '/var/lib/ceph' not in mounts:
+        mounts['/var/lib/ceph'] = '/srv/ceph:ro,z'
     if ctx.command:
         command = ctx.command
     else:
@@ -3338,6 +3571,11 @@ def command_list_networks(ctx):
         return list(obj) if isinstance(obj, set) else obj
 
     print(json.dumps(r, indent=4, default=serialize_sets))
+
+
+def command_list_rdma(ctx: CephadmContext) -> None:
+    r = list_rdma(ctx)
+    print(json.dumps(r, indent=4))
 
 ##################################
 
@@ -3923,6 +4161,10 @@ def command_rm_daemon(ctx):
              verbosity=CallVerbosity.DEBUG)
 
     data_dir = ident.data_dir(ctx.data_dir)
+
+    if ident.daemon_type == 'rgw':
+        d3n_state(ctx, data_dir, action=D3NStateAction.CLEANUP)
+
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
         # rename it out of the way -- do not delete
@@ -4120,16 +4362,30 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
     # clean up config, keyring, and pub key files
     files = [CEPH_DEFAULT_CONF, CEPH_DEFAULT_PUBKEY, CEPH_DEFAULT_KEYRING]
-    if os.path.exists(files[0]):
-        valid_fsid = False
-        with open(files[0]) as f:
-            if ctx.fsid in f.read():
-                valid_fsid = True
-        if valid_fsid:
-            # rm configuration files on /etc/ceph
-            for n in range(0, len(files)):
-                if os.path.exists(files[n]):
-                    os.remove(files[n])
+    if not os.path.exists(files[0]):
+        return
+
+    if os.path.isdir(files[0]) and not os.listdir(files[0]):
+        # If ceph.conf is an empty directory, it's a leftover bind mount
+        # point from a container. Remove it and return - there's no config
+        # file to validate and no other files to clean up.
+        Path(files[0]).rmdir()
+        return
+
+    if not os.path.isfile(files[0]):
+        return
+
+    # Validate fsid from ceph.conf
+    with open(files[0]) as f:
+        if ctx.fsid not in f.read():
+            logger.warning('Cluster fsid %s does not match %s, '
+                           'leaving config files untouched',
+                           ctx.fsid, files[0])
+            return
+
+    # rm configuration files on /etc/ceph
+    for f in files:
+        Path(f).unlink(missing_ok=True)
 
 ##################################
 
@@ -4461,6 +4717,91 @@ def change_maintenance_mode(ctx: CephadmContext) -> str:
                     return f'success - systemd target {target} enabled and started'
         return f'success - systemd target {target} enabled and started'
 
+
+@infer_fsid
+@infer_image
+def command_cluster_shutdown(ctx: CephadmContext) -> int:
+    """Shut down the entire Ceph cluster in the correct order."""
+    try:
+        health_msg = validate_shutdown_preconditions(ctx)
+    except SystemExit:
+        return 0
+
+    info = gather_shutdown_info(ctx)
+    dry_run = ctx.dry_run
+
+    print_shutdown_plan(ctx, info, health_msg, dry_run)
+
+    ssh_key, flags_set = prepare_for_shutdown(ctx, info, dry_run)
+    stop_client_daemons(ctx, info, ssh_key, dry_run)
+
+    if not dry_run:
+        save_shutdown_state(ctx, info, flags_set)
+
+    failed_hosts = stop_all_hosts(ctx, info, ssh_key, dry_run)
+
+    if failed_hosts:
+        logger.error(f'Failed to stop hosts: {failed_hosts}')
+        if not ctx.force:
+            return 1
+
+    print_shutdown_complete(ctx, len(info['shutdown_order']), dry_run)
+    return 0
+
+
+@infer_fsid
+@infer_image
+def command_cluster_start(ctx: CephadmContext) -> int:
+    """Start the Ceph cluster after a shutdown."""
+    info = load_startup_info(ctx)
+    if not info:
+        return 0
+
+    if ctx.dry_run:
+        print_startup_plan(ctx, info)
+        return 0
+
+    ssh_key = get_cephadm_ssh_key(ctx)
+    if not ssh_key:
+        logger.warning('No cached SSH key found - remote operations may fail')
+
+    failed_hosts = start_all_hosts(ctx, info, ssh_key)
+
+    if not wait_for_cluster_ready(ctx):
+        return 1
+
+    restore_cluster_services(ctx, info['flags_set'])
+    cleanup_startup(ctx)
+    print_startup_complete(failed_hosts)
+
+    return 0 if not failed_hosts else 1
+
+
+@infer_fsid
+@infer_image
+def command_cluster_status(ctx: CephadmContext) -> int:
+    """Show cluster shutdown/startup status."""
+    if not ctx.fsid:
+        raise Error('Cannot determine FSID. Use --fsid to specify.')
+
+    current_host = get_hostname()
+
+    print_section_header('CLUSTER STATUS')
+    print(f'FSID: {ctx.fsid}')
+    print(f'Current host: {current_host}')
+
+    state = load_cluster_state(ctx.fsid)
+
+    if state:
+        print_cluster_status_shutdown(ctx, state, current_host)
+        result = 0
+    else:
+        result = print_cluster_status_running(ctx)
+
+    print_section_footer()
+    return result
+
+
 ##################################
 
 
@@ -4638,6 +4979,11 @@ def _get_parser():
         action='store_true',
         default=False,
         help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
+    parser.add_argument(
+        '--logging-level',
+        choices=['info', 'debug', 'error', 'warning'],
+        default='debug',
+        help='Tunable log level for cephadm binary: info, debug, error, warning (default: debug)')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -4683,6 +5029,10 @@ def _get_parser():
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')
     parser_list_networks.set_defaults(func=command_list_networks)
+
+    parser_list_rdma = subparsers.add_parser(
+        'list-rdma', help='list RDMA devices and their netdev interfaces')
+    parser_list_rdma.set_defaults(func=command_list_rdma)
 
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')
@@ -5277,6 +5627,48 @@ def _get_parser():
     parser_update_service.add_argument('--fsid', help='cluster FSID')
     parser_update_service.add_argument('--osd-ids', required=True, help='Comma-separated OSD IDs')
     parser_update_service.add_argument('--service-name', required=True, help='OSD service name')
+
+    parser_cluster_shutdown = subparsers.add_parser(
+        'cluster-shutdown', help='Shut down the entire Ceph cluster')
+    parser_cluster_shutdown.set_defaults(func=command_cluster_shutdown)
+    parser_cluster_shutdown.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_cluster_shutdown.add_argument(
+        '--force',
+        action='store_true',
+        help=argparse.SUPPRESS)  # Hidden option to bypass health checks
+    parser_cluster_shutdown.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be done without actually doing it')
+    parser_cluster_shutdown.add_argument(
+        '--yes-i-really-mean-it',
+        action='store_true',
+        help='Required flag to confirm cluster shutdown')
+
+    parser_cluster_start = subparsers.add_parser(
+        'cluster-start', help='Start the Ceph cluster after a shutdown')
+    parser_cluster_start.set_defaults(func=command_cluster_start)
+    parser_cluster_start.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_cluster_start.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be done without actually doing it')
+    parser_cluster_start.add_argument(
+        '--parallel',
+        type=int,
+        default=DEFAULT_PARALLEL_HOSTS,
+        help=f'Max hosts to start in parallel (default: {DEFAULT_PARALLEL_HOSTS})')
+
+    parser_cluster_status = subparsers.add_parser(
+        'cluster-status', help='Show cluster shutdown/startup status')
+    parser_cluster_status.set_defaults(func=command_cluster_status)
+    parser_cluster_status.add_argument(
+        '--fsid',
+        help='cluster FSID')
 
     return parser
 

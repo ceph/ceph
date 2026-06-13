@@ -50,6 +50,7 @@ private:
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
+  std::unique_ptr<ThreadMonitor> thread_monitor;
 
   PyThreadState *pMainThreadState;
 
@@ -64,6 +65,7 @@ private:
   std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
+  PyObject* process_obj = nullptr;
 
 public:
   void handle_config(const std::string &k, const std::string &v);
@@ -93,9 +95,13 @@ public:
   }
 
   explicit PyModuleRegistry(LogChannelRef clog_)
-    : clog(clog_)
-  {}
+    : clog(clog_),
+      thread_monitor(std::make_unique<ThreadMonitor>(g_ceph_context))
+  { }
 
+  ~PyModuleRegistry() {
+    thread_monitor->stop_monitoring();
+  }
   /**
    * @return true if the mgrmap has changed such that the service needs restart
    */
@@ -237,6 +243,19 @@ public:
   auto& get_active_module_finisher(const std::string &name) {
     ceph_assert(active_modules);
     return active_modules->get_module_finisher(name);
+  }
+
+  // Sends the "active" beacon right away if all mgr modules
+  // have finished startup. If some modules are still pending
+  // startup, the "active" beacon is scheduled to send later
+  // after all modules are ready.
+  // See "Mgr::background_init()".
+  void check_all_modules_started(Context *modules_start_complete);
+
+  // Return set of active modules where class instances are not yet created.
+  // Protected by const; we only want to view the contents- not modify anything.
+  const std::set<std::string, std::less<>>& get_pending_modules() const {
+    return active_modules->get_pending_modules();
   }
 
   // <<< (end of ActivePyModules cheeky call-throughs)

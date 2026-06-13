@@ -1,3 +1,10 @@
+teuthology:
+  postmerge:
+    - |
+      if not (yaml.os_type == "centos" and yaml.os_version == "9.stream") then
+        -- reject kclient distro overrides
+        reject()
+      end
 meta:
 - desc: |
    install ceph/squid v19.2.2

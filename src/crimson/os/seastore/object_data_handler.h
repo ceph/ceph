@@ -85,6 +85,9 @@ struct clone_range_t {
   laddr_t dest_base = L_ADDR_NULL;
   extent_len_t offset = 0;
   extent_len_t len = 0;
+  base_iertr::future<> refresh() {
+    first_src_mapping = co_await first_src_mapping.refresh();
+  }
 };
 std::ostream& operator<<(std::ostream &out, const clone_range_t &);
 
@@ -251,6 +254,13 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalChildNode(length) {}
 
+  void do_on_state_commit() final {
+    auto &prior = static_cast<ObjectDataBlock&>(*get_prior_instance());
+    prior.delta = std::move(delta);
+    prior.modified_region = std::move(modified_region);
+    prior.cached_overwrites = std::move(cached_overwrites);
+  }
+
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));
   };
@@ -284,7 +294,10 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     modified_region.clear();
   }
 
-  void prepare_commit() final {
+  void prepare_commit(Transaction &t) final {
+    if (is_rewrite_transaction(t.get_src())) {
+      return;
+    }
     if (has_mutation()) {
       ceph_assert(!cached_overwrites.is_empty());
       if (cached_overwrites.has_cached_bptr()) {
@@ -332,6 +345,10 @@ public:
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
   };
+
+  using touch_iertr = base_iertr;
+  using touch_ret = touch_iertr::future<>;
+  touch_ret touch(context_t ctx);
 
   /// Writes bl to [offset, offset + bl.length())
   using write_iertr = base_iertr;
@@ -398,6 +415,9 @@ public:
     extent_len_t len,
     extent_len_t destoff);
 
+  using rename_iertr = base_iertr;
+  using rename_ret = rename_iertr::future<>;
+  rename_ret rename(context_t ctx);
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
@@ -427,6 +447,7 @@ private:
   write_iertr::future<std::optional<LBAMapping>>
   prepare_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 

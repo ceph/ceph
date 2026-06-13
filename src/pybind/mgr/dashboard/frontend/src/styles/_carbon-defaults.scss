@@ -182,40 +182,6 @@ Breadcrumbs
 }
 
 /******************************************
-Modals
-******************************************/
-.cds--modal-container {
-  background-color: colors.$gray-10;
-
-  .cds--modal-close {
-    background-color: transparent;
-
-    &:hover {
-      background-color: colors.$gray-10-hover;
-    }
-
-    &:focus,
-    &:active {
-      background-color: transparent;
-    }
-  }
-
-  .cds--modal-scroll-content {
-    max-height: 70vh;
-    overflow-y: auto;
-  }
-}
-
-/******************************************
-Dashboard page
-******************************************/
-// keeping this on 12px for now until we have responsive design
-// based on carbon
-cd-dashboard {
-  font-size: 12px;
-}
-
-/******************************************
 Code snippet
 ******************************************/
 
@@ -224,39 +190,14 @@ Code snippet
 }
 
 /******************************************
-Tooltip
-******************************************/
-.cds--tooltip-content {
-  background-color: theme.$layer-02;
-}
-
-/******************************************
-Carbon Popover
-******************************************/
-.cds--popover {
-  .cds--popover-caret {
-    background-color: theme.$background;
-  }
-}
-
-.cds--popover-content {
-  background-color: theme.$background;
-  padding: layout.$spacing-05;
-}
-
-// inner container class for overflow
-.cds--popover-scroll-container {
-  max-height: layout.$spacing-13;
-  overflow-y: auto;
-  margin-right: -1rem;
-  padding-right: 1rem;
-}
-
-/******************************************
 Tabs
 ******************************************/
 .cds--tab-content {
-  background: var(--cds-layer-01);
+  padding: 0;
+}
+
+.cds--data-table-container {
+  padding: 0;
 }
 
 .cds-success-color {
@@ -291,10 +232,23 @@ Tabs
   width: layout.$spacing-10;
 }
 
-.cds-mb-4 {
-  margin-bottom: layout.$spacing-02;
-}
-
 .cds--text-truncate--end {
   @include textTruncate.text-truncate-end;
+}
+
+/******************************************
+Modals
+******************************************/
+
+/* Temporary workaround for Carbon modal form field background bug.
+ https://github.com/carbon-design-system/carbon-components-angular/issues/3340
+ */
+.cds--modal {
+  .cds--select-input,
+  .cds--text-input,
+  .cds--list-box,
+  .cds--number input[type='number'],
+  .cds--text-area {
+    background-color: var(--cds-layer-02);
+  }
 }

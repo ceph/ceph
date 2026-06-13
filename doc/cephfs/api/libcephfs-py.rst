@@ -4,7 +4,7 @@
 
 .. highlight:: python
 
-The `cephfs` python module provides access to CephFS service.
+The `cephfs` Python module provides access to the CephFS service.
 
 API calls
 =========

@@ -464,6 +464,47 @@ private:
   RadosTestContext *context;
 };
 
+void usage(const char *prog)
+{
+  cout << "Usage: " << prog << std::endl;
+  cout << "        --op <read|write|write_excl|writesame|delete|snap_create|snap_remove|" << std::endl;
+  cout << "              rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|" << std::endl;
+  cout << "              undirty|cache_flush|cache_try_flush|cache_evict|append|append_excl|" << std::endl;
+  cout << "              set_redirect|unset_redirect|chunk_read|tier_promote|tier_flush|" << std::endl;
+  cout << "              set_chunk|tier_evict> <weight>" << std::endl;
+  cout << "        [--op <operation_type> <weight> ...]" << std::endl;
+  cout << "        [--pool <pool_name>]" << std::endl;
+  cout << "        [--max-ops <op_count>]" << std::endl;
+  cout << "        [--objects <object_count>]" << std::endl;
+  cout << "        [--max-in-flight <max_concurrent>]" << std::endl;
+  cout << "        [--size <max_size_bytes>]" << std::endl;
+  cout << "        [--min-stride-size <bytes>]" << std::endl;
+  cout << "        [--max-stride-size <bytes>]" << std::endl;
+  cout << "        [--max-seconds <seconds>]" << std::endl;
+  cout << "        [--ec-pool]" << std::endl;
+  cout << "        [--no-omap]" << std::endl;
+  cout << "        [--no-sparse]" << std::endl;
+  cout << "        [--pool-snaps]" << std::endl;
+  cout << "        [--balance-reads]" << std::endl;
+  cout << "        [--localize-reads]" << std::endl;
+  cout << "        [--offlen_randomization_ratio <0-100>]" << std::endl;
+  cout << "        [--write-fadvise-dontneed]" << std::endl;
+  cout << "        [--max-attr-len <bytes>]" << std::endl;
+  cout << "        [--set_redirect]" << std::endl;
+  cout << "        [--set_chunk]" << std::endl;
+  cout << "        [--low_tier_pool <pool_name>]" << std::endl;
+  cout << "        [--enable_dedup]" << std::endl;
+  cout << "        [--dedup_chunk_algo <fastcdc|fixcdc>]" << std::endl;
+  cout << "        [--dedup_chunk_size <bytes>]" << std::endl;
+  cout << "        [--timestamps]" << std::endl;
+  cout << std::endl;
+  cout << "Model-based RADOS integration stress test. Verifies data correctness by" << std::endl;
+  cout << "comparing object data and metadata returned by RADOS against an in-memory model." << std::endl;
+  cout << std::endl;
+  cout << "At least one --op with a positive weight is required." << std::endl;
+  cout << "See doc/dev/osd_internals/ceph_test_rados.rst for full documentation." << std::endl;
+}
+
 int main(int argc, char **argv)
 {
   int ops = 1000;
@@ -536,7 +577,10 @@ int main(int argc, char **argv)
 
 
   for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--max-ops") == 0)
+    if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+      usage(argv[0]);
+      exit(0);
+    } else if (strcmp(argv[i], "--max-ops") == 0)
       ops = atoi(argv[++i]);
     else if (strcmp(argv[i], "--pool") == 0)
       pool_name = argv[++i];
@@ -645,6 +689,7 @@ int main(int argc, char **argv)
       timestamp = true;
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
+      usage(argv[0]);
       exit(1);
     }
   }

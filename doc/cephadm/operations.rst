@@ -67,7 +67,146 @@ You can also do the same for all daemons for a service with:
     cases even data loss.
 
 
-Redeploying or Reconfiguring a Daemon
+Cluster-wide shutdown and startup
+----------------------------------
+
+Cephadm provides commands to gracefully shut down and start up an entire Ceph
+cluster. This is useful for planned maintenance such as datacenter power-downs,
+hardware upgrades, or disaster recovery scenarios.
+
+.. warning::
+
+   These commands will stop **all** Ceph services across **all** hosts in the
+   cluster. Ensure all clients have unmounted CephFS filesystems and disconnected
+   from RBD images and RGW before proceeding.
+
+Shutting down the cluster
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To shut down the entire cluster, run the following command from the admin host:
+
+.. prompt:: bash #
+
+   cephadm cluster-shutdown --fsid <fsid> --yes-i-really-mean-it
+
+The ``--yes-i-really-mean-it`` flag is required to confirm the operation.
+
+You can preview what would happen without making changes by using the dry-run mode:
+
+.. prompt:: bash #
+
+   cephadm cluster-shutdown --fsid <fsid> --dry-run
+
+The shutdown process performs the following steps in order:
+
+1. Checks cluster health and warns if the cluster is not healthy
+2. Pauses the cephadm orchestrator to prevent daemon restarts
+3. Sets the OSD ``noout`` flag to prevent rebalancing on startup
+4. Fails all CephFS filesystems to prevent client I/O
+5. Stops client-facing daemons (MDS, NFS, RGW, iSCSI)
+6. Saves cluster state to a local file for later startup
+7. Stops all hosts sequentially (admin host last)
+
+The cluster state is saved to ``/var/lib/ceph/<fsid>/cluster-shutdown-state.json``
+on the admin host. This file is required for the startup process.
+
+.. note::
+
+   During shutdown, the cephadm SSH private key is retrieved from the cluster
+   and cached locally on the admin host. This is necessary because the cluster
+   (and its key store) will be unavailable during startup. The cached key is
+   stored with restricted permissions (0600) and is automatically removed after
+   a successful cluster startup.
+
+If the cluster health check fails but you still want to proceed, you can use
+the ``--force`` flag:
+
+.. prompt:: bash #
+
+   cephadm cluster-shutdown --fsid <fsid> --yes-i-really-mean-it --force
+
+.. danger::
+
+   Using ``--force`` to shut down an unhealthy cluster is **dangerous** and may
+   result in data loss. The cluster may not be able to recover properly on
+   startup if there are degraded or undersized placement groups. Only use this
+   option in emergency situations when you fully understand the risks and have
+   verified that your data is safely replicated or backed up.
+
+Starting the cluster
+~~~~~~~~~~~~~~~~~~~~
+
+To start a previously shut-down cluster, run the following command from the
+admin host:
+
+.. prompt:: bash #
+
+   cephadm cluster-start --fsid <fsid>
+
+You can preview what would happen without making changes:
+
+.. prompt:: bash #
+
+   cephadm cluster-start --fsid <fsid> --dry-run
+
+The startup process performs the following steps:
+
+1. Loads the saved cluster state from the shutdown state file
+2. Starts all hosts in parallel (configurable)
+3. Waits for the cluster to become accessible
+4. Waits for all placement groups to become ``active+clean``
+5. Unsets the OSD ``noout`` flag
+6. Sets CephFS filesystems back to joinable
+7. Resumes the cephadm orchestrator
+8. Cleans up the state file
+
+By default, up to 5 hosts are started in parallel. You can adjust this with
+the ``--parallel`` option:
+
+.. prompt:: bash #
+
+   cephadm cluster-start --fsid <fsid> --parallel 10
+
+Checking cluster status
+~~~~~~~~~~~~~~~~~~~~~~~
+
+To check whether a cluster is in a shutdown state or running normally:
+
+.. prompt:: bash #
+
+   cephadm cluster-status --fsid <fsid>
+
+This command displays:
+
+- Whether a shutdown state file exists and when the shutdown occurred
+- The list of hosts and their status
+- Current cluster health (if the cluster is running)
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+
+**Stale state file**: If you believe the cluster is actually running but a
+state file exists from a previous incomplete operation, you can rename or
+remove the state file and retry:
+
+.. prompt:: bash #
+
+   mv /var/lib/ceph/<fsid>/cluster-shutdown-state.json /var/lib/ceph/<fsid>/cluster-shutdown-state.json.bak
+
+**Hosts fail to start**: If some hosts fail to start, check:
+
+- SSH connectivity from the admin host to the failed hosts
+- That the ``ceph.target`` systemd unit exists on those hosts
+- System logs on the failed hosts (``journalctl -u ceph.target``)
+
+**Cluster not becoming healthy after startup**: After startup, if PGs don't
+become ``active+clean``, check:
+
+- That all OSDs have started (``ceph osd tree``)
+- OSD logs for errors (``journalctl -u ceph-<fsid>@osd.*``)
+- That the ``noout`` flag has been cleared (``ceph osd dump | grep flags``)
+
+Redeploying or reconfiguring a daemon
 -------------------------------------
 
 The container for a daemon can be stopped, recreated, and restarted with
@@ -90,8 +229,8 @@ file but will not trigger a restart of the daemon.
    ceph orch daemon reconfig <name>
 
 
-Rotating a Daemon's Authenticate Key
-------------------------------------
+Rotating a Daemon's Authentication Key
+--------------------------------------
 
 All Ceph and gateway daemons in the cluster have a secret key that is used to connect
 to and authenticate with the cluster.  This key can be rotated (i.e., replaced with a
@@ -254,11 +393,39 @@ For example:
    ``--log-dest`` options described in the bootstrap section above.
 
 
+Setting Cephadm Log Verbosity
+-----------------------------
+
+The verbosity of cephadm's persistent logging (``/var/log/ceph/cephadm.log``
+and syslog, when enabled) can be controlled separately from its terminal
+output. Valid levels are ``info``, ``debug``, ``error``, and ``warning``.
+The default is ``debug``.
+
+When the cephadm orchestration module runs ``cephadm`` on cluster hosts, it
+uses the :confval:`mgr/cephadm/cephadm_binary_logging_level` configuration
+value:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/cephadm_binary_logging_level info
+
+For manual invocations, pass ``--logging-level`` on the command line:
+
+.. prompt:: bash #
+
+  cephadm --logging-level info check-host
+
+.. note:: The logging level applies only to persistent log destinations
+   (the log file and syslog). Console output during bootstrap and other
+   interactive use is unchanged. When you run ``cephadm`` directly, the
+   mgr configuration does not apply; use ``--logging-level`` as shown above.
+
+
 Data Location
 =============
 
 Cephadm stores daemon data and logs in different locations than did
-older, pre-cephadm (pre Octopus) versions of Ceph:
+older, pre-cephadm (pre-Octopus) versions of Ceph:
 
 * ``/var/log/ceph/<cluster-fsid>`` contains all cluster logs. By
   default, cephadm logs via stderr and the container runtime. These
@@ -355,7 +522,7 @@ means that those services cannot currently be managed by cephadm
 ``CEPHADM_STRAY_DAEMON``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-One or more Ceph daemons are running but not are not managed by
+One or more Ceph daemons are running but are not managed by
 *cephadm*.  This may be because they were deployed using a different
 tool, or because they were started manually.  Those
 services cannot currently be managed by cephadm (e.g., restarted,
@@ -424,7 +591,7 @@ Cluster Configuration Checks
 ----------------------------
 
 Cephadm periodically scans each host in the cluster in order
-to understand the state of the OS, disks, network interfacess etc. This information can
+to understand the state of the OS, disks, network interfaces etc. This information can
 then be analyzed for consistency across the hosts in the cluster to
 identify any configuration anomalies.
 

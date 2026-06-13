@@ -7,14 +7,14 @@ so that ``ceph-volume`` can manage it without the need of any other startup
 workflows or tools (like ``udev`` or ``ceph-disk``). Encryption with LUKS or
 PLAIN formats is fully supported.
 
-The command has the ability to inspect a running OSD, by inspecting the
+The command has the ability to inspect a running OSD by inspecting the
 directory where the OSD data is stored, or by consuming the data partition.
 The command can also scan all running OSDs if no path or device is provided.
 
 Once scanned, information will (by default) persist the metadata as JSON in
 a file in ``/etc/ceph/osd``. This ``JSON`` file will use the naming convention
-of: ``{OSD ID}-{OSD FSID}.json``. An OSD with an id of 1, and an FSID like
-``86ebd829-1405-43d3-8fd6-4cbc9b6ecf96`` the absolute path of the file would
+of: ``<OSD ID>-<OSD FSID>.json``. For an OSD with an ID of 1 and an FSID like
+``86ebd829-1405-43d3-8fd6-4cbc9b6ecf96``, the absolute path of the file would
 be::
 
     /etc/ceph/osd/1-86ebd829-1405-43d3-8fd6-4cbc9b6ecf96.json
@@ -22,12 +22,12 @@ be::
 The ``scan`` subcommand will refuse to write to this file if it already exists.
 If overwriting the contents is needed, the ``--force`` flag must be used::
 
-    ceph-volume simple scan --force {path}
+    ceph-volume simple scan --force <path>
 
 If there is no need to persist the ``JSON`` metadata, there is support to send
 the contents to ``stdout`` (no file will be written)::
 
-    ceph-volume simple scan --stdout {path}
+    ceph-volume simple scan --stdout <path>
 
 
 .. _ceph-volume-simple-scan-directory:
@@ -36,7 +36,7 @@ Running OSDs scan
 -----------------
 Using this command without providing an OSD directory or device will scan the
 directories of any currently running OSDs. If a running OSD was not created
-by ceph-disk it will be ignored and not scanned.
+by ceph-disk, it will be ignored and not scanned.
 
 To scan all running ceph-disk OSDs, the command would look like::
 
@@ -85,7 +85,7 @@ Would get stored as::
 For a directory like ``/var/lib/ceph/osd/ceph-1``, the command could look
 like::
 
-    ceph-volume simple scan /var/lib/ceph/osd/ceph1
+    ceph-volume simple scan /var/lib/ceph/osd/ceph-1
 
 
 .. _ceph-volume-simple-scan-device:
@@ -99,7 +99,7 @@ still require a few files present. This means that the device to be scanned
 **must be** the data partition of the OSD.
 
 As long as the data partition of the OSD is being passed in as an argument, the
-sub-command can scan its contents.
+subcommand can scan its contents.
 
 In the case where the device is already mounted, the tool can detect this
 scenario and capture file contents from that directory.
@@ -121,7 +121,7 @@ could look like::
 The contents of the JSON object is very simple. The scan not only will persist
 information from the special OSD files and their contents, but will also
 validate paths and device UUIDs. Unlike what ``ceph-disk`` would do, by storing
-them in ``{device type}_uuid`` files, the tool will persist them as part of the
+them in ``<device type>_uuid`` files, the tool will persist them as part of the
 device type key.
 
 For example, a ``block.db`` device would look something like::
@@ -138,12 +138,12 @@ But it will also persist the ``ceph-disk`` special file generated, like so::
 This duplication is in place because the tool is trying to ensure the
 following:
 
-# Support OSDs that may not have ceph-disk special files
-# Check the most up-to-date information on the device, by querying against LVM
-and ``blkid``
-# Support both logical volumes and GPT devices
+#. Support OSDs that may not have ceph-disk special files
+#. Check the most up-to-date information on the device, by querying against LVM
+   and ``blkid``
+#. Support both logical volumes and GPT devices
 
-This is a sample ``JSON`` metadata, from an OSD that is using ``bluestore``::
+This is a sample ``JSON`` metadata, from an OSD that is using BlueStore::
 
     {
         "active": "ok",

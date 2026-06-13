@@ -15,10 +15,12 @@
 
 #include "Paxos.h"
 #include "Monitor.h"
+#include "MonMap.h"
 #include "messages/MMonPaxos.h"
 
 #include "mon/mon_types.h"
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "common/Timer.h"

@@ -38,8 +38,10 @@
 
 #include "MgrContext.h"
 #include "DaemonServer.h"
+#include "JSONCommand.h"
 #include "PyModule.h"
 #include "Mgr.h"
+#include "DaemonHealthMetric.h" // for accessing DaemonState::daemon_health_metrics
 
 #include <sstream>
 
@@ -70,7 +72,8 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   clog(clog_),
   audit_clog(audit_clog_),
   initialized(false),
-  initializing(false)
+  initializing(false),
+  initialization_start_time(ceph::coarse_mono_clock::zero())
 {
   cluster_state.set_objecter(objecter);
 }
@@ -168,12 +171,21 @@ void Mgr::background_init(Context *completion)
   ceph_assert(!initializing);
   ceph_assert(!initialized);
   initializing = true;
+  initialization_start_time = ceph::coarse_mono_clock::now();
 
   finisher.start();
 
   finisher.queue(new LambdaContext([this, completion](int r){
     init();
-    completion->complete(0);
+    py_module_registry->check_all_modules_started(
+	new LambdaContext([this, completion](int){
+	  {
+	    std::lock_guard l(lock);
+	    initializing = false;
+	    initialized = true;
+	  }
+	completion->complete(0);
+      }));
   }));
 }
 
@@ -391,8 +403,6 @@ void Mgr::init()
 #endif
 
   dout(4) << "Complete." << dendl;
-  initializing = false;
-  initialized = true;
 }
 
 void Mgr::load_all_metadata()
@@ -612,10 +622,12 @@ Dispatcher::dispatch_result_t Mgr::ms_dispatch2(const ref_t<Message>& m)
     case CEPH_MSG_FS_MAP:
       handle_fs_map(ref_cast<MFSMap>(m));
       py_module_registry->notify_all("fs_map", "");
+      py_module_registry->notify_all("mds_metadata", "");
       return Dispatcher::ACKNOWLEDGED();
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
       py_module_registry->notify_all("osd_map", "");
+      py_module_registry->notify_all("osd_metadata", "");
 
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
@@ -752,6 +764,7 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   cluster_state.with_mgrmap([&](const MgrMap& m) {
       old_modules = m.modules;
     });
+  py_module_registry->notify_all("mgr_map", "");
   if (m.modules != old_modules) {
     derr << "mgrmap module list changed to (" << m.modules << "), respawn"
 	 << dendl;
@@ -764,17 +777,45 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   return false;
 }
 
+bool Mgr::exceeded_initialization_expiration()
+{
+  // initialization_start_time=0 when initialization hasn't started yet,
+  // so know we can't have exceeded the time expiration.
+  if (ceph::coarse_mono_clock::is_zero(initialization_start_time)) {
+    return false;
+  }
+
+  // Save the amount of time elapsed
+  auto time_elapsed = ceph::coarse_mono_clock::now() - initialization_start_time;
+  dout(20) << "time elapsed since mgr initialization: " << time_elapsed << dendl;
+
+  // Reset start time if the expiration time has been exceeded.
+  // Signal initialization=true so the mgr forcibly sends an "active" beacon
+  auto expiration = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_expiration");
+  bool exceeded_expiration = time_elapsed > expiration;
+  if (exceeded_expiration) {
+    std::lock_guard l(lock);
+    initialization_start_time = ceph::coarse_mono_clock::zero();
+    initializing = false;
+    initialized = true;
+  }
+
+  return exceeded_expiration;
+}
+
 void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
 {
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
   cluster_state.load_digest(m.get());
-  //no users: py_module_registry->notify_all("mon_status", "");
+  py_module_registry->notify_all("mon_status", "");
   py_module_registry->notify_all("health", "");
 
   // Hack: use this as a tick/opportunity to prompt python-land that
   // the pgmap might have changed since last time we were here.
   py_module_registry->notify_all("pg_summary", "");
+  py_module_registry->notify_all("pg_stats", "");
+  py_module_registry->notify_all("pg_dump", "");
   dout(10) << "done." << dendl;
   m.reset();
 
@@ -802,12 +843,19 @@ int Mgr::call(
   try {
     if (admin_command == "mgr_status") {
       f->open_object_section("mgr_status");
-      cluster_state.with_mgrmap(
-	[f](const MgrMap& mm) {
-	  f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
-	});
-      f->dump_bool("initialized", initialized);
+      {
+	cluster_state.with_mgrmap(
+	    [f](const MgrMap& mm) {
+	    f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
+	    });
+        f->dump_bool("initialized", initialized);
+	f->open_array_section("pending_modules");
+        for (auto& mod : py_module_registry->get_pending_modules()) {
+          f->dump_string("module", mod);
+        }
+        f->close_section();
       f->close_section();
+      }
       return 0;
     } else {
       return -ENOSYS;

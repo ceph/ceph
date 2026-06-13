@@ -28,10 +28,12 @@ import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 import { HealthCardTabSection, HealthCardVM } from '~/app/shared/models/overview';
 import { HardwareService } from '~/app/shared/api/hardware.service';
+import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
+import { GaugeChartComponent } from '@carbon/charts-angular';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -67,7 +69,8 @@ type HwRowVM = {
     PipesModule,
     TooltipModule,
     TabsModule,
-    LayoutModule
+    LayoutModule,
+    GaugeChartComponent
   ],
   standalone: true,
   templateUrl: './overview-health-card.component.html',
@@ -78,6 +81,7 @@ type HwRowVM = {
 export class OverviewHealthCardComponent {
   private readonly summaryService = inject(SummaryService);
   private readonly upgradeService = inject(UpgradeService);
+  private readonly healthService = inject(HealthService);
   private readonly hardwareService = inject(HardwareService);
   private readonly mgrModuleService = inject(MgrModuleService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
@@ -85,9 +89,10 @@ export class OverviewHealthCardComponent {
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
+  @Output() viewPGStates = new EventEmitter<void>();
   @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
 
-  activeSection: HealthCardTabSection | null = null;
+  activeSection: HealthCardTabSection | null;
 
   healthItems: HealthItemConfig[] = [
     { key: 'mon', label: $localize`Monitor` },
@@ -101,19 +106,25 @@ export class OverviewHealthCardComponent {
     this.activeSectionChange.emit(this.activeSection);
   }
 
-  readonly data$: Observable<OverviewHealthData> = combineLatest([
-    this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
-    this.upgradeService.listCached().pipe(
-      startWith(null as UpgradeInfoInterface | null),
-      catchError(() => of(null))
-    )
-  ]).pipe(map(([summary, upgrade]) => ({ summary, upgrade })));
-
   onViewIncidentsClick() {
     this.viewIncidents.emit();
   }
 
+  onViewPGStatesClick() {
+    this.viewPGStates.emit();
+  }
+
   private readonly permissions = this.authStorageService.getPermissions();
+
+  readonly data$: Observable<OverviewHealthData> = combineLatest([
+    this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
+    this.permissions?.configOpt?.read
+      ? this.upgradeService.listCached().pipe(
+          startWith(null as UpgradeInfoInterface | null),
+          catchError(() => of(null))
+        )
+      : of(null)
+  ]).pipe(map(([summary, upgrade]) => ({ summary, upgrade })));
 
   readonly enabled$: Observable<boolean> = this.permissions?.configOpt?.read
     ? this.mgrModuleService.getConfig('cephadm').pipe(
@@ -147,6 +158,12 @@ export class OverviewHealthCardComponent {
         error: Number(category?.[key]?.error ?? 0)
       }));
     }),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly telemetryEnabled$: Observable<boolean> = this.healthService.getTelemetryStatus().pipe(
+    map((enabled: any) => !!enabled),
+    catchError(() => of(false)),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 

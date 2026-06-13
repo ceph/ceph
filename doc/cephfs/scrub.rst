@@ -29,7 +29,7 @@ To start a scrub operation for a directory tree, run a command of the following 
 
    ceph tell mds.<fsname>:0 scrub start <path> [scrubopts] [tag]
 
-where ``scrubopts`` is a comma delimited list of ``recursive``, ``force``, or
+where ``scrubopts`` is a comma-delimited list of ``recursive``, ``force``, or
 ``repair`` and ``tag`` is an optional custom string tag (the default is a generated
 UUID). An example command is::
 
@@ -73,7 +73,7 @@ with the path and options used to initiate the scrub::
    }
 
 ``status`` shows the number of inodes that are scheduled to be scrubbed at any point in time.
-Hence, it can change on subsequent ``scrub status`` invocations. Also, a high level summary of
+Hence, it can change on subsequent ``scrub status`` invocations. Also, a high-level summary of
 scrub operation (which includes the operation state and paths on which scrub is triggered)
 gets displayed in ``ceph status``::
 
@@ -146,7 +146,7 @@ The types of damage that can be reported and repaired by File System Scrub are:
 
 These above named MDS damage types can be repaired by running a command of the following form::
 
-    ceph tell mds.<fsname>:0 scrub start /path recursive, repair, force
+    ceph tell mds.<fsname>:0 scrub start /path recursive,repair,force
 
 If scrub is able to repair the damage, the corresponding entry is automatically
 removed from the damage table.

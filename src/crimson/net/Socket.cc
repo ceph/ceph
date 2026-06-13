@@ -7,6 +7,7 @@
 #include <seastar/core/when_all.hh>
 #include <seastar/net/packet.hh>
 
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "Errors.h"

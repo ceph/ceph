@@ -50,7 +50,7 @@ Enabling CephX
 
 When CephX is enabled, Ceph will look for the keyring in the default search
 path: this path includes ``/etc/ceph/$cluster.$name.keyring``. It is possible
-to override this search-path location by adding a ``keyring`` option in the
+to override this search path location by adding a ``keyring`` option in the
 ``[global]`` section of your :ref:`Ceph configuration <configuring-ceph>`
 file, but this is not recommended.
 
@@ -281,7 +281,7 @@ daemon to function are shown below.
 .. note:: The monitor keyring (that is, ``mon.``) contains a key but no
    capabilities, and this keyring is not part of the cluster ``auth`` database.
 
-The daemon's data-directory locations default to directories of the form::
+The daemon's data directory locations default to directories of the form::
 
   /var/lib/ceph/$type/$cluster-$id
 
@@ -305,7 +305,7 @@ As with other parts of Ceph authentication, signatures admit of fine-grained
 control.  You can enable or disable signatures for service messages between
 clients and Ceph, and for messages between Ceph daemons.
 
-Note that even when signatures are enabled data is not encrypted in flight.
+Note that even when signatures are enabled, data is not encrypted in flight.
 
 ``cephx_require_signatures``
 

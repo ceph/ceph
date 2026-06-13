@@ -32,9 +32,10 @@ class TestMultiFS(CephFSTestCase):
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
-        self.run_ceph_cmd(f'auth caps client.{self.mount_b.client_id} mon '
-                          f'"allow r" osd "allow rw '
-                          f'pool={self.fs2.get_data_pool_name()}" mds allow')
+        self.run_ceph_cmd(f'auth caps client.{self.mount_b.client_id}'
+                           ' mon "allow r"'
+                          f' osd "allow rw tag cephfs data={self.fs2.name}"'
+                           ' mds "allow"')
         self.mount_b.remount(cephfs_name=self.fs2.name)
 
 

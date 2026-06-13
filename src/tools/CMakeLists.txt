@@ -37,10 +37,6 @@ add_executable(ceph_scratchtoolpp scratchtoolpp.cc)
 target_link_libraries(ceph_scratchtoolpp librados global)
 install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
-add_executable(ceph_radosacl radosacl.cc)
-target_link_libraries(ceph_radosacl librados global)
-install(TARGETS ceph_radosacl DESTINATION bin)
-
 install(PROGRAMS
   ceph-monstore-update-crush.sh
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
@@ -48,7 +44,6 @@ endif(WITH_TESTS)
 
 add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc
-  ../auth/cephx/CephxKeyServer.cc
   ../mgr/mgr_commands.cc)
 target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)

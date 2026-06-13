@@ -1,11 +1,18 @@
 import json
+import logging
 from unittest import mock
 
 import pytest
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
-from cephadm.upgrade import CephadmUpgrade, UpgradeState
+from cephadm.upgrade import (
+    CephadmUpgrade,
+    OkToUpgradeMonReport,
+    UpgradeState,
+    parse_ok_to_upgrade_mon_json,
+    request_osd_ok_to_upgrade_report,
+)
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
@@ -34,6 +41,39 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
 
                 assert wait(cephadm_module, cephadm_module.upgrade_stop()
                             ) == 'Stopped upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_hosts_mutually_exclusive_with_bucket(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with pytest.raises(OrchestratorError) as err:
+                    cephadm_module.upgrade_start(
+                        'image_id', None,
+                        daemon_types=['osd'],
+                        host_placement='test',
+                        bucket_type='rack',
+                        bucket_name='rack-a',
+                    )
+                assert str(err.value) == '--hosts cannot be combined with --crush_bucket_type or --crush_bucket_name'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_services_mutually_exclusive_with_bucket(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with pytest.raises(OrchestratorError) as err:
+                    cephadm_module.upgrade_start(
+                        'image_id', None,
+                        services=['mgr'],
+                        bucket_type='rack',
+                        bucket_name='rack-a',
+                    )
+                assert str(err.value) == (
+                    '--services cannot be combined with --crush_bucket_type or '
+                    '--crush_bucket_name')
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -196,6 +236,515 @@ def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
     cephadm_module.set_store('upgrade_state', 'null')
     CephadmUpgrade(cephadm_module)
     assert CephadmUpgrade(cephadm_module).upgrade_state is None
+
+
+def test_upgrade_state_crush_roundtrip():
+    u = UpgradeState(
+        'target', 'pid', crush_bucket_type='rack', crush_bucket_name='rack1')
+    restored = UpgradeState.from_json(u.to_json())
+    assert restored
+    assert restored.crush_bucket_type == 'rack'
+    assert restored.crush_bucket_name == 'rack1'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_status_which_crush_osd_only(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch.object(cephadm_module.upgrade, '_get_upgrade_info', return_value=('0/0', [])):
+        status = wait(cephadm_module, cephadm_module.upgrade_status())
+    assert status.which == 'Upgrading daemons of type(s) osd (OSDs in bucket scope)'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_status_which_crush_osd_only_uppercase(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        daemon_types=['OSD'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch.object(cephadm_module.upgrade, '_get_upgrade_info', return_value=('0/0', [])):
+        status = wait(cephadm_module, cephadm_module.upgrade_status())
+    assert status.which == 'Upgrading daemons of type(s) OSD (OSDs in bucket scope)'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_status_which_crush_mixed_daemon_types(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        daemon_types=['mon', 'osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch.object(cephadm_module.upgrade, '_get_upgrade_info', return_value=('0/0', [])):
+        status = wait(cephadm_module, cephadm_module.upgrade_status())
+    assert status.which == (
+        'Upgrading daemons of type(s) mon,osd (OSDs in bucket scope)')
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_status_which_full_cluster_with_crush_bucket(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch.object(cephadm_module.upgrade, '_get_upgrade_info', return_value=('0/0', [])):
+        status = wait(cephadm_module, cephadm_module.upgrade_status())
+    assert status.which == 'Upgrading all daemon types on all hosts'
+
+
+def test_parse_ok_to_upgrade_mon_json_nested_and_flat():
+    nested = '{"ok_to_upgrade": {"ok_to_upgrade": true, "all_osds_upgraded": false}}'
+    inner = parse_ok_to_upgrade_mon_json(nested)
+    assert inner['ok_to_upgrade'] is True
+    flat = '{"ok_to_upgrade": true}'
+    d = parse_ok_to_upgrade_mon_json(flat)
+    assert d['ok_to_upgrade'] is True
+
+
+def test_ok_to_upgrade_mon_report_from_parsed_body():
+    rep = OkToUpgradeMonReport.from_parsed_body({
+        'ok_to_upgrade': True,
+        'all_osds_upgraded': False,
+        'osds_ok_to_upgrade': [0, 1],
+        'osds_in_crush_bucket': [2, 3],
+        'osds_upgraded': [4],
+        'bad_no_version': [5],
+    })
+    assert rep.ok_to_upgrade is True
+    assert rep.all_osds_upgraded is False
+    assert rep.osds_ok_to_upgrade == [0, 1]
+    assert rep.osds_in_crush_bucket == [2, 3]
+    assert rep.osds_upgraded == [4]
+    assert rep.bad_no_version == [5]
+    assert rep.mon_resp_as_dict()['bad_no_version'] == [5]
+
+
+def test_ok_to_upgrade_mon_report_non_list_osd_array_becomes_empty(caplog):
+    caplog.set_level(logging.WARNING, logger='cephadm.upgrade')
+    rep = OkToUpgradeMonReport.from_parsed_body({
+        'ok_to_upgrade': True,
+        'all_osds_upgraded': False,
+        'osds_ok_to_upgrade': 'not-a-list',
+    })
+    assert rep.osds_ok_to_upgrade == []
+    assert any(
+        'expected list of osd ids' in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_ok_to_upgrade_mon_report_matches_mgr_json_formatter_shape():
+    """
+    Shape produced by upgrade_osd_report::dump + JSONFormatter (DaemonServer):
+    array sections are bare int lists, not objects per element.
+    """
+    mon_stdout = (
+        '{"ok_to_upgrade":{'
+        '"ok_to_upgrade":true,'
+        '"all_osds_upgraded":false,'
+        '"osds_in_crush_bucket":[10,11],'
+        '"osds_ok_to_upgrade":[10],'
+        '"osds_upgraded":[],'
+        '"bad_no_version":[]'
+        '}}'
+    )
+    body = parse_ok_to_upgrade_mon_json(mon_stdout)
+    rep = OkToUpgradeMonReport.from_parsed_body(body)
+    assert rep.ok_to_upgrade is True
+    assert rep.all_osds_upgraded is False
+    assert rep.osds_in_crush_bucket == [10, 11]
+    assert rep.osds_ok_to_upgrade == [10]
+    assert rep.osds_upgraded == []
+    assert rep.bad_no_version == []
+
+
+def test_ok_to_upgrade_mon_report_from_parsed_body_rejects_non_mapping():
+    with pytest.raises(ValueError, match='expected JSON object'):
+        OkToUpgradeMonReport.from_parsed_body([])
+
+
+def test_ok_to_upgrade_mon_report_warns_on_non_boolean_flags(caplog):
+    caplog.set_level(logging.WARNING)
+    rep = OkToUpgradeMonReport.from_parsed_body({
+        'ok_to_upgrade': 'unexpected-string',
+        'all_osds_upgraded': False,
+    })
+    assert rep.ok_to_upgrade is None
+    assert rep.all_osds_upgraded is False
+    assert any('expected boolean' in r.message for r in caplog.records)
+
+
+def test_request_osd_ok_to_upgrade_report(cephadm_module: CephadmOrchestrator):
+    cephadm_module.check_mon_command = mock.MagicMock(
+        return_value=(0, '{"ok_to_upgrade": {"ok_to_upgrade": true}}', ''))
+    rep = request_osd_ok_to_upgrade_report(
+        cephadm_module, 'mybucket', '20.1.0-144.el9cp', max_osds=3)
+    assert rep.ok_to_upgrade is True
+    cephadm_module.check_mon_command.assert_called_once()
+    cmd = cephadm_module.check_mon_command.call_args[0][0]
+    assert cmd['prefix'] == 'osd ok-to-upgrade'
+    assert cmd['crush_bucket'] == 'mybucket'
+    assert cmd['ceph_version'] == '20.1.0-144.el9cp'
+    assert cmd['max'] == 3
+
+
+def test_parse_ok_to_upgrade_mon_json_invalid_raises():
+    with pytest.raises(json.JSONDecodeError):
+        parse_ok_to_upgrade_mon_json('not-json{')
+
+
+def test_request_osd_ok_to_upgrade_report_invalid_json(cephadm_module: CephadmOrchestrator):
+    cephadm_module.check_mon_command = mock.MagicMock(
+        return_value=(0, 'not-json{', ''))
+    with pytest.raises(json.JSONDecodeError):
+        request_osd_ok_to_upgrade_report(
+            cephadm_module, 'mybucket', '20.1.0', max_osds=3)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_json_decode_pauses(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='host1',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=json.JSONDecodeError('msg', 'doc', 0),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_EXCEPTION' in cephadm_module.health_checks
+    assert 'invalid JSON' in cephadm_module.health_checks['UPGRADE_EXCEPTION']['summary']
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_value_error_pauses(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='host1',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=ValueError(
+            "osd ok-to-upgrade: expected JSON object after unwrap, got <class 'list'>"),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_EXCEPTION' in cephadm_module.health_checks
+    assert (
+        'unexpected JSON shape'
+        in cephadm_module.health_checks['UPGRADE_EXCEPTION']['summary']
+    )
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_bad_no_version_pauses(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='host1',
+    )
+    bad_rep = OkToUpgradeMonReport(
+        ok_to_upgrade=True,
+        all_osds_upgraded=False,
+        osds_ok_to_upgrade=[],
+        osds_in_crush_bucket=[0, 1],
+        osds_upgraded=[],
+        bad_no_version=[99],
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        return_value=bad_rep,
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_OSD_NO_VERSION' in cephadm_module.health_checks
+    detail = cephadm_module.health_checks['UPGRADE_OSD_NO_VERSION']['detail'][0]
+    assert 'osd.99' in detail
+
+
+def test_validate_failure_domain_upgrade_options_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        'rack', 'rack-a', ['osd'])
+
+
+def test_validate_failure_domain_upgrade_options_chassis_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        'chassis', 'c1', ['osd'])
+
+
+def test_validate_failure_domain_upgrade_options_host_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        'host', 'host1', ['osd'])
+
+
+def test_validate_failure_domain_upgrade_options_invalid_type(cephadm_module: CephadmOrchestrator):
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'root', 'default', ['osd'])
+    assert str(err.value) == (
+        "Supported bucket types for OSD upgrade are: chassis, host, rack (specified: 'root')")
+
+
+def test_validate_failure_domain_upgrade_options_pairing(cephadm_module: CephadmOrchestrator):
+    both_msg = 'Both --crush_bucket_type and --crush_bucket_name must be specified together'
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', None, ['osd'])
+    assert str(err.value) == both_msg
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            None, 'rack-a', ['osd'])
+    assert str(err.value) == both_msg
+
+
+def test_validate_failure_domain_upgrade_options_comma_in_name(cephadm_module: CephadmOrchestrator):
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'a,b', ['osd'])
+    assert str(err.value) == (
+        'Invalid --crush_bucket_name: use a single name token without commas')
+
+
+def test_validate_failure_domain_upgrade_options_multi_token_name(cephadm_module: CephadmOrchestrator):
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'rack-a rack-b', ['osd'])
+    assert str(err.value) == (
+        'Invalid --crush_bucket_name: use a single name token without commas')
+
+
+def test_validate_failure_domain_upgrade_options_daemon_types(cephadm_module: CephadmOrchestrator):
+    osd_msg = 'Bucket parameters for OSD upgrade require --daemon-types to be "osd"'
+    with pytest.raises(OrchestratorError):
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'rack-a', None)
+    with pytest.raises(OrchestratorError):
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'rack-a', ['osd', 'mds'])
+    with pytest.raises(OrchestratorError):
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'rack-a', ['mgr', 'mon', 'osd'])
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+            'rack', 'rack-a', ['mgr', 'mon'])
+    assert str(err.value) == osd_msg
+
+
+def test_validate_failure_domain_upgrade_options_name_not_consulting_crush_map(
+        cephadm_module: CephadmOrchestrator):
+    """Name existence in the CRUSH map is not validated here."""
+    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        'rack', 'not-in-map', ['osd'])
+
+
+@mock.patch('cephadm.serve.CephadmServe._run_cephadm', _run_cephadm('{}'))
+@pytest.mark.parametrize(
+    "prior_autoscale,pg_autoscale_during_upgrade,autoscale_during_upgrade",
+    [
+        # Decision table: prior_autoscale, pg_autoscale_during_upgrade -> autoscale_during_upgrade
+        (False, False, False),  # prior off, no opt-in -> autoscale off during upgrade
+        (False, True, True),   # prior off, opt-in -> autoscale on during upgrade
+        (True, False, False),  # prior on, no opt-in -> autoscale off during upgrade
+        (True, True, True),    # prior on, opt-in -> autoscale on during upgrade
+    ],
+)
+def test_pg_autoscale_decision_table(
+    prior_autoscale,
+    pg_autoscale_during_upgrade,
+    autoscale_during_upgrade,
+    cephadm_module: CephadmOrchestrator,
+):
+    """Test PG autoscaling decision table at upgrade start.
+    Verifies that prior_autoscale and pg_autoscale_during_upgrade produce the
+    expected autoscale_during_upgrade decision, and that _set_noautoscale is
+    called only when autoscale_during_upgrade is False.
+    """
+    expect_set_noautoscale = not autoscale_during_upgrade
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = pg_autoscale_during_upgrade
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=prior_autoscale,
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_set_noautoscale',
+                    return_value=True,
+                ) as mock_set_noautoscale:
+                    result = wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start('image_id', None),
+                    )
+                    assert result == 'Initiating upgrade to image_id'
+
+                    # Decision: autoscale_during_upgrade=False -> set noautoscale
+                    if expect_set_noautoscale:
+                        mock_set_noautoscale.assert_called_once()
+                        assert cephadm_module.upgrade.upgrade_state.noautoscale_set is True
+                    else:
+                        mock_set_noautoscale.assert_not_called()
+                        assert getattr(
+                            cephadm_module.upgrade.upgrade_state,
+                            'noautoscale_set',
+                            False,
+                        ) is False
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@pytest.mark.parametrize(
+    "daemon_types,expect_set_noautoscale",
+    [
+        (['mon', 'mgr'], False),        # excludes OSDs -> noautoscale not set
+        (['mon', 'mgr', 'osd'], True),  # includes OSDs, prior_autoscale=False -> noautoscale set
+    ],
+)
+def test_pg_autoscale_skipped_when_upgrade_excludes_osds(
+    _get_container_image_info, cephadm_module: CephadmOrchestrator,
+    daemon_types, expect_set_noautoscale
+):
+    """When upgrade excludes OSDs, _set_noautoscale should not be called.
+    When it includes OSDs and prior_autoscale=False, _set_noautoscale should be called.
+    """
+    _get_container_image_info.side_effect = async_side_effect(
+        ('img_id', 'ceph version 18.2.0 (hash)', ['digest'])
+    )
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = False
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=False,
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_set_noautoscale',
+                    return_value=True,
+                ) as mock_set_noautoscale:
+                    result = wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=daemon_types,
+                        ),
+                    )
+                    assert result == 'Initiating upgrade to image_id'
+                    if expect_set_noautoscale:
+                        mock_set_noautoscale.assert_called_once()
+                    else:
+                        mock_set_noautoscale.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "prior_autoscale,opt_in,autoscale_after",
+    [
+        # Decision table: prior_autoscale, opt-in -> autoscale_after
+        (False, False, False),  # Case 1: prior off, no opt-in -> autoscale off after
+        (False, True, False),   # Case 2: prior off, opt-in -> autoscale off after (revert)
+        (True, False, True),   # Case 3: prior on, no opt-in -> autoscale on after (revert)
+        (True, True, True),    # Case 4: prior on, opt-in -> autoscale on after
+    ],
+)
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_pg_autoscale_revert_after_upgrade(
+    check_mon_command,
+    _get_container_image_info,
+    prior_autoscale,
+    opt_in,
+    autoscale_after,
+    cephadm_module: CephadmOrchestrator,
+):
+    """Test autoscale_after per decision table: prior_autoscale, opt-in -> autoscale_after.
+    Cases 1,3: we set noautoscale during upgrade, so we restore to prior on stop.
+    Cases 2,4: we never set noautoscale, so no restore; cluster stays as prior.
+    """
+    _get_container_image_info.side_effect = async_side_effect(
+        ('img_id', 'ceph version 18.2.0 (hash)', ['digest'])
+    )
+    check_mon_command.return_value = (0, '', '')
+
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = opt_in
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=prior_autoscale,
+                ):
+                    wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=['mon', 'mgr', 'osd'],
+                        ),
+                    )
+
+                # upgrade_stop triggers _unset_noautoscale when noautoscale_set
+                check_mon_command.reset_mock()
+                wait(cephadm_module, cephadm_module.upgrade_stop())
+
+                # Verify autoscale_after: restore path (cases 1,3) vs no restore (cases 2,4)
+                config_calls = [
+                    c for c in check_mon_command.call_args_list
+                    if isinstance(c[0][0], dict)
+                    and c[0][0].get('name') == 'osd_pool_default_pg_autoscale_mode'
+                ]
+                if not opt_in:
+                    # Cases 1,3: we set noautoscale, so we restore
+                    assert len(config_calls) >= 1
+                    expected_value = 'on' if autoscale_after else 'off'
+                    assert any(
+                        c[0][0].get('value') == expected_value
+                        for c in config_calls
+                    )
+                else:
+                    # Cases 2,4: we never set noautoscale, so no restore calls
+                    assert len(config_calls) == 0
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -433,6 +982,30 @@ def test_upgrade_ls(current_version, use_tags, show_all_versions, tags, result, 
             None,
             False
         ),
+        (  # invalid, can't upgrade crash on a while mon on a is not upgraded
+            [('mgr', 'a', 'a.x')],
+            [('mon', 'a', 'a'), ('crash', 'a', 'a')],
+            ['crash'],
+            ['a'],
+            None,
+            True
+        ),
+        (  # invalid, can't upgrade crash on a while mgr on a is not upgraded
+            [('mon', 'a', 'a')],
+            [('mgr', 'a', 'a.x'), ('crash', 'a', 'a')],
+            ['crash'],
+            ['a'],
+            None,
+            True
+        ),
+        (  # invalid, can't upgrade crash service on a while mon on a is not upgraded
+            [('mgr', 'a', 'a.x')],
+            [('mon', 'a', 'a'), ('crash', 'a', 'a')],
+            None,
+            ['a'],
+            ['crash'],
+            True
+        ),
     ]
 )
 @mock.patch("cephadm.module.HostCache.get_daemons")
@@ -443,14 +1016,14 @@ def test_staggered_upgrade_validation(
         get_image_info,
         get_daemons,
         upgraded: List[Tuple[str, str, str]],
-        not_upgraded: List[Tuple[str, str, str, str]],
+        not_upgraded: List[Tuple[str, str, str]],
         daemon_types: Optional[str],
         hosts: Optional[str],
         services: Optional[str],
         should_block: bool,
         cephadm_module: CephadmOrchestrator,
 ):
-    def to_dds(ts: List[Tuple[str, str]], upgraded: bool) -> List[DaemonDescription]:
+    def to_dds(ts: List[Tuple[str, str, str]], upgraded: bool) -> List[DaemonDescription]:
         dds = []
         digest = 'new_image@repo_digest' if upgraded else 'old_image@repo_digest'
         for t in ts:

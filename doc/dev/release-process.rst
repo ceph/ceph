@@ -265,7 +265,7 @@ This job:
   or "fat" container image and pushes it to ``quay.ceph.io/ceph/prerelease``
 
 Finally, when all appropriate testing and verification is done on the
-container images, run ``make-manifest-list.py --promote`` from the Ceph
+container images, run ``make-manifest-list.py --promote --version <ver>`` from the Ceph
 source tree (at ``container/make-manifest-list.py``) to promote them to
 their final release location on ``quay.io/ceph/ceph`` (you must ensure
 that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropriate permissions):
@@ -273,7 +273,7 @@ that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropri
     .. prompt:: bash
 
        cd <ceph-checkout>/container
-       ./make-manifest-list.py --promote
+       ./make-manifest-list.py --promote --version <ver>
 
 The ``--promote`` step should be performed only as the final step in releasing
 containers, after the container images have been tested and have been confirmed

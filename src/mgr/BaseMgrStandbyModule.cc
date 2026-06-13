@@ -173,7 +173,8 @@ static PyObject*
 ceph_standby_state_get(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *whatc = NULL;
-  if (!PyArg_ParseTuple(args, "s:ceph_state_get", &whatc)) {
+  int get_mutable = 0;
+  if (!PyArg_ParseTuple(args, "s|i:ceph_state_get", &whatc, &get_mutable)) {
     return NULL;
   }
   std::string what(whatc);

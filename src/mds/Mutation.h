@@ -38,6 +38,8 @@
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 
+#include "messages/MMDSPeerRequest.h"
+
 class LogSegment;
 class BatchOp;
 class CInode;
@@ -52,7 +54,6 @@ struct sr_t;
 struct MDLockCache;
 class Message;
 class MClientRequest;
-class MMDSPeerRequest;
 
 struct MutationImpl : public TrackedOp {
 public:
@@ -124,9 +125,9 @@ public:
   protected:
     void add_lock(LockOp op, int idx) {
       if (idx >= 0) {
-	emplace(cbegin() + idx, std::move(op));
+        emplace(cbegin() + idx, op);
       } else {
-	emplace_back(std::move(op));
+        emplace_back(op);
       }
     }
   };
@@ -488,9 +489,6 @@ struct MDRequestImpl : public MutationImpl {
 
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
-
-  // referent straydn
-  bool referent_straydn = false;
 
 protected:
   void _dump(ceph::Formatter *f) const override {

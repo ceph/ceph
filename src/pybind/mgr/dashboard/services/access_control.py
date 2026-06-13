@@ -25,7 +25,7 @@ from ..exceptions import PasswordPolicyException, PermissionNotValid, \
 from ..security import Permission, Scope
 from ..settings import Settings
 
-logger = logging.getLogger('access_control')
+logger = logging.getLogger(__name__)
 DEFAULT_FILE_DESC = 'password/secret'
 
 

@@ -38,7 +38,8 @@ namespace rgw::dedup {
 #define HTOCEPH_32 htole32
 #define HTOCEPH_64 htole64
 
-  static inline constexpr unsigned DISK_BLOCK_SIZE  = 8*1024;
+  static constexpr unsigned HASH_UNITS = BLAKE3_OUT_LEN/sizeof(uint64_t);
+  static constexpr unsigned DISK_BLOCK_SIZE  = 8*1024;
   // we use 16 bit offset
   static_assert(DISK_BLOCK_SIZE < 64*1024);
   static constexpr unsigned DISK_BLOCK_COUNT = 256;
@@ -132,6 +133,35 @@ namespace rgw::dedup {
     uint32_t block_id;
   };
 
+  struct __attribute__ ((packed)) record_flags_t {
+  private:
+    static constexpr uint8_t RGW_RECORD_FLAG_HAS_VALID_HASH  = 0x01;
+    static constexpr uint8_t RGW_RECORD_FLAG_SHARED_MANIFEST = 0x02;
+    static constexpr uint8_t RGW_RECORD_FLAG_HASH_CALCULATED = 0x04;
+    static constexpr uint8_t RGW_RECORD_FLAG_FASTLANE        = 0x08;
+    static constexpr uint8_t RGW_RECORD_FLAG_SPLIT_HEAD      = 0x10;
+    static constexpr uint8_t RGW_RECORD_FLAG_TAIL_REFTAG     = 0x20;
+  public:
+    record_flags_t() : flags(0) {}
+    record_flags_t(uint8_t _flags) : flags(_flags) {}
+    inline void clear() { this->flags = 0; }
+    inline bool hash_calculated() const { return ((flags & RGW_RECORD_FLAG_HASH_CALCULATED) != 0); }
+    inline void set_hash_calculated()  { flags |= RGW_RECORD_FLAG_HASH_CALCULATED; }
+    inline void clear_hash_calculated()  { flags &= ~RGW_RECORD_FLAG_HASH_CALCULATED; }
+    inline bool has_valid_hash() const { return ((flags & RGW_RECORD_FLAG_HAS_VALID_HASH) != 0); }
+    inline void set_has_valid_hash()  { flags |= RGW_RECORD_FLAG_HAS_VALID_HASH; }
+    inline bool has_shared_manifest() const { return ((flags & RGW_RECORD_FLAG_SHARED_MANIFEST) != 0); }
+    inline void set_shared_manifest() { flags |= RGW_RECORD_FLAG_SHARED_MANIFEST; }
+    inline bool is_fastlane()  const { return ((flags & RGW_RECORD_FLAG_FASTLANE) != 0); }
+    inline void set_fastlane()  { flags |= RGW_RECORD_FLAG_FASTLANE; }
+    inline bool is_split_head() const { return ((flags & RGW_RECORD_FLAG_SPLIT_HEAD) != 0); }
+    inline void set_split_head() { flags |= RGW_RECORD_FLAG_SPLIT_HEAD; }
+    inline bool is_ref_tag_from_tail() const { return ((flags & RGW_RECORD_FLAG_TAIL_REFTAG) != 0); }
+    inline void set_ref_tag_from_tail() { flags |= RGW_RECORD_FLAG_TAIL_REFTAG; }
+  private:
+    uint8_t flags;
+  };
+
   struct disk_record_t
   {
     disk_record_t(const char *buff);
@@ -148,32 +178,29 @@ namespace rgw::dedup {
                  const DoutPrefixProvider* dpp,
                  disk_block_id_t block_id,
                  record_id_t rec_id) const;
-    inline bool has_shared_manifest() const { return s.flags.has_shared_manifest(); }
-    inline void set_shared_manifest() { s.flags.set_shared_manifest(); }
-
-    struct __attribute__ ((packed)) packed_rec_t
+    inline bool multipart_object() { return (this->s.num_parts > 0); }
+    struct packed_rec_t
     {
-      uint8_t       rec_version;     // allows changing record format
-      dedup_flags_t flags;           // 1 Byte flags
-      uint16_t      num_parts;       // For multipart upload (AWS MAX-PART is 10,000)
-      uint16_t      obj_name_len;
-      uint16_t      bucket_name_len;
-
+      uint64_t      hash[4];         // 4 * 8 Bytes of HASH
+      uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
       uint64_t      md5_high;        // High Bytes of the Object Data MD5
       uint64_t      md5_low;         // Low  Bytes of the Object Data MD5
       uint64_t      obj_bytes_size;
 
+      uint16_t      num_parts;       // For multipart upload (AWS MAX-PART is 10,000)
+      uint16_t      obj_name_len;
+      uint16_t      bucket_name_len;
       uint16_t      bucket_id_len;
+
       uint16_t      tenant_name_len;
       uint16_t      instance_len;
       uint16_t      stor_class_len;
       uint16_t      ref_tag_len;
-
       uint16_t      manifest_len;
-      uint8_t       pad[6];
 
-      uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
-      uint64_t      hash[4];       // 4 * 8 Bytes of BLAKE3
+      uint8_t       rec_version;     // allows changing record format
+      record_flags_t flags;           // 1 Byte flags
+      uint8_t       pad[6];
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
@@ -186,6 +213,7 @@ namespace rgw::dedup {
     bufferlist  manifest_bl;
   };
   static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
+  static_assert(sizeof(disk_record_t::packed_rec_t) == sizeof(uint64_t)*12);
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec);
 
   static constexpr unsigned BLOCK_MAGIC = 0xFACE;

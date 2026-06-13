@@ -88,7 +88,7 @@ public:
     return TestMemIoCtxImpl::cmpext(oid, off, cmp_bl, snap_id);
   }
 
-  MOCK_METHOD8(exec, int(const std::string& oid,
+  MOCK_METHOD8(exec_internal, int(const std::string& oid,
                          TestClassHandler *handler,
                          const char *cls,
                          const char *method,
@@ -99,7 +99,7 @@ public:
   int do_exec(const std::string& oid, TestClassHandler *handler,
               const char *cls, const char *method, bufferlist& inbl,
               bufferlist* outbl, uint64_t snap_id, const SnapContext &snapc) {
-    return TestMemIoCtxImpl::exec(oid, handler, cls, method, inbl, outbl,
+    return TestMemIoCtxImpl::exec_internal(oid, handler, cls, method, inbl, outbl,
                                   snap_id, snapc);
   }
 
@@ -223,7 +223,7 @@ public:
     ON_CALL(*this, assert_version(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_version));
     ON_CALL(*this, create(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_create));
     ON_CALL(*this, cmpext(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_cmpext));
-    ON_CALL(*this, exec(_, _, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
+    ON_CALL(*this, exec_internal(_, _, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
     ON_CALL(*this, get_instance_id()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_get_instance_id));
     ON_CALL(*this, list_snaps(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_snaps));
     ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));

@@ -3,11 +3,12 @@
 import hashlib
 import json
 from enum import Enum
-from typing import Dict, NamedTuple, Optional
+from typing import Dict, NamedTuple, Optional, Union
 
 from ceph.utils import datetime_now, datetime_to_str, parse_timedelta, str_to_datetime
 
 from ..cli import DBCLICommand
+from ..exceptions import DashboardException
 from . import PLUGIN_MANAGER as PM
 from .plugin import SimplePlugin as SP
 
@@ -38,6 +39,35 @@ class Motd(SP):
         )
     ]
 
+    def _normalize_severity(self, severity: Union[MotdSeverity, str]) -> Optional[MotdSeverity]:
+        if isinstance(severity, MotdSeverity):
+            return severity
+        try:
+            return MotdSeverity(severity)
+        except ValueError:
+            return None
+
+    def _set_motd(self, severity: Union[MotdSeverity, str], expires: str, message: str):
+        severity = self._normalize_severity(severity)
+        if severity is None:
+            return 1, '', 'Invalid severity, use "info", "warning" or "danger"'
+
+        if expires != '0':
+            delta = parse_timedelta(expires)
+            if not delta:
+                return 1, '', 'Invalid expires format, use "2h", "10d" or "30s"'
+            expires = datetime_to_str(datetime_now() + delta)
+        else:
+            expires = ''
+        value: str = json.dumps({
+            'message': message,
+            'md5': hashlib.md5(message.encode()).hexdigest(),
+            'severity': severity.value,
+            'expires': expires
+        })
+        self.set_option(self.NAME, value)
+        return 0, 'Message of the day has been set.', ''
+
     @PM.add_hook
     def register_commands(self):
         @DBCLICommand("dashboard {name} get".format(name=self.NAME))
@@ -56,21 +86,7 @@ class Motd(SP):
 
         @DBCLICommand("dashboard {name} set".format(name=self.NAME))
         def _set(_, severity: MotdSeverity, expires: str, message: str):
-            if expires != '0':
-                delta = parse_timedelta(expires)
-                if not delta:
-                    return 1, '', 'Invalid expires format, use "2h", "10d" or "30s"'
-                expires = datetime_to_str(datetime_now() + delta)
-            else:
-                expires = ''
-            value: str = json.dumps({
-                'message': message,
-                'md5': hashlib.md5(message.encode()).hexdigest(),
-                'severity': severity.value,
-                'expires': expires
-            })
-            self.set_option(self.NAME, value)
-            return 0, 'Message of the day has been set.', ''
+            return self._set_motd(severity, expires, message)
 
         @DBCLICommand("dashboard {name} clear".format(name=self.NAME))
         def _clear(_):
@@ -79,7 +95,7 @@ class Motd(SP):
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import RESTController, UIRouter
+        from ..controllers import APIDoc, APIRouter, Endpoint, RESTController, UIRouter
 
         @UIRouter('/motd')
         class MessageOfTheDay(RESTController):
@@ -95,4 +111,21 @@ class Motd(SP):
                         return None
                 return data._asdict()
 
-        return [MessageOfTheDay]
+        @APIRouter('/motd')
+        @APIDoc('Message of the day API', "Motd")
+        class MessageOfTheDayApi(RESTController):
+            def create(_, severity: MotdSeverity, expires: str, message: str):  # pylint: disable=no-self-argument,line-too-long # noqa: E501
+                # pylint: disable=W0212
+                _, _, stderr = self._set_motd(severity, expires, message)
+                if stderr:
+                    raise DashboardException(
+                        code='invalid_motd',
+                        msg="Invalid MOTD input",
+                        component='dashboard'
+                    )
+
+            @Endpoint('DELETE')
+            def clear(_):  # pylint: disable=no-self-argument
+                self.set_option(self.NAME, '')
+
+        return [MessageOfTheDay, MessageOfTheDayApi]

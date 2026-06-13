@@ -25,6 +25,7 @@
 #include "osd/osd_internal_types.h"
 #else
 #include "crimson/osd/object_context.h"
+typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #endif
 #include "common/interval_map.h"
 #include "common/inline_variant.h"
@@ -136,7 +137,6 @@ public:
 
     std::map<std::string, std::optional<ceph::buffer::list> > attr_updates;
 
-    enum class OmapUpdateType {Remove, Insert, RemoveRange};
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list> > omap_updates;
 
     std::optional<ceph::buffer::list> omap_header;
@@ -323,16 +323,16 @@ public:
 
   void update_snaps(
     const hobject_t &hoid,         ///< [in] object for snaps
-    const std::set<snapid_t> &old_snaps,///< [in] old snaps value
-    const std::set<snapid_t> &new_snaps ///< [in] new snaps value
+    std::set<snapid_t> &&old_snaps,///< [in] old snaps value
+    std::set<snapid_t> &&new_snaps ///< [in] new snaps value
     ) {
     auto &op = get_object_op(hoid);
     ceph_assert(!op.updated_snaps);
     ceph_assert(op.buffer_updates.empty());
     ceph_assert(!op.truncate);
     op.updated_snaps = make_pair(
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
   }
 
   /// Clears, truncates
@@ -454,7 +454,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::Insert,
+	OmapUpdateType::Insert,
 	keys_bl));
   }
   void omap_setkeys(
@@ -473,7 +473,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::Remove,
+	OmapUpdateType::Remove,
 	keys_bl));
   }
   void omap_rmkeys(
@@ -492,7 +492,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::RemoveRange,
+	OmapUpdateType::RemoveRange,
 	range_bl));
   }
   void omap_rmkeyrange(

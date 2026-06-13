@@ -90,9 +90,22 @@ export class NvmeofService {
     }).pipe(
       map(({ groups, hosts }) => {
         const usedHosts = new Set<string>();
+
         (groups?.[0] ?? []).forEach((group: CephServiceSpec) => {
-          group.placement?.hosts?.forEach((hostname: string) => usedHosts.add(hostname));
+          const placementHosts = group.placement?.hosts || [];
+          const placementLabel = group.placement?.label;
+
+          placementHosts.forEach((hostname: string) => usedHosts.add(hostname));
+
+          if (placementLabel) {
+            (hosts || []).forEach((host: Host) => {
+              if (host.labels?.includes(placementLabel as string)) {
+                usedHosts.add(host.hostname);
+              }
+            });
+          }
         });
+
         return (hosts || []).filter((host: Host) => {
           const isAvailable =
             host.status === HostStatus.AVAILABLE || host.status === HostStatus.RUNNING;
@@ -130,15 +143,8 @@ export class NvmeofService {
 
         if (hosts?.length) {
           return allHosts.filter((host: Host) => hosts.includes(host.hostname));
-        } else if (label?.length) {
-          if (typeof label === 'string') {
-            return allHosts.filter((host: Host) => host?.labels?.includes(label));
-          }
-          return allHosts.filter(
-            (host: Host) =>
-              host?.labels?.length === label?.length &&
-              _.isEqual([...host.labels].sort(), [...label].sort())
-          );
+        } else if (label) {
+          return allHosts.filter((host: Host) => host?.labels?.includes(label as string));
         }
         return [];
       })
@@ -186,18 +192,17 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`);
   }
 
-  createSubsystem(request: {
-    nqn: string;
-    enable_ha: boolean;
-    gw_group: string;
-    dhchap_key: string;
-  }) {
+  createSubsystem(request: { nqn: string; gw_group: string; dhchap_key: string }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 
   deleteSubsystem(subsystemNQN: string, group: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`, {
-      observe: 'response'
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
+      observe: 'response',
+      params: {
+        gw_group: group,
+        force: 'true'
+      }
     });
   }
 
@@ -205,7 +210,9 @@ export class NvmeofService {
     return this.getSubsystem(subsystemNqn, group).pipe(
       mapTo(true),
       catchError((e) => {
-        e?.preventDefault();
+        if (_.isFunction(e?.preventDefault)) {
+          e.preventDefault();
+        }
         return observableOf(false);
       })
     );
@@ -223,13 +230,9 @@ export class NvmeofService {
   }
 
   addNamespaceInitiators(nsid: number | string, request: NamespaceInitiatorRequest) {
-    return this.http.post(
-      `${UI_API_PATH}/subsystem/${request.subsystem_nqn}/namespace/${nsid}/host`,
-      request,
-      {
-        observe: 'response'
-      }
-    );
+    return this.http.post(`${UI_API_PATH}/namespace/${nsid}/host`, request, {
+      observe: 'response'
+    });
   }
 
   updateHostKey(subsystemNQN: string, request: InitiatorRequest) {

@@ -3,7 +3,7 @@
 
 #include <boost/iterator/counting_iterator.hpp>
 
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "include/intarith.h"
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
@@ -15,10 +15,12 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 CircularBoundedJournal::CircularBoundedJournal(
+    store_index_t store_index,
     JournalTrimmer &trimmer,
     RBMDevice* device,
     const std::string &path)
-  : trimmer(trimmer), path(path),
+  : store_index(store_index),
+    trimmer(trimmer), path(path),
   cjs(device),
   record_submitter(crimson::common::get_conf<uint64_t>(
       "seastore_journal_iodepth_limit"),
@@ -36,7 +38,7 @@ CircularBoundedJournal::CircularBoundedJournal(
 CircularBoundedJournal::open_for_mkfs_ret
 CircularBoundedJournal::open_for_mkfs()
 {
-  return record_submitter.open(true
+  return record_submitter.open(store_index, true
   ).safe_then([this](auto ret) {
     return open_for_mkfs_ret(
       open_for_mkfs_ertr::ready_future_marker{},
@@ -47,7 +49,7 @@ CircularBoundedJournal::open_for_mkfs()
 CircularBoundedJournal::open_for_mount_ret
 CircularBoundedJournal::open_for_mount()
 {
-  return record_submitter.open(false
+  return record_submitter.open(store_index, false
   ).safe_then([this](auto ret) {
     return open_for_mount_ret(
       open_for_mount_ertr::ready_future_marker{},
@@ -220,9 +222,9 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
         dhandler
       ).handle_error(
         replay_ertr::pass_further{},
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "shouldn't meet with any other error other replay_ertr"
-        }
+        )
       );
     }
   );
@@ -334,9 +336,9 @@ Journal::replay_ret CircularBoundedJournal::replay(
   return cjs.read_header(
   ).handle_error(
     open_for_mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error read_header"
-  }).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p)
+  )).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p)
     mutable {
     auto &[head, bl] = *p;
     cjs.set_cbj_header(head);

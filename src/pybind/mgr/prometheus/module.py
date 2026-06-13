@@ -21,7 +21,7 @@ from mgr_util import get_default_addr, profile_method, build_url, test_port_allo
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
-from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO, TypeVar, Generic
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO, TypeVar, Iterator
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
 MetricValue = Dict[LabelValues, Number]
@@ -188,8 +188,7 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 
-class LRUCacheDict(OrderedDict[K, V], Generic[K, V]):
-    maxsize: int
+class LRUCacheDict(OrderedDict[K, V]):
 
     def __init__(self, maxsize: int, *args: Any, **kwargs: Any) -> None:
         self.maxsize = maxsize
@@ -210,9 +209,9 @@ class HealthHistory:
 
     def __init__(self, mgr: MgrModule):
         self.mgr = mgr
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.max_entries = cast(int, self.mgr.get_localized_module_option('healthcheck_history_max_entries', 1000))
-        self.healthcheck: LRUCacheDict[str, HealthCheckEvent] = LRUCacheDict(maxsize=self.max_entries)
+        self.healthcheck: ThreadSafeLRUCacheDict[str, HealthCheckEvent] = ThreadSafeLRUCacheDict(maxsize=self.max_entries)
         self._load()
 
     def _load(self) -> None:
@@ -355,6 +354,55 @@ class HealthHistory:
             str: YAML representation of the healthcheck history
         """
         return yaml.safe_dump(self.as_dict(), explicit_start=True, default_flow_style=False)
+
+
+class ThreadSafeLRUCacheDict(LRUCacheDict[K, V]):
+    maxsize: int
+
+    def __init__(self, maxsize: int, *args: Any, **kwargs: Any) -> None:
+        self.maxsize = maxsize
+        self._lock = threading.RLock()
+        super().__init__(maxsize, *args, **kwargs)
+
+    def __setitem__(self, key: K, value: V) -> None:
+        with self._lock:
+            super().__setitem__(key, value)
+
+    def __getitem__(self, key: Any) -> V:
+        with self._lock:
+            return super().__getitem__(key)
+
+    def __iter__(self) -> Iterator[K]:
+        with self._lock:
+            return iter(list(super().keys()))
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return super().__contains__(key)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return super().__len__()
+
+    def get(self, key: K, default: Optional[V] = None) -> Optional[V]:  # type: ignore[override]
+        with self._lock:
+            return super().get(key, default)
+
+    def clear(self) -> None:
+        with self._lock:
+            super().clear()
+
+    def keys(self) -> List[K]:  # type: ignore[override]
+        with self._lock:
+            return list(super().keys())
+
+    def items(self) -> List[Tuple[K, V]]:  # type: ignore[override]
+        with self._lock:
+            return list(super().items())
+
+    def values(self) -> List[V]:  # type: ignore[override]
+        with self._lock:
+            return list(super().values())
 
 
 class Metric(object):
@@ -1055,6 +1103,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self._process_cert_health_detail(alert_id, active_healthchecks[alert_id])
 
         self.health_history.check(health)
+
         for name, info in self.health_history.healthcheck.items():
             # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
             if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
@@ -1324,6 +1373,11 @@ class Module(MgrModule, OrchestratorClientMixin):
             obj_store = osd_metadata.get('osd_objectstore', '')
             f_iface = osd_metadata.get('front_iface', '')
             b_iface = osd_metadata.get('back_iface', '')
+            bs_min_alloc = osd_metadata.get('bluestore_min_alloc_size', '')
+            bs_dedicated_db = osd_metadata.get('bluestore_dedicated_db', '')
+            bs_dedicated_wal = osd_metadata.get('bluestore_dedicated_wal', '')
+            c_version_created = osd_metadata.get('ceph_version_when_created', '')
+            c_created_at = osd_metadata.get('created_at', '')
 
             self.metrics['osd_metadata'].set(1, (
                 b_iface,
@@ -1334,7 +1388,12 @@ class Module(MgrModule, OrchestratorClientMixin):
                 osd_version[0],
                 obj_store,
                 p_addr,
-                osd_version[1]
+                osd_version[1],
+                bs_min_alloc,
+                bs_dedicated_db,
+                bs_dedicated_wal,
+                c_version_created,
+                c_created_at
             ))
 
             # collect osd status
@@ -1881,6 +1940,16 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.log.debug("Orchestrator not available")
                 return
 
+            try:
+                if not self.remote('smb', 'db_ready'):
+                    self.log.debug(
+                        "SMB DB not ready, skipping SMB metadata collection"
+                    )
+                    return
+            except Exception as e:
+                self.log.debug(f"SMB DB readiness check failed: {str(e)}")
+                return
+
             smb_version = ""
 
             try:
@@ -1902,15 +1971,16 @@ class Module(MgrModule, OrchestratorClientMixin):
             try:
                 smb_data = json.loads(out)
 
+                self.log.info("Processing SMB share resource")
                 for resource in smb_data.get('resources', []):
                     if resource.get('resource_type') == 'ceph.smb.share':
-                        self.log.info("Processing SMB share resource")
                         cluster_id = resource.get('cluster_id')
                         if not cluster_id:
                             self.log.debug("Skipping share with missing cluster_id")
                             continue
 
                         share_id = resource.get('share_id', '')
+                        self.log.debug(f"Processing SMB share resource: {share_id} in cluster {cluster_id}")
                         cephfs = resource.get('cephfs', {})
                         cephfs_volume = cephfs.get('volume', '')
                         cephfs_subvolumegroup = cephfs.get('subvolumegroup', '_nogroup')
@@ -2089,6 +2159,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 # Lock the function execution
                 assert isinstance(_global_instance, Module)
                 with _global_instance.collect_lock:
+                    cherrypy.response.headers['Content-Type'] = 'text/plain; charset=utf-8'
                     return self._metrics(_global_instance)
 
             @staticmethod
@@ -2305,6 +2376,7 @@ class StandbyModule(MgrStandbyModule):
 
             @cherrypy.expose
             def metrics(self) -> str:
+                cherrypy.response.headers['Content-Type'] = 'text/plain; charset=utf-8'
                 return ''
 
         config = {

@@ -34,6 +34,7 @@
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
+#include "global/global_context.h" // for g_ceph_context
 
 using namespace std;
 

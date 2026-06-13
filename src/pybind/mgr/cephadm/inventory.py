@@ -239,7 +239,7 @@ class SpecDescription(NamedTuple):
     spec: ServiceSpec
     rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
     created: datetime.datetime
-    deleted: Optional[datetime.datetime]
+    deleted: Optional[Tuple[datetime.datetime, bool]]
 
 
 class SpecStore():
@@ -250,7 +250,7 @@ class SpecStore():
         # service_name -> rank -> gen -> daemon_id
         self._rank_maps = {}    # type: Dict[str, Dict[int, Dict[int, Optional[str]]]]
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
-        self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
+        self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
 
@@ -315,8 +315,11 @@ class SpecStore():
                 self.spec_created[service_name] = created
 
                 if 'deleted' in j:
-                    deleted = str_to_datetime(cast(str, j['deleted']))
-                    self.spec_deleted[service_name] = deleted
+                    deleted_ts = str_to_datetime(cast(str, j['deleted']))
+                    force_delete_data = cast(
+                        bool, j.get('force_delete_data', False)
+                    )
+                    self.spec_deleted[service_name] = (deleted_ts, force_delete_data)
 
                 if 'needs_configuration' in j:
                     self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
@@ -378,7 +381,9 @@ class SpecStore():
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
-            data['deleted'] = datetime_to_str(self.spec_deleted[name])
+            deleted_time, force_delete_data = self.spec_deleted[name]
+            data['deleted'] = datetime_to_str(deleted_time)
+            data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
 
@@ -469,7 +474,7 @@ class SpecStore():
                         service_name=nvmeof_spec.service_name(),
                         user_made=True)
 
-    def rm(self, service_name: str) -> bool:
+    def rm(self, service_name: str, force_delete_data: bool = False) -> bool:
         if service_name not in self._specs:
             return False
 
@@ -477,7 +482,7 @@ class SpecStore():
             self.finally_rm(service_name)
             return True
 
-        self.spec_deleted[service_name] = datetime_now()
+        self.spec_deleted[service_name] = (datetime_now(), force_delete_data)
         self.save(self._specs[service_name], update_create=False)
         return True
 
@@ -842,7 +847,9 @@ class HostCache():
                 self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
-                self.last_client_files[host] = j.get('last_client_files', {})
+                self.last_client_files[host] = {
+                    path: tuple(v) for path, v in j.get('last_client_files', {}).items()
+                }
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
@@ -949,6 +956,14 @@ class HostCache():
     ) -> None:
         self.networks[host] = nets
         self.last_network_update[host] = datetime_now()
+
+    def get_interface_for_ip(self, host: str, ip: str) -> Optional[str]:
+        """Return the network interface name that has the given IP on host, or None."""
+        for _subnet, ifaces in self.networks.get(host, {}).items():
+            for iface, ips in ifaces.items():
+                if ip in ips:
+                    return iface
+        return None
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -1331,7 +1346,7 @@ class HostCache():
             if host in self.mgr.offline_hosts:
                 dd.status = orchestrator.DaemonDescriptionStatus.error
                 dd.status_desc = 'host is offline'
-            elif self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
+            elif self.mgr.inventory._inventory.get(host, {}).get("status", "").lower() == "maintenance":
                 # We do not refresh daemons on hosts in maintenance mode, so stored daemon statuses
                 # could be wrong. We must assume maintenance is working and daemons are stopped
                 dd.status = orchestrator.DaemonDescriptionStatus.stopped

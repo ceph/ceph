@@ -16,7 +16,7 @@
     </button>
   </ng-template>
   <!-- TOTAL COUNT -->
-  @if (vm?.total) {
+  @if (vm?.total || vm?.total === 0) {
   <div>
     <span class="cds--type-heading-07">{{ vm.total }}</span>
     <cd-icon [type]="vm.icon"></cd-icon>
@@ -28,14 +28,16 @@
     {{ vm.statusText }}
   </small>
   <!-- SUB TOTAL COUNTS -->
-  <div class="cds-mt-6">
+  <div class="cds-mt-5">
   @if (vm.badges.length) {
     <div [cdsStack]="compact? 'horizontal' : 'vertical'">
       @for (b of vm.badges; track b.key; let last = $last) {
       <span
-        class="overview-alerts-card-badge"
-        [class.overview-alerts-card-badge-with-border--right]="!last && compact"
-        [class.overview-alerts-card-badge-with-border--bottom]="!compact">
+        class="overview-alerts-card-badge cds-pr-4"
+        [class.cds-mr-4]="!last && compact"
+        [class.border-subtle-right]="!last && compact"
+        [class.overview-alerts-card-badge--compact]="!compact"
+        [class.border-subtle-bottom]="!compact">
         <a
           cdsLink
           [routerLink]="['/monitoring/active-alerts']"

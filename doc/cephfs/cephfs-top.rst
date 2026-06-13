@@ -4,15 +4,15 @@
 CephFS Top Utility
 ==================
 
-CephFS provides `top(1)` like utility to display various Ceph Filesystem metrics
-in realtime. `cephfs-top` is a curses based python script which makes use of `stats`
+CephFS provides `top(1)`\-like utility to display various Ceph Filesystem metrics
+in real time. `cephfs-top` is a curses-based Python script which makes use of `stats`
 plugin in Ceph Manager to fetch (and display) metrics.
 
 Manager Plugin
 ==============
 
 Ceph Filesystem clients periodically forward various metrics to Ceph Metadata Servers (MDS)
-which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forward its
+which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forwards its
 respective set of metrics to MDS rank zero. Metrics are aggregated and forwarded to Ceph
 Manager.
 
@@ -56,7 +56,7 @@ To fetch metrics only for a subset of active MDSs (e.g., MDS rank 1 and 2)::
 ============
 
 `cephfs-top` utility relies on `stats` plugin to fetch performance metrics and display in
-`top(1)` like format. `cephfs-top` is available as part of `cephfs-top` package.
+`top(1)`\-like format. `cephfs-top` is available as part of `cephfs-top` package.
 
 By default, `cephfs-top` uses `client.fstop` user to connect to a Ceph cluster::
 
@@ -169,4 +169,4 @@ Sample screenshot running `cephfs-top` with 2 filesystems:
 
 .. image:: cephfs-top.png
 
-.. note:: Minimum compatible python version for cephfs-top is 3.6.0. cephfs-top is supported on distros RHEL 8, Ubuntu 18.04, CentOS 8 and above.
+.. note:: Minimum compatible Python version for cephfs-top is 3.6.0. cephfs-top is supported on distributions RHEL 8, Ubuntu 18.04, CentOS 8 and above.

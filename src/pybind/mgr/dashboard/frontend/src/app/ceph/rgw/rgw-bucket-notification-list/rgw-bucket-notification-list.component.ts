@@ -75,7 +75,7 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
       },
       {
         name: $localize`Destination`,
-        prop: 'Destination',
+        prop: 'Topic',
         flexGrow: 1,
         cellTransformation: CellTemplate.copy
       },

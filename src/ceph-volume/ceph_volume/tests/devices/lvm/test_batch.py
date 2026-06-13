@@ -22,6 +22,25 @@ class TestBatch(object):
         with pytest.raises(SystemExit):
             batch.Batch(argv=['--osd-ids', '1', 'foo']).main()
 
+    def test_batch_dmcrypt_open_opts_accepts_cryptsetup_style_value(self):
+        b = batch.Batch([
+            '--dmcrypt-open-opts', '--persistent --debug-json',
+        ])
+        assert b.args.dmcrypt_open_opts == '--persistent --debug-json'
+        assert b.args.dmcrypt_format_opts is None
+
+    def test_batch_dmcrypt_format_opts_accepts_cryptsetup_style_value(self):
+        b = batch.Batch([
+            '--dmcrypt-format-opts', '--foo bar',
+        ])
+        assert b.args.dmcrypt_format_opts == '--foo bar'
+        assert b.args.dmcrypt_open_opts is None
+
+    def test_batch_dmcrypt_opts_default_none(self):
+        b = batch.Batch([])
+        assert b.args.dmcrypt_open_opts is None
+        assert b.args.dmcrypt_format_opts is None
+
     def test_disjoint_device_lists(self, mock_device_generator: Callable) -> None:
         device1 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sda')
         device2 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sdb')
@@ -42,6 +61,57 @@ class TestBatch(object):
         )
         with pytest.raises(ArgumentError):
             arg_validators.ValidBatchDevice()('foo')
+
+    def test_exit_on_unavailable_fast_allocation(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=[],
+                       objectstore='bluestore',
+                       block_db_size="1G",
+                       block_db_slots=1.0,
+                       dmcrypt=True,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
+                      )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit) as err:
+            b.get_deployment_layout()
+        assert err.value.code == 1
+
+    def test_exit_on_unavailable_very_fast_allocation(self, factory, conf_ceph_stub, mock_device_generator):
+        # ensure json reports are valid when empty
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
+        very_fast_devs = [mock_device_generator()]
+        very_fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=very_fast_devs,
+                       objectstore='bluestore',
+                       block_db_size="1G",
+                       block_db_slots=5,
+                       dmcrypt=True,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
+                      )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit) as err:
+            b.get_deployment_layout()
+        assert err.value.code == 1
 
     @pytest.mark.parametrize('format_', ['pretty', 'json', 'json-pretty'])
     def test_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
@@ -85,65 +155,6 @@ class TestBatch(object):
                        block_db_size="1G",
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
-                      )
-        b = batch.Batch([])
-        b.args = args
-        plan = b.get_deployment_layout()
-        report = b._create_report(plan)
-        json.loads(report)
-
-    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
-    def test_json_report_valid_empty_unavailable_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
-        # ensure json reports are valid when empty
-        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        devs = [mock_device_generator() for _ in range(5)]
-        fast_devs = [mock_device_generator()]
-        fast_devs[0].available_lvm = False
-        args = factory(data_slots=1,
-                       osds_per_device=1,
-                       osd_ids=[],
-                       report=True,
-                       format=format_,
-                       devices=devs,
-                       db_devices=fast_devs,
-                       wal_devices=[],
-                       objectstore='bluestore',
-                       block_db_size="1G",
-                       block_db_slots=1.0,
-                       dmcrypt=True,
-                       data_allocate_fraction=1.0,
-                       has_block_db_size_without_db_devices=None
-                      )
-        b = batch.Batch([])
-        b.args = args
-        plan = b.get_deployment_layout()
-        report = b._create_report(plan)
-        json.loads(report)
-
-
-    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
-    def test_json_report_valid_empty_unavailable_very_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
-        # ensure json reports are valid when empty
-        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        devs = [mock_device_generator() for _ in range(5)]
-        fast_devs = [mock_device_generator()]
-        fast_devs[0].available_lvm = False
-        very_fast_devs = [mock_device_generator()]
-        very_fast_devs[0].available_lvm = False
-        args = factory(data_slots=1,
-                       osds_per_device=1,
-                       osd_ids=[],
-                       report=True,
-                       format=format_,
-                       devices=devs,
-                       db_devices=fast_devs,
-                       wal_devices=very_fast_devs,
-                       objectstore='bluestore',
-                       block_db_size="1G",
-                       block_db_slots=5,
-                       dmcrypt=True,
-                       data_allocate_fraction=1.0,
-                       has_block_db_size_without_db_devices=None
                       )
         b = batch.Batch([])
         b.args = args
@@ -322,6 +333,33 @@ class TestBatch(object):
         db_device = [mock_device_generator()]
         fast = b.fast_allocations(db_device, 1, 1, 'block_db')
         assert len(fast) == 1
+        # Layout: the allocation must reference the fast device, not the
+        # data device, with a non-trivial slot size.
+        assert fast[0][0] == db_device[0].path
+        assert int(fast[0][2]) > 0
+
+    def test_batch_fast_allocations_one_block_db_partial_vg(self,
+                                                            factory, conf_ceph_stub,
+                                                            mock_device_generator):
+        # Single-OSD redeploy at the Batch.fast_allocations() level (the
+        # one-call-up integration of get_physical_fast_allocs that exercises
+        # fast_slots_per_device recompute). When the fast device's VG already
+        # carries surviving DB LVs from sibling OSDs, fast_allocations must
+        # still produce one allocation on that fast device — not silently
+        # return [], which would let cephadm fall back to a co-located OSD.
+        #
+        # The spec sets db_slots: 6 (the per-device occupancy cap); only one
+        # OSD is being deployed in this batch, so fast_slots_per_device gets
+        # recomputed to 1, and the fast device already has 5 sibling LVs.
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+
+        b = batch.Batch([])
+        b.args.block_db_slots = 6
+        db_device = [mock_device_generator(number_lvs=5)]
+        fast = b.fast_allocations(db_device, 1, 1, 'block_db')
+        assert len(fast) == 1
+        assert fast[0][0] == db_device[0].path
+        assert int(fast[0][2]) > 0
 
     @pytest.mark.parametrize('occupied_prior', range(7))
     @pytest.mark.parametrize('slots,num_devs',
@@ -355,6 +393,66 @@ class TestBatch(object):
         expected_assignment_on_used_devices = sum([slots - len(d.lvs) for d in fast_devs if len(d.lvs) > 0])
         assert len([f for f in fast if f[0] == '/dev/bar']) == expected_assignment_on_used_devices
         assert len([f for f in fast if f[0] != '/dev/bar']) == expected_num_osds - expected_assignment_on_used_devices
+
+    def test_get_physical_fast_allocs_redeploy_partial_vg(self, factory,
+                                                          conf_ceph_stub,
+                                                          mock_device_generator):
+        # Single-OSD redeploy where the fast-device VG already hosts
+        # surviving DB LVs for sibling OSDs must still produce one allocation.
+        # Reproducer: db_slots=6 in the spec, 5 LVs already on the fast
+        # device, one new OSD being deployed in this batch, so
+        # Batch.fast_allocations() recomputes fast_slots_per_device down to 1.
+        # With the original `occupied_slots < fast_slots_per_device` loop
+        # guard, occupied_slots==5 >= 1 short-circuited the loop and
+        # get_physical_fast_allocs() returned an empty list.
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        fast_dev = mock_device_generator(number_lvs=5)
+        args = factory(block_db_slots=6, block_db_size=None,
+                       devices=['/dev/data'])
+        fast = batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                              1, 1, args)
+        assert len(fast) == 1
+        assert fast[0][0] == fast_dev.path
+
+    def test_get_physical_fast_allocs_tolerance_within_1_percent(self, factory,
+                                                                 conf_ceph_stub,
+                                                                 mock_device_generator):
+        # When requested_size overshoots the achievable abs_size by <=1%
+        # (e.g. PE alignment rounding 1 GiB down to ~1023.3 MiB), the
+        # allocator must scale down to abs_size silently instead of calling
+        # exit(1).
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        # 20 GiB / 20 slots = 1 GiB abs_size; request 1 GiB + 100 KiB → ~0.01%
+        vg_size = 21474836480
+        fast_dev = mock_device_generator()
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [vg_size]
+        requested = disk.Size(b=int(vg_size / 20) + 100 * 1024)
+        args = factory(block_db_slots=20, block_db_size=requested,
+                       devices=['/dev/data'])
+        fast = batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                              20, 1, args)
+        assert len(fast) == 1
+        # abs_size is the achievable size, not the over-requested one
+        assert fast[0][2] == disk.Size(b=int(vg_size / 20))
+
+    def test_get_physical_fast_allocs_tolerance_over_1_percent(self, factory,
+                                                               conf_ceph_stub,
+                                                               mock_device_generator):
+        # Over the 1% threshold still aborts via exit(1).
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        vg_size = 21474836480
+        fast_dev = mock_device_generator()
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [vg_size]
+        # Request 2 GiB on a 1 GiB slot — ~100% overshoot.
+        requested = disk.Size(b=int(vg_size / 20) * 2)
+        args = factory(block_db_slots=20, block_db_size=requested,
+                       devices=['/dev/data'])
+        with pytest.raises(SystemExit) as err:
+            batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                           20, 1, args)
+        assert err.value.code == 1
 
     def test_get_lvm_osds_return_len(self, factory,
                                      mock_lv_device_generator,

@@ -31,7 +31,6 @@ protected:
   ShardServices &shard_services;
   PipelineHandle handle;
 
-  std::optional<epoch_t> from;
   epoch_t to;
 
   PeeringCtx rctx;
@@ -53,8 +52,23 @@ public:
   PipelineHandle &get_handle() { return handle; }
 
   using cached_map_t = OSDMapService::cached_map_t;
+
+  enum class merge_role_t {
+    None,
+    Source,
+    Target,
+  };
+
+  struct merge_result_t {
+    merge_role_t role = merge_role_t::None;
+    spg_t parent;
+  };
+
   seastar::future<> check_for_splits(epoch_t old_epoch,
                                      cached_map_t next_map);
+  seastar::future<merge_result_t> check_for_merges(epoch_t old_epoch,
+                                                   cached_map_t next_map,
+                                                   PeeringCtx &rctx);
   seastar::future<> split_pg(std::set<spg_t> split_children,
                              cached_map_t next_map);
   void split_stats(std::set<Ref<PG>> child_pgs,
@@ -70,10 +84,17 @@ public:
   }
 
 private:
+  seastar::future<merge_result_t> merge_pg(cached_map_t next_map,
+                                           unsigned new_pg_num,
+                                           unsigned old_pg_num,
+                                           PeeringCtx &rctx);
   PGPeeringPipeline &peering_pp(PG &pg);
-  seastar::future<> handle_split_pg_creation(
-    Ref<PG> child_pg,
+  seastar::future<Ref<PG>> handle_split_pg_creation(
+    spg_t child_pgid,
     cached_map_t next_map);
+  seastar::future<> finish_merge_source(
+    spg_t parent,
+    PeeringCtx &rctx);
 };
 
 }

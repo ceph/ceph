@@ -65,11 +65,10 @@ class service : public boost::asio::execution_context::service {
   /// Unregister an object
   void remove(IoObject& entry) {
     auto lock = std::scoped_lock{mutex};
-    if (entries.empty()) {
-      // already shut down
-    } else {
+    if (entry.is_linked()) {
       entries.erase(entries.iterator_to(entry));
     }
+    // else: already removed by shutdown() or a previous remove()
   }
 };
 

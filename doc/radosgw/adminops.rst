@@ -252,7 +252,7 @@ Request Parameters
 
 ``end``
 
-:Description: Date and (optional) time that specifies the end time of the requested data (none inclusive).
+:Description: Date and (optional) time that specifies the end time of the requested data (non-inclusive).
 :Type: String
 :Example: ``2012-09-25 16:00:00``
 :Required: No
@@ -1596,7 +1596,7 @@ Request Parameters
 
 ``uid``
 
-:Description: The user ID under which a subuser is to  be created.
+:Description: The user ID under which a subuser is to be created.
 :Type: String
 :Example: ``foo_user``
 :Required: Yes
@@ -2273,7 +2273,7 @@ Request Parameters
 
 ``purge-objects``
 
-:Description: Remove a buckets objects before deletion.
+:Description: Remove a bucket's objects before deletion.
 :Type: Boolean
 :Example: True [False]
 :Required: No
@@ -2813,7 +2813,7 @@ permission. ::
 Rate Limit
 ==========
 
-The Admin Operations API enables you to set and get ratelimit configurations on users and on bucket and global rate limit configurations. See `Rate Limit Management`_ for additional details.
+The Admin Operations API enables you to set and get ratelimit configurations on users and on buckets and global rate limit configurations. See `Rate Limit Management`_ for additional details.
 Rate Limit includes the maximum number of operations and/or bytes per accumulation interval, separated by read and/or write (Additionally list and get operations),
 to a bucket and/or by a user and the maximum storage size in megabytes.
 
@@ -2932,6 +2932,180 @@ To set a rate limit, the user must have ``ratelimit`` capability set with ``writ
 permission. ::
 
 	POST /{admin}/ratelimit?ratelimit-scope=anon&global=<True|False><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>][&max-list-ops=<ops>][&max-delete-ops=<ops>][&enabled=<True|False>]>
+
+
+
+Dedup
+=====
+
+The Admin Operations API can be used to manage RGW object deduplication.
+See `Full RGW Object Dedup`_ for additional details on the dedup feature and
+CLI commands.
+
+.. _Full RGW Object Dedup: ../s3_objects_dedup
+
+To view dedup status, the user must have ``dedup=read`` capability. To
+control dedup operations, the user must have ``dedup=write`` capability.
+See the `Admin Guide`_ for details.
+
+Get Dedup Stats
+~~~~~~~~~~~~~~~
+
+Collects and displays last dedup statistics.
+
+:caps: dedup=read
+
+Syntax
+^^^^^^
+
+::
+
+	GET /{admin}/dedup?op=stats HTTP/1.1
+	Host: {fqdn}
+
+
+Get Dedup Throttle
+~~~~~~~~~~~~~~~~~~
+
+Displays current dedup throttle settings.
+
+:caps: dedup=read
+
+Syntax
+^^^^^^
+
+::
+
+	GET /{admin}/dedup?op=throttle HTTP/1.1
+	Host: {fqdn}
+
+
+Start Dedup Estimate
+~~~~~~~~~~~~~~~~~~~~
+
+Starts a new dedup estimate session (aborting first any existing session).
+No changes are made to the existing system. Only statistics will be
+collected and reported.
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=estimate HTTP/1.1
+	Host: {fqdn}
+
+
+Start Dedup Exec
+~~~~~~~~~~~~~~~~
+
+Starts a new dedup session (aborting first any existing session).
+Performs a full dedup, finding duplicated tail objects and removing them.
+
+.. warning:: This operation can lead to data loss and should not be used on
+   production data.
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=exec&yes-i-really-mean-it HTTP/1.1
+	Host: {fqdn}
+
+Request Parameters
+^^^^^^^^^^^^^^^^^^
+
+``yes-i-really-mean-it``
+
+:Description: Confirmation flag required to execute full dedup.
+:Type: Boolean
+:Required: Yes
+
+
+Abort Dedup
+~~~~~~~~~~~
+
+Aborts an active dedup session, releasing all resources used by it.
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=abort HTTP/1.1
+	Host: {fqdn}
+
+
+Pause Dedup
+~~~~~~~~~~~
+
+Pauses an active dedup session (dedup resources are not released).
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=pause HTTP/1.1
+	Host: {fqdn}
+
+
+Resume Dedup
+~~~~~~~~~~~~
+
+Resumes a paused dedup session.
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=resume HTTP/1.1
+	Host: {fqdn}
+
+
+Set Dedup Throttle
+~~~~~~~~~~~~~~~~~~
+
+Specifies maximum allowed operations per second for a single RGW server
+during dedup. ``0`` means unlimited. At least one of ``max-bucket-index-ops``
+or ``max-metadata-ops`` must be specified.
+
+:caps: dedup=write
+
+Syntax
+^^^^^^
+
+::
+
+	POST /{admin}/dedup?op=throttle<[&max-bucket-index-ops=<count>][&max-metadata-ops=<count>]> HTTP/1.1
+	Host: {fqdn}
+
+Request Parameters
+^^^^^^^^^^^^^^^^^^
+
+``max-bucket-index-ops``
+
+:Description: Maximum bucket index read requests per second per RGW during dedup. ``0`` means unlimited.
+:Type: Integer
+:Required: No (but at least one of ``max-bucket-index-ops`` or ``max-metadata-ops`` is required)
+
+``max-metadata-ops``
+
+:Description: Maximum metadata requests per second per RGW during dedup. ``0`` means unlimited.
+:Type: Integer
+:Required: No (but at least one of ``max-bucket-index-ops`` or ``max-metadata-ops`` is required)
 
 
 

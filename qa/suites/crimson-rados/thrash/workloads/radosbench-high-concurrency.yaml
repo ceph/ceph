@@ -1,10 +1,6 @@
 overrides:
   ceph:
     conf:
-      global:
-        # added due to https://tracker.ceph.com/issues/74504
-        # and https://tracker.ceph.com/issues/74503
-        crimson_allow_pg_split: false
       client.0:
         debug ms: 1
         debug objecter: 20

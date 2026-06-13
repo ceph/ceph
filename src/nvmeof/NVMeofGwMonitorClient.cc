@@ -269,7 +269,7 @@ void NVMeofGwMonitorClient::send_beacon()
       gwmap_epoch,
       beacon_sequence,
       // Pass affected features to the constructor
-      cluster_beacon_diff_included ? CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF : 0
+      cluster_beacon_diff_included ? 1 : 0
   );
   dout(10) << "sending beacon with diff support: " << (cluster_beacon_diff_included ? "enabled" : "disabled") << dendl;
   
@@ -413,6 +413,13 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   // ensure that the gateway state has not vanished
   ceph_assert(got_new_gw_state || !got_old_gw_state);
 
+  uint64_t old_cluster_beacon_diff_included = cluster_beacon_diff_included;
+  cluster_beacon_diff_included = (new_gw_state.map_features & NVMeofGwMap::FLAG_BEACONDIFF) != 0;
+  if (old_cluster_beacon_diff_included != cluster_beacon_diff_included) {
+    dout(0) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included)
+            << dendl;
+  }
+
   // Check if the last_beacon_seq_number in the received map doesn't match our last sent beacon_sequence
   // beacon_sequence is incremented after sending, so we compare with (beacon_sequence - 1)
   {
@@ -551,12 +558,6 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
 {
   std::lock_guard l(lock);
   dout(10) << "got map type " << m->get_type() << dendl;
-
-  // print connection features for all incoming messages and update cluster features
-  if (m->get_connection()) {
-    cluster_beacon_diff_included = monc.get_monmap_required_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF);
-    dout(10) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included) << dendl;
-  }
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
     handle_nvmeof_gw_map(ref_cast<MNVMeofGwMap>(m));

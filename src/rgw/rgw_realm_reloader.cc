@@ -193,9 +193,12 @@ void RGWRealmReloader::reload()
   if (env.lua.manager.get()) {
     env.lua.manager = env.driver->get_lua_manager(
         env.lua.manager->luarocks_path());
-    if (env.lua.background) {
-      env.lua.background->set_manager(env.lua.manager.get());
-      env.lua.manager.get()->set_lua_background(env.lua.background);
+    if (env.driver->get_name() == "rados") {
+      static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(&dp);
+      if (env.lua.background) {
+        env.lua.background->set_manager(env.lua.manager.get());
+        env.lua.manager.get()->set_lua_background(env.lua.background);
+      }
     }
   }
 

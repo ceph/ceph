@@ -19,6 +19,8 @@
 #include <errno.h>
 #include <sstream>
 
+using namespace rados::cls::numops;
+
 namespace rados {
   namespace cls {
     namespace numops {
@@ -37,7 +39,7 @@ namespace rados {
         encode(stream.str(), in);
 
         librados::ObjectWriteOperation op;
-        op.exec("numops", "add", in);
+        op.exec(method::add, in);
 
         return ioctx->operate(oid, &op);
       }
@@ -64,7 +66,7 @@ namespace rados {
         encode(stream.str(), in);
 
         librados::ObjectWriteOperation op;
-        op.exec("numops", "mul", in);
+        op.exec(method::mul, in);
 
         return ioctx->operate(oid, &op);
       }

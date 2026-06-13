@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
 set -ex
 
@@ -9,7 +10,7 @@ set -ex
 : ${DASHBOARD_PORT:='8443'}
 
 get_vm_ip () {
-    local ip=$(kcli info vm "$1" -f ip -v | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+    local ip=$(with_libvirt "kcli info vm \"$1\" -f ip -v" | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
     echo -n $ip
 }
 

@@ -6,12 +6,12 @@ LazyIO relaxes POSIX semantics. Buffered reads/writes are allowed even when a
 file is opened by multiple applications on multiple clients. Applications are
 responsible for managing cache coherency themselves.
 
-Libcephfs supports LazyIO since nautilus release.
+Libcephfs supports LazyIO since Nautilus release.
 
 Enable LazyIO
 =============
 
-LazyIO can be enabled by following ways.
+LazyIO can be enabled in the following ways.
 
 - ``client_force_lazyio`` option enables LAZY_IO globally for libcephfs and
   ceph-fuse mount.
@@ -48,7 +48,7 @@ particular client/file descriptor in a parallel application:
         int fda = ceph_open(ca, "shared_file.txt", O_CREAT|O_RDWR, 0644); 
 
         /* Enable LazyIO for fda */
-        ceph_lazyio(ca, fda, 1));
+        ceph_lazyio(ca, fda, 1);
 
         for(i = 0; i < num_iters; i++) {
             char out_buf[] = "fooooooooo";

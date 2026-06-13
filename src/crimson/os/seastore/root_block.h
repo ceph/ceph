@@ -61,7 +61,7 @@ struct RootBlock : CachedExtent {
     return extent_types_t::ROOT;
   }
 
-  void on_replace_prior() final;
+  void on_replace_prior(Transaction &t) final;
 
   /// dumps root as delta
   ceph::bufferlist get_delta() final {

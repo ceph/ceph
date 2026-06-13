@@ -22,6 +22,8 @@
 namespace crimson::osd {
 class PG;
 
+class PGRecovery;
+
 class RecoveryBackend {
 public:
   class WaitForObjectRecovery;
@@ -36,13 +38,22 @@ public:
   RecoveryBackend(crimson::osd::PG& pg,
 		  crimson::osd::ShardServices& shard_services,
 		  crimson::os::CollectionRef coll,
+      store_index_t store_index,
 		  PGBackend* backend)
     : pg{pg},
       shard_services{shard_services},
-      store{&shard_services.get_store()},
+      store(shard_services.get_store(store_index)),
       coll{coll},
       backend{backend} {}
   virtual ~RecoveryBackend() {}
+
+  static std::unique_ptr<RecoveryBackend> create(
+    const pg_pool_t& pool,
+    crimson::osd::PG& pg,
+    crimson::osd::ShardServices& shard_services,
+    crimson::os::CollectionRef coll,
+    PGBackend* backend);
+
   std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
     auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery(pg));
     assert(it->second);
@@ -76,17 +87,18 @@ public:
 
   virtual interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionXcoreRef conn) = 0;
+    crimson::net::ConnectionXcoreRef conn);
 
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual interruptible_future<> recover_delete(
+
+  interruptible_future<> recover_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
-  virtual interruptible_future<> push_delete(
+    eversion_t need);
+  interruptible_future<> push_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
+    eversion_t need);
 
   interruptible_future<PrimaryBackfillInterval> scan_for_backfill_primary(
     const hobject_t from,
@@ -127,7 +139,7 @@ public:
 protected:
   crimson::osd::PG& pg;
   crimson::osd::ShardServices& shard_services;
-  crimson::os::FuturizedStore::Shard* store;
+  crimson::os::BackendStore store;
   crimson::os::CollectionRef coll;
   PGBackend* backend;
 
@@ -176,6 +188,15 @@ public:
     }
     seastar::future<> wait_for_pushes(pg_shard_t shard) {
       return pushes[shard].get_shared_future();
+    }
+    bool has_pushes() const {
+      return !pushes.empty();
+    }
+    seastar::future<> wait_for_all_pushes() {
+      return seastar::parallel_for_each(pushes,
+	[](auto& entry) {
+	  return entry.second.get_shared_future();
+	});
     }
     seastar::future<> wait_for_recovered() {
       if (!recovered) {
@@ -255,6 +276,8 @@ public:
 protected:
   std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
   std::map<hobject_t, seastar::shared_promise<>> unfound;
+
+  friend PGRecovery;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) const;
@@ -272,10 +295,6 @@ protected:
   void clean_up(ceph::os::Transaction& t, interrupt_cause_t why);
   virtual seastar::future<> on_stop() = 0;
 
-  virtual interruptible_future<> handle_backfill_op(
-    Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionXcoreRef conn);
-
   /**
    * replica_push_targets
    *
@@ -284,6 +303,20 @@ protected:
    */
   std::map<hobject_t, crimson::osd::ObjectContextRef> replica_push_targets;
 private:
+  interruptible_future<> on_local_recover_persist(
+    const hobject_t& soid,
+    const ObjectRecoveryInfo& _recovery_info,
+    bool is_delete,
+    epoch_t epoch_to_freeze);
+  interruptible_future<> local_recover_delete(
+    const hobject_t& soid,
+    eversion_t need,
+    epoch_t epoch_frozen);
+  interruptible_future<> handle_recovery_delete(
+    Ref<MOSDPGRecoveryDelete> m);
+  interruptible_future<> handle_recovery_delete_reply(
+    Ref<MOSDPGRecoveryDeleteReply> m);
+
   void handle_backfill_finish(
     MOSDPGBackfill& m,
     crimson::net::ConnectionXcoreRef conn);

@@ -1,4 +1,4 @@
-import { HttpParams } from '@angular/common/http';
+import { HttpParams, HttpResponse } from '@angular/common/http';
 import {
   AfterViewInit,
   ChangeDetectorRef,
@@ -17,7 +17,7 @@ import {
 
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { take, tap } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { DaemonService } from '~/app/shared/api/daemon.service';
@@ -33,11 +33,14 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Daemon } from '~/app/shared/models/daemon.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { CephServiceSpec, DaemonAction } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-service-daemon-list',
@@ -95,6 +98,21 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   hasOrchestrator = false;
   showDocPanel = false;
 
+  private static readonly DAEMON_ACTIONS_NEED_ORCHESTRATOR_FORCE = new Set<DaemonAction>([
+    DaemonAction.STOP,
+    DaemonAction.RESTART
+  ]);
+
+  private static readonly DAEMON_TYPES_NEED_ORCHESTRATOR_FORCE = new Set<string>([
+    'alertmanager',
+    'grafana',
+    'nfs',
+    'nvmeof',
+    'prometheus',
+    'rgw',
+    'smb'
+  ]);
+
   private daemonsTable: TableComponent;
   private daemonsTableTplsSub: Subscription;
   private serviceSub: Subscription;
@@ -109,6 +127,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     private authStorageService: AuthStorageService,
     private daemonService: DaemonService,
     private notificationService: NotificationService,
+    private modalService: ModalCdsService,
     private cdRef: ChangeDetectorRef
   ) {}
 
@@ -118,30 +137,30 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         permission: 'update',
         icon: Icons.start,
-        click: () => this.daemonAction('start'),
+        click: () => this.daemonAction(DaemonAction.START),
         name: this.actionLabels.START,
-        disable: () => this.actionDisabled('start')
+        disable: () => this.actionDisabled(DaemonAction.START)
       },
       {
         permission: 'update',
         icon: Icons.stop,
-        click: () => this.daemonAction('stop'),
+        click: () => this.daemonAction(DaemonAction.STOP),
         name: this.actionLabels.STOP,
-        disable: () => this.actionDisabled('stop')
+        disable: () => this.actionDisabled(DaemonAction.STOP)
       },
       {
         permission: 'update',
         icon: Icons.restart,
-        click: () => this.daemonAction('restart'),
+        click: () => this.daemonAction(DaemonAction.RESTART),
         name: this.actionLabels.RESTART,
-        disable: () => this.actionDisabled('restart')
+        disable: () => this.actionDisabled(DaemonAction.RESTART)
       },
       {
         permission: 'update',
         icon: Icons.deploy,
-        click: () => this.daemonAction('redeploy'),
+        click: () => this.daemonAction(DaemonAction.REDEPLOY),
         name: this.actionLabels.REDEPLOY,
-        disable: () => this.actionDisabled('redeploy')
+        disable: () => this.actionDisabled(DaemonAction.REDEPLOY)
       }
     ];
     this.columns = [
@@ -306,41 +325,77 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.selection = selection;
   }
 
-  daemonAction(actionType: string) {
-    this.daemonService
-      .action(this.selection.first()?.daemon_name, actionType)
-      .pipe(take(1))
-      .subscribe({
-        next: (resp) => {
+  daemonAction(actionType: DaemonAction) {
+    const daemon = this.selection.first();
+    if (!daemon?.daemon_name) {
+      return;
+    }
+    if (
+      ServiceDaemonListComponent.DAEMON_ACTIONS_NEED_ORCHESTRATOR_FORCE.has(actionType) &&
+      ServiceDaemonListComponent.DAEMON_TYPES_NEED_ORCHESTRATOR_FORCE.has(daemon.daemon_type)
+    ) {
+      this.modalService.show(DeleteConfirmationModalComponent, {
+        impact: DeletionImpact.medium,
+        itemDescription: 'daemon',
+        itemNames: [daemon.daemon_name],
+        actionDescription: actionType,
+        infoMessage: $localize`Stopping or restarting this ${daemon.daemon_type}:daemonType: daemon can disrupt clients or services that depend on it. The orchestrator may require acknowledging risk, confirm only if you accept it. This action uses the orchestrator force option.`,
+        submitActionObservable: () =>
+          this.executeDaemonActionObservable(daemon.daemon_name, actionType, true)
+      });
+      return;
+    }
+    this.executeDaemonAction(daemon.daemon_name, actionType);
+  }
+
+  /**
+   * Observable used by DeleteConfirmationModal (submitActionObservable) so the modal closes on
+   * complete; sync submitAction does not call hideModal().
+   */
+  private executeDaemonActionObservable(
+    daemonName: string,
+    actionType: DaemonAction,
+    force?: boolean
+  ): Observable<HttpResponse<object>> {
+    return this.daemonService.action(daemonName, actionType, force).pipe(
+      take(1),
+      tap({
+        next: (resp: HttpResponse<object>) => {
           this.notificationService.show(
             NotificationType.success,
             `Daemon ${actionType} scheduled`,
-            resp.body.toString()
+            resp.body?.toString() ?? ''
           );
         },
-        error: (resp) => {
+        error: (resp: unknown) => {
+          const err = resp as { body?: { toString?: () => string }; message?: string };
           this.notificationService.show(
             NotificationType.error,
             'Daemon action failed',
-            resp.body.toString()
+            err?.body?.toString?.() ?? err?.message ?? ''
           );
         }
-      });
+      })
+    );
   }
 
-  actionDisabled(actionType: string) {
+  private executeDaemonAction(daemonName: string, actionType: DaemonAction, force?: boolean) {
+    this.executeDaemonActionObservable(daemonName, actionType, force).subscribe();
+  }
+
+  actionDisabled(actionType: DaemonAction) {
     if (this.selection?.hasSelection) {
       const daemon = this.selection.selected[0];
       if (daemon.daemon_type === 'mon' || daemon.daemon_type === 'mgr') {
         return true; // don't allow actions on mon and mgr, dashboard requires them.
       }
       switch (actionType) {
-        case 'start':
+        case DaemonAction.START:
           if (daemon.status_desc === 'running') {
             return true;
           }
           break;
-        case 'stop':
+        case DaemonAction.STOP:
           if (daemon.status_desc === 'stopped') {
             return true;
           }

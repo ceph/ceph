@@ -12,7 +12,6 @@ import {
   NgbTimepickerModule,
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { ClickOutsideModule } from 'ng-click-outside';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 import {
@@ -46,7 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
-import EditIcon from '@carbon/icons/es/edit/20';
+import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -70,7 +69,6 @@ import { HelperComponent } from './helper/helper.component';
 import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
-import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
 import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
@@ -87,7 +85,6 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
 import { CardGroupComponent } from './card-group/card-group.component';
 import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
-import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
 import { ChartsModule } from '@carbon/charts-angular';
@@ -111,6 +108,7 @@ import DataCenter16 from '@carbon/icons/es/data--center/16';
 import Upgrade16 from '@carbon/icons/es/upgrade/16';
 import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import WarningAltFilled32 from '@carbon/icons/es/warning--alt--filled/32';
 import Help16 from '@carbon/icons/es/help/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
@@ -121,6 +119,19 @@ import Plug16 from '@carbon/icons/es/plug/16';
 import VmdkDisk16 from '@carbon/icons/es/vmdk-disk/16';
 import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
 import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
+import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
+import InProgress16 from '@carbon/icons/es/in-progress/16';
+import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
+import Launch16 from '@carbon/icons/es/launch/16';
+import Cube16 from '@carbon/icons/es/cube/16';
+import ChevronLeft16 from '@carbon/icons/es/chevron--left/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import CaretLeft16 from '@carbon/icons/es/caret--left/16';
+import CaretRight16 from '@carbon/icons/es/caret--right/16';
+import Locked16 from '@carbon/icons/es/locked/16';
+import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
+import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
+import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -140,7 +151,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     PipesModule,
     DirectivesModule,
     NgbDropdownModule,
-    ClickOutsideModule,
     SimplebarAngularModule,
     RouterModule,
     NgbDatepickerModule,
@@ -184,7 +194,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     UsageBarComponent,
     LoadingPanelComponent,
     ModalComponent,
-    NotificationsSidebarComponent,
     DeleteConfirmationModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
@@ -214,7 +223,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
@@ -237,7 +245,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     LoadingPanelComponent,
     UsageBarComponent,
     ModalComponent,
-    NotificationsSidebarComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
@@ -262,7 +269,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
@@ -294,6 +300,7 @@ export class ComponentsModule {
       DataCenter16,
       Upgrade16,
       WarningAltFilled16,
+      WarningAltFilled32,
       Help16,
       IncidentReporter16,
       IbmStreamSets16,
@@ -303,7 +310,20 @@ export class ComponentsModule {
       Plug16,
       VmdkDisk16,
       WarningAlt16,
-      CheckMarkOutline16
+      CheckMarkOutline16,
+      ArrowUpRight16,
+      InProgress16,
+      ArrowDown16,
+      Launch16,
+      Cube16,
+      ChevronLeft16,
+      ChevronRight16,
+      CaretLeft16,
+      CaretRight16,
+      Locked16,
+      WebServicesCluster20,
+      WebServicesCluster32,
+      CloudMonitoring16
     ]);
   }
 }

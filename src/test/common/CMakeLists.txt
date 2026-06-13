@@ -114,6 +114,22 @@ add_executable(unittest_shared_cache
 add_ceph_unittest(unittest_shared_cache)
 target_link_libraries(unittest_shared_cache global)
 
+# unittest_web_cache
+add_executable(unittest_web_cache
+  test_web_cache.cc
+  )
+add_ceph_unittest(unittest_web_cache)
+target_link_libraries(unittest_web_cache ceph-common)
+
+if(HAVE_KEYUTILS)
+  # unittest_web_cache
+  add_executable(unittest_keyring
+    test_keyring.cc
+    )
+  add_ceph_unittest(unittest_keyring)
+  target_link_libraries(unittest_keyring global keyring)
+endif()
+
 # unittest_sloppy_crc_map
 add_executable(unittest_sloppy_crc_map
   test_sloppy_crc_map.cc
@@ -376,6 +392,10 @@ add_executable(unittest_hobject test_hobject.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_hobject global ceph-common)
 add_ceph_unittest(unittest_hobject)
+
+add_executable(unittest_async_call_once test_async_call_once.cc)
+add_ceph_unittest(unittest_async_call_once)
+target_link_libraries(unittest_async_call_once ceph-common Boost::context)
 
 add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)

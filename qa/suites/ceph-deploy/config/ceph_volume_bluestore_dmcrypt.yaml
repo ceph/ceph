@@ -1,8 +1,0 @@
-overrides:
-   ceph-deploy:
-      use-ceph-volume: True
-      bluestore: True
-      dmcrypt: True
-      conf:
-        osd:
-          bluestore fsck on mount: true

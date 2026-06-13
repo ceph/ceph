@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <iostream>
 #include <string>
 #include <memory>
@@ -111,11 +112,13 @@ namespace file::listing {
     using wd_remove_map_t = ankerl::unordered_dense::map<std::string, int>;
 
     int wfd, efd;
-    std::thread thrd;
     std::mutex map_mutex;  // protects wd_callback_map and wd_remove_map
     wd_callback_map_t wd_callback_map;
     wd_remove_map_t wd_remove_map;
-    bool shutdown{false};
+    std::atomic<bool> shutdown{false};
+    /* must be last: starting the thread (ev_loop) reaches every member
+     * above, which are constructed in declaration order */
+    std::thread thrd;
 
     class AlignedBuf
     {
@@ -147,9 +150,9 @@ namespace file::listing {
       struct pollfd fds[2] = {{wfd, POLLIN}, {efd, POLLIN}};
 
     restart:
-      while(! shutdown) {
+      while(! shutdown.load(std::memory_order_acquire)) {
 	npoll = poll(fds, nfds, -1); /* for up to 10 fds, poll is fast as epoll */
-	if (shutdown) {
+	if (shutdown.load(std::memory_order_acquire)) {
 	  return;
 	}
 	if (npoll == -1) {
@@ -203,6 +206,7 @@ namespace file::listing {
 	    } /* !overflow */
 	    if (evec.size() > 0) {
 	      n->notify(watch_name, watch_opaque, evec);
+	      evec.clear();
 	    }
 	  } /* events */
 	} /* n > 0 */
@@ -211,14 +215,18 @@ namespace file::listing {
 
     Inotify(Notifiable* n, const std::string& bucket_root)
       : Notify(n, bucket_root),
+	wfd(inotify_init1(IN_NONBLOCK)),
+	efd(eventfd(0, EFD_NONBLOCK)),
 	thrd(&Inotify::ev_loop, this)
       {
-	wfd = inotify_init1(IN_NONBLOCK);
 	if (wfd == -1) {
 	  std::cerr << fmt::format("{} inotify_init1 failed with {}", __func__, wfd) << std::endl;
 	  exit(1);
 	}
-	efd = eventfd(0, EFD_NONBLOCK);
+	if (efd == -1) {
+	  std::cerr << fmt::format("{} eventfd failed", __func__) << std::endl;
+	  exit(1);
+	}
       }
 
     void signal_shutdown() {
@@ -258,9 +266,11 @@ namespace file::listing {
     }
 
     virtual ~Inotify() {
-      shutdown = true;
+      shutdown.store(true, std::memory_order_release);
       signal_shutdown();
       thrd.join();
+      close(wfd);
+      close(efd);
     }
   };
 #endif /* linux */

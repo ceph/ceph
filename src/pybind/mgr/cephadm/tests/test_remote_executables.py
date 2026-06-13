@@ -104,6 +104,8 @@ def _names(node):
         return [f"<Subscript: {node.value}{node.slice}>"]
     if isinstance(node, ast.BinOp):
         return [f"<BinaryOp: {_names(node.left)} {_names(node.op)} {_names(node.right)}"]
+    if isinstance(node, ast.BoolOp):
+        return [f"<BoolOp: {node.op} {[_names(v) for v in node.values]}>"]
     if (
         isinstance(node, ast.Add)
         or isinstance(node, ast.Sub)
@@ -114,7 +116,7 @@ def _names(node):
         or isinstance(node, ast.Pow)
         or isinstance(node, ast.LShift)
         or isinstance(node, ast.RShift)
-        or isinstance(node, ast.ButOr)
+        or isinstance(node, ast.BitOr)
         or isinstance(node, ast.BitXor)
         or isinstance(node, ast.BitAnd)
         or isinstance(node, ast.MatMult)

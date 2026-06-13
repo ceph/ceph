@@ -18,7 +18,7 @@
             <a target="_blank"
                [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
                {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-              <i class="fa fa-external-link"></i>
+              <cd-icon type="launch"></cd-icon>
             </a>
           </h4>
         </div>
@@ -52,9 +52,10 @@
   <div class="container h-75">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
-        <i class="mx-auto d-block"
-           [ngClass]="[icons.large3x, icons.spinner, icons.spin]">
-        </i>
+        <cds-loading class="mx-auto d-block"
+                     [isActive]="true"
+                     [overlay]="false"
+                     size="lg"></cds-loading>
         <p class="text-center mt-3"
            i18n>Loading data, Please wait...</p>
       </div>

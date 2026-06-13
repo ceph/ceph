@@ -76,7 +76,17 @@ def task(ctx, config):
     target = acting[1]
 
     log.debug("write some data")
-    rados(ctx, mon, ['-p', pool, 'bench', '120', 'write', '--no-cleanup'])
+    # perform rados bench writes of 4MiB objects. The ec2+1 pool has 150%
+    # overhead and based on the total available capacity, calculate the max
+    # number of objects necessary to fill only 50% of the cluster.
+    cluster_stats = manager.get_cluster_df_stats()
+    total_avail_bytes = cluster_stats['total_avail_bytes']
+    log.debug("total available bytes: %s" % total_avail_bytes)
+    max_objects = int(total_avail_bytes / (4*1024*1024) / 1.5 / 2)
+    log.debug("max_objects=%s" % max_objects)
+    # Perform writes
+    rados(ctx, mon, ['-p', pool, 'bench', '120', 'write', '--max-objects', \
+          str(max_objects), '--no-cleanup'])
     df = manager.get_osd_df(target)
     log.debug("target osd df: %s" % df)
 
@@ -88,7 +98,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set', 'nobackfill')
     manager.raw_cluster_cmd('osd', 'set', 'norecover')
 
-    log.debug("stop tartget osd %s" % target)
+    log.debug("stop target osd %s" % target)
     manager.kill_osd(target)
     manager.wait_till_active()
 
@@ -100,7 +110,18 @@ def task(ctx, config):
     log.debug("re-write data")
     rados(ctx, mon, ['-p', pool, 'cleanup'])
     time.sleep(10)
-    rados(ctx, mon, ['-p', pool, 'bench', '60', 'write', '--no-cleanup'])
+    cluster_stats = manager.get_cluster_df_stats()
+    total_avail_bytes = cluster_stats['total_avail_bytes']
+    log.debug("total available bytes(after stopping osd.%s): %s" %
+              (target, total_avail_bytes))
+    # Write nominal data (20% of total_avail_bytes) to test backfillfull.
+    # This later helps keep the backfillfull ratio to a level that allows
+    # backfilling of new data to the target.
+    max_objects = int(total_avail_bytes / (4*1024*1024) / 1.5 / 5)
+    log.debug("max_objects=%s" % max_objects)
+
+    rados(ctx, mon, ['-p', pool, 'bench', '60', 'write', '--max-objects', \
+          str(max_objects), '--no-cleanup'])
 
     df = manager.get_osd_df(primary)
     log.debug("primary osd df: %s" % df)
@@ -124,7 +145,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set-backfillfull-ratio',
                             '{:.3f}'.format(backfillfull + 0.001))
 
-    log.debug("start tartget osd %s" % target)
+    log.debug("start target osd %s" % target)
 
     manager.revive_osd(target)
     manager.wait_for_active()
@@ -152,7 +173,7 @@ def task(ctx, config):
     log.debug("compress_ratio: %s" % compress_ratio)
 
     backfillfull = (used_kb + primary_used_kb) * compress_ratio / total_kb
-    assert backfillfull < 0.9
+    assert backfillfull < 0.9 * compress_ratio
     nearfull_min = max(used_kb, primary_used_kb) * compress_ratio / total_kb
     assert nearfull_min < backfillfull
     delta = backfillfull - nearfull_min
@@ -161,10 +182,12 @@ def task(ctx, config):
 
     log.debug("update nearfull ratio to %s and backfillfull ratio to %s" %
               (nearfull, backfillfull))
-    manager.raw_cluster_cmd('osd', 'set-nearfull-ratio',
-                            '{:.3f}'.format(nearfull + 0.001))
+    # Set backfillfull-ratio first to avoid a temporary "full ratio(s) out of
+    # order" condition and the resulting cluster error log.
     manager.raw_cluster_cmd('osd', 'set-backfillfull-ratio',
                             '{:.3f}'.format(backfillfull + 0.001))
+    manager.raw_cluster_cmd('osd', 'set-nearfull-ratio',
+                            '{:.3f}'.format(nearfull + 0.001))
 
     wait_for_pg_state(manager, pgid, 'backfilling', target)
 

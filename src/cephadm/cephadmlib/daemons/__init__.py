@@ -1,4 +1,4 @@
-from .ceph import Ceph, OSD, CephExporter
+from .ceph import Ceph, OSD, CephExporter, Crash
 from .custom import CustomContainer
 from .ingress import HAproxy, Keepalived
 from .iscsi import CephIscsi
@@ -15,6 +15,7 @@ from .oauth2_proxy import OAuth2Proxy
 __all__ = [
     'Ceph',
     'CephExporter',
+    'Crash',
     'CephIscsi',
     'CephNvmeof',
     'CustomContainer',

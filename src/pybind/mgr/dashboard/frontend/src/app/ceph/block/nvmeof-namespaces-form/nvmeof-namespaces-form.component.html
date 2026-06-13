@@ -20,17 +20,56 @@
         </cd-help-text>
       </div>
 
+      <!-- Subsystem -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-select
+            formControlName="subsystem"
+            cdValidate
+            #subsystemRef="cdValidate"
+            label="Select subsystem"
+            [invalid]="subsystemRef.isInvalid"
+            invalidText="This field is required"
+            i18n-label
+            i18n-invalidText>
+            @if (!subsystems) {
+            <option
+              [ngValue]="null"
+              disabled>Loading...</option>
+            }
+            @if (subsystems && subsystems.length === 0) {
+            <option
+              [ngValue]="null"
+              disabled>-- No subsystems available --</option>
+            }
+            @if (subsystems && subsystems.length > 0) {
+            <option
+              selectionFeedback="top-after-reopen"
+              value=""
+              selected>Select a subsystem</option>
+            }
+            @for (subsystem of subsystems; track subsystem.nqn) {
+            <option
+              [value]="subsystem.nqn">{{ subsystem.nqn }}</option>
+            }
+          </cds-select>
+        </div>
+      </div>
+
       <!-- Namespace Count (Create only) -->
       <div cdsRow
            class="form-item">
         <div cdsCol>
           <cds-number
+            cdValidate
+            #nsCountRef="cdValidate"
             formControlName="nsCount"
             label="Number of namespaces"
             helperText="No. of namespaces to generate. Value must be between 1 and 5."
             [min]="MIN_NAMESPACE_CREATE"
             [max]="MAX_NAMESPACE_CREATE"
-            [invalid]="nsForm.controls['nsCount'].invalid && (nsForm.controls['nsCount'].dirty || nsForm.controls['nsCount'].touched)"
+            [invalid]="nsCountRef.isInvalid"
             [invalidText]="nsForm.getError('required', 'nsCount') ? requiredInvalidText : nsCountInvalidText"
             i18n-label
             i18n-helperText>
@@ -38,26 +77,35 @@
         </div>
       </div>
 
-      <!-- Namespace Size (UI only) -->
+      <!-- Image Size -->
       <div cdsRow
            class="form-item">
-        <div cdsCol>
-          <cds-number
-            formControlName="namespace_size"
-            label="Namespace size (GiB)"
-            helperText="Specify the size to expose to hosts. Leave blank for full device/file."
-            placeholder="e.g. 100"
-            [min]="0"
-            [invalid]="nsForm.controls['namespace_size'].invalid && (nsForm.controls['namespace_size'].dirty || nsForm.controls['namespace_size'].touched)"
-            [invalidText]="namespaceSizeError"
+        <div
+          cdsCol
+          [columnNumbers]="{md: 4}">
+          <cds-text-label
+            label="Image size (GiB)"
+            helperText="The size of the namespace image."
+            [invalid]="imageSize.isInvalid"
+            [invalidText]="sizeError"
+            cdRequiredField="Image Size"
             i18n-label
             i18n-helperText>
-          </cds-number>
-          <ng-template #namespaceSizeError>
-            @if (nsForm.controls['namespace_size'].hasError('blockSizeMultiple')) {
+            <input cdsText
+                   cdValidate
+                   #imageSize="cdValidate"
+                   type="text"
+                   placeholder="e.g. 100 GiB"
+                   id="image_size"
+                   formControlName="image_size"
+                   defaultUnit="GiB"
+                   [min]="0"
+                   [invalid]="imageSize.isInvalid"
+                   cdDimlessBinary>
+          </cds-text-label>
+          <ng-template #sizeError>
             <span
-              i18n>Size must be a multiple of the block size (typically 512 or 4096 bytes).</span>
-            }
+              i18n>Enter a valid size (e.g., 10GiB).</span>
           </ng-template>
         </div>
       </div>
@@ -126,49 +174,16 @@
       </div>
       }
 
-      <!-- Subsystem -->
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-select
-            formControlName="subsystem"
-            label="Select subsystem"
-            [invalid]="nsForm.controls['subsystem'].invalid && (nsForm.controls['subsystem'].dirty || nsForm.controls['subsystem'].touched)"
-            invalidText="This field is required"
-            i18n-label
-            i18n-invalidText>
-            @if (subsystems === undefined) {
-            <option
-              [ngValue]="null"
-              disabled>Loading...</option>
-            }
-            @if (subsystems && subsystems.length === 0) {
-            <option
-              [ngValue]="null"
-              disabled>-- No subsystems available --</option>
-            }
-            @if (subsystems && subsystems.length > 0) {
-            <option
-              selectionFeedback="top-after-reopen"
-              value=""
-              selected>Select a subsystem</option>
-            }
-            @for (subsystem of subsystems; track subsystem.nqn) {
-            <option
-              [value]="subsystem.nqn">{{ subsystem.nqn }}</option>
-            }
-          </cds-select>
-        </div>
-      </div>
-
       <!-- Pool -->
       <div cdsRow
            class="form-item">
         <div cdsCol>
           <cds-select
             formControlName="pool"
+            cdValidate
+            #poolRef="cdValidate"
             label="RBD image pool"
-            [invalid]="nsForm.controls['pool'].invalid && (nsForm.controls['pool'].dirty || nsForm.controls['pool'].touched)"
+            [invalid]="poolRef.isInvalid"
             invalidText="This field is required"
             helperText="Pool where the backing Ceph block device resides."
             i18n-label
@@ -237,13 +252,16 @@
               i18n>Image name (optional)</label>
             <cds-text-label
               helperText="Provide a name for the images. For bulk creation, this will be used as the base prefix with numeric suffixes (e.g., img-1, img-2). Leave blank to auto-generate."
-              [invalid]="nsForm.controls['rbd_image_name'].invalid && (nsForm.controls['rbd_image_name'].dirty || nsForm.controls['rbd_image_name'].touched)"
+              [invalid]="rbdImageName.isInvalid"
               [invalidText]="nsForm.getError('rbdImageName', 'rbd_image_name') ? 'Image name contains invalid characters' : ''"
               i18n-helperText
               i18n-invalidText>
               <input cdsText
+                     cdValidate
+                     #rbdImageName="cdValidate"
                      placeholder="Enter a name"
-                     formControlName="rbd_image_name" />
+                     formControlName="rbd_image_name"
+                     [invalid]="rbdImageName.isInvalid" />
             </cds-text-label>
           </div>
         </div>
@@ -257,8 +275,10 @@
         <div cdsCol>
           <cds-select
             formControlName="rbd_image_name"
+            cdValidate
+            #rbdImageSelectRef="cdValidate"
             label="RBD Image"
-            [invalid]="nsForm.controls['rbd_image_name'].invalid && (nsForm.controls['rbd_image_name'].dirty || nsForm.controls['rbd_image_name'].touched)"
+            [invalid]="rbdImageSelectRef.isInvalid"
             invalidText="This field is required"
             helperText="Select an existing RBD image from the pool to expose as a namespace."
             i18n-label
@@ -277,34 +297,21 @@
       </div>
       }
 
-      <!-- Image Size -->
+      <!-- Namespace Block Size (bytes) -->
       <div cdsRow
            class="form-item">
-        <div
-          cdsCol
-          [columnNumbers]="{md: 4}">
-          <cds-text-label
-            label="Image size (GiB)"
-            helperText="The size of the namespace image."
-            [invalid]="nsForm.controls['image_size'].invalid && (nsForm.controls['image_size'].dirty || nsForm.controls['image_size'].touched)"
-            [invalidText]="sizeError"
-            cdRequiredField="Image Size"
+        <div cdsCol>
+          <cds-number
+            cdValidate
+            #namespaceSize="cdValidate"
+            formControlName="namespace_size"
+            label="Namespace block size (bytes)"
+            helperText="Specify the block size to expose to the hosts. Leave blank for the default block size of 512 bytes."
+            [min]="0"
+            [invalid]="namespaceSize.isInvalid"
             i18n-label
             i18n-helperText>
-            <input cdsText
-                   type="text"
-                   placeholder="e.g. 100 GiB"
-                   id="image_size"
-                   formControlName="image_size"
-                   defaultUnit="GiB"
-                   [min]="0"
-                   [invalid]="nsForm.controls['image_size'].invalid && (nsForm.controls['image_size'].dirty || nsForm.controls['image_size'].touched)"
-                   cdDimlessBinary>
-          </cds-text-label>
-          <ng-template #sizeError>
-            <span
-              i18n>Enter a valid size (e.g., 10GiB).</span>
-          </ng-template>
+          </cds-number>
         </div>
       </div>
 
@@ -320,4 +327,3 @@
     </div>
   </div>
 </form>
-

@@ -539,6 +539,9 @@ class Orchestrator(object):
     def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> OrchResult[Dict[str, str]]:
+        raise NotImplementedError()
+
     def cert_store_get_cert(
         self,
         cert_name: str,
@@ -662,7 +665,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names: List[str]) -> OrchResult[List[str]]:
+    def remove_daemons(self, names: List[str], force_delete_data: bool = False) -> OrchResult[List[str]]:
         """
         Remove specific daemon(s).
 
@@ -670,7 +673,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_name: str, force: bool = False) -> OrchResult[str]:
+    def remove_service(self, service_name: str, force: bool = False, force_delete_data: bool = False) -> OrchResult[str]:
         """
         Remove a service (a collection of daemons).
 
@@ -862,6 +865,14 @@ class Orchestrator(object):
         """remove prometheus target for multi-cluster"""
         raise NotImplementedError()
 
+    def set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> OrchResult[str]:
+        """set prometheus remote write url and allowed metrics for multi-cluster"""
+        raise NotImplementedError()
+
+    def remove_prometheus_remote_write(self, url: str) -> OrchResult[str]:
+        """remove prometheus remote write url and allowed metrics for multi-cluster"""
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
@@ -949,7 +960,8 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def upgrade_start(self, image: Optional[str], version: Optional[str], daemon_types: Optional[List[str]],
-                      hosts: Optional[str], services: Optional[List[str]], limit: Optional[int]) -> OrchResult[str]:
+                      hosts: Optional[str], services: Optional[List[str]], limit: Optional[int],
+                      bucket_type: Optional[str] = None, bucket_name: Optional[str] = None) -> OrchResult[str]:
         raise NotImplementedError()
 
     def upgrade_pause(self) -> OrchResult[str]:

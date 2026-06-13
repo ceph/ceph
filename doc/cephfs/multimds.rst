@@ -93,7 +93,7 @@ be stuck in the stopping state then that should be investigated as a possible
 bug.
 
 If an MDS daemon crashes or is killed while in the ``up:stopping`` state, a
-standby will take over and the cluster monitors will against try to stop
+standby will take over and the cluster Monitors will again try to stop
 the daemon.
 
 When a daemon finishes stopping, it will respawn itself and go back to being a
@@ -143,7 +143,7 @@ directory's export pin. For example:
 Setting subtree partitioning policies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-It is also possible to setup **automatic** static partitioning of subtrees via
+It is also possible to set up **automatic** static partitioning of subtrees via
 a set of **policies**. In CephFS, this automatic static partitioning is
 referred to as **ephemeral pinning**. Any directory (inode) which is
 ephemerally pinned will be automatically assigned to a particular rank
@@ -278,7 +278,7 @@ Dynamic subtree partitioning with Balancer on specific ranks
 The CephFS file system provides the ``bal_rank_mask`` option to enable the
 balancer to dynamically rebalance subtrees within particular active MDS ranks.
 This allows administrators to employ both the dynamic subtree partitioning and
-static pining schemes in different active MDS ranks so that metadata loads are
+static pinning schemes in different active MDS ranks so that metadata loads are
 optimized based on user demand. For instance, in realistic cloud storage
 environments, where a lot of subvolumes are allotted to multiple computing
 nodes (e.g., VMs and containers), some subvolumes that require high performance

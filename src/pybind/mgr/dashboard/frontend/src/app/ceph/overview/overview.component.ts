@@ -1,22 +1,31 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
-import { GridModule, TilesModule } from 'carbon-components-angular';
-import { EMPTY, Observable } from 'rxjs';
-import { catchError, exhaustMap, map, shareReplay } from 'rxjs/operators';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  ViewEncapsulation
+} from '@angular/core';
+import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
+import { combineLatest, EMPTY, Observable, timer } from 'rxjs';
+import {
+  catchError,
+  distinctUntilChanged,
+  exhaustMap,
+  map,
+  shareReplay,
+  startWith,
+  switchMap
+} from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
-import { HealthCheck, HealthSnapshotMap } from '~/app/shared/models/health.interface';
+import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import {
-  HealthCardCheckVM,
+  buildHealthCardVM,
   HealthCardTabSection,
   HealthCardVM,
-  HealthDisplayVM,
-  HealthIconMap,
-  HealthMap,
-  HealthStatus,
-  Severity,
-  SeverityIconMap
+  StorageCardVM
 } from '~/app/shared/models/overview';
 
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
@@ -25,95 +34,15 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
-const sev = {
-  ok: 0 as Severity,
-  warn: 1 as Severity,
-  err: 2 as Severity
-} as const;
-
-const maxSeverity = (...values: Severity[]): Severity => Math.max(...values) as Severity;
-
-function buildHealthDisplay(status: HealthStatus): HealthDisplayVM {
-  return HealthMap[status] ?? HealthMap['HEALTH_OK'];
-}
-
-function safeDifference(a: number, b: number): number | null {
-  return a != null && b != null ? a - b : null;
-}
-
-/**
- * Mapper: HealthSnapshotMap -> HealthCardVM
- * Runs only when healthData$ emits.
- */
-export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
-  const checksObj: Record<string, HealthCheck> = d.health?.checks ?? {};
-  const healthDisplay = buildHealthDisplay(d.health.status as HealthStatus);
-
-  // --- Health panel ---
-
-  // Count incidents
-  let incidents = 0;
-  const checks: HealthCardCheckVM[] = [];
-
-  for (const [name, check] of Object.entries(checksObj)) {
-    incidents++;
-    checks.push({
-      name,
-      description: check?.summary?.message ?? '',
-      icon: HealthIconMap[check?.severity] ?? ''
-    });
-  }
-
-  // --- System sub-states ---
-
-  // MON
-  const monTotal = d.monmap?.num_mons ?? 0;
-  const monQuorum = (d.monmap as any)?.quorum?.length ?? 0;
-  const monSev: Severity = monQuorum < monTotal ? sev.warn : sev.ok;
-
-  // MGR
-  const mgrActive = d.mgrmap?.num_active ?? 0;
-  const mgrStandby = d.mgrmap?.num_standbys ?? 0;
-  const mgrSev: Severity = mgrActive < 1 ? sev.err : mgrStandby < 1 ? sev.warn : sev.ok;
-
-  // OSD
-  const osdUp = (d.osdmap as any)?.up ?? 0;
-  const osdIn = (d.osdmap as any)?.in ?? 0;
-  const osdTotal = (d.osdmap as any)?.num_osds ?? 0;
-  const osdDown = safeDifference(osdTotal, osdUp);
-  const osdOut = safeDifference(osdTotal, osdIn);
-  const osdSev: Severity = osdDown > 0 || osdOut > 0 ? sev.err : sev.ok;
-
-  // HOSTS
-  const hostsTotal = d.num_hosts ?? 0;
-  const hostsAvailable = (d as any)?.num_hosts_available ?? 0;
-  const hostsSev: Severity = hostsAvailable < hostsTotal ? sev.warn : sev.ok;
-
-  // Overall = worst of the subsystem severities.
-  const overallSystemSev = maxSeverity(monSev, mgrSev, osdSev, hostsSev);
-
-  return {
-    fsid: d.fsid,
-    overallSystemSev: SeverityIconMap[overallSystemSev],
-
-    incidents,
-    checks,
-
-    health: healthDisplay,
-
-    mon: { value: $localize`Quorum: ${monQuorum}/${monTotal}`, severity: SeverityIconMap[monSev] },
-    mgr: {
-      value: $localize`${mgrActive} active, ${mgrStandby} standby`,
-      severity: SeverityIconMap[mgrSev]
-    },
-    osd: { value: $localize`${osdUp}/${osdTotal} in/up`, severity: SeverityIconMap[osdSev] },
-    hosts: {
-      value: $localize`${hostsAvailable} / ${hostsTotal} available`,
-      severity: SeverityIconMap[hostsSev]
-    }
-  };
-}
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
+const TREND_DAYS = 7;
+const PROMETHUES_CONFIG_POLL_INTERVAL = 60000;
 
 @Component({
   selector: 'cd-overview',
@@ -125,35 +54,173 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     OverviewHealthCardComponent,
     ComponentsModule,
     OverviewAlertsCardComponent,
-    PerformanceCardComponent
+    PerformanceCardComponent,
+    LayoutModule,
+    DataTableModule,
+    PipesModule
   ],
   standalone: true,
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class OverviewComponent {
   isHealthPanelOpen = false;
+  isPGStatePanelOpen = false;
   activeHealthTab: HealthCardTabSection | null = null;
+  pgTableColumns = [
+    { prop: 'count', name: $localize`PGs count` },
+    { prop: 'state_name', name: $localize`Status` }
+  ];
+  hasOsd: boolean = false;
 
   private readonly healthService = inject(HealthService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
+  private readonly overviewStorageService = inject(OverviewStorageService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly prometheusService = inject(PrometheusService);
 
+  /* HEALTH CARD DATA */
   private readonly healthData$: Observable<HealthSnapshotMap> = this.refreshIntervalObs(() =>
     this.healthService.getHealthSnapshot()
-  );
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
   readonly healthCardVm$: Observable<HealthCardVM> = this.healthData$.pipe(
     map(buildHealthCardVM),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
+  /* EMPTY STATE DATA */
+  readonly isPromethuesConfigured$ = timer(0, PROMETHUES_CONFIG_POLL_INTERVAL).pipe(
+    switchMap(() => this.prometheusService.refreshPrometheusUsable()),
+    distinctUntilChanged(),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly hasNoOSDs$ = this.healthData$.pipe(
+    map((data: HealthSnapshotMap) => (data?.osdmap?.num_osds ?? 0) === 0),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly storageEmptyState$ = this.hasNoOSDs$.pipe(startWith(false)).pipe(
+    map((hasNoOSDs) => hasNoOSDs),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly prometheusEmptyState$ = this.isPromethuesConfigured$.pipe(
+    map((isPromethuesConfigured) => !isPromethuesConfigured),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  /* STORAGE CARD DATA */
   readonly storageVm$ = this.healthData$.pipe(
     map((data: HealthSnapshotMap) => ({
-      total: data.pgmap?.bytes_total ?? 0,
-      used: data.pgmap?.bytes_used ?? 0
+      total: data.pgmap?.bytes_total,
+      used: data.pgmap?.bytes_used
     })),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly averageConsumption$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.refreshIntervalObs(() => this.overviewStorageService.getAverageConsumption())
+        : EMPTY
+    ),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly timeUntilFull$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.refreshIntervalObs(() => this.overviewStorageService.getTimeUntilFull())
+        : EMPTY
+    ),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly breakdownRawData$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.refreshIntervalObs(() => this.overviewStorageService.getStorageBreakdown())
+        : EMPTY
+    ),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly capacityThresholds$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.refreshIntervalObs(() => this.overviewStorageService.getRawCapacityThresholds())
+        : EMPTY
+    ),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  // getTrendData() is already a polling stream through getRangeQueriesData()
+  // hence no refresh needed.
+  readonly trendData$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.overviewStorageService.getTrendData(
+            Math.floor(Date.now() / 1000) - TREND_DAYS * SECONDS_PER_DAY,
+            Math.floor(Date.now() / 1000),
+            SECONDS_PER_HOUR
+          )
+        : EMPTY
+    ),
+    map((result) => {
+      const values = result?.TOTAL_RAW_USED ?? [];
+
+      return values.map(([ts, val]) => ({
+        timestamp: new Date(ts * 1000),
+        values: { Used: Number(val) }
+      }));
+    }),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly storageCardVm$: Observable<StorageCardVM> = combineLatest([
+    this.storageVm$,
+    this.breakdownRawData$.pipe(startWith(null)),
+    this.trendData$.pipe(startWith([])),
+    this.averageConsumption$.pipe(startWith('')),
+    this.timeUntilFull$.pipe(startWith('')),
+    this.capacityThresholds$.pipe(startWith({ osdFullRatio: null, osdNearfullRatio: null }))
+  ]).pipe(
+    map(
+      ([
+        storage,
+        breakdownRawData,
+        consumptionTrendData,
+        averageDailyConsumption,
+        estimatedTimeUntilFull,
+        capacityThresholds
+      ]) => {
+        const total = storage?.total ?? 0;
+        const used = storage?.used ?? 0;
+        const [, unit] = this.overviewStorageService.formatBytesForChart(used);
+
+        return {
+          totalCapacity: total,
+          usedCapacity: used,
+          breakdownData: breakdownRawData
+            ? this.overviewStorageService.mapStorageChartData(breakdownRawData, unit, used)
+            : [],
+          isBreakdownLoaded: !!breakdownRawData,
+          consumptionTrendData,
+          averageDailyConsumption,
+          estimatedTimeUntilFull,
+          threshold: this.overviewStorageService.getThresholdStatus(
+            total,
+            storage?.used,
+            capacityThresholds.osdNearfullRatio,
+            capacityThresholds.osdFullRatio
+          )
+        };
+      }
+    ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
@@ -164,7 +231,11 @@ export class OverviewComponent {
     );
   }
 
-  togglePanel(): void {
+  toggleHealthPanel(): void {
     this.isHealthPanelOpen = !this.isHealthPanelOpen;
+  }
+
+  togglePGStatesPanel(): void {
+    this.isPGStatePanelOpen = !this.isPGStatePanelOpen;
   }
 }

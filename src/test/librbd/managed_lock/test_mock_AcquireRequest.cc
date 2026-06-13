@@ -119,7 +119,7 @@ public:
   void expect_lock(MockImageCtx &mock_image_ctx, int r,
                              bool exclusive = true) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                exec_internal(mock_image_ctx.header_oid, _, StrEq("lock"),
                      StrEq("lock"), IsLockType(exclusive), _, _, _))
                   .WillOnce(Return(r));
   }

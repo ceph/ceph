@@ -40,7 +40,6 @@ class ExtentQueue {
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(extent.is_linked_to_list());
     assert(list.size() > 0);
     auto extent_loaded_length = extent.get_loaded_length();
@@ -100,7 +99,6 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(!extent.is_linked_to_list());
 
     // absent, add to top (back)
@@ -126,7 +124,6 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
     assert(extent.is_linked_to_list());
 
     // present, move to top (back)
@@ -143,7 +140,6 @@ public:
     assert(extent.is_data_stable());
     assert(extent.is_linked_to_list());
     assert(extent.is_stable_clean());
-    assert(!extent.is_placeholder());
 
     // present, increase size
     assert(list.size() > 0);
@@ -296,7 +292,7 @@ public:
     return lru.get_current_num_extents();
   }
 
-  void register_metrics() final {
+  void register_metrics(store_index_t store_index) final {
     namespace sm = seastar::metrics;
     metrics.add_group(
       "cache",
@@ -306,22 +302,26 @@ public:
           [this] {
             return get_current_size_bytes();
           },
-          sm::description("total bytes pinned by the lru")
+          sm::description("total bytes pinned by the lru"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
         sm::make_counter(
           "lru_num_extents",
           [this] {
             return get_current_num_extents();
           },
-          sm::description("total extents pinned by the lru")
+          sm::description("total extents pinned by the lru"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
         sm::make_counter(
           "lru_hit", hit,
-          sm::description("total count of the extents that are linked to lru when touching them")
+          sm::description("total count of the extents that are linked to lru when touching them"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
         sm::make_counter(
           "lru_miss", miss,
-          sm::description("total count of the extents that are not linked to lru when touching them")
+          sm::description("total count of the extents that are not linked to lru when touching them"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
       }
     );
@@ -505,7 +505,7 @@ public:
     return warm_in.get_current_num_extents() + hot.get_current_num_extents();
   }
 
-  void register_metrics() final;
+  void register_metrics(store_index_t store_index) final;
 
   void get_stats(
     cache_stats_t &stats,
@@ -521,6 +521,7 @@ public:
 	ceph_assert(s == extent_2q_state_t::Hot);
 	hot.remove(extent);
       }
+      extent.set_2q_state(extent_2q_state_t::Fresh);
     } else {
       ceph_assert(s == extent_2q_state_t::Fresh);
     }
@@ -802,7 +803,7 @@ void ExtentPinboardTwoQ::get_stats(
   last_hits = overall_hits;
 }
 
-void ExtentPinboardTwoQ::register_metrics() {
+void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
   namespace sm = seastar::metrics;
   metrics.add_group(
     "cache",
@@ -812,36 +813,42 @@ void ExtentPinboardTwoQ::register_metrics() {
         [this] {
           return warm_in.get_current_size_bytes();
         },
-        sm::description("total bytes pinned by the 2q warm_in queue")
+        sm::description("total bytes pinned by the 2q warm_in queue"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "2q_warm_in_num_extents",
         [this] {
           return warm_in.get_current_num_extents();
         },
-        sm::description("total extents pinned by the 2q warm_in queue")
+        sm::description("total extents pinned by the 2q warm_in queue"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "2q_hot_size_bytes",
         [this] {
           return hot.get_current_size_bytes();
         },
-        sm::description("total bytes pinned by the 2q hot queue")
+        sm::description("total bytes pinned by the 2q hot queue"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "2q_hot_num_extents",
         [this] {
           return hot.get_current_num_extents();
         },
-        sm::description("total extents pinned by the 2q hot queue")
+        sm::description("total extents pinned by the 2q hot queue"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "2q_hit", hit,
-        sm::description("total count of the extents that are linked to 2Q when touching them")
+        sm::description("total count of the extents that are linked to 2Q when touching them"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "2q_miss", miss,
-        sm::description("total count of the extents that are not linked to 2Q when touching them")
+        sm::description("total count of the extents that are not linked to 2Q when touching them"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
   );

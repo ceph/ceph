@@ -14,6 +14,7 @@ from mgr_module import CLICheckNonemptyFileInput, HandleCommandResult
 from prettytable import PrettyTable
 
 from ..cli import DBCLICommand
+from ..exceptions import DashboardException
 from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
@@ -136,6 +137,36 @@ def convert_from_bytes(num_in_bytes):
         size_str = f"{size:.1f}"
 
     return f"{size_str}{units[unit_index]}"
+
+
+def resolve_nvmeof_server_address(
+    *,
+    server_address: Optional[str] = None,
+    traddr: Optional[str] = None,
+    require: bool = False,
+) -> Optional[str]:
+    sa = (server_address or "").strip() or None
+    ta = (traddr or "").strip() or None
+
+    if sa and ta:
+        raise DashboardException(
+            msg="Pass either 'server_address' or deprecated 'traddr', not both.",
+            code="server_address_and_traddr_mutually_exclusive",
+            http_status_code=400,
+            component="nvmeof",
+        )
+
+    resolved = sa or ta
+
+    if require and not resolved:
+        raise DashboardException(
+            msg="Missing required gateway address: 'server_address' (or deprecated 'traddr').",
+            code="missing_server_address",
+            http_status_code=400,
+            component="nvmeof",
+        )
+
+    return resolved
 
 
 class OutputFormatter(ABC):
@@ -457,6 +488,9 @@ class NvmeofCLICommand(DBCLICommand):
                                    self.prefix, exc_info=True)
 
                 out = message if message else self._output_formatter.format_output(ret, self._model)
+                wrn_msg = ret.get('error_message', '')
+                if wrn_msg:
+                    out += f"\nWarning: {wrn_msg}"
 
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)

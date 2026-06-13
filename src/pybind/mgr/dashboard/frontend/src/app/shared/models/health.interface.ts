@@ -38,6 +38,9 @@ export interface PgMap {
   bytes_used: number;
   bytes_total: number;
   num_pgs: number;
+  write_bytes_sec: number;
+  read_bytes_sec: number;
+  recovering_bytes_per_sec: number;
 }
 
 export interface HealthMapCommon {

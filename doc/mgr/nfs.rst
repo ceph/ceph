@@ -31,7 +31,7 @@ Create NFS Ganesha Cluster
 
 .. prompt:: bash #
 
-   ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] [--port <int>]
+   ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] [--port <int>] [--enable-rdma] [--rdma_port <int>] [-i <spec_file>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
@@ -290,7 +290,7 @@ Create CephFS Export
 
 .. prompt:: bash #
 
-   ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--cmount_path <value>]
+   ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--cmount_path <value>] [--xprtsec <value>] [--transports <value>...]
 
 This creates export RADOS objects containing the export block, where
 
@@ -318,18 +318,27 @@ value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
 ``<sectype>`` specifies which authentication methods will be used when
-connecting to the export. Valid values include "krb5p", "krb5i", "krb5", "sys", "tls", "mtls"
-and "none". More than one value can be supplied. The flag may be specified
+connecting to the export. Valid values include ``krb5p``, ``krb5i``, ``krb5``, ``sys``
+and ``none``. More than one value can be supplied. The flag may be specified
 multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or multiple
 values may be separated by a comma (example: ``--sectype krb5p,krb5i``). The
 server will negotatiate a supported security type with the client preferring
 the supplied methods left-to-right.
+
+``<xprtsec>`` defines how traffic is secured at the transport layer.
+Valid values are ``tls``, ``mtls`` and ``none``.
 
 ``<cmount_path>`` specifies the path within the CephFS to mount this export on. It is
 allowed to be any complete path hierarchy between ``/`` and the ``EXPORT {path}``. (i.e. if ``EXPORT { Path }`` parameter is ``/foo/bar`` then cmount_path could be ``/``, ``/foo`` or ``/foo/bar``).
 
 .. note:: If this and the other ``EXPORT { FSAL {} }`` options are the same between multiple exports, those exports will share a single CephFS client.
           If not specified, the default is ``/``.
+
+``<transports>`` is optional. List of NFS transport protocols. Valid values are
+``TCP``, ``UDP``, and ``RDMA``. Multiple values may be passed (e.g.
+``--transports TCP --transports RDMA`` or ``--transports TCP,RDMA``). If omitted,
+the export uses the default (e.g. TCP only, or TCP and RDMA when the cluster
+has RDMA enabled).
 
 .. note:: Specifying values for sectype that require Kerberos will only function on servers
           that are configured to support Kerberos. Setting up NFS-Ganesha to support Kerberos
@@ -355,7 +364,7 @@ To export a *bucket*:
 
 .. prompt:: bash #
 
-   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...]
+   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--xprtsec <value>] [--transports <value>...]
 
 For example, to export ``mybucket`` via NFS cluster ``mynfs`` at the
 pseudo-path ``/bucketdata`` to any host in the ``192.168.10.0/24`` network
@@ -392,16 +401,24 @@ default value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
 ``<sectype>`` specifies which authentication methods will be used when
-connecting to the export. Valid values include "krb5p", "krb5i", "krb5",
-"sys", and "none". More than one value can be supplied. The flag may be
+connecting to the export. Valid values include ``krb5p``, ``krb5i``, ``krb5``,
+``sys`` and ``none``. More than one value can be supplied. The flag may be
 specified multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or
 multiple values may be separated by a comma (example: ``--sectype
 krb5p,krb5i``). The server will negotatiate a supported security type with the
 client preferring the supplied methods left-to-right.
 
+``<transports>`` is optional. Valid values are ``TCP``, ``UDP``, and ``RDMA``.
+Multiple values may be passed. If omitted, defaults apply (e.g. TCP and RDMA
+when the cluster has RDMA enabled).
+
 .. note:: Specifying values for sectype that require Kerberos will only
    function on servers that are configured to support Kerberos. Setting up
    NFS-Ganesha to support Kerberos is outside the scope of this document.
+
+``<xprtsec>`` defines how traffic is secured at the transport layer.
+Valid values are ``tls``, ``mtls`` and ``none``.
+
 
 RGW user export
 ^^^^^^^^^^^^^^^
@@ -410,7 +427,7 @@ To export an RGW *user*:
 
 .. prompt:: bash #
 
-   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --user-id <user-id> [--readonly] [--client_addr <value>...] [--squash <value>]
+   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --user-id <user-id> [--readonly] [--client_addr <value>...] [--squash <value>] [--transports <value>...]
 
 For example, to export *myuser* via NFS cluster *mynfs* at the pseudo-path */myuser* to any host in the ``192.168.10.0/24`` network
 

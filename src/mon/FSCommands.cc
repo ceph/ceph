@@ -17,6 +17,8 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
+#include "Monitor.h"
+#include "Paxos.h"
 #include "mds/cephfs_features.h"
 #include "mds/FSMap.h"
 #include "osd/OSDMap.h"
@@ -601,28 +603,6 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         {
 	  fs.get_mds_map().clear_multimds_snaps_allowed();
         });
-      }
-    } else if (var == "allow_referent_inodes") {
-      bool allow_referent_inodes = false;
-      int r = parse_bool(val, &allow_referent_inodes, ss);
-      if (r != 0) {
-        return r;
-      }
-
-      if (!allow_referent_inodes) {
-        modify_filesystem(fsmap, fsv,
-            [](auto&& fs)
-        {
-          fs.get_mds_map().clear_referent_inodes();
-        });
-	ss << "Disabled creation of referent inodes for hardlinks to store backtrace";
-      } else {
-        modify_filesystem(fsmap, fsv,
-            [](auto&& fs)
-        {
-          fs.get_mds_map().set_referent_inodes();
-        });
-	ss << "Enabled creation of referent inodes for hardlinks to store backtrace";
       }
     } else if (var == "allow_dirfrags") {
         ss << "Directory fragmentation is now permanently enabled."

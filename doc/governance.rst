@@ -48,8 +48,8 @@ Current Members
 ^^^^^^^^^^^^^^^
 
 * Dan van der Ster <dan.vanderster@clyso.com>
-* Josh Durgin <jdurgin@redhat.com>
 * Neha Ojha <nojha@redhat.com>
+* Patrick Donnelly <pdonnell@ibm.com>
 
 .. _csc:
 
@@ -96,26 +96,23 @@ Current Members
  * Haomai Wang <haomai@xsky.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
- * Jeff Layton <jlayton@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
- * Ken Dreyer <kdreyer@redhat.com>
  * Laura Flores <lflores@redhat.com>
  * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
- * Myoungwon Oh <myoungwon.oh@samsung.com>
+ * Myoungwon Oh <ohmyoungwon@gmail.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
- * Sam Just <sjust@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
- * Vikhyat Umrao <vikhyat@redhat.com>
+ * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yaarit Hatuka <yhatuka@ibm.com>
- * Yehuda Sadeh <yehuda@redhat.com>
+ * Yehuda Sadeh <yehuda@ui.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>

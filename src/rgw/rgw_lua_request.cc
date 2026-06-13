@@ -272,6 +272,46 @@ struct OwnerMetaTable : public EmptyMetaTable {
   }
 };
 
+struct BucketTagsTable : public EmptyMetaTable {
+  static int IndexClosure(lua_State* L) {
+    const auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    const char* key = luaL_checkstring(L, 2);
+    try {
+      RGWObjTags tags;
+      auto bl_it = bl->cbegin();
+      tags.decode(bl_it);
+
+      const auto& tag_map = tags.get_tags();
+      auto tag_it = tag_map.find(key);
+
+      if (tag_it != tag_map.end()) {
+        pushstring(L, tag_it->second);
+        return ONE_RETURNVAL;
+      }
+    } catch (const buffer::error& err) {
+      lua_pushnil(L);
+      return ONE_RETURNVAL;
+    }
+    lua_pushnil(L);
+    return ONE_RETURNVAL;
+  }
+
+  static int LenClosure(lua_State* L) {
+    const auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+    try {
+      RGWObjTags tags;
+      auto bl_it = bl->cbegin();
+      tags.decode(bl_it);
+      lua_pushinteger(L, tags.get_tags().size());
+      return ONE_RETURNVAL;
+    } catch (const buffer::error& err) {
+      lua_pushinteger(L, 0);
+      return ONE_RETURNVAL;
+    }
+  }
+};
+
 struct BucketMetaTable : public EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     const auto name = table_name_upvalue(L);
@@ -300,6 +340,13 @@ struct BucketMetaTable : public EmptyMetaTable {
       pushtime(L, bucket->get_creation_time());
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, bucket->get_modification_time());
+    } else if (strcasecmp(index, "Tags") == 0) {
+      auto it = s->bucket_attrs.find(RGW_ATTR_TAGS);
+      if (it != s->bucket_attrs.end()) {
+        create_metatable<BucketTagsTable>(L, name, index, false, &(it->second));
+      } else {
+        lua_pushnil(L);
+    }
     } else if (strcasecmp(index, "Quota") == 0) {
       create_metatable<QuotaMetaTable>(L, name, index, false, &(bucket->get_info().quota));
     } else if (strcasecmp(index, "PlacementRule") == 0) {

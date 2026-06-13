@@ -6,6 +6,7 @@
 #include <optional>
 #include <regex>
 #include "include/function2.hpp"
+#include "rgw_account.h"
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub.h"
@@ -75,6 +76,17 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
       return false;
     }
   }
+
+  // check for mTLS key password - also a secret that requires secure transport
+  auto ssl_key_password = args.get_optional("ssl-key-password");
+  if (ssl_key_password.has_value() && !ssl_key_password->empty()) {
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, *ri.env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -253,7 +265,10 @@ class RGWPSCreateTopicOp : public RGWOp {
 
   int get_params() {
     topic_name = s->info.args.get("Name");
-    if (!validate_topic_name(topic_name, s->err.message)) {
+    if (topic_name.empty() ||
+        (!s->get_cct()->_conf.get_val<bool>("rgw_relaxed_topic_names") &&
+        !validate_topic_name(topic_name, s->err.message))
+       ) {
       return -EINVAL;
     }
 
@@ -391,7 +406,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     encode_xml("TopicArn", topic_arn.to_string(), f);
     f->close_section(); // CreateTopicResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // CreateTopicResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -467,9 +482,13 @@ private:
 
 public:
   int verify_permission(optional_yield) override {
-    // check account permissions up front
-    if (s->auth.identity->get_account() &&
-        !verify_user_permission(this, s, {}, rgw::IAM::snsListTopics)) {
+    // account permissions are checked up front. for non-account users,
+    // execute() instead checks permissions against each topic
+    if (!s->auth.identity->get_account()) {
+      return 0;
+    }
+    const auto arn = rgw::account::root_arn(s->auth.identity->get_account()->id);
+    if (!verify_user_permission(this, s, arn, rgw::IAM::snsListTopics)) {
       return -ERR_AUTHORIZATION;
     }
 
@@ -501,7 +520,7 @@ public:
     encode_xml("Topics", result, f); 
     f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     if (!next_token.empty()) {
       encode_xml("NextToken", next_token, f);
@@ -626,7 +645,7 @@ class RGWPSGetTopicOp : public RGWOp {
     encode_xml("Topic", result, f); 
     f->close_section();
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section();
     f->close_section();
     rgw_flush_formatter_and_reset(s, f);
@@ -712,7 +731,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // GetTopicAttributesResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -805,7 +824,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
-          "user-name",     "password"};
+          "user-name",     "password",
+          "ssl-certificate-location", "ssl-key-location", "ssl-key-password"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
@@ -877,7 +897,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section_in_ns("SetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f);
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section();  // ResponseMetadata
     f->close_section();  // SetTopicAttributesResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -1032,7 +1052,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section_in_ns("DeleteTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // DeleteTopicResponse
     rgw_flush_formatter_and_reset(s, f);

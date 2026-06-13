@@ -150,12 +150,13 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
       },
       error: (e) => {
         this.loadingReady();
+        const errorDetail = e?.error?.detail || e?.message || '';
         this.notificationService.show(
           NotificationType.error,
           this.taskMessageService.messages[this.ADD_GATEWAY_NODE_TASK].failure({
             group_name: this.groupName
           }),
-          e
+          errorDetail
         );
       }
     });
@@ -168,14 +169,18 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
 
     const { status, ...modifiedSpec } = this.serviceSpec;
 
-    if ('events' in modifiedSpec) {
-      delete (modifiedSpec as any).events;
+    if (modifiedSpec.events) {
+      delete modifiedSpec.events;
     }
 
     if (modifiedSpec.placement) {
       modifiedSpec.placement = { ...modifiedSpec.placement };
     } else {
       modifiedSpec.placement = {};
+    }
+
+    if ('locations' in modifiedSpec.placement) {
+      delete modifiedSpec.placement.locations;
     }
 
     modifiedSpec.placement.hosts = newHosts;

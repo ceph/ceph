@@ -4,7 +4,6 @@
 
 @mixin row-details-icon {
   color: vv.$gray-900;
-  font-family: 'ForkAwesome', sans-serif;
   font-size: 1rem;
   line-height: 1;
 }
@@ -65,8 +64,8 @@
 }
 
 .filter-tags {
-  background-color: var(--cds-layer-accent);
-  border-bottom: 1px solid var(--cds-layer-active);
+  background-color: var(--cds-layer-01);
+  border-top: var(--cds-spacing-01) solid var(--cds-layer-02);
   color: var(--cds-text-primary);
 }
 
@@ -110,4 +109,10 @@ tr:hover .edit-btn {
 
 .table-tag {
   white-space: nowrap;
+}
+
+.filter-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }

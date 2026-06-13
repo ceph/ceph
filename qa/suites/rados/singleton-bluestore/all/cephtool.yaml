@@ -3,6 +3,7 @@ roles:
   - mon.b
   - mon.c
   - mgr.x
+  - mds.a
   - osd.0
   - osd.1
   - osd.2
@@ -41,6 +42,7 @@ tasks:
     - \(MON_DOWN\)
     - \(SLOW_OPS\)
     - slow request
+    - evicting unresponsive client
 - workunit:
     clients:
       all:

@@ -65,7 +65,7 @@ policy documents. For example, ``arn:aws:iam::RGW33567154695143645:user/A``
 refers to an IAM user named A in that account. The Ceph Object Gateway also
 supports tenant names in that position.
 
-Accounts IDs can also be used in ACLs for a ``Grantee`` of type ``CanonicalUser``.
+Account IDs can also be used in ACLs for a ``Grantee`` of type ``CanonicalUser``.
 User IDs are also supported here.
 
 IAM Policy
@@ -201,7 +201,7 @@ Account topics are supported only when the ``notification_v2`` feature is enable
 as described in :ref:`radosgw-notifications` and :ref:`Supported Zone Features <radosgw-zone-features>`.
 
 #. **Migration Impact:** When a non-account user is migrated to an account, the
-   the existing notification topics remain accessible through the RADOS Gateway admin API,
+   existing notification topics remain accessible through the RADOS Gateway admin API,
    but the user loses access to them via the SNS Topic API. Despite this, the topics
    remain functional, and bucket notifications will continue to be delivered as expected.
 

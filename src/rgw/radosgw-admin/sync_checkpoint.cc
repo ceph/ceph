@@ -16,6 +16,8 @@
 
 #include "radosgw-admin/sync_checkpoint.h"
 
+#include <iostream>
+
 #include <fmt/format.h>
 
 #include "common/errno.h"
@@ -136,14 +138,14 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
   }
 
   if (full_status.incremental_gen > latest_gen) {
-    ldpp_dout(dpp, 1) << "bucket sync caught up with source:\n"
+    std::cout << "bucket sync caught up with source:\n"
         << "        local gen: " << full_status.incremental_gen << '\n'
-        << "       remote gen: " << latest_gen << dendl;
+        << "       remote gen: " << latest_gen << std::endl;
     return 0;
   }
 
   if (empty(remote_markers, num_shards)) {
-    ldpp_dout(dpp, 1) << "bucket sync caught up with empty source" << dendl;
+    std::cout << "bucket sync caught up with empty source" << std::endl;
     return 0;
   }
 
@@ -158,7 +160,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
   while (status < remote_markers) {
     const auto delay_until = ceph::coarse_mono_clock::now() + retry_delay;
     if (delay_until > timeout_at) {
-      ldpp_dout(dpp, 0) << "bucket checkpoint timed out waiting for incremental sync to catch up" << dendl;
+      std::cerr << "bucket checkpoint timed out waiting for incremental sync to catch up" << std::endl;
       return -ETIMEDOUT;
     }
     ldpp_dout(dpp, 1) << "waiting for incremental sync to catch up:\n"
@@ -171,9 +173,9 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
       return r;
     }
   }
-  ldpp_dout(dpp, 1) << "bucket sync caught up with source:\n"
+  std::cout << "bucket sync caught up with source:\n"
       << "      local status: " << status << '\n'
-      << "    remote markers: " << remote_markers << dendl;
+      << "    remote markers: " << remote_markers << std::endl;
   return 0;
 }
 
@@ -273,11 +275,11 @@ int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
                                           e.pipe, e.latest_gen, e.remote_markers,
                                           retry_delay, timeout_at);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "bucket sync checkpoint failed: " << cpp_strerror(r) << dendl;
+      std::cerr << "bucket sync checkpoint failed: " << cpp_strerror(r) << std::endl;
       return r;
     }
   }
-  ldpp_dout(dpp, 0) << "bucket checkpoint complete" << dendl;
+  std::cout << "bucket checkpoint complete" << std::endl;
   return 0;
 }
 

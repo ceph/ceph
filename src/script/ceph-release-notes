@@ -51,7 +51,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
-release_re = re.compile(r"^(nautilus|octopus|pacific|quincy|reef|squid|tentacle):\s*", re.IGNORECASE)
+release_re = re.compile(r"^(nautilus|octopus|pacific|quincy|reef|squid|tentacle|umbrella):\s*", re.IGNORECASE)
 
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
@@ -397,8 +397,7 @@ if __name__ == "__main__":
                         help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
-    gh = github.GitHub(
-        access_token=args.token)
+    gh = github.GitHub(args.token)
 
     make_release_notes(
         gh,

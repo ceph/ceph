@@ -24,7 +24,7 @@ system namespace, coordinating access to the shared OSD cluster.
 Each ceph-mds daemon instance should have a unique name. The name is used
 to identify daemon instances in the ceph.conf.
 
-Once the daemon has started, the monitor cluster will normally assign
+Once the daemon has started, the Monitor cluster will normally assign
 it a logical rank, or put it in a standby pool to take over for
 another daemon that crashes. Some of the specified options can cause
 other behaviors.
@@ -57,12 +57,12 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during
    startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through
+   Connect to specified Monitor (instead of looking through
    ``ceph.conf``).
 
 .. option:: --id/-i ID

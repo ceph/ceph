@@ -194,7 +194,15 @@
               <tr>
                 <td i18n
                     class="bold w-25">Replication policy</td>
-                <td><pre>{{ selection.replication | json}}</pre></td>
+                <td>
+                @if(hasSyncPolicyOnly) {
+                Sync policy configured. View on
+                <a routerLink="/rgw/multisite/sync-policy"
+                   i18n>Sync-policy page.</a>
+                } @else {
+                  <pre>{{ replicationData?.policy | json}}</pre>
+                }
+                </td>
               </tr>
               <tr>
                 <td i18n

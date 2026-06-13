@@ -4,7 +4,7 @@ Capabilities in CephFS
 When a client wants to operate on an inode, it will query the MDS in various
 ways, which will then grant the client a set of **capabilities**. This
 grants the client permissions to operate on the inode in various ways. One
-of the major differences from other network file systems (e.g NFS or SMB) is
+of the major differences from other network file systems (e.g. NFS or SMB) is
 that the capabilities granted are quite granular, and it's possible that
 multiple clients can hold different capabilities on the same inodes.
 
@@ -119,7 +119,7 @@ states, and the MDS will issue capabilities to clients based on the lock
 state.
 
 In each state the MDS Locker will always try to issue all the capabilities to the
-clients allowed, even some capabilities are not needed or wanted by the clients,
+clients allowed, even if some capabilities are not needed or wanted by the clients,
 as pre-issuing capabilities could reduce latency in some cases.
 
 If there is only one client, usually it will be the loner client for all the inodes.
@@ -127,8 +127,8 @@ While in multiple clients case, the MDS will try to calculate a loner client out
 each inode depending on the capabilities the clients (needed | wanted), but usually
 it will fail. The loner client will always get all the capabilities.
 
-The filelock will control files' partial metadatas' and the file contents' access
-permissions. The metadatas include **mtime**, **atime**, **size**, etc.
+The filelock will control files' partial metadata and the file contents' access
+permissions. The metadata includes **mtime**, **atime**, **size**, etc.
 
 * **Fs**: Once a client has it, all other clients are denied **Fw**.
 
@@ -149,7 +149,7 @@ permissions. The metadatas include **mtime**, **atime**, **size**, etc.
   MDSes. The **Fcb** capabilities won't be granted to all the clients and the
   clients will do sync read/write.
 
-* **Fw**: If there is no loner client and once a client have this capability, the
+* **Fw**: If there is no loner client and once a client has this capability, the
   **Fsxcb** capabilities won't be granted to other clients.
 
   If multiple clients read from and write to the same file, then the lock state
@@ -176,7 +176,7 @@ permissions. The metadatas include **mtime**, **atime**, **size**, etc.
   forcing clients to drop dirty buffers, for example on a simple file size extension
   or truncating use case.
 
-* **Fl**: This capability means the clients could perform lazy io. LazyIO relaxes
+* **Fl**: This capability means the clients could perform lazy IO. LazyIO relaxes
   POSIX semantics. Buffered reads/writes are allowed even when a file is opened by
   multiple applications on multiple clients. Applications are responsible for managing
   cache coherency themselves.

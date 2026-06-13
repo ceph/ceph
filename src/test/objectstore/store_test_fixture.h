@@ -13,14 +13,16 @@ class StoreTestFixture : virtual public ::testing::Test {
   ConfigProxy* conf = nullptr;
 
 protected:
-  const std::string data_dir;
+  // Unique per-instance temp directory, set in SetUp() via mkdtemp.
+  // Using a unique directory makes it safe to run tests in parallel.
+  std::string data_dir;
 
 public:
   std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 
   explicit StoreTestFixture(const std::string& type)
-    : type(type), data_dir(type + ".test_temp_dir")
+    : type(type)
   {}
 
   void SetUp() override;

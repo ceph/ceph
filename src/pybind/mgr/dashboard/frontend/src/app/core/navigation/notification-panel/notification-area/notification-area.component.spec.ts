@@ -10,7 +10,6 @@ import { NotificationType } from '../../../../shared/enum/notification-type.enum
 import { SharedModule } from '../../../../shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 describe('NotificationAreaComponent', () => {
   let component: NotificationAreaComponent;
   let fixture: ComponentFixture<NotificationAreaComponent>;
@@ -185,12 +184,12 @@ describe('NotificationAreaComponent', () => {
     const infoNotification = createNotification(
       NotificationType.info,
       'Info Today',
-      new Date(today.getTime() + 1000).toISOString()
+      new Date(today.getTime() - 60000).toISOString()
     );
     const warningNotification = createNotification(
       NotificationType.warning,
       'Warning Today',
-      new Date(today.getTime() + 2000).toISOString()
+      new Date(today.getTime() - 30000).toISOString()
     );
 
     mockDataSource.next([infoNotification, warningNotification]);
@@ -217,12 +216,12 @@ describe('NotificationAreaComponent', () => {
       createNotification(
         NotificationType.success,
         'Success 1',
-        new Date(today.getTime() + 1000).toISOString()
+        new Date(today.getTime() - 60000).toISOString()
       ),
       createNotification(
         NotificationType.info,
         'Info 1',
-        new Date(today.getTime() + 2000).toISOString()
+        new Date(today.getTime() - 30000).toISOString()
       )
     ];
 

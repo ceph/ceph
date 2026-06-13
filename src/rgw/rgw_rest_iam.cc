@@ -43,15 +43,38 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"AttachUserPolicy", make_iam_attach_user_policy_op},
   {"DetachUserPolicy", make_iam_detach_user_policy_op},
   {"ListAttachedUserPolicies", make_iam_list_attached_user_policies_op},
-  {"CreateOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWCreateOIDCProvider;}},
-  {"ListOpenIDConnectProviders", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListOIDCProviders;}},
-  {"GetOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetOIDCProvider;}},
-  {"DeleteOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeleteOIDCProvider;}},
-  {"AddClientIDToOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWAddClientIdToOIDCProvider;}},
-  {"RemoveClientIDFromOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWRemoveCientIdFromOIDCProvider;}},
-  {"UpdateOpenIDConnectProviderThumbprint", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUpdateOIDCProviderThumbprint;}},
-  {"TagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWTagRole(bl_post_body);}},
-  {"ListRoleTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListRoleTags;}},
+    {"CreateOpenIDConnectProvider",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWCreateOIDCProvider(bl_post_body);
+     }},
+    {"ListOpenIDConnectProviders",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWListOIDCProviders;
+     }},
+    {"GetOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {
+      return new RGWGetOIDCProvider;
+    }},
+    {"DeleteOpenIDConnectProvider",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWDeleteOIDCProvider(bl_post_body);
+     }},
+    {"AddClientIDToOpenIDConnectProvider",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWAddClientIdToOIDCProvider(bl_post_body);
+     }},
+    {"RemoveClientIDFromOpenIDConnectProvider",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWRemoveClientIdFromOIDCProvider(bl_post_body);
+     }},
+    {"UpdateOpenIDConnectProviderThumbprint",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWUpdateOIDCProviderThumbprint(bl_post_body);
+     }},
+    {"TagRole",
+     [](const bufferlist& bl_post_body) -> RGWOp* {
+       return new RGWTagRole(bl_post_body);
+     }},
+    {"ListRoleTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListRoleTags;}},
   {"UntagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUntagRole(bl_post_body);}},
   {"UpdateRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUpdateRole(bl_post_body);}},
   {"CreateUser", make_iam_create_user_op},

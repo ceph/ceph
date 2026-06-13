@@ -77,7 +77,6 @@ set(librgw_common_srcs
   rgw_object_ownership.cc
   rgw_period.cc
   rgw_realm.cc
-  rgw_sync.cc
   rgw_sync_policy.cc
   rgw_notify_event_type.cc
   rgw_period_history.cc
@@ -96,6 +95,7 @@ set(librgw_common_srcs
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
+  rgw_rest_dedup.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
@@ -103,6 +103,7 @@ set(librgw_common_srcs
   rgw_rest_iam_group.cc
   rgw_rest_iam_user.cc
   rgw_rest_s3.cc
+  rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
@@ -130,6 +131,7 @@ set(librgw_common_srcs
   rgw_rest_iam.cc
   rgw_object_lock.cc
   rgw_kms.cc
+  rgw_kms_cache.cc
   rgw_kmip_client.cc
   rgw_url.cc
   rgw_oidc_provider.cc
@@ -218,6 +220,8 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_trim_datalog.cc
           driver/rados/rgw_trim_mdlog.cc
           driver/rados/rgw_user.cc
+          driver/rados/oidc.cc
+          driver/rados/oidcs.cc
           driver/rados/role.cc
           driver/rados/roles.cc
           driver/rados/sync_fairness.cc
@@ -234,6 +238,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/zone.cc
           driver/rados/config/zonegroup.cc
           driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_filter.cc
           driver/rados/rgw_dedup_table.cc
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
@@ -295,11 +300,18 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
 
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  # Will be picked up by anyone including rgw_common
+  target_compile_options(rgw_common PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
+
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
     global
     cls_rgw_client
+    keyring
     rt
     ICU::uc
     OATH::OATH
@@ -419,6 +431,7 @@ set(rgw_a_srcs
   rgw_realm_reloader.cc
   rgw_rest_config.cc
   rgw_rest_info.cc
+  rgw_rest_dedup.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_sts.cc
@@ -460,7 +473,7 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  find_package(RDKafka 0.9.2 REQUIRED)
+  find_package(RDKafka 1.1.0 REQUIRED)
 endif()
 
 target_link_libraries(rgw_a
@@ -490,12 +503,15 @@ set(rgw_schedulers_srcs
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock Boost::context)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(rgw_schedulers PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 
 set(radosgw_srcs
   rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
-
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
   target_compile_definitions(rgw_common PUBLIC WITH_ARROW_FLIGHT)
@@ -528,6 +544,12 @@ set(radosgw_admin_srcs
   radosgw-admin/sync_checkpoint.cc
   radosgw-admin/orphan.cc)
 
+set(radosgw_admin_srcs_without_rados
+  radosgw-admin/radosgw-admin.cc
+  driver/rados/rgw_user.cc
+  driver/rados/rgw_bucket.cc
+  driver/rados/rgw_obj_manifest.cc)
+
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
@@ -546,6 +568,12 @@ target_link_libraries(radosgw-admin
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 endif()
+
+if(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
+add_executable(radosgw-admin ${radosgw_admin_srcs_without_rados})
+target_link_libraries(radosgw-admin
+  ${rgw_libs} librados)
+endif(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -575,6 +603,9 @@ target_link_libraries(radosgw-token
   legacy-option-headers
   librados
   global)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(radosgw-token PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 install(TARGETS radosgw-token DESTINATION bin)
 
 if(WITH_RADOSGW_RADOS)

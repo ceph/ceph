@@ -6,6 +6,7 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/util/defer.hh>
 
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"

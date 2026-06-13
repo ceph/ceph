@@ -86,7 +86,7 @@ At the top of this diagram, we see two applications (also known as "clients").
 The application on the right is both writing and reading data from the Ceph
 Cluster, by means of the RADOS Gateway (RGW). The application on the left is
 only *reading* data from the Ceph Cluster, by means of an instance of RADOS
-Gateway. In both cases (read-and-write and read-only), the transmssion of
+Gateway. In both cases (read-and-write and read-only), the transmission of
 data is handled RESTfully.
 
 In the middle of this diagram, we see two zones, each of which contains an
@@ -108,8 +108,8 @@ Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
 active-active zone mode. This makes it possible to write to non-master zones.
 
 The multi-site configuration is stored within a container called a "realm". The
-realm stores zonegroups, zones, and a time "period" with multiple epochs (which
-(the epochs) are used for tracking changes to the configuration). 
+realm stores zonegroups, zones, and a time "period" with multiple epochs.
+The epochs are used for tracking changes to the configuration.
 
 Beginning with Kraken, the ``ceph-radosgw`` daemons handle the synchronization
 of data across zones, which eliminates the need for a separate synchronization
@@ -129,8 +129,8 @@ geographically separate locations; however, the configuration can work on the
 same site. This guide also assumes two Ceph Object Gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single geographically-distributed Ceph storage cluster
-   is NOT recommended unless you have low latency WAN connections.
+.. important:: Running a single geographically distributed Ceph storage cluster
+   is NOT recommended unless you have low-latency WAN connections.
 
 A multi-site configuration requires a master zonegroup and a master zone. Each
 zonegroup requires a master zone. Zonegroups may have one or more secondary

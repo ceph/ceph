@@ -10,7 +10,7 @@ import requests
 from .exceptions import GrafanaError
 from .settings import Settings
 
-logger = logging.getLogger('grafana')
+logger = logging.getLogger(__name__)
 
 
 class GrafanaRestClient(object):

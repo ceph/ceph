@@ -3,19 +3,19 @@
 ``zap``
 =======
 
-This subcommand is used to zap lvs, partitions or raw devices that have been used
-by ceph OSDs so that they may be reused. If given a path to a logical
-volume it must be in the format of vg/lv. Any file systems present
-on the given lv or partition will be removed and all data will be purged.
+This subcommand is used to zap LVs, partitions, or raw devices that have been used
+by Ceph OSDs so that they may be reused. If given a path to a logical
+volume, it must be in the format of vg/lv. Any file systems present
+on the given LV or partition will be removed and all data will be purged.
 
-.. note:: The lv or partition will be kept intact.
+.. note:: The LV or partition will be kept intact.
 
-.. note:: If the logical volume, raw device or partition is being used for any ceph related
-          mount points they will be unmounted.
+.. note:: If the logical volume, raw device, or partition is being used for any Ceph-related
+          mount points, they will be unmounted.
 
 Zapping a logical volume::
 
-    ceph-volume lvm zap {vg name/lv name}
+    ceph-volume lvm zap <vg name/lv name>
 
 Zapping a partition::
 
@@ -23,20 +23,20 @@ Zapping a partition::
 
 Removing Devices
 ----------------
-When zapping, and looking for full removal of the device (lv, vg, or partition)
+When zapping and looking for full removal of the device (LV, VG, or partition),
 use the ``--destroy`` flag. A common use case is to simply deploy OSDs using
 a whole raw device. If you do so and then wish to reuse that device for another
-OSD you must use the ``--destroy`` flag when zapping so that the vgs and lvs
+OSD, you must use the ``--destroy`` flag when zapping so that the VGs and LVs
 that ceph-volume created on the raw device will be removed.
 
-.. note:: Multiple devices can be accepted at once, to zap them all
+.. note:: Multiple devices can be specified at once to zap them all.
 
-Zapping a raw device and destroying any vgs or lvs present::
+Zapping a raw device and destroying any VGs or LVs present::
 
     ceph-volume lvm zap /dev/sdc --destroy
 
 
-This action can be performed on partitions, and logical volumes as well::
+This action can be performed on partitions and logical volumes::
 
     ceph-volume lvm zap /dev/sdc1 --destroy
     ceph-volume lvm zap osd-vg/data-lv --destroy

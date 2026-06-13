@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -55,7 +55,6 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       InputModule,
       SelectModule,
       NumberModule,
@@ -105,15 +104,18 @@ describe('ServiceFormComponent', () => {
       });
     });
 
-    it('should test placement (label)', () => {
+    it('should test placement (label) with single select value', () => {
+      // placement labels take only single value
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('placement', 'label');
-      formHelper.setValue('label', [{ content: 'foo', selected: true }]);
+      formHelper.setValue('label', { content: 'foo', selected: true });
+
       component.onSubmit();
+
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'mgr',
         placement: {
-          label: ['foo']
+          label: 'foo'
         },
         unmanaged: false
       });

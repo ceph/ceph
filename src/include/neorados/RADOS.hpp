@@ -36,6 +36,8 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/uuid/uuid.hpp>
@@ -64,6 +66,9 @@
 
 #include "common/ceph_time.h"
 
+// For compile-time policing of class calls.
+#include "include/rados/cls_traits.hpp"
+
 namespace neorados {
 class Object;
 class IOContext;
@@ -78,7 +83,7 @@ struct hash<neorados::IOContext>;
 namespace neorados {
 namespace detail {
 class Client;
-template<std::size_t S, std::size_t Alignment = std::bit_ceil(S)>
+template<std::size_t S, std::size_t Alignment = alignof(std::max_align_t)>
 struct alignas(Alignment) aligned_storage {
   std::byte data[S];
 };
@@ -352,22 +357,61 @@ public:
   void assert_exists();
   void cmp_omap(const std::vector<cmp_assertion>& assertions);
 
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    ceph::buffer::list* out,
-	    boost::system::error_code* ec = nullptr);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code,
-				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code, int,
-				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    boost::system::error_code* ec = nullptr);
+ protected:
+  // These methods being protected is part of the compile-time protection for
+  // read/write execs.
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            ceph::buffer::list* out,
+            boost::system::error_code* ec);
 
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code,
+                                      const ceph::buffer::list&) &&> f);
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code, int,
+                                      const ceph::buffer::list&) &&> f);
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            boost::system::error_code* ec);
+  // templates don't work well with default arguments.
+  void exec_impl(std::string_view cls, std::string_view method,
+          const ceph::buffer::list& inbl) {
+    exec_impl(cls, method, inbl, (boost::system::error_code*)nullptr);
+  }
+  void exec_impl(std::string_view cls, std::string_view method,
+          const ceph::buffer::list& inbl,
+          ceph::buffer::list* out) {
+    exec_impl(cls, method, inbl, out, (boost::system::error_code*)nullptr);
+  }
+ public:
+
+  /**
+   * Execute an OSD class method on an object
+   *
+   * The OSD has a plugin mechanism for performing complicated
+   * operations on an object atomically. These plugins are called
+   * "Ceph Classes". This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the Ceph Class.
+   * Ceph Classes in ceph.git can be found in src/cls subdirectories
+   *
+   * This Op may be a read, so only read execs are permitted with this interface
+   *
+   * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+   * @param inbl where to find input
+   * @param out (optional) where to store output
+   * @param ec (optional) storage for error code
+   * @param f (optional) handler callback
+   * @returns return code (>=0 for success, otherwise stanard OSD errors)
+   */
+  template <typename Tag, typename ClassID, typename... Args>
+  void exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of a non-write op ");
+    exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
+  }
 
   // Flags that apply to all ops in the operation vector
   void balance_reads();
@@ -649,61 +693,19 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       ceph::buffer::list* out,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, out, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  ReadOp& exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) & {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of read. ");
+    Op::exec_impl(method.cls, method.name, std::forward<Args>(args)...);
     return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		ceph::buffer::list* out,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, out, ec);
-    return std::move(*this);
   }
 
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-	        const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  ReadOp&& exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) && {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of read. ");
+    Op::exec_impl(method.cls, method.name, std::forward<Args>(args)...);
     return std::move(*this);
   }
 
@@ -1029,61 +1031,33 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       ceph::buffer::list* out,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, out, ec);
+  /**
+   * Execute an OSD class method on an object
+   *
+   * The OSD has a plugin mechanism for performing complicated
+   * operations on an object atomically. These plugins are called
+   * "Ceph Classes". This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the Ceph Class.
+   * Ceph Classes in ceph.git can be found in src/cls subdirectories
+   *
+   * This is a write op, so all execs are permitted (including reads)
+   *
+   * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+   * @param inbl where to find input
+   * @param out (optional) where to store output
+   * @param ec (optional) storage for error code
+   * @param f (optional) handler callback
+   * @returns return code (>=0 for success, otherwise stanard OSD errors)
+   */
+  template <typename Tag, typename ClassID, typename... Args>
+  decltype(auto) exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) & {
+    Op::exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
     return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		ceph::buffer::list* out,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, out, ec);
-    return std::move(*this);
   }
 
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-	        const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  decltype(auto) exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) && {
+    Op::exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
     return std::move(*this);
   }
 
@@ -1357,17 +1331,18 @@ public:
 		BuildComp c);
   };
 
-
+  /// We take an `intrusive_ptr<CephContext>` to make it clear that we
+  /// will take ownership of the reference.
   template<boost::asio::completion_token_for<BuildSig> CompletionToken>
-  static auto make_with_cct(CephContext* cct,
+  static auto make_with_cct(boost::intrusive_ptr<CephContext> cct,
 			    boost::asio::io_context& ioctx,
 			    CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	boost::asio::get_associated_executor(token, ioctx.get_executor())));
     return boost::asio::async_initiate<decltype(consigned), BuildSig>(
-      [cct, &ioctx](auto&& handler) {
-	make_with_cct_(cct, ioctx, std::move(handler));
+      [cct = std::move(cct), &ioctx](auto&& handler) mutable {
+	make_with_cct_(std::move(cct), ioctx, std::move(handler));
       }, consigned);
   }
 
@@ -1817,7 +1792,7 @@ private:
   friend Builder;
 
   RADOS(std::shared_ptr<detail::Client> impl);
-  static void make_with_cct_(CephContext* cct,
+  static void make_with_cct_(boost::intrusive_ptr<CephContext> cct,
 			     boost::asio::io_context& ioctx,
 			     BuildComp c);
 

@@ -1,7 +1,7 @@
 
 Supported Features of the Kernel Driver
 ========================================
-The kernel driver is developed separately from the core ceph code, and as
+The kernel driver is developed separately from the core Ceph code, and as
 such it sometimes differs from the FUSE driver in feature implementation.
 The following details the implementation status of various CephFS features
 in the kernel driver.
@@ -20,9 +20,9 @@ See `Experimental Features`_ for more information.
 
 Quotas
 ------
-Quota was first introduced by the hammer release. Quota disk format got renewed
+Quota was first introduced by the Hammer release. Quota disk format got renewed
 by the Mimic release. Linux kernel clients >= 4.17 can support the new format
-quota. At present, no Linux kernel client support the old format quota.
+quota. At present, no Linux kernel clients support the old format quota.
 
 See `Quotas`_ for more information.
 

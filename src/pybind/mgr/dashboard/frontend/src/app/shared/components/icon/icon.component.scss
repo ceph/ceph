@@ -62,3 +62,11 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 .checkMarkOutline-icon {
   fill: theme.$support-success !important;
 }
+
+.inProgress-icon {
+  fill: theme.$support-info !important;
+}
+
+.arrowDown-icon {
+  fill: theme.$support-error !important;
+}

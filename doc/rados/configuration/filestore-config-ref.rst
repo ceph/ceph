@@ -25,7 +25,7 @@
 Extended Attributes
 ===================
 
-Extended Attributes (XATTRs) are important for Filestore OSDs. However, Certain
+Extended Attributes (XATTRs) are important for Filestore OSDs. However, certain
 disadvantages can occur when the underlying file system is used for the storage
 of XATTRs: some file systems have limits on the number of bytes that can be
 stored in XATTRs, and your file system might in some cases therefore run slower
@@ -205,7 +205,7 @@ The following settings define limits on the size of the Filestore queue:
 
 ``filestore_queue_max_ops``
 
-:Description: Defines the maximum number of in-progress operations that Filestore accepts before it blocks the queueing of any new operations. 
+:Description: Defines the maximum number of in-progress operations that Filestore accepts before it blocks the queuing of any new operations. 
 :Type: Integer
 :Required: No. Minimal impact on performance.
 :Default: ``50``

@@ -34,7 +34,10 @@ seastar::future<> TMDriver::write(
           crimson::ct_error::pass_further_all{}
         ).si_then([this, offset, &t, &ptr] {
           logger().debug("dec_ref complete");
-          return tm->alloc_data_extents<TestBlock>(t, laddr_t::from_byte_offset(offset), ptr.length());
+          return tm->alloc_data_extents<TestBlock>(
+	    t,
+	    laddr_hint_t::create_as_fixed(laddr_t::from_byte_offset(offset)),
+	    ptr.length());
         }).si_then([this, offset, &t, &ptr](auto extents) mutable {
 	  boost::ignore_unused(offset);  // avoid clang warning;
 	  auto off = offset;
@@ -54,7 +57,7 @@ seastar::future<> TMDriver::write(
       });
     });
   }).handle_error(
-    crimson::ct_error::assert_all{"store-nbd write"}
+    crimson::ct_error::assert_all("store-nbd write")
   );
 }
 
@@ -76,10 +79,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  pins.begin(),
 	  pins.end(),
 	  [this, &t, &ret](auto &&pin) {
-	    logger().debug(
-	      "read_extents: get_extent {}~{}",
-	      pin.get_val(),
-	      pin.get_length());
+	    logger().debug("read_extents: get_extent {}", pin);
 	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)
@@ -135,7 +135,7 @@ seastar::future<bufferlist> TMDriver::read(
       });
     });
   }).handle_error(
-    crimson::ct_error::assert_all{"store-nbd read"}
+    crimson::ct_error::assert_all("store-nbd read")
   ).then([blptrret=std::move(blptrret)]() mutable {
     logger().debug("read complete");
     return std::move(*blptrret);
@@ -148,9 +148,9 @@ void TMDriver::init()
 
   std::vector<Device*> sec_devices;
 #ifndef NDEBUG
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, true);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, true);
 #else
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, false);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, false);
 #endif
 }
 
@@ -200,9 +200,9 @@ seastar::future<> TMDriver::mkfs()
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::mkfs"
-    }
+    )
   );
 }
 
@@ -218,9 +218,9 @@ seastar::future<> TMDriver::mount()
     init();
     return tm->mount();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::mount"
-    }
+    )
   );
 };
 
@@ -230,8 +230,8 @@ seastar::future<> TMDriver::close()
     clear();
     return device->close();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::close"
-    }
+    )
   );
 }

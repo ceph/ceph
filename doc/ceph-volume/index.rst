@@ -2,12 +2,12 @@
 
 ceph-volume
 ===========
-Deploy OSDs with different device technologies like lvm or physical disks using
+Deploy OSDs with different device technologies like LVM or physical disks using
 pluggable tools (:doc:`lvm/index` itself is treated like a plugin) and trying to
-follow a predictable, and robust way of preparing, activating, and starting OSDs.
+follow a predictable and robust way of preparing, activating, and starting OSDs.
 
 :ref:`Overview <ceph-volume-overview>` |
-:ref:`Plugin Guide <ceph-volume-plugins>` |
+:ref:`Plugin Guide <ceph-volume-plugins>`
 
 
 **Command Line Subcommands**
@@ -24,7 +24,7 @@ that may have been deployed with ``ceph-disk``.
 **Node inventory**
 
 The :ref:`ceph-volume-inventory` subcommand provides information and metadata
-about a nodes physical disk inventory.
+about a node's physical disk inventory.
 
 
 Migrating
@@ -45,7 +45,7 @@ ceph-disk replaced? <ceph-disk-replaced>` section.
 
 New deployments
 ^^^^^^^^^^^^^^^
-For new deployments, :ref:`ceph-volume-lvm` is recommended, it can use any
+For new deployments, :ref:`ceph-volume-lvm` is recommended. It can use any
 logical volume as input for data OSDs, or it can setup a minimal/naive logical
 volume from a device.
 

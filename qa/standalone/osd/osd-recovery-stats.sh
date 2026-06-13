@@ -505,6 +505,217 @@ function TEST_recovery_multi() {
     kill_daemons $dir || return 1
 }
 
+function TEST_recovery_last_degraded_latching() {
+    local dir=$1
+    local osds=6
+
+    # Setup Cluster
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1)); do
+      run_osd $dir $i || return 1
+    done
+
+    # Create Pool with specific replica counts
+    create_pool $poolname 8 8
+    ceph osd pool set $poolname size 3
+    ceph osd pool set $poolname min_size 1
+    wait_for_clean || return 1
+
+    # Inject data
+    local numobjs=100
+    for i in $(seq 1 $numobjs); do
+      rados -p $poolname put obj$i /dev/null
+    done
+
+    # Identify PG and OSDs
+    local pgid=$(get_pg $poolname obj1)
+    local replicaosds=$(get_osds $poolname obj1 | awk '{print $2, $3}')
+    read -r osd_a osd_b <<< "$replicaosds"
+
+    # Capture baseline timestamp
+    local last_clean_start=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_clean')
+
+    # --- Step 1: Kill the first non-primary OSD (osd_a) ---
+    echo "Setting norecover to freeze PG state..."
+    ceph osd set norecover
+
+    echo "Stopping OSD.$osd_a..."
+    kill $(cat $dir/osd.${osd_a}.pid)
+    ceph osd down osd.${osd_a}
+    ceph osd out osd.${osd_a}
+
+    # 1.1 Wait and confirm state moves to degraded or undersized
+    local state=""
+    for i in $(seq 1 30); do
+      state=$(ceph pg $pgid query | jq -r '.info.stats.state')
+      echo "Current PG $pgid state: $state"
+      if [[ "$state" == *"degraded"* ]] || \
+         [[ "$state" == *"undersized"* ]]; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "$state" != *"degraded"* ]] && [[ "$state" != *"undersized"* ]]; then
+      echo "Error: PG $pgid state ($state) did not become " \
+           "degraded/undersized after killing osd.$osd_a."
+      return 1
+    fi
+
+    # 1.2 Confirm last_degraded updated
+    local last_degraded_t1=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Queried last_degraded (T1): $last_degraded_t1"
+    if [[ "$last_degraded_t1" > "$last_clean_start" ]]; then
+      echo "Confirmed: last_degraded ($last_degraded_t1) updated on failure."
+    else
+      echo "Error: last_degraded ($last_degraded_t1) is not newer than " \
+           "initial last_clean ($last_clean_start)."
+      return 1
+    fi
+
+    # --- Step 2: Kill the second non-primary OSD (osd_b) ---
+    echo "Stopping OSD.$osd_b..."
+    kill $(cat $dir/osd.${osd_b}.pid)
+    ceph osd down osd.${osd_b}
+    ceph osd out osd.${osd_b}
+
+    # 2.1 Confirm last_degraded remains latched (the same)
+    local last_degraded_t2=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Queried last_degraded (T2): $last_degraded_t2"
+    if [[ "$last_degraded_t2" == "$last_degraded_t1" ]]; then
+      echo "Test Passed: last_degraded timestamp remained " \
+           "stable at $last_degraded_t2."
+    else
+      echo "Test Failed: last_degraded updated to " \
+           "$last_degraded_t2 on second failure."
+      return 1
+    fi
+
+    # --- Step 3: Recovery ---
+    echo "Unsetting norecover and restarting OSDs..."
+    ceph osd unset norecover
+
+    echo "Restarting OSDs $osd_a and $osd_b..."
+    activate_osd $dir $osd_a
+    activate_osd $dir $osd_b
+    wait_for_clean || return 1
+
+    # --- Step 4: Final Verification ---
+    local final_stats=$(ceph pg $pgid query | \
+      jq -r '.info.stats | "\(.last_degraded) \(.last_clean)"')
+    read -r last_degraded_final last_clean_final <<< "$final_stats"
+
+    echo "Final Timestamps -> Last Degraded: $last_degraded_final, " \
+         "Last Clean: $last_clean_final"
+    if [[ "$last_clean_final" > "$last_degraded_final" ]]; then
+      echo "Test Passed: Recovery successful. last_clean ($last_clean_final) " \
+           "is newer than last_degraded ($last_degraded_final)."
+    else
+      echo "Test Failed: last_clean ($last_clean_final) was not updated " \
+           "correctly after recovery."
+      return 1
+    fi
+
+    # Cleanup
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+function TEST_recovery_last_degraded_undersized() {
+    local dir=$1
+    local osds=3
+
+    # 1. Setup Cluster
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1)); do
+      run_osd $dir $i || return 1
+    done
+
+    # 2. Create Pool and force size 1
+    create_pool $poolname 8 8
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
+    wait_for_clean || return 1
+
+    # Inject data
+    for i in $(seq 1 50); do
+      rados -p $poolname put obj$i /dev/null
+    done
+
+    local pgid=$(get_pg $poolname obj1)
+    local primary=$(get_primary $poolname obj1)
+
+    # 3. Select Non-Primary OSD
+    local replica_osd=""
+    for i in $(seq 0 $(expr $osds - 1)); do
+      if [[ "$i" != "$primary" ]]; then
+          replica_osd=$i
+          break
+      fi
+    done
+    echo "Primary is OSD.$primary, selected OSD.$replica_osd to mark OUT."
+
+    local last_clean_start=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_clean')
+
+    # 4. Mark non-primary OSD out and set norecover
+    ceph osd set norecover
+    ceph osd out $replica_osd
+
+    # 5. Increase pool size to 4
+    echo "Increasing pool size to 4..."
+    ceph osd pool set $poolname size 4
+
+    # 6. Unset norecover and kick the recovery queue
+    echo "Starting recovery..."
+    ceph osd unset norecover
+    ceph tell osd.$primary debug kick_recovery_wq 0
+
+    sleep 10
+    flush_pg_stats || return 1
+
+    # 7. Custom recovery-wait logic
+    echo "Waiting for $pgid to be marked undersized..."
+    for i in $(seq 1 300); do
+      # Fetch only the stats for the specific PG in JSON format
+      local current_state=$(ceph pg $pgid query | jq -r '.info.stats.state')
+      echo "Iteration $i: PG $pgid state is [$current_state]"
+
+      # Check if 'recovering' is absent from the state string
+      if [[ "$current_state" != *"recovering"* ]]; then
+        echo "PG $pgid is marked undersized (current state: $current_state)."
+        break
+      fi
+      if [ "$i" = "300" ]; then
+        echo "Timeout waiting for $pgid to become undersized"
+        ceph pg $pgid query | jq .
+        return 1
+      fi
+      sleep 1
+    done
+
+    # 8. Verification
+    local last_degraded_final=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Initial Clean:  $last_clean_start"
+    echo "Final Degraded: $last_degraded_final"
+
+    if [[ "$last_degraded_final" > "$last_clean_start" ]]; then
+      echo "Test Passed: last_degraded updated correctly."
+    else
+      echo "Test Failed: last_degraded ($last_degraded_final) was not updated."
+      return 1
+    fi
+
+    # Cleanup
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 main osd-recovery-stats "$@"
 
 # Local Variables:

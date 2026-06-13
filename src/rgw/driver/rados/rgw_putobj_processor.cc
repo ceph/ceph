@@ -807,18 +807,20 @@ int AppendObjectProcessor::complete(
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
     hex_to_buf(cur_etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     hex_to_buf(etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     hash.Final((unsigned char *)final_etag);
-    buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-             "-%lld", (long long)cur_part_num);
+
     bufferlist etag_bl;
-    etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
-    attrs[RGW_ATTR_ETAG] = etag_bl;
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+      iter = buf_to_hex(final_etag, iter);
+      iter = fmt::format_to(iter, "-{}", cur_part_num);
+      *iter++ = '\0';
+      return iter;
+    });
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
   }
   r = obj_op.write_meta(actual_size + cur_size,
 			accounted_size + *cur_accounted_size,

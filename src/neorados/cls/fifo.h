@@ -361,7 +361,7 @@ public:
   template<boost::asio::completion_token_for<
     void(boost::system::error_code, rados::cls::fifo::info,
 	 uint32_t, uint32_t)> CompletionToken>
-  static auto get_meta(neorados::RADOS rados, Object obj, IOContext ioc,
+  static auto get_meta(neorados::RADOS& rados, Object obj, IOContext ioc,
 		       std::optional<rados::cls::fifo::objv> objv,
 		       CompletionToken&& token) {
 

@@ -38,7 +38,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, true, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+              exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
                    _, _))
                 .WillOnce(DoDefault());
 
@@ -65,7 +65,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+              exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
                    _, _))
                 .WillOnce(DoDefault());
 
@@ -95,7 +95,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
                                                 &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+              exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
                    _, _))
                 .WillOnce(DoDefault());
 
@@ -117,7 +117,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, ErrorOnDiskUpdateWithoutLock) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+              exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
                    _, _))
                 .Times(0);
 
@@ -142,7 +142,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, ErrorOnDiskUpdateFailure) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+              exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
                    _, _))
                 .WillOnce(Return(-EINVAL));
 

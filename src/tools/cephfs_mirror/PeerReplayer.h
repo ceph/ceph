@@ -227,6 +227,9 @@ private:
     bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
     bool has_pending_work() const;
     void mark_crawl_finished(int ret);
+    bool is_dataq_empty_unlocked() const {
+      return m_sync_dataq.empty();
+    }
     bool get_crawl_finished_unlocked() {
       return m_crawl_finished;
     }
@@ -514,7 +517,9 @@ private:
   ceph::condition_variable smq_cv;
   std::deque<std::shared_ptr<SyncMechanism>> syncm_q;
 
-  uint64_t blockdiff_min_file_size = 0;
+  std::atomic<uint64_t> blockdiff_min_file_size{0};
+  std::atomic<bool> distribute_datasync_threads{true};
+  std::atomic<uint64_t> datasync_files_per_batch{64};
 
   ServiceDaemonStats m_service_daemon_stats;
 
@@ -580,6 +585,28 @@ private:
   void enqueue_syncm(const std::shared_ptr<SyncMechanism>& item);
   ceph::mutex& get_smq_lock() {
     return smq_lock;
+  }
+  int get_num_queued_snapshots_unlocked() {
+    return syncm_q.size();
+  }
+  void set_changed_mirroring_configurations();
+  uint64_t get_blockdiff_min_file_size() const {
+    return blockdiff_min_file_size.load(std::memory_order_relaxed);
+  }
+  uint64_t set_blockdiff_min_file_size(uint64_t value) {
+    return blockdiff_min_file_size.exchange(value, std::memory_order_relaxed);
+  }
+  bool get_distribute_datasync_threads() const {
+    return distribute_datasync_threads.load(std::memory_order_relaxed);
+  }
+  bool set_distribute_datasync_threads(bool value) {
+    return distribute_datasync_threads.exchange(value, std::memory_order_relaxed);
+  }
+  uint64_t get_datasync_files_per_batch() const {
+    return datasync_files_per_batch.load(std::memory_order_relaxed);
+  }
+  uint64_t set_datasync_files_per_batch(uint64_t value) {
+    return datasync_files_per_batch.exchange(value, std::memory_order_relaxed);
   }
 };
 

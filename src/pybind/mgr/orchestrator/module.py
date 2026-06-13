@@ -22,7 +22,13 @@ from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
 from ceph.cephadm.images import NonCephImageServiceTypes
-from mgr_util import to_pretty_timedelta, format_bytes, parse_combined_pem_file
+from mgr_util import (
+    is_valid_container_image_ref,
+    to_pretty_timedelta,
+    format_bytes,
+    parse_combined_pem_file,
+    NvmeofMetadataPoolHelper,
+)
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
@@ -761,7 +767,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.right_padding_width = 2
             for host in natsorted(hosts, key=lambda h: h.hostname):
                 row = (host.hostname, host.addr, ','.join(
-                    host.labels), host.status.capitalize())
+                    sorted(host.labels)), host.status.capitalize())
 
                 if show_detail and isinstance(host, HostDetails):
                     row += (host.server, host.cpu_summary, host.ram,
@@ -1432,6 +1438,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         result = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(result))
 
+    @OrchestratorCLICommand.Write('orch prometheus set-remote-write')
+    def _set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> HandleCommandResult:
+        completion = self.set_prometheus_remote_write(url, remote_write_allowed_metrics)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
+    @OrchestratorCLICommand.Write('orch prometheus remove-remote-write')
+    def _remove_prometheus_remote_write(self, url: str) -> HandleCommandResult:
+        completion = self.remove_prometheus_remote_write(url)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
     @OrchestratorCLICommand.Write('orch alertmanager set-credentials')
     def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
@@ -1639,10 +1657,19 @@ Usage:
             table._align['PGS'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for osd in sorted(report, key=lambda o: o.osd_id):
-                table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.force, osd.zap,
-                               osd.drain_started_at or ''])
+            for osd in sorted(report, key=lambda o: o.get('osd_id')):
+                table.add_row(
+                    [
+                        osd.get('osd_id'),
+                        osd.get('hostname'),
+                        osd.get('drain_status'),
+                        osd.get('pg_count'),
+                        osd.get('replace'),
+                        osd.get('force'),
+                        osd.get('zap'),
+                        osd.get('drain_started_at') or ''
+                    ]
+                )
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
@@ -1791,36 +1818,83 @@ Usage:
     @OrchestratorCLICommand.Write('orch daemon redeploy')
     def _daemon_action_redeploy(self,
                                 name: str,
-                                image: Optional[str] = None) -> HandleCommandResult:
+                                image: Optional[str] = None,
+                                force: bool = False) -> HandleCommandResult:
         """Redeploy a daemon (with a specific image)"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.daemon_action("redeploy", name, image=image)
+        if image is not None and not is_valid_container_image_ref(image):
+            raise OrchestratorError(
+                f'Invalid container image {image!r} (not a valid container image reference)'
+            )
+        completion = self.daemon_action("redeploy", name, image=image, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @OrchestratorCLICommand.Write('orch daemon rm')
     def _daemon_rm(self,
                    names: List[str],
-                   force: Optional[bool] = False) -> HandleCommandResult:
-        """Remove specific daemon(s)"""
+                   force: bool = False,
+                   force_delete_data: bool = False) -> HandleCommandResult:
+        """
+        Remove specific daemon(s).
+
+        When used with --force-delete-data, data for certain daemon types
+        (mon, osd, prometheus) will be deleted instead of being moved to
+        <fsid>/removed/.
+        """
         for name in names:
             if '.' not in name:
-                return HandleCommandResult(stderr=f"{name} is not a valid daemon name", retval=-errno.EINVAL)
-            (daemon_type) = name.split('.')[0]
+                return HandleCommandResult(
+                    stderr=f"{name} is not a valid daemon name",
+                    retval=-errno.EINVAL
+                )
+
+            daemon_type = name.split('.')[0]
+
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                return HandleCommandResult(stderr=f"must pass --force to REMOVE daemon with potentially PRECIOUS DATA for {name}", retval=-errno.EPERM)
-        completion = self.remove_daemons(names)
+                return HandleCommandResult(
+                    stderr=f"must pass --force to remove daemon with potentially precious data for {name}",
+                    retval=-errno.EPERM
+                )
+
+        if force_delete_data and not force:
+            # extra safety: don’t allow delete-data without force
+            return HandleCommandResult(
+                stderr="--force-delete-data requires --force",
+                retval=-errno.EPERM
+            )
+
+        completion = self.remove_daemons(
+            names,
+            force_delete_data=force_delete_data,
+        )
         return completion_to_result(completion)
 
     @OrchestratorCLICommand.Write('orch rm')
     def _service_rm(self,
                     service_name: str,
-                    force: bool = False) -> HandleCommandResult:
-        """Remove a service"""
+                    force: bool = False,
+                    force_delete_data: bool = False) -> HandleCommandResult:
+        """
+        Remove a service.
+
+        When used with --force-delete-data, data for stateful daemons belonging
+        to this service (e.g. mon, osd, prometheus) will be deleted instead of
+        being moved to <fsid>/removed/.
+        """
         if service_name in ['mon', 'mgr'] and not force:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_name, force=force)
+
+        if force_delete_data and not force:
+            # same safety rule as for daemon rm
+            raise OrchestratorError('--force-delete-data requires --force')
+
+        completion = self.remove_service(
+            service_name,
+            force=force,
+            force_delete_data=force_delete_data,
+        )
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -2106,12 +2180,15 @@ Usage:
                             no_overwrite: bool = False,
                             inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = OAuth2ProxySpec(
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
-            https_address=https_address
+            https_address=https_address,
         )
+        spec.preview_only = dry_run
 
         spec.validate()  # force any validation exceptions to be caught correctly
 
@@ -2119,8 +2196,9 @@ Usage:
 
     @OrchestratorCLICommand.Write('orch apply nvmeof')
     def _apply_nvmeof(self,
-                      pool: str,
-                      group: str,
+                      _end_positional_: int = 0,
+                      pool: str = ".nvmeof",
+                      group: str = '',
                       placement: Optional[str] = None,
                       unmanaged: bool = False,
                       dry_run: bool = False,
@@ -2128,11 +2206,19 @@ Usage:
                       no_overwrite: bool = False,
                       inbuf: Optional[str] = None) -> HandleCommandResult:
         """Scale an nvmeof service"""
+        if group == '':
+            raise OrchestratorValidationError('The --group argument is required')
+
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
+        if pool == ".nvmeof":
+            nvmeof_pool_helper = NvmeofMetadataPoolHelper(self)
+            nvmeof_pool_helper.create_pool_if_needed()
+
+        cleanpool = pool.lstrip('.')
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}' if group else pool,
+            service_id=f'{cleanpool}.{group}' if group else cleanpool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
@@ -2577,12 +2663,17 @@ Usage:
                        hosts: Optional[str] = None,
                        services: Optional[str] = None,
                        limit: Optional[int] = None,
-                       ceph_version: Optional[str] = None) -> HandleCommandResult:
+                       ceph_version: Optional[str] = None,
+                       crush_bucket_type: Optional[str] = None,
+                       crush_bucket_name: Optional[str] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
-        dtypes = daemon_types.split(',') if daemon_types is not None else None
-        service_names = services.split(',') if services is not None else None
-        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
+
+        # Split comma-separated lists and trim whitespace so "mon, crash" and "mon,crash" are equivalent.
+        dtypes = [d.strip() for d in daemon_types.split(',')] if daemon_types is not None else None
+        service_names = [s.strip() for s in services.split(',')] if services is not None else None
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit,
+                                        crush_bucket_type, crush_bucket_name)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

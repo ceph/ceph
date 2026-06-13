@@ -5,7 +5,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
@@ -33,8 +32,7 @@ describe('CRUDTableComponent', () => {
       PipesModule,
       NgbTooltipModule,
       RouterTestingModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot()
+      HttpClientTestingModule
     ]
   });
   beforeEach(() => {

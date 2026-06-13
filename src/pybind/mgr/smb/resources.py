@@ -14,6 +14,14 @@ from ceph.deployment.service_spec import (
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
+from ceph.smb.constants import (
+    BURST_MULT_MAX,
+    BURST_MULT_MIN,
+    BYTES_LIMIT_MAX,
+    IOPS_LIMIT_MAX,
+    REMOTE_CONTROL,
+    REMOTE_CONTROL_LOCAL,
+)
 from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
 
@@ -24,6 +32,8 @@ from .enums import (
     HostAccess,
     Intent,
     JoinSourceType,
+    KeyBridgePeerPolicy,
+    KeyBridgeScopeType,
     LoginAccess,
     LoginCategory,
     PasswordFilter,
@@ -123,6 +133,88 @@ class BigString(str):
 yaml.SafeDumper.add_representer(BigString, BigString.yaml_representer)
 
 
+class KeyBridgeScopeIdentity:
+    """Represent a KeyBridge scope's name in a structured manner.
+    Helps parse and validate the name of a keybridge scope without encoding a
+    more complex type in the JSON/YAML.
+
+    NOTE: Does not need to be serialized by resourcelib.
+    """
+
+    _AUTO_SUB = '00'
+
+    def __init__(
+        self,
+        scope_type: KeyBridgeScopeType,
+        subname: str = '',
+        *,
+        autosub: bool = False,
+    ):
+        if scope_type.unique() and subname:
+            raise ValueError(
+                f'invalid scope name {scope_type}.{subname},'
+                f' must be {scope_type}'
+            )
+        if subname:
+            # is the subname valid?
+            try:
+                validation.check_id(subname)
+            except ValueError as err:
+                raise ValueError(f'invalid scope name: {err}')
+        if autosub and not scope_type.unique():
+            # used to transform unqualified non-unique to qualified
+            subname = self._AUTO_SUB
+        elif subname and subname.startswith(self._AUTO_SUB):
+            # reserved for auto-naming and other future uses
+            raise ValueError(f'invalid scope name: reserved id: {subname}')
+        self._scope_type = scope_type
+        self._subname = subname
+
+    @property
+    def scope_type(self) -> KeyBridgeScopeType:
+        return self._scope_type
+
+    def __str__(self) -> str:
+        if self._subname:
+            return f'{self._scope_type}.{self._subname}'
+        return str(self._scope_type)
+
+    def qualified(self) -> Self:
+        """Return a qualified version of this scope identity if the scope is
+        not unique.
+        """
+        if self._scope_type.unique() or self._subname:
+            return self
+        return self.__class__(self._scope_type, autosub=True)
+
+    @classmethod
+    def from_name(cls, name: str) -> Self:
+        """Parse a scope name string into a scope identity.
+
+        A scope name can be unqualified, consisting only of the scope type, like
+        "mem" or "kmip" or qualified where a sub-name follows a dot (.)
+        following the type, like "kmip.foo". This allows the common case of
+        just one "kmip" scope but allow for >1 if needed (eg. "kmip.1" &
+        "kmip.2".
+
+        Subnames starting with "00" are reserved for automatic naming and/or
+        future uses.
+        """
+        typename, subname = name, ''
+        if '.' in name:
+            typename, subname = name.split('.', 1)
+            if not subname:
+                raise ValueError(
+                    'invalid scope name: no value after delimiter'
+                )
+        try:
+            _type = KeyBridgeScopeType(typename)
+        except ValueError:
+            scopes = sorted(st.value for st in KeyBridgeScopeType)
+            raise ValueError(f'invalid scope type: must be one of {scopes}')
+        return cls(_type, subname)
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
@@ -140,10 +232,27 @@ class QoSConfig(_RBase):
 
     read_iops_limit: Optional[int] = None
     write_iops_limit: Optional[int] = None
-    read_bw_limit: Optional[int] = None
-    write_bw_limit: Optional[int] = None
-    read_delay_max: Optional[int] = 30
-    write_delay_max: Optional[int] = 30
+    read_bw_limit: Optional[str] = None
+    write_bw_limit: Optional[str] = None
+    read_burst_mult: Optional[int] = 15
+    write_burst_mult: Optional[int] = 15
+
+
+@resourcelib.component()
+class FSCryptKeySelector(_RBase):
+    """Parameters used to define where a fscrypt key will be acquired."""
+
+    # name of the keybridge scope to use
+    scope: str
+    # name of the entity (the key) to fetch
+    name: str
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.scope)
+
+    def validate(self) -> None:
+        self.scope_identity()  # raises value error if scope invalid
+        validation.check_fscrypt_key_name(self.name)
 
 
 @resourcelib.component()
@@ -156,11 +265,9 @@ class CephFSStorage(_RBase):
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
     qos: Optional[QoSConfig] = None
-    DELAY_MAX_LIMIT = 300
-    # Maximal value for iops_limit
-    IOPS_LIMIT_MAX = 1_000_000
-    # Maximal value for bw_limit (1 << 40 = 1 TB)
-    BYTES_LIMIT_MAX = 1 << 40
+    # fscrypt_key is used to identify and obtain fscrypt key material
+    # from the keybridge.
+    fscrypt_key: Optional[FSCryptKeySelector] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -197,47 +304,83 @@ class CephFSStorage(_RBase):
         rc.qos.quiet = True
         return rc
 
+    @staticmethod
+    def _apply_limit(
+        qos_updates: Dict[str, Union[int, str, None]],
+        key: str,
+        value: Union[int, str, None],
+        maximum: int,
+    ) -> None:
+        """Apply a QoS limit to the updates dict, handling disable (0) and capping at maximum."""
+        if value is None:
+            return
+        if value == 0 or value == "0":
+            qos_updates[key] = None
+            return
+        if isinstance(value, str):
+            if value.isdigit():
+                qos_updates[key] = str(min(int(value), maximum))
+            else:
+                qos_updates[key] = value
+        else:
+            qos_updates[key] = min(value, maximum)
+
     def update_qos(
         self,
         *,
         read_iops_limit: Optional[int] = None,
         write_iops_limit: Optional[int] = None,
-        read_bw_limit: Optional[int] = None,
-        write_bw_limit: Optional[int] = None,
-        read_delay_max: Optional[int] = 30,
-        write_delay_max: Optional[int] = 30,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
     ) -> Self:
         """Return a new CephFSStorage instance with updated QoS values."""
-
-        qos_updates = {}
+        qos_updates: Dict[str, Union[int, str, None]] = {}
         new_qos: Optional[QoSConfig] = None
-        if read_iops_limit is not None and read_iops_limit > 0:
-            qos_updates["read_iops_limit"] = min(
-                read_iops_limit, self.IOPS_LIMIT_MAX
+
+        self._apply_limit(
+            qos_updates, "read_iops_limit", read_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_iops_limit", write_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "read_bw_limit", read_bw_limit, BYTES_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_bw_limit", write_bw_limit, BYTES_LIMIT_MAX
+        )
+
+        if read_burst_mult is not None:
+            if read_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"read_burst_mult must be at least {BURST_MULT_MIN} (got {read_burst_mult})"
+                )
+            qos_updates["read_burst_mult"] = min(
+                read_burst_mult, BURST_MULT_MAX
             )
-        if write_iops_limit is not None and write_iops_limit > 0:
-            qos_updates["write_iops_limit"] = min(
-                write_iops_limit, self.IOPS_LIMIT_MAX
-            )
-        if read_bw_limit is not None and read_bw_limit > 0:
-            qos_updates["read_bw_limit"] = min(
-                read_bw_limit, self.BYTES_LIMIT_MAX
-            )
-        if write_bw_limit is not None and write_bw_limit > 0:
-            qos_updates["write_bw_limit"] = min(
-                write_bw_limit, self.BYTES_LIMIT_MAX
-            )
-        if read_delay_max is not None and read_delay_max > 0:
-            qos_updates["read_delay_max"] = min(
-                read_delay_max, self.DELAY_MAX_LIMIT
-            )
-        if write_delay_max is not None and write_delay_max > 0:
-            qos_updates["write_delay_max"] = min(
-                write_delay_max, self.DELAY_MAX_LIMIT
+        if write_burst_mult is not None:
+            if write_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"write_burst_mult must be at least {BURST_MULT_MIN} (got {write_burst_mult})"
+                )
+            qos_updates["write_burst_mult"] = min(
+                write_burst_mult, BURST_MULT_MAX
             )
 
         if qos_updates:
-            new_qos = replace(self.qos or QoSConfig(), **qos_updates)
+            new_qos = replace(self.qos or QoSConfig(), **qos_updates)  # type: ignore
+
+            if (
+                new_qos.read_iops_limit is None
+                and new_qos.write_iops_limit is None
+                and new_qos.read_bw_limit is None
+                and new_qos.write_bw_limit is None
+            ):
+                new_qos = None
+        else:
+            new_qos = self.qos
 
         return replace(self, qos=new_qos)
 
@@ -604,6 +747,9 @@ class ExternalCephClusterSource(_RBase):
 class RemoteControl(_RBase):
     # enabled can be set to explicitly toggle the remote control server
     enabled: Optional[bool] = None
+    # locally_enabled can be set to explicitly toggle the remote control
+    # servers local unix socket mode
+    locally_enabled: Optional[bool] = None
     # cert specifies the ssl/tls certificate to use
     cert: Optional[TLSSource] = None
     # cert specifies the ssl/tls server key to use
@@ -617,9 +763,113 @@ class RemoteControl(_RBase):
 
     @property
     def is_enabled(self) -> bool:
+        return self._locally_enabled() or self._remotely_enabled()
+
+    def _locally_enabled(self) -> bool:
+        return bool(self.locally_enabled)
+
+    def _remotely_enabled(self) -> bool:
         if self.enabled is not None:
             return self.enabled
         return bool(self.cert and self.key)
+
+    def enabled_features(self) -> list[str]:
+        out = []
+        if self._locally_enabled():
+            out.append(REMOTE_CONTROL_LOCAL)
+        if self._remotely_enabled():
+            out.append(REMOTE_CONTROL)
+        return out
+
+
+@resourcelib.component()
+class KeyBridgeScope(_RBase):
+    """Define and configure scopes for the doc/mgr/smb.rstkeybridge service.
+    Each scope is to be named via <type>[.<subname>] and specifies zero or
+    more configuration parameters depending on the scope type.
+    """
+
+    # name of the scope (can be unique, like "mem" or "kmip" or qualified
+    # like "kmip.1")
+    name: str
+    # KMIP fields
+    kmip_hosts: Optional[List[str]] = None
+    kmip_port: Optional[int] = None
+    kmip_cert: Optional[TLSSource] = None
+    kmip_key: Optional[TLSSource] = None
+    kmip_ca_cert: Optional[TLSSource] = None
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.name)
+
+    def validate(self) -> None:
+        kbsi = self.scope_identity()  # raises value error if scope invalid
+        vfn = {
+            KeyBridgeScopeType.KMIP: self.validate_kmip,
+            KeyBridgeScopeType.MEM: self.validate_mem,
+        }
+        vfn[kbsi.scope_type]()
+
+    def validate_kmip(self) -> None:
+        if not self.kmip_hosts:
+            raise ValueError('at least one kmip hostname is required')
+        if not (self.kmip_port or all(':' in h for h in self.kmip_hosts)):
+            raise ValueError(
+                'a kmip default port is required unless all'
+                ' hosts include a port'
+            )
+        # TODO: should tls credentials be always required?
+        if not (self.kmip_cert and self.kmip_key and self.kmip_ca_cert):
+            raise ValueError('kmip requires a cert, a key, and a ca cert')
+
+    def validate_mem(self) -> None:
+        if (
+            self.kmip_hosts
+            or self.kmip_port
+            or self.kmip_cert
+            or self.kmip_key
+            or self.kmip_ca_cert
+        ):
+            raise ValueError('mem scope does not support kmip parameters')
+
+
+@resourcelib.component()
+class KeyBridge(_RBase):
+    """Configure and enable/disable the keybridge service for this cluster.
+
+    The keybridge can be explicitly enabled or disabled. It will automatically
+    be enabled if scopes are defined and is not explicitly enabled (or
+    disabled).  The peer_policy parameter can be used by devs/testers to relax
+    some of the normal access restrictions.
+    """
+
+    # enabled can be set to explicitly toggle the keybridge server
+    enabled: Optional[bool] = None
+    scopes: Optional[List[KeyBridgeScope]] = None
+    # peer_policy allows one to change/relax the keybridge server's peer
+    # verification policy. generally this is only something a developer
+    # should change
+    peer_policy: Optional[KeyBridgePeerPolicy] = None
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.scopes)
+
+    @property
+    def use_peer_policy(self) -> KeyBridgePeerPolicy:
+        if self.peer_policy is None:
+            return KeyBridgePeerPolicy.RESTRICTED
+        return self.peer_policy
+
+    def validate(self) -> None:
+        if self.enabled and not self.scopes:
+            raise ValueError(
+                'an enabled KeyBridge requires at least one scope'
+            )
+        for scope in self.scopes or []:
+            scope.validate()
 
 
 @resourcelib.resource('ceph.smb.cluster')
@@ -647,6 +897,11 @@ class Cluster(_RBase):
     # connect the smb cluster and all its shares to cephfs file systems
     # hosted on an external ceph cluster
     external_ceph_cluster: Optional[ExternalCephClusterSource] = None
+    # debug_level can be used to change the smb services
+    # default debugging levels
+    debug_level: Optional[dict[str, str]] = None
+    # configure the keybridge (KMS integration) for this cluster
+    keybridge: Optional[KeyBridge] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -678,11 +933,13 @@ class Cluster(_RBase):
             raise ValueError(
                 'bind_addrs must have at least one value or not be set'
             )
+        validation.check_debug_level(self.debug_level)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
         rc.on_construction_error(InvalidResourceError.wrap)
+        rc.debug_level.quiet = True
         return rc
 
     @property
@@ -701,6 +958,15 @@ class Cluster(_RBase):
         if not self.remote_control:
             return False
         return self.remote_control.is_enabled
+
+    @property
+    def keybridge_is_enabled(self) -> bool:
+        """Return true if a keybridge service should be enabled for this
+        cluster.
+        """
+        if not self.keybridge:
+            return False
+        return self.keybridge.is_enabled
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""

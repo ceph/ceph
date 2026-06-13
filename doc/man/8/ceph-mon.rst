@@ -15,13 +15,13 @@ Synopsis
 Description
 ===========
 
-**ceph-mon** is the cluster monitor daemon for the Ceph distributed
+**ceph-mon** is the cluster Monitor daemon for the Ceph distributed
 file system. One or more instances of **ceph-mon** form a Paxos
 part-time parliament cluster that provides extremely reliable and
 durable storage of cluster membership, configuration, and state.
 
 The *mondatapath* refers to a directory on a local file system storing
-monitor data. It is normally specified via the ``mon data`` option in
+Monitor data. It is normally specified via the ``mon data`` option in
 the configuration file.
 
 Options
@@ -50,27 +50,27 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during
    startup.
 
 .. option:: --mkfs
 
    Initialize the ``mon data`` directory with seed information to form
-   and initial ceph file system or to join an existing monitor
+   an initial Ceph file system or to join an existing Monitor
    cluster.  Three pieces of information must be provided:
 
    - The cluster fsid.  This can come from a monmap (``--monmap <path>``) or
      explicitly via ``--fsid <uuid>``.
-   - A list of monitors and their addresses.  This list of monitors
+   - A list of Monitors and their addresses.  This list of Monitors
      can come from a monmap (``--monmap <path>``), the ``mon host``
      configuration value (in *ceph.conf* or via ``-m
      host1,host2,...``), or (for backward compatibility) the deprecated ``mon addr`` lines in *ceph.conf*.  If this
-     monitor is to be part of the initial monitor quorum for a new
+     Monitor is to be part of the initial Monitor quorum for a new
      Ceph cluster, then it must be included in the initial list,
-     matching either the name or address of a monitor in the list.
+     matching either the name or address of a Monitor in the list.
      When matching by address, either the ``public addr`` or ``public
      subnet`` options may be used.
-   - The monitor secret key ``mon.``.  This must be included in the
+   - The Monitor secret key ``mon.``.  This must be included in the
      keyring provided via ``--keyring <path>``.
 
 .. option:: --keyring
@@ -79,7 +79,7 @@ Options
 
 .. option:: --no-config-file
 
-    Signal that we don't want to rely on a *ceph.conf*, either user provided
+    Signal that we don't want to rely on a *ceph.conf*, either user-provided
     or the default, to run the daemon.  This will entail providing all
     necessary options to the daemon as arguments.
 

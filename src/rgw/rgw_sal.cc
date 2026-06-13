@@ -84,8 +84,9 @@ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_co
 std::optional<neorados::RADOS>
 make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
   try {
-    auto neorados = neorados::RADOS::make_with_cct(cct, io_context,
-						   ceph::async::use_blocked);
+    auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
+                                                   io_context,
+                                                   ceph::async::use_blocked);
     return neorados;
   } catch (const std::exception& e) {
     ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()

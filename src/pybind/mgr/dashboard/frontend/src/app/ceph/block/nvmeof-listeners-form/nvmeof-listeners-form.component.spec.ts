@@ -3,8 +3,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form.component';
 import { ActivatedRoute } from '@angular/router';
@@ -31,7 +29,7 @@ describe('NvmeofListenersFormComponent', () => {
           }
         }
       ],
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ToastrModule.forRoot()],
+      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 

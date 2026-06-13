@@ -26,6 +26,9 @@ context to_context(const std::string& s)
   if (strcasecmp(s.c_str(), "prerequest") == 0) {
     return context::preRequest;
   }
+  if (strcasecmp(s.c_str(), "postauth") == 0) {
+    return context::postAuth;
+  }
   if (strcasecmp(s.c_str(), "postrequest") == 0) {
     return context::postRequest;
   }
@@ -46,6 +49,8 @@ std::string to_string(context ctx)
   switch (ctx) {
     case context::preRequest:
       return "prerequest";
+    case context::postAuth:
+      return "postauth";
     case context::postRequest:
       return "postrequest";
     case context::background:
@@ -248,6 +253,9 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     ldpp_dout(dpp, 1) << "Lua ERROR: failed to create temporary directory from template: " << 
       tmp_path_template << ". error: " << rc << dendl;
     return rc;
+  } else {
+    // rgw starts as root and will later drop to user ceph
+    chmod(tmp_luarocks_path, 0755);
   }
   install_dir.assign(tmp_luarocks_path);
 

@@ -144,6 +144,7 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'num_pgs': (int, 'Total PG count'),
         'bytes_used': (int, 'Used capacity in bytes'),
         'bytes_total': (int, 'Total capacity in bytes'),
+        'recovering_bytes_per_sec': (int, 'Total recovery in bytes'),
     }, 'Placement group map details'),
     'mgrmap': ({
         'num_active': (int, 'Number of active managers'),
@@ -295,10 +296,10 @@ class HealthData(object):
         return mon_status
 
     def osd_map(self):
-        osd_map = mgr.get('osd_map')
+        osd_map = dict(mgr.get('osd_map'))
         assert osd_map is not None
         # Not needed, skip the effort of transmitting this to UI
-        del osd_map['pg_temp']
+        osd_map.pop('pg_temp', None)
         if self._minimal:
             osd_map = partial_dict(osd_map, ['osds'])
             osd_map['osds'] = [
@@ -403,9 +404,12 @@ class Health(BaseController):
             summary['pgmap'] = {
                 'pgs_by_state': data.get('pgmap', {}).get('pgs_by_state', []),
                 'num_pools': data.get('pgmap', {}).get('num_pools'),
-                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'write_bytes_sec': data.get('pgmap', {}).get('write_bytes_sec'),
+                'read_bytes_sec': data.get('pgmap', {}).get('read_bytes_sec'),
                 'bytes_used': data.get('pgmap', {}).get('bytes_used'),
                 'bytes_total': data.get('pgmap', {}).get('bytes_total'),
+                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'recovering_bytes_per_sec': data.get('pgmap', {}).get('recovering_bytes_per_sec'),
             }
 
         if self._has_permissions(Permission.READ, Scope.MANAGER):
@@ -456,7 +460,7 @@ class Health(BaseController):
             summary['num_hosts'] = len(hosts)
             available_hosts = [
                 h for h in hosts
-                if h.get("status") == "Available"
+                if h.get("status") == ""
             ]
             summary['num_hosts_available'] = len(available_hosts)
 
