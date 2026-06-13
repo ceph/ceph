@@ -758,21 +758,21 @@ public:
                                   optional_yield y,
                                   const RGWOIDCProviderInfo& info,
                                   bool exclusive,
-                                  RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
+                                  RGWObjVersionTracker* objv_tracker) override;
   virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
                                  optional_yield y,
                                  std::string_view tenant,
                                  std::string_view url,
                                  RGWOIDCProviderInfo& info,
-                                 RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
+                                 RGWObjVersionTracker* objv_tracker) override;
   virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   std::string_view tenant,
-				   std::string_view url) override { return -ENOTSUP; }
+				   std::string_view url) override;
   virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view tenant,
-				 std::vector<RGWOIDCProviderInfo>& providers) override { return 0; }
+				 std::vector<RGWOIDCProviderInfo>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				optional_yield y,
 				rgw::sal::Object* obj,
