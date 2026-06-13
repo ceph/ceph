@@ -1,0 +1,32 @@
+@if (poolName) {
+  @switch (section) {
+  @case ('details') {
+  <cd-table-key-value [renderObjects]="true"
+                      [data]="poolDetails"
+                      [autoReload]="false">
+  </cd-table-key-value>
+  }
+  @case ('performance-details') {
+  <cd-grafana i18n-title
+              title="Pool details"
+              [grafanaPath]="'ceph-pool-details?var-pool_name=' + poolName"
+              [type]="'metrics'"
+              uid="-xyV8KCiz"
+              grafanaStyle="three">
+  </cd-grafana>
+  }
+  @case ('configuration') {
+  <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
+  }
+  @case ('cache-tiers-details') {
+  <cd-table [data]="cacheTiers"
+            [columns]="cacheTierColumns"
+            [autoSave]="false"
+            columnMode="flex">
+  </cd-table>
+  }
+  }
+} @else {
+<cd-alert-panel type="error"
+                i18n>No pool name found.</cd-alert-panel>
+}

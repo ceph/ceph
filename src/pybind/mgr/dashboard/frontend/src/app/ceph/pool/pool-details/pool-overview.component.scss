@@ -1,0 +1,30 @@
+.overview-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  width: 100%;
+  padding-left: 1rem;
+}
+
+.overview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.overview-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+::ng-deep .tag-auto {
+  width: fit-content !important;
+  max-width: 100%;
+}

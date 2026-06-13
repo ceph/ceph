@@ -23,7 +23,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
 import { Pool } from '../pool';
-import { PoolDetailsComponent } from '../pool-details/pool-details.component';
 import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
@@ -45,7 +44,7 @@ describe('PoolListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
+    declarations: [PoolListComponent, RbdConfigurationListComponent],
     imports: [
       BrowserAnimationsModule,
       SharedModule,
