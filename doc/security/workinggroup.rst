@@ -1,3 +1,7 @@
+==========================
+ Security Working Group
+==========================
+
 In order to fully support Ceph, the security working group
 co-ordinates security improvements. This is essential as industry
 focuses more on security, and Ceph has become a mature software

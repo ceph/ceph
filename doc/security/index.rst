@@ -7,6 +7,8 @@
 
    Past Vulnerabilities / CVEs <cves>
    Vulnerability Management Process <process>
+   Security Lead <securitylead>
+   Security Working Group <workinggroup>
 
 Reporting a vulnerability
 =========================
