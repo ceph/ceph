@@ -69,6 +69,7 @@ static void init_sqe(struct ioring_data *d, struct io_uring_sqe *sqe,
 
   io_uring_sqe_set_data(sqe, io);
   io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+  sqe->__pad2[0] = io->write_hint;
 }
 
 static int ioring_queue(struct ioring_data *d, void *priv,
