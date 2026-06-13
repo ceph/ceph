@@ -529,3 +529,20 @@ add_ceph_unittest(unittest_async_cond)
 add_executable(unittest_async_redirect_error test_async_redirect_error.cc)
 target_link_libraries(unittest_async_redirect_error GTest::GTest)
 add_ceph_unittest(unittest_async_redirect_error)
+
+if(WITH_LIBCEPHSQLITE)
+  # Link AuditDB.cc here (not the `audit_db` target): that target is created in
+  # src/CMakeLists.txt after add_subdirectory(test), so it is not visible when
+  # this file is configured.
+  add_executable(ceph_test_audit_db
+    test_audit_db.cc
+    ${CMAKE_SOURCE_DIR}/src/common/AuditDB.cc)
+  target_link_libraries(ceph_test_audit_db
+    cephsqlite
+    librados
+    ceph-common
+    global
+    SQLite3::SQLite3
+    ${UNITTEST_LIBS})
+  install(TARGETS ceph_test_audit_db DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

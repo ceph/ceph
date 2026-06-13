@@ -43,7 +43,7 @@ if(WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs})
   target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
   if(WITH_LIBCEPHSQLITE)
-    target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
+    target_link_libraries(ceph-mgr cephsqlite audit_db SQLite3::SQLite3)
   endif()
   target_include_directories(ceph-mgr PRIVATE
     $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)

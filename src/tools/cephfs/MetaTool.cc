@@ -105,21 +105,6 @@ int MetaTool::main(string& mode,
     }
   }
 
-  // RADOS init
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0) {
-    cerr << "RADOS unavailable" << std::endl;
-    return r;
-  }
-
-  if (_debug)
-    cout << "MetaTool: connecting to RADOS..." << std::endl;
-  r = rados.connect();
-  if (r < 0) {
-    cerr << "couldn't connect to cluster: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
-
   if (!manual_mode) {
     r = role_selector.parse(*fsmap, rank_str);
     if (r != 0) {
@@ -189,6 +174,31 @@ int MetaTool::main(string& mode,
     cout << "op[" << mode << "] ret : " << r << std::endl;
   }
   return r;
+}
+
+int MetaTool::connect_rados()
+{
+  int r = rados.init_with_context(g_ceph_context);
+  if (r < 0) {
+    cerr << "RADOS unavailable" << std::endl;
+    return r;
+  }
+
+  if (_debug)
+    cout << "MetaTool: connecting to RADOS..." << std::endl;
+  r = rados.connect();
+  if (r < 0) {
+    cerr << "couldn't connect to cluster: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  rados_connected = true;
+  return 0;
+}
+
+librados::Rados& MetaTool::get_rados_handle()
+{
+  ceph_assert(rados_connected);
+  return rados;
 }
 
 int MetaTool::process(string& mode, string& ino, string out, string in, bool confirm)

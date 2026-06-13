@@ -250,6 +250,8 @@ private:
   int amend_meta(meta_op &op);
   int show_fn(meta_op &op);
   int amend_fn(meta_op &op);
+
+  bool rados_connected{false};
   public:
   int _file_meta(meta_op &op, librados::IoCtx& io);
   int _show_meta(inode_meta_t& i, const std::string& fn);
@@ -269,5 +271,8 @@ private:
            std::string& in,
            bool confirm = false
            );
+
+  int connect_rados();
+  librados::Rados& get_rados_handle();
 };
 #endif // METATOOL_H__
