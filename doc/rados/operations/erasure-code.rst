@@ -272,38 +272,41 @@ Erasure-coded pool overhead
 ---------------------------
 
 The overhead factor (space amplification) of an erasure-coded pool
-is `(k+m) / k`.  For a 4,2 profile, the overhead is
+is ``(k+m) / k``.  For a ``4+2`` profile, the overhead is
 thus 1.5, which means that 1.5 GiB of underlying storage is used to store
-1 GiB of user data.  Contrast with default replication with ``size-3``, with
-which the overhead factor is 3.0.  Do not mistake erasure coding for a free
+1 GiB of user data.  Contrast with default replication with ``size=3``, with
+which the write amplification factor is ``3.0``.  Do not mistake erasure coding for a free
 lunch: there is a significant performance tradeoff, especially when using HDDs
 and when performing cluster recovery or backfill.
 
-Below is a table showing the overhead factors for various values of `k` and `m`.
-As `k` increases above 4, the incremental capacity overhead gain quickly
+Below is a table showing the overhead factors for various values of ``k`` and ``m``.
+As ``k`` increases above ``4``, the incremental space amplification gain
 experiences diminishing returns but the performance impact grows proportionally.
-We recommend that you do not choose a profile with `k` > 4 or `m` > 2 unless
+We recommend that you do not choose a profile with ``k`` > ``4` or ``m`` > 2 unless
 and until you fully understand the ramifications, including the number of
-failure domains your cluster topology presents.  If  you choose `m=1`,
+failure domains your cluster topology presents.  If  you choose ``m=1``,
 expect data unavailability during maintenance and data loss when component
-failures overlap.  Profiles with `m=1` are thus strongly discouraged for
+failures overlap.  Profiles with ``m=1`` are strongly discouraged for
 production data.
 
 Deployments that must remain active and avoid data loss when larger numbers
-of overlapping component failure must be survived may favor a value of `m` > 2.
-Note that such profiles result in lower space efficiency and lessened performance, especially
+of overlapping component failure must be survived may favor a value of ``m`` > 2.
+Note that such profiles may result in lower space efficiency and lessened performance, especially
 during backfill and recovery.
 
 If you are certain that you wish to use erasure coding for one or more pools but
-are not certain which profile to use, select `k=4` and `m=2`.  You will realize
-double the usable space compared to replication with `size=3` with relatively
+are not certain which profile to use, select ``4+2`` or ``6+3``.  You will realize
+double the usable space compared to replication with ``size=3`` with relatively
 tolerable write and recovery performance impact.
 
-.. note:: Most erasure-coded pool deployments require at least `k+m` CRUSH failure
-	  domains, which in most cases means `rack`s or `hosts`.  There are
+.. note:: For a discussion of how durability varies across EC profiles, consult
+	  [this Cephalocon presentation](https://www.youtube.com/watch?v=0y8WMu-hMBQ) .
+
+.. note:: Most erasure-coded pool deployments require at least ``k+m`` CRUSH failure
+	  domains, which in most cases means racks or hosts.  There are
 	  operational advantages to planning EC profiles and cluster topology
-	  so that there are at least `k+m+1` failure domains. In most cases
-	  a value of `k` > 8 is discouragd.
+	  so that there are at least ``k+m+1`` failure domains. In most cases
+	  a value of ``k`` > 8 is discouraged.
 
 .. note:: CephFS and RGW deployments with a significant proportion
           of very small user files/objects may wish to plan carefully as
