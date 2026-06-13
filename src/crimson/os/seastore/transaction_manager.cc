@@ -512,17 +512,32 @@ TransactionManager::update_lba_mappings(
   return seastar::do_with(
     std::list<LogicalChildNodeRef>(),
     std::list<CachedExtentRef>(),
-    [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
-    auto chksum_func = [&lextents, &pextents, this](auto &extent) {
+    std::list<std::pair<CachedExtentRef, checksum_t>>(),
+    [this, &t, &pre_allocated_extents]
+    (auto &lextents, auto &pextents, auto &exist_mutation_extents) {
+    auto chksum_func = [&lextents, &pextents, &exist_mutation_extents, this](auto &extent) {
       if (!extent->is_valid() ||
-          !extent->is_fully_loaded() ||
-          // EXIST_MUTATION_PENDING extents' crc will be calculated when
-          // preparing records
-          extent->is_exist_mutation_pending()) {
+          !extent->is_fully_loaded()) {
         return;
       }
       if (extent->is_logical()) {
         assert(is_logical_type(extent->get_type()));
+        if (extent->is_exist_mutation_pending()) {
+          // EXIST_MUTATION_PENDING extents (delta-based overwrite) need
+          // their LBA leaf checksum updated in-place. compute the new
+          // CRC now (calc_crc32c materialises the cached bptr with
+          // pending deltas) and queue the leaf update.
+          //
+          // do NOT touch extent->last_committed_crc here:
+          // Cache::prepare_record() consumes it as delta_info_t::prev_crc
+          // and would emit a corrupt prev_crc (post-delta instead of
+          // pre-delta) if we wrote to it before that point.
+          checksum_t crc = get_checksum_needed(extent->get_paddr())
+            ? extent->calc_crc32c()
+            : CRC_NULL;
+          exist_mutation_extents.emplace_back(extent, crc);
+          return;
+        }
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
@@ -551,6 +566,8 @@ TransactionManager::update_lba_mappings(
     // For other fresh logical extents, update lba-leaf crc.
     t.for_each_finalized_fresh_block(chksum_func);
     // For existing-clean logical extents, update lba-leaf crc.
+    // For EXIST_MUTATION_PENDING (delta-based overwrite) logical extents,
+    // compute CRC and collect for LBA checksum update.
     t.for_each_existing_block(chksum_func);
     // For pre-allocated fresh logical extents, update lba-leaf crc.
     // For inplace-rewrite dirty logical extents, update lba-leaf crc.
@@ -576,6 +593,29 @@ TransactionManager::update_lba_mappings(
 	extent->set_last_committed_crc(crc);
 	extent->update_in_extent_chksum_field(crc);
       }
+    }).si_then([&exist_mutation_extents, this, &t]() -> update_lba_mappings_ret {
+      // Update LBA tree leaf checksums for EXIST_MUTATION_PENDING extents.
+      // These extents were mutated in place (delta-based overwrite); the
+      // LBA leaf still holds the pre-mutation CRC.  The post-mutation
+      // CRC was computed above in chksum_func and stored in the pair.
+      return trans_intr::do_for_each(
+        exist_mutation_extents,
+        [this, &t](auto &p) {
+          auto &extent = p.first;
+          auto crc = p.second;
+          auto lextent = extent->template cast<LogicalCachedExtent>();
+          return lba_manager->get_cursor(
+            t, lextent->get_laddr()
+          ).si_then([this, &t, crc](auto cursor) {
+            return lba_manager->update_mapping_checksum(
+              t, std::move(cursor), crc
+            ).si_then([](auto) {});
+          }).handle_error_interruptible(
+            LBAManager::update_mapping_checksum_iertr::pass_further{},
+            crimson::ct_error::assert_all{
+              "update_lba_mappings: update_mapping_checksum failed"}
+          );
+        });
     });
   });
 }
