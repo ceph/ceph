@@ -140,3 +140,22 @@ double Allocator::get_fragmentation_score()
   double terrible = (sum / block_size) * get_score(block_size);
   return (ideal - score_sum) / (ideal - terrible);
 }
+
+void Allocator::foreach_interruptible(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  // Number of free extents fetched per get_free_extents() call. The allocator
+  // lock is held only for the duration of one batch, so this bounds the
+  // per-batch lock hold
+  static constexpr size_t batch_size = 1024;
+  const uint64_t end = get_capacity();
+  uint64_t cursor = 0;
+  free_extent_vector_t batch;
+  while (cursor < end) {
+    batch.clear();
+    cursor = get_free_extents(cursor, end, batch_size, &batch);
+    for (const auto& [offset, length] : batch) {
+      notify(offset, length);
+    }
+  }
+}
