@@ -27,30 +27,30 @@
 
 namespace rgw { namespace store {
 
-class FilesystemUserDB;
-class FilesystemAccountDB;
+class POSIXUserDB;
+class POSIXAccountDB;
 
-struct FilesystemAccountDBOpAccountInfo : DBOpAccountInfo {};
+struct POSIXAccountDBOpAccountInfo : DBOpAccountInfo {};
 
-struct FilesystemUserDBOpUserInfo : DBOpUserInfo {};
+struct POSIXUserDBOpUserInfo : DBOpUserInfo {};
 
-struct FilesystemUserDBOpInfo : DBOpInfo {};
+struct POSIXUserDBOpInfo : DBOpInfo {};
 
-struct FilesystemUserDBOpUserPrepareInfo : DBOpUserPrepareInfo {};
+struct POSIXUserDBOpUserPrepareInfo : DBOpUserPrepareInfo {};
 
-struct FilesystemUserDBOpPrepareInfo : DBOpPrepareInfo {};
+struct POSIXUserDBOpPrepareInfo : DBOpPrepareInfo {};
 
-struct FilesystemUserDBOpPrepareParams : DBOpPrepareParams {};
+struct POSIXUserDBOpPrepareParams : DBOpPrepareParams {};
 
-struct FilesystemAccountDBOpInfo : DBOpInfo {};
+struct POSIXAccountDBOpInfo : DBOpInfo {};
 
-struct FilesystemAccountDBOpPrepareInfo : DBOpPrepareInfo {};
+struct POSIXAccountDBOpPrepareInfo : DBOpPrepareInfo {};
 
-struct FilesystemAccountDBOpPrepareParams : DBOpPrepareParams {};
+struct POSIXAccountDBOpPrepareParams : DBOpPrepareParams {};
 
-struct FilesystemAccountDBOps : DBOps {};
+struct POSIXAccountDBOps : DBOps {};
 
-class FilesystemAccountDBOp : public DBOp {
+class POSIXAccountDBOp : public DBOp {
   private:
     static constexpr std::string_view CreateAccountTableQ =
       /* Corresponds to RGWAccountInfo
@@ -77,20 +77,20 @@ class FilesystemAccountDBOp : public DBOp {
       PRIMARY KEY (AccountID) \n);";
 
   public:
-    FilesystemAccountDBOp() : DBOp() {}
-    virtual ~FilesystemAccountDBOp() {}
+    POSIXAccountDBOp() : DBOp() {}
+    virtual ~POSIXAccountDBOp() {}
     std::mutex mtx; // to protect prepared stmt
 };
 
-class InsertFilesystemAccountOp : public SQLInsertAccount {};
+class InsertPOSIXAccountOp : public SQLInsertAccount {};
 
-class RemoveFilesystemAccountOp: public SQLRemoveAccount {};
+class RemovePOSIXAccountOp: public SQLRemoveAccount {};
 
-class GetFilesystemAccountOp: public SQLGetAccount {};
+class GetPOSIXAccountOp: public SQLGetAccount {};
 
-struct FilesystemUserDBOps : DBOps {};
+struct POSIXUserDBOps : DBOps {};
 
-class FilesystemUserDBOp : public DBOp {
+class POSIXUserDBOp : public DBOp {
   private:
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
@@ -139,16 +139,16 @@ class FilesystemUserDBOp : public DBOp {
       PRIMARY KEY (UserID) \n);";
 
   public:
-    FilesystemUserDBOp() : DBOp() {}
-    virtual ~FilesystemUserDBOp() {}
+    POSIXUserDBOp() : DBOp() {}
+    virtual ~POSIXUserDBOp() {}
     std::mutex mtx; // to protect prepared stmt
 };
 
-class InsertFilesystemUserOp : public SQLInsertUser {};
+class InsertPOSIXUserOp : public SQLInsertUser {};
 
-class RemoveFilesystemUserOp: public SQLRemoveUser {};
+class RemovePOSIXUserOp: public SQLRemoveUser {};
 
-class FilesystemUserDB : public SQLiteDB {
+class POSIXUserDB : public SQLiteDB {
   private:
     const std::string db_name;
     rgw::sal::Driver* driver;
@@ -164,12 +164,12 @@ class FilesystemUserDB : public SQLiteDB {
   public:
     struct DBOps dbops;
 
-    FilesystemUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
+    POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
 		cct(_cct),
-		dp(_cct, ceph_subsys_rgw, "rgw FilesystemUserDB backend:")
+		dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend:")
                 { DB::set_context(cct); }
-    /* FilesystemUserDB() {}*/
+    /* POSIXUserDB() {}*/
 
     int Initialize(std::string logfile, int loglevel);
     int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
@@ -187,7 +187,7 @@ class FilesystemUserDB : public SQLiteDB {
     virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
 };
 
-class FilesystemAccountDB : public SQLiteDB {
+class POSIXAccountDB : public SQLiteDB {
   private:
     const std::string db_name;
     const std::string account_table;
@@ -210,12 +210,12 @@ class FilesystemAccountDB : public SQLiteDB {
   public:
     struct DBOps dbops;
 
-    FilesystemAccountDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
+    POSIXAccountDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
 		account_table(db_name+"_account_table"),
 		user_table(db_name+"_user_table"),
 		cct(_cct),
-		dp(_cct, ceph_subsys_rgw, "rgw FilesystemAccountDB backend:")
+		dp(_cct, ceph_subsys_rgw, "rgw POSIXAccountDBStore backend:")
                 { DB::set_context(cct); }
 
     int Initialize(std::string logfile, int loglevel);
