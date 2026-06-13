@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
-import { of } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
+import { BehaviorSubject, of } from 'rxjs';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -89,8 +90,17 @@ class MockTaskWrapperService {}
 describe('NvmeofSubsystemsComponent', () => {
   let component: NvmeofSubsystemsComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsComponent>;
+  let queryParams$: BehaviorSubject<Record<string, string>>;
+  const activatedRouteMock = {
+    queryParams: null as any,
+    snapshot: { queryParams: {} as Record<string, string> }
+  };
 
   beforeEach(async () => {
+    queryParams$ = new BehaviorSubject<Record<string, string>>({});
+    activatedRouteMock.queryParams = queryParams$.asObservable();
+    activatedRouteMock.snapshot.queryParams = queryParams$.value;
+
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule, ComboBoxModule, GridModule],
@@ -98,9 +108,19 @@ describe('NvmeofSubsystemsComponent', () => {
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
         { provide: ModalCdsService, useClass: MockModalService },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
+        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+        { provide: ActivatedRoute, useValue: activatedRouteMock }
       ]
     }).compileComponents();
+
+    const router = TestBed.inject(Router);
+    jest.spyOn(router, 'navigate').mockImplementation((_commands, extras?) => {
+      const group = extras?.queryParams?.['group'];
+      const params = group ? { group: String(group) } : {};
+      activatedRouteMock.snapshot.queryParams = params;
+      queryParams$.next(params);
+      return Promise.resolve(true);
+    });
 
     fixture = TestBed.createComponent(NvmeofSubsystemsComponent);
     component = fixture.componentInstance;
