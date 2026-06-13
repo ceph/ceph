@@ -1054,7 +1054,7 @@ static inline bool notification_match(reservation_t& res,
     return false;
   }
 
-  if (!filter.s3_filter.metadata_filter.kv.empty()) {
+  if (filter.s3_filter.metadata_filter.has_content()) {
     // metadata filter exists
     if (res.s) {
       filter_amz_meta(res.x_meta_map, res.s->info.x_meta_map);
@@ -1065,7 +1065,7 @@ static inline bool notification_match(reservation_t& res,
     }
   }
 
-  if (!filter.s3_filter.tag_filter.kv.empty()) {
+  if (filter.s3_filter.tag_filter.has_content()) {
     // tag filter exists
     if (req_tags) {
       // tags in the request
@@ -1084,6 +1084,14 @@ static inline bool notification_match(reservation_t& res,
       if (!match(filter.s3_filter.tag_filter, tags)) {
         return false;
       }
+    }
+  }
+
+  if (filter.s3_filter.zone_filter.has_content()) {
+    //zone filter exists
+    const std::string &zone_name = res.store->get_zone()->get_name();
+    if(!match(filter.s3_filter.zone_filter, zone_name)) {
+      return false;
     }
   }
 
