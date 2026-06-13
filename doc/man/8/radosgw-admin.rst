@@ -151,8 +151,12 @@ as follows:
   Purge bucket index entries.
 
 :command:`object rm`
-  Remove an S3/Swift object. Include "--yes-i-really-mean-it" to remove object's
-  entry from bucket index, for example if it's damaged.
+  Remove an S3/Swift object. Include ``--yes-i-really-mean-it`` to remove
+  object's entry from bucket index, for example if it's damaged.
+  Use ``--all`` with ``--bucket`` to remove all objects from a bucket while
+  leaving the bucket itself and its policies (ACL, lifecycle, etc.) intact.
+  Objects are queued to garbage collection as normal; combine with
+  ``--bypass-gc`` to remove via async AIO instead.
 
 :command:`object stat`
   Stat an S3/Swift object for its metadata.
@@ -891,9 +895,15 @@ Options
    When specified with bucket limit check,
    list only buckets nearing or over the current max objects per shard value.
 
+.. option:: --all
+
+   When specified with ``object rm`` and ``--bucket``, removes all objects
+   from the bucket while leaving the bucket itself intact.
+   Requires ``--yes-i-really-mean-it``.
+
 .. option:: --bypass-gc
 
-   When specified with bucket deletion,
+   When specified with bucket deletion or ``object rm --all``,
    triggers object deletion without involving GC.
 
 .. option:: --inconsistent-index

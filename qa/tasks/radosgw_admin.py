@@ -855,6 +855,152 @@ def task(ctx, config):
         ['bucket', 'rm', '--bucket', bucket_name, '--purge-objects'],
         check_status=True)
 
+    # TESTCASE 'object-rm-all-no-confirm', 'object', 'rm', 'all objects without --yes-i-really-mean-it', 'fails'
+    bucket_name_all = bucket_name + 'all'
+    connection.create_bucket(Bucket=bucket_name_all)
+    for key_name in ['a', 'b', 'c']:
+        connection.put_object(Bucket=bucket_name_all, Key=key_name, Body=key_name)
+
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_all])
+    assert err
+
+    # TESTCASE 'object-rm-all', 'object', 'rm', 'all objects from bucket', 'succeeds, objects deleted, bucket preserved'
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_all,
+         '--yes-i-really-mean-it'],
+        check_status=True)
+
+    # bucket should still exist and be empty
+    (err, out) = rgwadmin(ctx, client,
+        ['bucket', 'stats', '--bucket', bucket_name_all], check_status=True)
+    assert out['usage']['rgw.main']['num_objects'] == 0
+
+    connection.delete_bucket(Bucket=bucket_name_all)
+
+    # TESTCASE 'object-rm-all-versioned', 'object', 'rm', 'all objects from versioned bucket', 'succeeds, all versions and delete markers deleted, versioning state preserved'
+    bucket_name_ver = bucket_name + 'ver'
+    connection.create_bucket(Bucket=bucket_name_ver)
+    connection.put_bucket_versioning(
+        Bucket=bucket_name_ver,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    # put two versions of each key
+    for key_name in ['x', 'y']:
+        connection.put_object(Bucket=bucket_name_ver, Key=key_name, Body='v1')
+        connection.put_object(Bucket=bucket_name_ver, Key=key_name, Body='v2')
+    # delete 'x' via S3 to produce a delete marker
+    connection.delete_object(Bucket=bucket_name_ver, Key='x')
+
+    # confirm there are now versions and a delete marker before the rm
+    versions_before = connection.list_object_versions(Bucket=bucket_name_ver)
+    assert 'Versions' in versions_before
+    assert 'DeleteMarkers' in versions_before
+
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_ver,
+         '--yes-i-really-mean-it'],
+        check_status=True)
+
+    # versioning state must be preserved
+    versioning = connection.get_bucket_versioning(Bucket=bucket_name_ver)
+    assert versioning['Status'] == 'Enabled'
+
+    # all versions and delete markers must be gone
+    versions = connection.list_object_versions(Bucket=bucket_name_ver)
+    assert 'Versions' not in versions
+    assert 'DeleteMarkers' not in versions
+
+    connection.delete_bucket(Bucket=bucket_name_ver)
+
+    # TESTCASE 'object-rm-all-bypass-gc', 'object', 'rm', 'all objects with --bypass-gc', 'succeeds, tail data deleted immediately without queuing into GC'
+    bucket_name_bgc = bucket_name + 'bgc'
+    connection.create_bucket(Bucket=bucket_name_bgc)
+    # use a large object so it has tail data that would normally be queued for GC
+    connection.put_object(Bucket=bucket_name_bgc, Key='big', Body='foo' * 10000000)
+
+    # drain any GC entries from earlier in the test before we check
+    rgwadmin(ctx, client, ['gc', 'process'], check_status=True)
+
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_bgc,
+         '--yes-i-really-mean-it', '--bypass-gc'],
+        check_status=True)
+
+    # tail data should have been deleted in-line, not queued for GC
+    (err, out) = rgwadmin(ctx, client, ['gc', 'list', '--include-all'])
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    if not omit_tdir:
+        assert len(out) == 0
+
+    connection.delete_bucket(Bucket=bucket_name_bgc)
+
+    # TESTCASE 'object-rm-all-preserves-config', 'object', 'rm', 'all objects from bucket with lifecycle and CORS', 'succeeds, lifecycle and CORS config preserved'
+    bucket_name_cfg = bucket_name + 'cfg'
+    connection.create_bucket(Bucket=bucket_name_cfg)
+
+    connection.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name_cfg,
+        LifecycleConfiguration={
+            'Rules': [{
+                'ID': 'test-rule',
+                'Status': 'Enabled',
+                'Filter': {'Prefix': ''},
+                'Expiration': {'Days': 30},
+            }]
+        }
+    )
+    connection.put_bucket_cors(
+        Bucket=bucket_name_cfg,
+        CORSConfiguration={
+            'CORSRules': [{
+                'AllowedMethods': ['GET'],
+                'AllowedOrigins': ['*'],
+            }]
+        }
+    )
+    for key_name in ['u', 'v', 'w']:
+        connection.put_object(Bucket=bucket_name_cfg, Key=key_name, Body=key_name)
+
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_cfg,
+         '--yes-i-really-mean-it'],
+        check_status=True)
+
+    # lifecycle and CORS must survive the object removal
+    lc = connection.get_bucket_lifecycle_configuration(Bucket=bucket_name_cfg)
+    assert lc['Rules'][0]['ID'] == 'test-rule'
+
+    cors = connection.get_bucket_cors(Bucket=bucket_name_cfg)
+    assert cors['CORSRules'][0]['AllowedOrigins'] == ['*']
+
+    (err, out) = rgwadmin(ctx, client,
+        ['bucket', 'stats', '--bucket', bucket_name_cfg], check_status=True)
+    assert out['usage']['rgw.main']['num_objects'] == 0
+
+    connection.delete_bucket(Bucket=bucket_name_cfg)
+
+    # TESTCASE 'object-rm-all-locked', 'object', 'rm', 'all objects including object-locked objects', 'succeeds, locked objects deleted'
+    bucket_name_lock = bucket_name + 'lock'
+    connection.create_bucket(
+        Bucket=bucket_name_lock,
+        ObjectLockEnabledForBucket=True)
+    connection.put_object(Bucket=bucket_name_lock, Key='locked', Body='locked')
+    connection.put_object_legal_hold(
+        Bucket=bucket_name_lock, Key='locked',
+        LegalHold={'Status': 'ON'})
+
+    (err, out) = rgwadmin(ctx, client,
+        ['object', 'rm', '--all', '--bucket', bucket_name_lock,
+         '--yes-i-really-mean-it'],
+        check_status=True)
+
+    (err, out) = rgwadmin(ctx, client,
+        ['bucket', 'stats', '--bucket', bucket_name_lock], check_status=True)
+    assert out['usage'].get('rgw.main', {}).get('num_objects', 0) == 0
+
+    connection.delete_bucket(Bucket=bucket_name_lock)
+
     # TESTCASE 'caps-add', 'caps', 'add', 'add user cap', 'succeeds'
     caps='user=read'
     (err, out) = rgwadmin(ctx, client, ['caps', 'add', '--uid', user1, '--caps', caps])

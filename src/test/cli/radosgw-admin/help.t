@@ -59,6 +59,8 @@
     bi list                          list raw bucket index entries
     bi purge                         purge bucket index entries
     object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index
+                                     use --all to remove all objects from a bucket while keeping the bucket itself;
+                                     combine with --bypass-gc to remove via async AIO instead of garbage collection
     object put                       put object
     object stat                      stat an object for its metadata
     object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data
