@@ -205,6 +205,11 @@ class SubvolumeBase(object):
             attrs["earmark"] = ''
 
         try:
+            attrs["encoding"] = self.fs.getxattr(pathname, 'ceph.dir.encoding').decode('utf-8')
+        except cephfs.NoData:
+            attrs["encoding"] = None
+
+        try:
             attrs["normalization"] = self.fs.getxattr(pathname,
                                                       'ceph.dir.normalization'
                                                       ).decode('utf-8')
@@ -327,6 +332,13 @@ class SubvolumeBase(object):
         if earmark is not None:
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
+
+        encoding = attrs.get("encoding")
+        if encoding is not None:
+            try:
+                self.fs.setxattr(path, "ceph.dir.encoding", encoding.encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
         normalization = attrs.get("normalization")
         if normalization is not None:
@@ -556,6 +568,13 @@ class SubvolumeBase(object):
             earmark = ''
         except EarmarkException:
             earmark = ''
+
+        try:
+            encoding = self.fs.getxattr(subvolpath,
+                                        'ceph.dir.encoding'
+                                        ).decode('utf-8')
+        except cephfs.NoData:
+            encoding = "none"
 
         try:
             normalization = self.fs.getxattr(subvolpath,
