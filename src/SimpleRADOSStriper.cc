@@ -457,12 +457,14 @@ ssize_t SimpleRADOSStriper::write(const void* data, size_t len, uint64_t off)
   }
 
   size_t w = 0;
+  int write_err = 0;
   while ((len-w) > 0) {
     auto ext = get_next_extent(off+w, len-w);
     auto aiocp = aiocompletionptr(librados::Rados::aio_create_completion());
     bufferlist bl;
     bl.append((const char*)data+w, ext.len);
     if (int rc = ioctx.aio_write(ext.soid, aiocp.get(), bl, ext.len, ext.off); rc < 0) {
+      write_err = rc;
       break;
     }
     aios.emplace(std::move(aiocp));
@@ -470,6 +472,11 @@ ssize_t SimpleRADOSStriper::write(const void* data, size_t len, uint64_t off)
   }
 
   wait_for_aios(false); // clean up finished completions
+
+  if (write_err) {
+    d(-1) << "write failed: " << cpp_strerror(write_err) << dendl;
+    return write_err;
+  }
 
   if (size < (len+off)) {
     size = len+off;
