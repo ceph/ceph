@@ -952,6 +952,14 @@ int CrushWrapper::verify_upmap(CephContext *cct,
   int root_bucket = 0;
   int cursor = 0;
   std::map<int, int> type_stack;
+  // Running product of numrep from prior choose/chooseleaf steps in the
+  // current TAKE..EMIT scope. For a nested rule like
+  //   choose_indep 5 pod ; choose_indep 2 rack ; chooseleaf_indep 1 osd
+  // the inner step's numrep is per-outer-bucket, so the maximum number of
+  // distinct buckets of `type` allowed at that step is
+  //   numrep * outer_numrep_product
+  // (e.g. 2 racks/pod * 5 pods = 10 racks total).
+  int outer_numrep_product = 1;
   for (unsigned step = 0; step < rule->len; ++step) {
     auto curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << dendl;
@@ -959,6 +967,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
     case CRUSH_RULE_TAKE:
       {
         root_bucket = curstep->arg1;
+        outer_numrep_product = 1;
       }
       break;
     case CRUSH_RULE_CHOOSELEAF_FIRSTN:
@@ -969,8 +978,10 @@ int CrushWrapper::verify_upmap(CephContext *cct,
         if (numrep <= 0)
           numrep += pool_size;
         type_stack.emplace(type, numrep);
-        if (type == 0) // osd
+        if (type == 0) { // osd
+          outer_numrep_product *= numrep;
           break;
+        }
         map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
         for (auto osd : up) {
           auto parent = get_parent_of_type(osd, type, rule_id);
@@ -990,6 +1001,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
             return -EINVAL;
           }
         }
+        outer_numrep_product *= numrep;
       }
       break;
 
@@ -1001,8 +1013,10 @@ int CrushWrapper::verify_upmap(CephContext *cct,
         if (numrep <= 0)
           numrep += pool_size;
         type_stack.emplace(type, numrep);
-        if (type == 0) // osd
+        if (type == 0) { // osd
+          outer_numrep_product *= numrep;
           break;
+        }
         set<int> parents_of_type;
         for (auto osd : up) {
           auto parent = get_parent_of_type(osd, type, rule_id);
@@ -1014,12 +1028,18 @@ int CrushWrapper::verify_upmap(CephContext *cct,
                           << dendl;
           }
         }
-        if ((int)parents_of_type.size() > numrep) {
+        // Inner choose steps select numrep buckets of `type` per
+        // outer-bucket-result, so the total expected count is
+        // numrep * outer_numrep_product.
+        int max_expected = numrep * outer_numrep_product;
+        if ((int)parents_of_type.size() > max_expected) {
           lderr(cct) << __func__ << " number of buckets "
-                     << parents_of_type.size() << " exceeds desired " << numrep
+                     << parents_of_type.size() << " exceeds desired "
+                     << max_expected
                      << dendl;
           return -EINVAL;
         }
+        outer_numrep_product = max_expected;
       }
       break;
 
@@ -1041,6 +1061,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
         }
         type_stack.clear();
         root_bucket = 0;
+        outer_numrep_product = 1;
       }
       break;
     default:
