@@ -413,6 +413,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'upgrade_pre_pull_images',
+            type='bool',
+            default=False,
+            desc='Before upgrading any daemon, pull the target container image '
+                 'in parallel on every host that has a daemon in the upgrade '
+                 'scope. This moves image download time off the critical path. '
+                 'If the image cannot be pulled on any host, the upgrade is '
+                 'paused before any daemon is touched.'
+        ),
+        Option(
+            'upgrade_max_parallel_image_pulls',
+            type='int',
+            default=8,
+            desc='Maximum number of hosts on which the target image is pulled '
+                 'in parallel when upgrade_pre_pull_images is enabled.'
+        ),
+        Option(
             'pg_autoscale_during_upgrade',
             type='bool',
             default=False,
@@ -615,6 +632,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
+            self.upgrade_pre_pull_images = False
+            self.upgrade_max_parallel_image_pulls = 8
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True

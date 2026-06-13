@@ -88,6 +88,37 @@ Starting the Upgrade
    #. Bring CephFS filesystems back up, bringing the state of active
       MDS daemon(s) from ``up:standby`` to ``up:active``.
 
+Pre-pulling the target image
+----------------------------
+
+By default, cephadm pulls the target container image on each host on demand,
+just before the first daemon on that host is upgraded. On clusters with many
+hosts and/or a large image, these sequential pulls add up and lengthen the
+upgrade.
+
+To pull the target image on every host in the upgrade scope up front, in
+parallel, before any daemon is upgraded, enable:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_pre_pull_images true
+
+Hosts that already have the target image are skipped. The number of hosts
+pulled in parallel is capped by ``mgr/cephadm/upgrade_max_parallel_image_pulls``
+(default ``8``) to avoid overwhelming the registry:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_max_parallel_image_pulls 8
+
+When the upgrade is scoped (``--hosts``, ``--services`` or ``--daemon-types``),
+only the hosts that have a daemon in scope are pre-pulled. If the image cannot
+be pulled on one or more hosts (for example because a host is out of disk
+space), the upgrade is paused before any daemon is touched, and the failing
+host(s) and reason are reported in ``ceph status`` and ``ceph health detail``.
+Because nothing has been upgraded yet, no daemon is left down while the problem
+is resolved.
+
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently
 online and that your cluster is healthy by running the following command:
 

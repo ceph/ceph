@@ -1,3 +1,4 @@
+import asyncio
 import errno
 import json
 import logging
@@ -204,6 +205,7 @@ class UpgradeState:
                  crush_bucket_name: Optional[str] = None,
                  noautoscale_set: Optional[bool] = False,
                  prior_autoscale: Optional[bool] = True,
+                 pre_pull_done: Optional[bool] = False,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -226,6 +228,7 @@ class UpgradeState:
         self.crush_bucket_name = crush_bucket_name
         self.noautoscale_set = noautoscale_set
         self.prior_autoscale = prior_autoscale
+        self.pre_pull_done = pre_pull_done or False
 
     def to_json(self) -> dict:
         return {
@@ -248,6 +251,7 @@ class UpgradeState:
             'crush_bucket_name': self.crush_bucket_name,
             'noautoscale_set': self.noautoscale_set,
             'prior_autoscale': self.prior_autoscale,
+            'pre_pull_done': self.pre_pull_done,
         }
 
     @classmethod
@@ -1707,6 +1711,94 @@ class CephadmUpgrade:
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
 
+    def _pre_pull_image_on_hosts(self, target_image: str, hosts: List[str]) -> bool:
+        # Pull the target image on the given hosts in parallel, up to
+        # upgrade_max_parallel_image_pulls at a time, before any daemon is
+        # upgraded. Returns True on success. On any failure the upgrade is
+        # paused via _fail_upgrade (visible in 'ceph status' / 'ceph health
+        # detail') with the failing host(s) and reason, and no daemon has been
+        # touched yet.
+        if not hosts:
+            return True
+        limit = max(1, int(self.mgr.upgrade_max_parallel_image_pulls))
+        logger.info('Upgrade: pre-pulling image %s on %d host(s), up to %d in '
+                    'parallel' % (target_image, len(hosts), limit))
+        self.upgrade_info_str = 'Pre-pulling image %s on %d hosts' % (
+            target_image, len(hosts))
+        done = 0
+        total = len(hosts)
+        target_digests = self.upgrade_state.target_digests or [] if self.upgrade_state else []
+
+        async def _pull_one(sem: asyncio.Semaphore, host: str) -> Tuple[str, int, str]:
+            nonlocal done
+            async with sem:
+                # If the upgrade was paused/stopped while pulls were queued,
+                # don't start new pulls. Pulls already running are left to
+                # finish (interrupting podman/docker mid-pull is unsafe).
+                if not self.upgrade_state or self.upgrade_state.paused:
+                    return host, 0, ''
+                # Skip the pull if the target image is already present on the
+                # host (matching one of the target digests), like the
+                # per-daemon path does, to avoid needless registry round-trips.
+                try:
+                    out, _, code = await CephadmServe(self.mgr)._run_cephadm(
+                        host, '', 'inspect-image', [],
+                        image=target_image, no_fsid=True, error_ok=True)
+                    present = (code == 0 and any(
+                        d in target_digests
+                        for d in json.loads(''.join(out)).get('repo_digests', [])))
+                except Exception:
+                    present = False
+                if present:
+                    done += 1
+                    logger.info('Upgrade: image already present on host %s '
+                                '(%d/%d done)' % (host, done, total))
+                    return host, 0, ''
+                logger.info('Upgrade: pulling image %s on host %s'
+                            % (target_image, host))
+                out, errs, code = await CephadmServe(self.mgr)._run_cephadm(
+                    host, '', 'pull', [],
+                    image=target_image, no_fsid=True, error_ok=True)
+                done += 1
+                if code:
+                    logger.error('Upgrade: failed to pull image on host %s '
+                                 '(%d/%d done)' % (host, done, total))
+                else:
+                    logger.info('Upgrade: pulled image on host %s (%d/%d done)'
+                                % (host, done, total))
+                return host, code, ''.join(errs) if code else ''
+
+        async def _pull_all() -> List[Tuple[str, int, str]]:
+            sem = asyncio.Semaphore(limit)
+            return await asyncio.gather(*[_pull_one(sem, h) for h in hosts])
+
+        try:
+            with self.mgr.async_timeout_handler('cephadm pre-pull'):
+                results = self.mgr.wait_async(_pull_all())
+        except Exception as e:
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pre-pull target image',
+                'count': 1,
+                'detail': ['failed to pre-pull %s: %s' % (target_image, str(e))],
+            })
+            return False
+
+        failures = ['failed to pull %s on host %s: %s'
+                    % (target_image, host, err or 'unknown error')
+                    for host, code, err in results if code]
+        if failures:
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pre-pull target image on %d host(s)'
+                           % len(failures),
+                'count': len(failures),
+                'detail': failures,
+            })
+            return False
+        logger.info('Upgrade: pre-pull complete on all %d host(s)' % len(hosts))
+        return True
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -1809,6 +1901,18 @@ class CephadmUpgrade:
         if self.upgrade_state.hosts is not None:
             logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
+
+        # Optionally pre-pull the target image, in parallel, on every host that
+        # has a daemon in this upgrade's scope, before upgrading any daemon. On
+        # failure the upgrade is paused before anything is touched (no daemon
+        # down), surfacing the failing host(s) in the status.
+        if self.mgr.upgrade_pre_pull_images and not self.upgrade_state.pre_pull_done:
+            pre_pull_hosts = sorted({d.hostname for d in daemons if d.hostname})
+            if not self._pre_pull_image_on_hosts(target_image, pre_pull_hosts):
+                return
+            self.upgrade_state.pre_pull_done = True
+            self._save_upgrade_state()
+
         upgraded_daemon_count: int = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
