@@ -65,6 +65,14 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         action='store_true'
     ),
     parser.add_argument(
+        '--tpm2-pcrs',
+        dest='tpm2_pcrs',
+        help=('PCRs for systemd-cryptenroll --tpm2-pcrs when using --with-tpm '
+              '(default binds to Secure Boot policy, see systemd-cryptenroll(1)).'),
+        default='7',
+        type=str,
+    ),
+    parser.add_argument(
         '--osd-id',
         help='Reuse an existing OSD id',
         default=None,

@@ -97,6 +97,13 @@ common_args: Dict[str, Any] = {
         'help': 'Whether encrypted OSDs should be enrolled with TPM.',
         'action': 'store_true'
     },
+    '--tpm2-pcrs': {
+        'dest': 'tpm2_pcrs',
+        'help': ('PCRs for systemd-cryptenroll --tpm2-pcrs when using --with-tpm '
+                 '(default binds to Secure Boot policy, see systemd-cryptenroll(1)).'),
+        'default': '7',
+        'type': str,
+    },
     '--no-systemd': {
         'dest': 'no_systemd',
         'action': 'store_true',
