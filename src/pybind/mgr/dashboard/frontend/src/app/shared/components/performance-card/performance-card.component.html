@@ -24,9 +24,10 @@
         </cds-dropdown>
 
         <cd-time-picker
-          [dropdwonSize]="'sm'"
-          [label]="'Time Span'"
+          dropdownSize="sm"
+          label="Time Span"
           (selectedTime)="loadCharts($event)"
+          i18n-label
         ></cd-time-picker>
       </div>
     </ng-template>

@@ -112,15 +112,17 @@ export class OverviewHealthCardComponent {
     this.viewPGStates.emit();
   }
 
+  private readonly permissions = this.authStorageService.getPermissions();
+
   readonly data$: Observable<OverviewHealthData> = combineLatest([
     this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
-    this.upgradeService.listCached().pipe(
-      startWith(null as UpgradeInfoInterface | null),
-      catchError(() => of(null))
-    )
+    this.permissions?.configOpt?.read
+      ? this.upgradeService.listCached().pipe(
+          startWith(null as UpgradeInfoInterface | null),
+          catchError(() => of(null))
+        )
+      : of(null)
   ]).pipe(map(([summary, upgrade]) => ({ summary, upgrade })));
-
-  private readonly permissions = this.authStorageService.getPermissions();
 
   readonly enabled$: Observable<boolean> = this.permissions?.configOpt?.read
     ? this.mgrModuleService.getConfig('cephadm').pipe(
