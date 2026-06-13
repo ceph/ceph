@@ -1231,6 +1231,10 @@ public:
 
   virtual void release_projected_usage(std::size_t) = 0;
 
+  // Returns true when the allocator is full (failsafe limit) and writes should
+  // be refused. Only RBMCleaner overrides this; SegmentCleaner returns false.
+  virtual bool is_storage_full() const { return false; }
+
   virtual bool should_block_io_on_clean() const = 0;
 
   virtual bool can_clean_space() const = 0;
@@ -1799,6 +1803,15 @@ public:
 
   bool should_block_io_on_clean() const final {
     return false;
+  }
+
+  bool is_storage_full() const final {
+    auto st = get_stat();
+    if (st.total == 0) {
+      return false;
+    }
+    // 3% free, matching the default osd_failsafe_full_ratio (0.97)
+    return st.available < (st.total * 3 / 100);
   }
 
   bool can_clean_space() const final {

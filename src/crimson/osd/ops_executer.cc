@@ -609,6 +609,24 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     "handling op {} on object {}",
     ceph_osd_op_name(osd_op.op.op),
     get_target());
+  // Best-effort capacity gate (failsafe): refuse data-allocating ops with
+  // -ENOSPC before a transaction is created if the local store is full.
+  // This is Crimson's analog to classic's osd_failsafe_full_ratio check,
+  // preventing allocator exhaustion assert aborts.
+  switch (osd_op.op.op) {
+  case CEPH_OSD_OP_CREATE:
+  case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITEFULL:
+  case CEPH_OSD_OP_WRITESAME:
+  case CEPH_OSD_OP_APPEND:
+  case CEPH_OSD_OP_COPY_FROM2:
+    if (pg->is_local_store_full() && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+      return crimson::ct_error::enospc::make();
+    }
+    break;
+  default:
+    break;
+  }
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
