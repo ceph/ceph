@@ -1659,6 +1659,21 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
+
+  // if this is an archive zone "-deleted-" bucket, expose when this instance was created
+  auto archive_mtime_iter = bucket->get_attrs().find(RGW_ATTR_ARCHIVE_INSTANCE_MTIME);
+  if (archive_mtime_iter != bucket->get_attrs().end()) {
+    try {
+      ceph::real_time archive_instance_mtime;
+      auto bliter = archive_mtime_iter->second.cbegin();
+      decode(archive_instance_mtime, bliter);
+      utime_t archive_mtime_ut(archive_instance_mtime);
+      archive_mtime_ut.gmtime(formatter->dump_stream("archive_instance_mtime"));
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to decode archive_instance_mtime attr" << dendl;
+    }
+  }
+
   encode_json("bucket_quota", bucket_info.quota, formatter);
 
   // bucket tags
@@ -2665,7 +2680,7 @@ static void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
 }
 #endif
 
-#define ARCHIVE_META_ATTR RGW_ATTR_PREFIX "zone.archive.info" 
+#define ARCHIVE_META_ATTR RGW_ATTR_PREFIX "zone.archive.info"
 
 struct archive_meta_info {
   rgw_bucket orig_bucket;
@@ -2780,6 +2795,11 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
     new_bi.objv_tracker.clear();
 
     new_be.bucket.name = new_bucket_name;
+
+    ceph::real_time instance_mtime = ceph::real_clock::now();
+    bufferlist bl;
+    encode(instance_mtime, bl);
+    attrs_m[RGW_ATTR_ARCHIVE_INSTANCE_MTIME] = std::move(bl);
 
     ret = ctl_bucket->store_bucket_instance_info(new_be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
                                                                     .set_exclusive(false)
