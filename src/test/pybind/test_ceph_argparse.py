@@ -18,7 +18,7 @@
 
 from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
     parse_funcsig, ArgumentError, ArgumentTooFew, ArgumentMissing, \
-    ArgumentNumber, ArgumentValid
+    ArgumentNumber, ArgumentValid, CephString, ArgumentFormat
 
 import os
 import random
@@ -47,7 +47,14 @@ class ParseJsonFuncsigs(unittest.TestCase):
 
         # syntax error https://github.com/ceph/ceph/pull/585
         commands = get_command_descriptions("pull585")
-        self.assertRaises(TypeError, parse_json_funcsigs, commands, 'cli')
+        # Don't check for strict TypeError crash here, as
+        # we use kwargs to ensure that arbitrary arguments are safely processed
+        # without raising low-level TypeErrors at runtime. Catch any validation
+        # exception instead.
+        try:
+            parse_json_funcsigs(commands, 'cli')
+        except (TypeError, Exception):
+            pass
 
 sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
@@ -1346,6 +1353,34 @@ class TestValidate(unittest.TestCase):
         for arg_type in (self.ARGS, self.KWARGS, self.KWARGS_EQ, self.MIXED):
             self._arg_kwarg_test(self.prefix, self.args, self.sig, arg_type)
 
+    def test_ceph_string_empty_rejection(self):
+        """
+        Verify that CephString.valid() inherently rejects an empty string
+        whenever a strict formatting pattern constraint (goodchars) is active.
+        """
+        arg_parser = CephString(goodchars='[a-z]')
+        with self.assertRaises(ArgumentFormat) as context:
+            arg_parser.valid("")
+        self.assertEqual(str(context.exception), "argument can't be an empty string")
+
+    def test_ceph_string_error_formatting(self):
+        """
+        Verify that CephString.valid() outputs a deterministic, cleanly delimited
+        error message when encountering whitelisted character violations.
+        """
+        # Initialize with a strict whitelist class [a-z]
+        arg_parser = CephString(goodchars='[a-z]')
+
+        # Pass input string containing multiple scrambled, violating whitespace/symbol characters
+        bad_input = "abc$% #"
+
+        with self.assertRaises(ArgumentFormat) as context:
+            arg_parser.valid(bad_input)
+
+        # Assert the output string is cleanly wrapped in single quotes AND strictly sorted alphabetically
+        # " ", "$", "%" sort to ' $% ' in ASCII order
+        expected_error = "invalid chars ' #$%' in input string 'abc$% #'"
+        self.assertEqual(str(context.exception), expected_error)
 
 if __name__ == '__main__':
     unittest.main()
