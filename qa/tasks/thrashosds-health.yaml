@@ -33,6 +33,7 @@ overrides:
       - Degraded data redundancy
       - is down
       - osds down
+      - marked LAGGY
       - pg .*? is .*?degraded.*?, acting
       - pg .*? is stuck
       - pg degraded
