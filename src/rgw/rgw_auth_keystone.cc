@@ -218,14 +218,24 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
       }
     }
 
+    /* Match Keystone role names against the ACL spec map. Swift container
+     * ACLs can grant access to bare role names (stored without a tenant
+     * prefix), so we look up each role the token carries. */
+    for (const auto& r : token_roles) {
+      const auto iter = aclspec.find(r.name);
+      if (std::end(aclspec) != iter) {
+        perm |= iter->second;
+      }
+    }
+
     for (const auto& r : token_roles) {
       if (r.is_reader) {
-        if (r.is_admin) {    /* system scope reader persona */
-          /*
-           * Because system reader defeats permissions,
-           * we don't even look at the aclspec.
-           */
+        if (r.is_admin) {
+          /* System scope reader defeats project-level permissions. */
           perm |= RGW_OP_TYPE_READ;
+        } else {
+          /* Project scope reader grants read within the project. */
+          perm |= RGW_PERM_READ;
         }
       }
     }
@@ -254,6 +264,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
+      /* A reader role also implies a regular one. */
+      plain.insert(std::end(plain), std::begin(reader), std::end(reader));
     }
 
     std::vector<std::string> plain;
@@ -643,11 +655,66 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 }
 
 EC2Engine::acl_strategy_t
-EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
+EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t& token) const
 {
-  /* This is based on the assumption that the default acl strategy in
-   * get_perms_from_aclspec, will take care. Extra acl spec is not required. */
-  return nullptr;
+  /* The primary identity is constructed upon UUIDs. */
+  const auto& tenant_uuid = token.get_project_id();
+  const auto& user_uuid = token.get_user_id();
+
+  /* For Keystone v2 an alias may be also used. */
+  const auto& tenant_name = token.get_project_name();
+  const auto& user_name = token.get_user_name();
+
+  /* Construct all possible combinations including Swift's wildcards.
+   * This mirrors TokenEngine::get_acl_strategy() to allow S3 requests
+   * authenticated via Keystone to honor Swift-format ACL entries. */
+  const std::array<std::string, 6> allowed_items = {
+    make_spec_item(tenant_uuid, user_uuid),
+    make_spec_item(tenant_name, user_name),
+
+    /* Wildcards. */
+    make_spec_item(tenant_uuid, "*"),
+    make_spec_item(tenant_name, "*"),
+    make_spec_item("*", user_uuid),
+    make_spec_item("*", user_name),
+  };
+
+  /* Lambda will obtain a copy of (not a reference to!) allowed_items. */
+  return [allowed_items, token_roles=token.roles](const rgw::auth::Identity::aclspec_t& aclspec) {
+    uint32_t perm = 0;
+
+    for (const auto& allowed_item : allowed_items) {
+      const auto iter = aclspec.find(allowed_item);
+
+      if (std::end(aclspec) != iter) {
+        perm |= iter->second;
+      }
+    }
+
+    /* Match Keystone role names against the ACL spec map. Swift container
+     * ACLs can grant access to bare role names (stored without a tenant
+     * prefix), so we look up each role the token carries. */
+    for (const auto& r : token_roles) {
+      const auto iter = aclspec.find(r.name);
+      if (std::end(aclspec) != iter) {
+        perm |= iter->second;
+      }
+    }
+
+    for (const auto& r : token_roles) {
+      if (r.is_reader) {
+        if (r.is_admin) {
+          /* System scope reader defeats project-level permissions. */
+          perm |= RGW_OP_TYPE_READ;
+        } else {
+          /* Project scope reader grants read within the project. */
+          perm |= RGW_PERM_READ;
+        }
+      }
+    }
+
+    return perm;
+  };
 }
 
 EC2Engine::auth_info_t
@@ -712,13 +779,17 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
+      /* A reader role also implies a regular one. */
+      plain.insert(std::end(plain), std::begin(reader), std::end(reader));
     }
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
+    std::vector<std::string> reader;
   } accepted_roles(cct);
 
   /* When we handle a HTTP OPTIONS call we must ignore the signature */
@@ -744,6 +815,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << " expired: " << t->get_expires() << dendl;
     return result_t::deny();
   }
+
+  t->update_roles(accepted_roles.admin, accepted_roles.reader);
 
   /* check if we have a valid role */
   bool found = false;
