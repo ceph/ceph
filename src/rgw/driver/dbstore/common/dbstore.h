@@ -283,6 +283,8 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* type = ":type";
   static constexpr const char* mfa_ids = ":mfa_ids";
   static constexpr const char* account_id = ":user_account_id";
+  static constexpr const char* path = ":user_path";
+  static constexpr const char* create_date = ":user_create_date";
   static constexpr const char* user_attrs = ":user_attrs";
   static constexpr const char* user_ver = ":user_vers";
   static constexpr const char* user_ver_tag = ":user_ver_tag";
@@ -611,6 +613,8 @@ class DBOp {
       MfaIDs BLOB ,	\
       AssumedRoleARN TEXT , \
       AccountID TEXT , \
+      UserPath TEXT , \
+      UserCreateDate TEXT , \
       UserAttrs   BLOB,   \
       UserVersion   INTEGER,    \
       UserVersionTag TEXT,      \
@@ -1287,7 +1291,7 @@ class GetAccountUserOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          AccountID, UserAttrs, UserVersion, UserVersionTag \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
                           from '{}' where AccountID = {} AND DisplayName = {}";
 
   public:
@@ -1307,7 +1311,7 @@ class ListAccountUsersOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          AccountID, UserAttrs, UserVersion, UserVersionTag \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
                           from '{}' where AccountID = {} AND DisplayName > {} \
                           ORDER BY DisplayName ASC LIMIT {}";
 
@@ -1348,9 +1352,9 @@ class InsertUserOp : virtual public DBOp {
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
                            BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
-                           AccountID, UserAttrs, UserVersion, UserVersionTag) \
+                           AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -1369,6 +1373,7 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.temp_url_keys, params.op.user.user_quota,
           params.op.user.type, params.op.user.mfa_ids,
           params.op.user.account_id,
+          params.op.user.path, params.op.user.create_date,
           params.op.user.user_attrs, params.op.user.user_ver,
           params.op.user.user_ver_tag);
     }
@@ -1399,7 +1404,7 @@ class GetUserOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1407,7 +1412,7 @@ class GetUserOp: virtual public DBOp {
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                  System, PlacementName, PlacementStorageClass, PlacementTags, \
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                 AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
+                                 AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
 
     static constexpr std::string_view QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1415,7 +1420,7 @@ class GetUserOp: virtual public DBOp {
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                       System, PlacementName, PlacementStorageClass, PlacementTags, \
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                      AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
+                                      AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
 
     static constexpr std::string_view QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1423,7 +1428,7 @@ class GetUserOp: virtual public DBOp {
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                   System, PlacementName, PlacementStorageClass, PlacementTags, \
                                   BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                  AccountID, UserAttrs, UserVersion, UserVersionTag \
+                                  AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
                                   from '{}' where UserID = {}";
 
   public:
@@ -1456,7 +1461,7 @@ class ListUsersOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where \
                           UserID >= {} ORDER BY UserID ASC LIMIT {} ";
 
   public:
