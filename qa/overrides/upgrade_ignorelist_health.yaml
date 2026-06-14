@@ -20,3 +20,8 @@ overrides:
       - nodeep-scrub
       - running out of quota
       - pool\(s\) full
+      - OSD_ROOT_DOWN
+      - MDS_INSUFFICIENT_STANDBY
+      - insufficient standby
+      - have.*want.*more
+      - is offline because no MDS is active for it

@@ -6,6 +6,8 @@ overrides:
       - or freeform for custom applications
       - POOL_APP_NOT_ENABLED
       - is down
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
       - OSD_DOWN
       - mons down
       - mon down
@@ -16,6 +18,7 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
+      - pg .* is stuck undersized
       - pg .* is stuck peering
       - pg .* is .*degraded
       - FS_DEGRADED
@@ -27,6 +30,7 @@ overrides:
       - filesystem is offline
       - with fewer MDS than max_mds
       - CEPHADM_FAILED_DAEMON
+      - osd.* is in unknown state
       - pg .* is stuck undersized
       - HEALTH_WARN .* osds down
       - MDS_INSUFFICIENT_STANDBY
