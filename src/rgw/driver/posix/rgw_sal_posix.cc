@@ -2599,7 +2599,7 @@ int POSIXDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
 					   std::unique_ptr<User>* user)
 {
   RGWUserInfo uinfo;
-  int ret = get_account_db()->get_account_user_by_name(dpp,
+  int ret = get_user_db()->get_account_user_by_name(dpp,
       std::string(account_id), std::string(username), uinfo);
   if (ret < 0) {
     return ret;
@@ -2607,6 +2607,10 @@ int POSIXDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
   if (user) {
     *user = get_user(uinfo.user_id);
     (*user)->get_info() = uinfo;
+    ret = (*user)->load_user(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
   }
   return 0;
 }
@@ -2616,7 +2620,7 @@ int POSIXDriver::count_account_users(const DoutPrefixProvider* dpp,
 				     std::string_view account_id,
 				     uint32_t& count)
 {
-  return get_account_db()->count_account_users(dpp,
+  return get_user_db()->count_account_users(dpp,
       std::string(account_id), count);
 }
 
@@ -2630,7 +2634,7 @@ int POSIXDriver::list_account_users(const DoutPrefixProvider* dpp,
 				    UserList& listing)
 {
   std::vector<RGWUserInfo> users;
-  int ret = get_account_db()->list_account_users(dpp,
+  int ret = get_user_db()->list_account_users(dpp,
       std::string(account_id), std::string(marker),
       max_items + 1, users);
   if (ret < 0) {

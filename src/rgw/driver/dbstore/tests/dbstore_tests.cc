@@ -1834,6 +1834,52 @@ TEST_F(DBStoreTest, CountAccountUsers) {
   ASSERT_EQ(std::stoi(params.op.user.list_entries.front().user_id.id), 2);
 }
 
+/* IAM CreateUser produces users with no access keys; verify that
+ * store_user, get_user, and remove_user handle them correctly. */
+TEST_F(DBStoreTest, KeylessUserRoundtrip) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "keyless-user-1";
+  uinfo.display_name = "KeylessUser";
+  uinfo.user_email = "keyless@test.com";
+  uinfo.account_id = "ACCT00000000000000099";
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objv.read_version.ver, 1u);
+
+  /* get_user by user_id must find a keyless user */
+  RGWUserInfo found;
+  found.user_id = uinfo.user_id;
+  RGWObjVersionTracker found_objv;
+  ret = db->get_user(dpp, "user_id", uinfo.user_id.id, found,
+                     nullptr, &found_objv);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(found.display_name, "KeylessUser");
+  ASSERT_EQ(found.account_id, "ACCT00000000000000099");
+  ASSERT_EQ(found_objv.read_version.ver, 1u);
+
+  /* get_account_user_by_name must also find it */
+  RGWUserInfo found2;
+  ret = db->get_account_user_by_name(dpp, "ACCT00000000000000099",
+                                     "KeylessUser", found2);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(found2.user_id.id, "keyless-user-1");
+
+  /* remove_user must succeed */
+  RGWObjVersionTracker rm_objv;
+  rm_objv.read_version.ver = 1;
+  ret = db->remove_user(dpp, uinfo, &rm_objv);
+  ASSERT_EQ(ret, 0);
+
+  /* get_user must return ENOENT after removal */
+  RGWUserInfo gone;
+  gone.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "user_id", uinfo.user_id.id, gone,
+                     nullptr, nullptr);
+  ASSERT_EQ(ret, -ENOENT);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;
