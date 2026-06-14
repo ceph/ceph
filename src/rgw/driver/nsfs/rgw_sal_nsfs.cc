@@ -85,7 +85,6 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 
 #define RGW_NSFS_ATTR_BUCKET_INFO "bucket_info"
 #define RGW_NSFS_ATTR_MPUPLOAD "mp_upload"
-#define RGW_NSFS_ATTR_OWNER "owner"
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
 #define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
@@ -110,37 +109,9 @@ const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const std::string NSFS_FOLDER_OBJECT_NAME = ".folder";
 
-struct NSFSOwner {
-  rgw_user user;
-  std::string display_name;
-
-  NSFSOwner() {}
-
-  NSFSOwner(const rgw_user& _u, const std::string& _n) :
-    user(_u),
-    display_name(_n)
-    {}
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(user, bl);
-    encode(display_name, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(user, bl);
-    decode(display_name, bl);
-    DECODE_FINISH(bl);
-  }
-  friend inline std::ostream &operator<<(std::ostream &out,
-                                         const NSFSOwner &o) {
-    out << o.user << ":" << o.display_name;
-    return out;
-  }
-};
-WRITE_CLASS_ENCODER(NSFSOwner);
+/* See posix driver comment — object ownership is now read from the
+ * standard RGW_ATTR_ACL attribute, matching rados. The former
+ * NSFSOwner xattr could not represent account-owned objects. */
 
 static std::string to_base36(uint64_t v)
 {
@@ -209,16 +180,6 @@ static bool nsfs_parse_version_id(const std::string& version_id,
   std::string ino_str = version_id.substr(ino_pos + ino_pfx.size());
   return from_base36(mtime_str, info.mtime_ns) &&
          from_base36(ino_str, info.ino);
-}
-
-static bool nsfs_verify_version_id(const struct statx& stx,
-                                   const std::string& version_id)
-{
-  nsfs_version_info info;
-  if (!nsfs_parse_version_id(version_id, info)) {
-    return false;
-  }
-  return info.mtime_ns == statx_mtime_ns(stx) && info.ino == stx.stx_ino;
 }
 
 static bool is_null_version_fd(int fd)
@@ -673,13 +634,20 @@ static inline rgw_obj_key decode_obj_key(const std::string& fname)
   return key;
 }
 
-int decode_owner(Attrs& attrs, NSFSOwner& owner)
+static int decode_acl_owner(Attrs& attrs, ACLOwner& owner)
 {
-  bufferlist bl;
-  if (!decode_attr(attrs, RGW_NSFS_ATTR_OWNER, owner)) {
+  auto i = attrs.find(RGW_ATTR_ACL);
+  if (i == attrs.end()) {
     return -EINVAL;
   }
-
+  RGWAccessControlPolicy policy;
+  try {
+    auto bp = i->second.cbegin();
+    policy.decode(bp);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  owner = policy.get_owner();
   return 0;
 }
 
@@ -1036,14 +1004,14 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   if (ret < 0)
     return ret;
 
-  NSFSOwner o;
-  ret = decode_owner(attrs, o);
+  ACLOwner acl_owner;
+  ret = decode_acl_owner(attrs, acl_owner);
   if (ret < 0) {
     bde.meta.owner = "unknown";
     bde.meta.owner_display_name = "unknown";
   } else {
-    bde.meta.owner = o.user.to_str();
-    bde.meta.owner_display_name = o.display_name;
+    bde.meta.owner = to_string(acl_owner.id);
+    bde.meta.owner_display_name = acl_owner.display_name;
   }
   bde.meta.category = RGWObjCategory::Main;
   bde.meta.size = stx.stx_size;
@@ -1664,10 +1632,10 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       if (ret < 0)
         return ret;
 
-      NSFSOwner o;
-      if (decode_owner(attrs, o) >= 0) {
-        bde.meta.owner = o.user.to_str();
-        bde.meta.owner_display_name = o.display_name;
+      ACLOwner acl_owner;
+      if (decode_acl_owner(attrs, acl_owner) >= 0) {
+        bde.meta.owner = to_string(acl_owner.id);
+        bde.meta.owner_display_name = acl_owner.display_name;
       } else {
         bde.meta.owner = "unknown";
         bde.meta.owner_display_name = "unknown";
@@ -1769,10 +1737,10 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             Attrs attrs;
             ret = get_x_attrs(y, dpp, tfd, attrs, vname);
 
-            NSFSOwner o;
-            if (decode_owner(attrs, o) >= 0) {
-              bde.meta.owner = o.user.to_str();
-              bde.meta.owner_display_name = o.display_name;
+            ACLOwner acl_owner;
+            if (decode_acl_owner(attrs, acl_owner) >= 0) {
+              bde.meta.owner = to_string(acl_owner.id);
+              bde.meta.owner_display_name = acl_owner.display_name;
             }
 
             bufferlist etag_bl;
@@ -3685,10 +3653,6 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_MPUPLOAD, mpu)) {
     attrs[RGW_NSFS_ATTR_MPUPLOAD] = mpu;
   }
-  bufferlist ownerbl;
-  if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_OWNER, ownerbl)) {
-    attrs[RGW_NSFS_ATTR_OWNER] = ownerbl;
-  }
   bufferlist pot;
   if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = pot;
@@ -4267,15 +4231,19 @@ int NSFSObject::make_ent(ObjectType type)
 
 int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner)
 {
-  NSFSOwner o;
-  int ret = decode_owner(get_attrs(), o);
+  ACLOwner acl_owner;
+  int ret = decode_acl_owner(get_attrs(), acl_owner);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
-        << ": No " RGW_NSFS_ATTR_OWNER " attr" << dendl;
+        << ": No " RGW_ATTR_ACL " attr" << dendl;
     return ret;
   }
 
-  *owner = driver->get_user(o.user);
+  if (const auto* u = std::get_if<rgw_user>(&acl_owner.id)) {
+    *owner = driver->get_user(*u);
+  } else {
+    *owner = driver->get_user(rgw_user(std::get<rgw_account_id>(acl_owner.id)));
+  }
   (*owner)->load_user(dpp, y);
   return 0;
 }
@@ -5499,11 +5467,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return -errno;
   }
 
-  // encode owner
-  NSFSOwner nsfs_owner(std::get<rgw_user>(owner.id), owner.display_name);
-  bufferlist owner_bl;
-  encode(nsfs_owner, owner_bl);
-  attrs[RGW_NSFS_ATTR_OWNER] = std::move(owner_bl);
+  /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
   // encode object type as FILE
   ObjectType file_type;
@@ -5924,15 +5888,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
   }
 
-  bufferlist owner_bl;
-  std::unique_ptr<User> user;
-  user = driver->get_user(std::get<rgw_user>(owner.id));
-  user->load_user(rctx.dpp, rctx.y);
-  NSFSOwner po{std::get<rgw_user>(owner.id), user->get_display_name()};
-  encode(po, owner_bl);
-  attrs[RGW_NSFS_ATTR_OWNER] = owner_bl;
-
-  bufferlist type_bl;
+  /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
   obj->set_attrs(attrs);
   ret = obj->write_attrs(rctx.dpp, rctx.y);

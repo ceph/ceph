@@ -59,7 +59,6 @@ const int64_t READ_SIZE = 128 * 1024;
 const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
-#define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_VERSION "POSIX-version"
 #define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
@@ -68,37 +67,15 @@ const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
-struct POSIXOwner {
-  rgw_user user;
-  std::string display_name;
-
-  POSIXOwner() {}
-
-  POSIXOwner(const rgw_user& _u, const std::string& _n) :
-    user(_u),
-    display_name(_n)
-    {}
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(user, bl);
-    encode(display_name, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(user, bl);
-    decode(display_name, bl);
-    DECODE_FINISH(bl);
-  }
-  friend inline std::ostream &operator<<(std::ostream &out,
-                                         const POSIXOwner &o) {
-    out << o.user << ":" << o.display_name;
-    return out;
-  }
-};
-WRITE_CLASS_ENCODER(POSIXOwner);
+/*
+ * Object ownership is stored in RGW_ATTR_ACL (the standard ACL policy
+ * attribute written by the generic RGW layer), matching the rados driver.
+ * Earlier code maintained a separate "POSIX-Owner" xattr with a
+ * POSIXOwner struct that only held rgw_user — this could not represent
+ * account-owned objects (STS role sessions, account root users) and
+ * crashed with std::bad_variant_access.  Removed in favour of the
+ * generic ACLOwner which carries the full rgw_owner variant.
+ */
 
 namespace posix {
 
@@ -192,13 +169,21 @@ static inline rgw_obj_key decode_obj_key(const std::string& fname)
   return decode_obj_key(fname.c_str());
 }
 
-int decode_owner(Attrs& attrs, POSIXOwner& owner)
+/* Extract object owner from the standard RGW_ATTR_ACL attribute */
+static int decode_acl_owner(Attrs& attrs, ACLOwner& owner)
 {
-  bufferlist bl;
-  if (!decode_attr(attrs, RGW_POSIX_ATTR_OWNER, owner)) {
+  auto i = attrs.find(RGW_ATTR_ACL);
+  if (i == attrs.end()) {
     return -EINVAL;
   }
-
+  RGWAccessControlPolicy policy;
+  try {
+    auto bp = i->second.cbegin();
+    policy.decode(bp);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  owner = policy.get_owner();
   return 0;
 }
 
@@ -524,14 +509,14 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
   if (ret < 0)
     return ret;
 
-  POSIXOwner o;
-  ret = decode_owner(attrs, o);
+  ACLOwner acl_owner;
+  ret = decode_acl_owner(attrs, acl_owner);
   if (ret < 0) {
     bde.meta.owner = "unknown";
     bde.meta.owner_display_name = "unknown";
   } else {
-    bde.meta.owner = o.user.to_str();
-    bde.meta.owner_display_name = o.display_name;
+    bde.meta.owner = to_string(acl_owner.id);
+    bde.meta.owner_display_name = acl_owner.display_name;
   }
   bde.meta.category = RGWObjCategory::Main;
   bde.meta.size = stx.stx_size;
@@ -1756,8 +1741,8 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
   }
 
   bufferlist owner_bl;
-  if (rgw::sal::get_attr(v_attrs, RGW_POSIX_ATTR_OWNER, owner_bl)) {
-    attrs[RGW_POSIX_ATTR_OWNER] = std::move(owner_bl);
+  if (rgw::sal::get_attr(v_attrs, RGW_ATTR_ACL, owner_bl)) {
+    attrs[RGW_ATTR_ACL] = std::move(owner_bl);
   }
 
   buffer::list bl;
@@ -3709,10 +3694,6 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_MPUPLOAD, mpu)) {
     attrs[RGW_POSIX_ATTR_MPUPLOAD] = mpu;
   }
-  bufferlist ownerbl;
-  if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OWNER, ownerbl)) {
-    attrs[RGW_POSIX_ATTR_OWNER] = ownerbl;
-  }
   bufferlist pot;
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
@@ -4107,15 +4088,19 @@ int POSIXObject::make_ent(ObjectType type)
 
 int POSIXObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner)
 {
-  POSIXOwner o;
-  int ret = decode_owner(get_attrs(), o);
+  ACLOwner acl_owner;
+  int ret = decode_acl_owner(get_attrs(), acl_owner);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
-        << ": No " RGW_POSIX_ATTR_OWNER " attr" << dendl;
+        << ": No " RGW_ATTR_ACL " attr" << dendl;
     return ret;
   }
 
-  *owner = driver->get_user(o.user);
+  if (const auto* u = std::get_if<rgw_user>(&acl_owner.id)) {
+    *owner = driver->get_user(*u);
+  } else {
+    *owner = driver->get_user(rgw_user(std::get<rgw_account_id>(acl_owner.id)));
+  }
   (*owner)->load_user(dpp, y);
   return 0;
 }
@@ -5206,15 +5191,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
   }
 
-  bufferlist owner_bl;
-  std::unique_ptr<User> user;
-  user = driver->get_user(std::get<rgw_user>(owner.id));
-  user->load_user(rctx.dpp, rctx.y);
-  POSIXOwner po{std::get<rgw_user>(owner.id), user->get_display_name()};
-  encode(po, owner_bl);
-  attrs[RGW_POSIX_ATTR_OWNER] = owner_bl;
-
-  bufferlist type_bl;
+  /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
   obj->set_attrs(attrs);
   ret = obj->write_attrs(rctx.dpp, rctx.y);
