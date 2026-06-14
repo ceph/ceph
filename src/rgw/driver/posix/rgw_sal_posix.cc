@@ -2571,6 +2571,25 @@ int POSIXUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   return driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
 }
 
+int POSIXUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                           std::string_view marker, uint32_t max_items,
+                           GroupList& listing)
+{
+  std::vector<RGWGroupInfo> groups;
+  int ret = driver->get_user_db()->list_user_groups(dpp,
+      get_id().id, std::string(marker), max_items + 1, groups);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (groups.size() > max_items) {
+    listing.next_marker = groups[max_items].name;
+    groups.resize(max_items);
+  }
+  listing.groups = std::move(groups);
+  return 0;
+}
+
 int POSIXUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
 {
   *verified = false;
@@ -2823,7 +2842,7 @@ int POSIXDriver::list_group_users(const DoutPrefixProvider* dpp,
 				  UserList& listing)
 {
   std::vector<std::string> user_ids;
-  int ret = get_account_db()->list_group_users(dpp,
+  int ret = get_user_db()->list_group_users(dpp,
       std::string(id), std::string(marker), max_items + 1, user_ids);
   if (ret < 0) {
     return ret;
@@ -2837,6 +2856,11 @@ int POSIXDriver::list_group_users(const DoutPrefixProvider* dpp,
   for (auto& uid : user_ids) {
     RGWUserInfo uinfo;
     uinfo.user_id.id = uid;
+    ret = get_user_db()->get_user(dpp, std::string("user_id"), uid,
+                                  uinfo, nullptr, nullptr);
+    if (ret < 0) {
+      continue;
+    }
     listing.users.push_back(std::move(uinfo));
   }
   return 0;

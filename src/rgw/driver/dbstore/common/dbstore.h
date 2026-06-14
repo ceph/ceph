@@ -454,6 +454,8 @@ struct DBOps {
   std::shared_ptr<class InsertGroupUserOp> InsertGroupUser;
   std::shared_ptr<class RemoveGroupUserOp> RemoveGroupUser;
   std::shared_ptr<class ListGroupUsersOp> ListGroupUsers;
+  std::shared_ptr<class RemoveUserGroupsOp> RemoveUserGroups;
+  std::shared_ptr<class ListUserGroupsOp> ListUserGroups;
   std::shared_ptr<class InsertAccessKeyOp> InsertAccessKey;
   std::shared_ptr<class RemoveAccessKeyOp> RemoveAccessKey;
   std::shared_ptr<class RemoveUserAccessKeysOp> RemoveUserAccessKeys;
@@ -1265,6 +1267,39 @@ class RemoveGroupUserOp : virtual public DBOp {
     static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.group_users_table,
           params.op.group.group_id, params.op.group.user_id);
+    }
+};
+
+class RemoveUserGroupsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where UserID = {}";
+
+  public:
+    virtual ~RemoveUserGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.user_id);
+    }
+};
+
+class ListUserGroupsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          g.GroupID, g.Name, g.Tenant, g.AccountID, g.Path, g.GroupAttrs \
+                          from '{}' g JOIN '{}' gu ON g.GroupID = gu.GroupID \
+                          where gu.UserID = {} AND g.Name > {} COLLATE NOCASE \
+                          ORDER BY g.Name COLLATE NOCASE ASC LIMIT {}";
+
+  public:
+    virtual ~ListUserGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.group_users_table,
+          params.op.group.user_id, params.op.group.name,
+          params.op.list_max_count);
     }
 };
 
@@ -2365,6 +2400,9 @@ class DB {
     int list_group_users(const DoutPrefixProvider *dpp,
         const std::string& group_id, const std::string& marker,
         uint32_t max_items, std::vector<std::string>& user_ids);
+    int list_user_groups(const DoutPrefixProvider *dpp,
+        const std::string& user_id, const std::string& marker,
+        uint32_t max_items, std::vector<RGWGroupInfo>& groups);
     int list_account_groups(const DoutPrefixProvider *dpp,
         const std::string& account_id, const std::string& path_prefix,
         const std::string& marker, uint32_t max_items,
