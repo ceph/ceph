@@ -1039,7 +1039,7 @@ class GetRoleOp: virtual public DBOp {
                           RoleID, Name, Tenant, AccountID, Path, ARN, \
                           TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
                           MaxSessionDuration, Description, CreationDate \
-                          from '{}' where Name = {} AND AccountID = {}";
+                          from '{}' where Name = {} COLLATE NOCASE AND AccountID = {}";
 
   public:
     virtual ~GetRoleOp() {}
@@ -1065,14 +1065,14 @@ class ListRolesOp: virtual public DBOp {
                           TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
                           MaxSessionDuration, Description, CreationDate \
                           from '{}' where Tenant = {} AND Path LIKE {} \
-                          AND Name > {} ORDER BY Name ASC LIMIT {}";
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
 
     static constexpr std::string_view QueryByAccount = "SELECT \
                           RoleID, Name, Tenant, AccountID, Path, ARN, \
                           TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
                           MaxSessionDuration, Description, CreationDate \
                           from '{}' where AccountID = {} AND Path LIKE {} \
-                          AND Name > {} ORDER BY Name ASC LIMIT {}";
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
 
     static constexpr std::string_view CountByAccount =
       "SELECT COUNT(*) from '{}' where AccountID = {}";
@@ -1199,7 +1199,7 @@ class GetGroupOp: virtual public DBOp {
 
     static constexpr std::string_view QueryByName = "SELECT \
                           GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
-                          from '{}' where Name = {} AND AccountID = {}";
+                          from '{}' where Name = {} COLLATE NOCASE AND AccountID = {}";
 
   public:
     virtual ~GetGroupOp() {}
@@ -1220,7 +1220,7 @@ class ListGroupsOp: virtual public DBOp {
     static constexpr std::string_view QueryByAccount = "SELECT \
                           GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
                           from '{}' where AccountID = {} AND Path LIKE {} \
-                          AND Name > {} ORDER BY Name ASC LIMIT {}";
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
 
     static constexpr std::string_view CountByAccount =
       "SELECT COUNT(*) from '{}' where AccountID = {}";
