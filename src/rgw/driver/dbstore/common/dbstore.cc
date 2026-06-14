@@ -784,8 +784,9 @@ int DB::store_role(const DoutPrefixProvider *dpp,
 
   if (exclusive) {
     RGWRoleInfo orig_info;
-    orig_info.id = rinfo.id;
-    ret = get_role(dpp, "role_id", orig_info);
+    orig_info.name = rinfo.name;
+    orig_info.account_id = rinfo.account_id;
+    ret = get_role(dpp, rinfo.account_id.empty() ? "name" : "name_account", orig_info);
     if (!ret) {
       return -EEXIST;
     }
