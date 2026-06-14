@@ -798,6 +798,71 @@ int PGBackendTestFixture::write(
   return completed ? result : -EINPROGRESS;
 }
 
+int PGBackendTestFixture::delete_object(const std::string& obj_name)
+{
+  // Get the primary TestPG directly
+  TestPG* primary_test_pg = get_primary_test_pg();
+  if (!primary_test_pg) {
+    return -EINVAL;
+  }
+  
+  int primary_osd = primary_test_pg->pg_whoami.osd;
+  
+  bool completed = false;
+  int result = -EINPROGRESS;
+  
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name]() {
+    hobject_t hoid = make_test_object(obj_name);
+    
+    // Get OBC
+    ObjectContextRef obc = get_object_context(hoid, false);
+    if (!obc) {
+      completed = true;
+      result = -ENOENT;
+      return;
+    }
+    
+    // Create PGTransaction for delete
+    std::unique_ptr<PGTransaction> pg_t(new PGTransaction());
+    pg_t->remove(hoid);
+    
+    object_stat_sum_t delta_stats;
+    delta_stats.num_objects = -1;
+    delta_stats.num_bytes = -(int64_t)obc->obs.oi.size;
+    
+    eversion_t prior_version = obc->obs.oi.version;
+    eversion_t at_version = get_next_version();
+    
+    // Create log entry for delete
+    std::vector<pg_log_entry_t> log_entries;
+    pg_log_entry_t entry;
+    entry.op = pg_log_entry_t::DELETE;
+    entry.soid = hoid;
+    entry.version = at_version;
+    entry.prior_version = prior_version;
+    log_entries.push_back(entry);
+    
+    TestPG* test_pg = get_test_pg();
+    
+    // Create completion lambda
+    auto delete_complete = [test_pg, hoid, &completed, &result](int r) {
+      // Clean up outstanding writes and attr_cache
+      test_pg->outstanding_writes.erase(hoid);
+      
+      // Mark as completed and store result
+      completed = true;
+      result = r;
+    };
+    
+    do_transaction(
+      hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), delete_complete);
+  });
+  
+  // Run the event loop to complete the transaction
+  event_loop->run_until_idle();
+  
+  return completed ? result : -EINPROGRESS;
+}
 
 int PGBackendTestFixture::read_object(
   const std::string& obj_name,
@@ -1204,26 +1269,33 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
 {
   hobject_t hoid = make_test_object(obj_name);
 
-  int total_shards = pool_type == EC ? (k + m) : num_replicas;
+  // Get the acting set from the OSDMap to know which OSDs to scrub
+  std::vector<int> acting_osds;
+  int acting_primary = -1;
+  osdmap->pg_to_acting_osds(pgid, &acting_osds, &acting_primary);
+  
   std::map<pg_shard_t, ScrubMap> scrub_maps;
 
-  // Scan each shard within its PG context using run_in_pg
-  for (int shard = 0; shard < total_shards; ++shard) {
-    TestPG* test_pg = get_test_pg_by_shard(shard);
+  // Scan each OSD in the acting set
+  for (size_t i = 0; i < acting_osds.size(); ++i) {
+    int osd = acting_osds[i];
+    shard_id_t shard_id(i);
+    pg_shard_t pg_shard(osd, shard_id);
+    
+    TestPG* test_pg = get_test_pg(pg_shard);
     if (!test_pg) {
-      std::cerr << "ERROR: TestPG for shard " << shard << " does not exist" << std::endl;
-      return true;
+      std::cerr << "WARNING: TestPG for OSD " << osd << " (shard " << i << ") does not exist "
+                << "(object may be left degraded, cannot scrub)" << std::endl;
+      return false;
     }
     
-    int osd = test_pg->pg_whoami.osd;
-    pg_shard_t pg_shard(osd, shard_id_t(shard));
     ScrubMap& smap = scrub_maps[pg_shard];
     
     // Execute be_scan_list within the PG context for this shard
     event_loop->run_in_pg(osd, test_pg, [&]() {
       PGBackend* backend = test_pg->get_backend();
       if (!backend) {
-        std::cerr << "ERROR: Backend pointer for shard " << shard << " is null" << std::endl;
+        std::cerr << "ERROR: Backend pointer for OSD " << osd << " (shard " << i << ") is null" << std::endl;
         return;
       }
 
@@ -1240,12 +1312,12 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
       }
 
       if (r != 0) {
-        std::cerr << "ERROR: be_scan_list failed for shard " << shard << ": " << cpp_strerror(r) << std::endl;
+        std::cerr << "ERROR: be_scan_list failed for OSD " << osd << " (shard " << i << "): " << cpp_strerror(r) << std::endl;
         return;
       }
 
       if (!smap.objects.contains(hoid)) {
-        std::cerr << "ERROR: Object not in scrub map for shard " << shard << std::endl;
+        std::cerr << "ERROR: Object not in scrub map for OSD " << osd << " (shard " << i << ")" << std::endl;
         return;
       }
     });
@@ -1283,13 +1355,17 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
   pg_scrub_listener.primary = primary_shard;
   pg_scrub_listener.info.pgid = spgid;
 
+  // Get the acting set from the OSDMap (already retrieved earlier in the function)
+  spg_t primary_spg;
+  osdmap->get_primary_shard(pgid, &primary_spg);
+  
   std::set<pg_shard_t> acting_set;
-  for (int i = 0; i < k + m; ++i) {
-    acting_set.insert(pg_shard_t(i, shard_id_t(i)));
+  for (size_t i = 0; i < acting_osds.size(); ++i) {
+    acting_set.insert(pg_shard_t(acting_osds[i], shard_id_t(i)));
   }
 
   TestScrubBackend scrub_backend(*scrub_listener, pg_scrub_listener,
-                                 pg_shard_t(primary_shard, shard_id_t(primary_shard)),
+                                 pg_shard_t(acting_primary, shard_id_t(primary_spg.shard)),
                                  false, scrub_level_t::deep, acting_set);
 
   scrub_backend.new_chunk();

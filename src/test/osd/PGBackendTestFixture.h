@@ -511,6 +511,8 @@ public:
     bufferlist& out_data,
     uint64_t object_size);
 
+  int delete_object(const std::string& obj_name);
+
   /**
    * Read an object and verify that its contents match expected data.
    *
