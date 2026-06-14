@@ -174,6 +174,7 @@ struct DBOpParams {
   std::string oidc_table;
   std::string group_table;
   std::string group_users_table;
+  std::string access_keys_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -256,15 +257,7 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* ns = ":ns";
   static constexpr const char* display_name = ":display_name";
   static constexpr const char* user_email = ":user_email";
-  /* Support only single access_key for now. So store
-   * it separately as primary access_key_id & secret to
-   * be able to query easily.
-   *
-   * In future, when need to support & query from multiple
-   * access keys, better to maintain them in a separate table.
-   */
-  static constexpr const char* access_keys_id = ":access_keys_id";
-  static constexpr const char* access_keys_secret = ":access_keys_secret";
+  static constexpr const char* access_key_id = ":access_key_id";
   static constexpr const char* access_keys = ":access_keys";
   static constexpr const char* swift_keys = ":swift_keys";
   static constexpr const char* subusers = ":subusers";
@@ -425,6 +418,7 @@ struct DBOpPrepareParams {
   std::string oidc_table;
   std::string group_table;
   std::string group_users_table;
+  std::string access_keys_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -460,6 +454,9 @@ struct DBOps {
   std::shared_ptr<class InsertGroupUserOp> InsertGroupUser;
   std::shared_ptr<class RemoveGroupUserOp> RemoveGroupUser;
   std::shared_ptr<class ListGroupUsersOp> ListGroupUsers;
+  std::shared_ptr<class InsertAccessKeyOp> InsertAccessKey;
+  std::shared_ptr<class RemoveAccessKeyOp> RemoveAccessKey;
+  std::shared_ptr<class RemoveUserAccessKeysOp> RemoveUserAccessKeys;
   std::shared_ptr<class GetAccountUserOp> GetAccountUser;
   std::shared_ptr<class ListAccountUsersOp> ListAccountUsers;
   std::shared_ptr<class InsertUserOp> InsertUser;
@@ -571,6 +568,12 @@ class DBOp {
       UserID TEXT NOT NULL,		\
       PRIMARY KEY (GroupID, UserID) \n);";
 
+    static constexpr std::string_view CreateAccessKeysTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      AccessKeyID TEXT NOT NULL,		\
+      UserID TEXT NOT NULL,			\
+      PRIMARY KEY (AccessKeyID) \n);";
+
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
        *
@@ -579,11 +582,8 @@ class DBOp {
        * make both (UserID, Tenant) as Primary Key.
        *
        * XXX:
-       * - AccessKeys, SwiftKeys, Subusers (map<>) are stored as blob.
-       *   To enable easy query, first accesskey is stored in separate fields
-       *   AccessKeysID, AccessKeysSecret.
-       *   In future, may be have separate table to store these keys and
-       *   query on that table.
+       * - AccessKeys are stored both as a BLOB (full key map) and in
+       *   a separate access_keys join table (for lookup by key ID).
        * - Quota stored as blob .. should be linked to quota table.
        */
       "CREATE TABLE IF NOT EXISTS '{}' (	\
@@ -592,8 +592,6 @@ class DBOp {
       NS TEXT ,		\
       DisplayName TEXT , \
       UserEmail TEXT ,	\
-      AccessKeysID TEXT ,	\
-      AccessKeysSecret TEXT ,	\
       AccessKeys BLOB ,	\
       SwiftKeys BLOB ,	\
       SubUsers BLOB ,		\
@@ -860,6 +858,9 @@ class DBOp {
       if (!type.compare("GroupUsers"))
         return fmt::format(CreateGroupUsersTableQ,
             params->group_users_table);
+      if (!type.compare("AccessKeys"))
+        return fmt::format(CreateAccessKeysTableQ,
+            params->access_keys_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -1267,6 +1268,48 @@ class RemoveGroupUserOp : virtual public DBOp {
     }
 };
 
+class InsertAccessKeyOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "INSERT OR REPLACE INTO '{}' (AccessKeyID, UserID) VALUES ({}, {});";
+
+  public:
+    virtual ~InsertAccessKeyOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.access_key_id, params.op.user.user_id);
+    }
+};
+
+class RemoveAccessKeyOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where AccessKeyID = {}";
+
+  public:
+    virtual ~RemoveAccessKeyOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.access_key_id);
+    }
+};
+
+class RemoveUserAccessKeysOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where UserID = {}";
+
+  public:
+    virtual ~RemoveUserAccessKeysOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.user_id);
+    }
+};
+
 class ListGroupUsersOp : virtual public DBOp {
   private:
     static constexpr std::string_view Query = "SELECT UserID from '{}' \
@@ -1287,7 +1330,7 @@ class GetAccountUserOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -1307,7 +1350,7 @@ class ListAccountUsersOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -1348,13 +1391,13 @@ class InsertUserOp : virtual public DBOp {
      */
     static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
                           (UserID, Tenant, NS, DisplayName, UserEmail, \
-                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                           AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
                            BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
                            AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -1363,7 +1406,6 @@ class InsertUserOp : virtual public DBOp {
       return fmt::format(Query, params.user_table,
           params.op.user.user_id, params.op.user.tenant, params.op.user.ns,
           params.op.user.display_name, params.op.user.user_email,
-          params.op.user.access_keys_id, params.op.user.access_keys_secret,
           params.op.user.access_keys, params.op.user.swift_keys,
           params.op.user.subusers, params.op.user.suspended,
           params.op.user.max_buckets, params.op.user.op_mask,
@@ -1400,7 +1442,7 @@ class GetUserOp: virtual public DBOp {
      * in list_user() cbk in sqliteDB.cc */
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -1408,7 +1450,7 @@ class GetUserOp: virtual public DBOp {
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
-                                 AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                 AccessKeys, SwiftKeys,\
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                  System, PlacementName, PlacementStorageClass, PlacementTags, \
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -1416,15 +1458,17 @@ class GetUserOp: virtual public DBOp {
 
     static constexpr std::string_view QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
-                                      AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                      AccessKeys, SwiftKeys,\
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                       System, PlacementName, PlacementStorageClass, PlacementTags, \
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                      AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
+                                      AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
+                                      from '{}' where UserID = \
+                                      (SELECT UserID from '{}' where AccessKeyID = {})";
 
     static constexpr std::string_view QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
-                                  AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                  AccessKeys, SwiftKeys,\
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                   System, PlacementName, PlacementStorageClass, PlacementTags, \
                                   BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -1441,7 +1485,8 @@ class GetUserOp: virtual public DBOp {
       } else if (params.op.query_str == "access_key") {
         return fmt::format(QueryByAccessKeys,
             params.user_table,
-            params.op.user.access_keys_id);
+            params.access_keys_table,
+            params.op.user.access_key_id);
       } else if (params.op.query_str == "user_id") {
         return fmt::format(QueryByUserID,
             params.user_table,
@@ -1457,7 +1502,7 @@ class GetUserOp: virtual public DBOp {
 class ListUsersOp: virtual public DBOp {
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
@@ -2138,6 +2183,7 @@ class DB {
     const std::string oidc_table;
     const std::string group_table;
     const std::string group_users_table;
+    const std::string access_keys_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -2165,6 +2211,7 @@ class DB {
     oidc_table(table_name_prefix + "_oidc_table"),
     group_table(table_name_prefix + "_group_table"),
     group_users_table(table_name_prefix + "_group_users_table"),
+    access_keys_table(table_name_prefix + "_access_keys_table"),
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
@@ -2182,6 +2229,7 @@ class DB {
     oidc_table(db_name+"_oidc_table"),
     group_table(db_name+"_group_table"),
     group_users_table(db_name+"_group_users_table"),
+    access_keys_table(db_name+"_access_keys_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -2199,6 +2247,7 @@ class DB {
     const std::string getOIDCTable() { return oidc_table; }
     const std::string getGroupTable() { return group_table; }
     const std::string getGroupUsersTable() { return group_users_table; }
+    const std::string getAccessKeysTable() { return access_keys_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
