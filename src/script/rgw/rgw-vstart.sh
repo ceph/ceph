@@ -14,6 +14,7 @@
 #   --clone             Enable GPFS clone_snap+clone_copy (implies --gpfs)
 #   --lwe               Enable GPFS LWE cluster-wide locking (implies --gpfs)
 #   --gpfs-root DIR     GPFS data directory (default: /mnt/rgw/nsfs)
+#   --clean             Wipe config DB and all data before starting
 #   --debug-rgw N       Debug level (default: 20)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
@@ -27,6 +28,7 @@ STORE=nsfs
 GPFS=false
 CLONE=false
 LWE=false
+CLEAN=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -37,6 +39,7 @@ while [[ $# -gt 0 ]]; do
 		--gpfs)       GPFS=true; shift ;;
 		--clone)      CLONE=true; GPFS=true; shift ;;
 		--lwe)        LWE=true; GPFS=true; shift ;;
+		--clean)      CLEAN=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -76,6 +79,11 @@ fuser -k 8000/tcp 2>/dev/null || true
 # --- clean data dirs ---
 # tolerate permission errors from root-owned files (e.g. LMDB
 # created when the daemon ran as root for LWE testing)
+
+if $CLEAN; then
+	echo "==> --clean: wiping config DB and all data"
+	rm -f "$BUILD_DIR/dev/rgw/dbstore/config.db" 2>/dev/null || true
+fi
 
 echo "==> cleaning data dirs"
 rm -rf "$BUILD_DIR/dev/rgw/$STORE"/{lmdb,root,userdb}/* 2>/dev/null || true
