@@ -508,6 +508,10 @@ if(COMPILER_SUPPORTS_VLA_ERROR)
     $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif()
 
+# rgw_a references rgw::dmclock::* (rgw_schedulers) and kmip_* (kmip); declare
+# it here so the dependency propagates to every consumer. PRIVATE: not in headers.
+target_link_libraries(rgw_a PRIVATE rgw_schedulers kmip)
+
 set(radosgw_srcs
   rgw_main.cc)
 
@@ -532,8 +536,6 @@ target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
-  rgw_schedulers
-  kmip
   ${ALLOC_LIBS})
 
 install(TARGETS radosgw DESTINATION bin)
@@ -642,8 +644,6 @@ target_include_directories(rgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
-  rgw_schedulers
-  kmip
   librados
   cls_rgw_client
   cls_otp_client
