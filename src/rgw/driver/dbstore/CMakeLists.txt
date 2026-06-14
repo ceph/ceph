@@ -54,9 +54,12 @@ target_link_libraries(dbstore_lib PUBLIC ${link_targets})
 set (dbstore_libs dbstore_lib)
 
 IF(USE_SQLITE)
-  list(APPEND dbstore_libs
-    rgw_common
-    sqlite_db)
+  add_subdirectory(sqlite)
+  set(CMAKE_INCLUDE_DIR ${CMAKE_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/sqlite")
+  add_compile_definitions(SQLITE_ENABLED=1)
+  set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} sqlite_db)
+  set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} rgw_common)
+  add_dependencies(sqlite_db dbstore_lib)
 ENDIF()
 
 # add pthread library
