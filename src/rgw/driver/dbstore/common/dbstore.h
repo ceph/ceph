@@ -1292,7 +1292,7 @@ class GetAccountUserOp: virtual public DBOp {
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                           AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
-                          from '{}' where AccountID = {} AND DisplayName = {}";
+                          from '{}' where AccountID = {} AND DisplayName = {} COLLATE NOCASE";
 
   public:
     virtual ~GetAccountUserOp() {}
@@ -1312,7 +1312,7 @@ class ListAccountUsersOp: virtual public DBOp {
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                           AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
-                          from '{}' where AccountID = {} AND DisplayName > {} \
+                          from '{}' where AccountID = {} AND DisplayName > {} COLLATE NOCASE \
                           ORDER BY DisplayName COLLATE NOCASE ASC LIMIT {}";
 
     static constexpr std::string_view CountQuery =
