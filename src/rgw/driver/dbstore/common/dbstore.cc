@@ -134,6 +134,12 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveGroupUser;
   if (!Op.compare("ListGroupUsers"))
     return dbops.ListGroupUsers;
+  if (!Op.compare("InsertAccessKey"))
+    return dbops.InsertAccessKey;
+  if (!Op.compare("RemoveAccessKey"))
+    return dbops.RemoveAccessKey;
+  if (!Op.compare("RemoveUserAccessKeys"))
+    return dbops.RemoveUserAccessKeys;
   if (!Op.compare("GetAccountUser"))
     return dbops.GetAccountUser;
   if (!Op.compare("ListAccountUsers"))
@@ -281,6 +287,7 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params)
   params->oidc_table = oidc_table;
   params->group_table = group_table;
   params->group_users_table = group_users_table;
+  params->access_keys_table = access_keys_table;
   params->user_table = user_table;
   params->bucket_table = bucket_table;
   params->quota_table = quota_table;
@@ -429,6 +436,26 @@ int DB::store_user(const DoutPrefixProvider *dpp,
   }
   ldpp_dout(dpp, 20)<<"User creation successful - userid:(" <<uinfo.user_id<<") " << dendl;
 
+  /* sync access_keys join table: delete old rows, insert current keys */
+  {
+    DBOpParams ak_params = {};
+    InitializeParams(dpp, &ak_params);
+    ak_params.op.user.uinfo.user_id = uinfo.user_id;
+    ProcessOp(dpp, "RemoveUserAccessKeys", &ak_params);
+
+    for (const auto& [key_id, key] : uinfo.access_keys) {
+      DBOpParams ik_params = {};
+      InitializeParams(dpp, &ik_params);
+      ik_params.op.user.uinfo.user_id = uinfo.user_id;
+      ik_params.op.user.uinfo.access_keys[key_id] = key;
+      int r = ProcessOp(dpp, "InsertAccessKey", &ik_params);
+      if (r) {
+        ldpp_dout(dpp, 0) << "InsertAccessKey failed for key "
+            << key_id << " err:(" << r << ")" << dendl;
+      }
+    }
+  }
+
   if (pobjv) {
     pobjv->read_version = obj_ver;
     pobjv->write_version = obj_ver;
@@ -467,6 +494,9 @@ int DB::remove_user(const DoutPrefixProvider *dpp,
   }
 
   params.op.user.uinfo.user_id = uinfo.user_id;
+
+  /* remove access_keys join table rows before removing the user */
+  ProcessOp(dpp, "RemoveUserAccessKeys", &params);
 
   ret = ProcessOp(dpp, "RemoveUser", &params);
 
