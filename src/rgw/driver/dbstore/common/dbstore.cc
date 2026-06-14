@@ -134,6 +134,10 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveGroupUser;
   if (!Op.compare("ListGroupUsers"))
     return dbops.ListGroupUsers;
+  if (!Op.compare("RemoveUserGroups"))
+    return dbops.RemoveUserGroups;
+  if (!Op.compare("ListUserGroups"))
+    return dbops.ListUserGroups;
   if (!Op.compare("InsertAccessKey"))
     return dbops.InsertAccessKey;
   if (!Op.compare("RemoveAccessKey"))
@@ -369,6 +373,15 @@ int DB::get_user(const DoutPrefixProvider *dpp,
 
   uinfo = params.op.user.uinfo;
 
+  /* populate group_ids from the group_users junction table */
+  {
+    std::vector<RGWGroupInfo> groups;
+    list_user_groups(dpp, uinfo.user_id.id, "", 1000, groups);
+    for (auto& g : groups) {
+      uinfo.group_ids.insert(std::move(g.id));
+    }
+  }
+
   if (pattrs) {
     *pattrs = params.op.user.user_attrs;
   }
@@ -467,6 +480,26 @@ int DB::store_user(const DoutPrefixProvider *dpp,
     }
   }
 
+  /* sync group_users join table */
+  {
+    DBOpParams gu_params = {};
+    InitializeParams(dpp, &gu_params);
+    gu_params.op.group.user_id = uinfo.user_id.id;
+    ProcessOp(dpp, "RemoveUserGroups", &gu_params);
+
+    for (const auto& gid : uinfo.group_ids) {
+      DBOpParams ig_params = {};
+      InitializeParams(dpp, &ig_params);
+      ig_params.op.group.info.id = gid;
+      ig_params.op.group.user_id = uinfo.user_id.id;
+      int r = ProcessOp(dpp, "InsertGroupUser", &ig_params);
+      if (r) {
+        ldpp_dout(dpp, 0) << "InsertGroupUser failed for group "
+            << gid << " err:(" << r << ")" << dendl;
+      }
+    }
+  }
+
   if (pobjv) {
     pobjv->read_version = obj_ver;
     pobjv->write_version = obj_ver;
@@ -506,8 +539,14 @@ int DB::remove_user(const DoutPrefixProvider *dpp,
 
   params.op.user.uinfo.user_id = uinfo.user_id;
 
-  /* remove access_keys join table rows before removing the user */
+  /* remove join table rows before removing the user */
   ProcessOp(dpp, "RemoveUserAccessKeys", &params);
+  {
+    DBOpParams gu_params = {};
+    InitializeParams(dpp, &gu_params);
+    gu_params.op.group.user_id = uinfo.user_id.id;
+    ProcessOp(dpp, "RemoveUserGroups", &gu_params);
+  }
 
   ret = ProcessOp(dpp, "RemoveUser", &params);
 
@@ -1092,6 +1131,30 @@ int DB::list_group_users(const DoutPrefixProvider *dpp,
   }
 
   user_ids = std::move(params.op.group.user_list);
+
+  return ret;
+}
+
+int DB::list_user_groups(const DoutPrefixProvider *dpp,
+    const std::string& user_id, const std::string& marker,
+    uint32_t max_items, std::vector<RGWGroupInfo>& groups)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.group.user_id = user_id;
+  params.op.group.info.name = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListUserGroups", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_user_groups failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  groups = std::move(params.op.group.list_entries);
 
   return ret;
 }

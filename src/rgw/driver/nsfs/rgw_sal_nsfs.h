@@ -768,7 +768,7 @@ public:
                          const DoutPrefixProvider* dpp, optional_yield y) override;
   int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
                   std::string_view marker, uint32_t max_items,
-                  GroupList& listing) override { return -ENOTSUP; }
+                  GroupList& listing) override;
 };
 
 class NSFSBucket : public StoreBucket {
