@@ -54,9 +54,6 @@ void RGWGetAccountSummary::execute(optional_yield y)
   }
 
   s->formatter->open_object_section("GetAccountSummaryResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("GetAccountSummaryResult");
   s->formatter->open_object_section("SummaryMap");
   add_entry("Users", users_count);
@@ -65,6 +62,9 @@ void RGWGetAccountSummary::execute(optional_yield y)
   add_entry("GroupsQuota", account->max_groups);
   add_entry("AccessKeysPerUserQuota", account->max_access_keys);
   s->formatter->close_section();
+  s->formatter->close_section();
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
 }

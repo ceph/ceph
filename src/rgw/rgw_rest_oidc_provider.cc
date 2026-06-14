@@ -313,11 +313,11 @@ void RGWGetOIDCProvider::execute(optional_yield y)
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("GetOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
     s->formatter->open_object_section("GetOpenIDConnectProviderResult");
     dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -338,9 +338,6 @@ void RGWListOIDCProviders::execute(optional_yield y)
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("ListOpenIDConnectProvidersResponse", RGW_REST_IAM_XMLNS);
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
     s->formatter->open_object_section("ListOpenIDConnectProvidersResult");
     s->formatter->open_array_section("OpenIDConnectProviderList");
     for (const auto& it : result) {
@@ -349,6 +346,9 @@ void RGWListOIDCProviders::execute(optional_yield y)
       s->formatter->close_section();
     }
     s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -424,11 +424,11 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
   if (op_ret == 0 || op_ret == -EEXIST) {
     op_ret = 0;
     s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResult");
+    dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
-    dump_oidc_provider(info, s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -505,11 +505,11 @@ RGWRemoveClientIdFromOIDCProvider::execute(optional_yield y)
   if (op_ret == 0) {
     op_ret = 0;
     s->formatter->open_object_section("RemoveClientIDFromOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("RemoveClientIDFromOpenIDConnectProviderResult");
+    dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("RemoveClientIDFromOpenIDConnectProviderResponse");
-    dump_oidc_provider(info, s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -583,12 +583,12 @@ void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
   constexpr bool exclusive = false;
   op_ret = driver->store_oidc_provider(this, y, info, exclusive, &objv_tracker);
   if (op_ret == 0) {
-    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("UpdateOpenIDConnectProviderThumbprintResponse");
+    s->formatter->open_object_section("UpdateOpenIDConnectProviderThumbprintResult");
+    dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
-    dump_oidc_provider(info, s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
