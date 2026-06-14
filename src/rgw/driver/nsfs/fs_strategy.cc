@@ -23,9 +23,11 @@
 #include <fcntl.h>
 #include <linux/stat.h>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#include "gpfs/gpfs.h"
 #include "gpfs/gpfs_fcntl.h"
 
 #include "common/dout.h"
@@ -338,8 +340,33 @@ GPFSStrategy::~GPFSStrategy()
 
 std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
   const DoutPrefixProvider* dpp, const std::string& dl_path,
+  const std::string& base_path,
   bool clone_enabled, bool lwe_enabled, bool batch_xattrs)
 {
+  /*
+   * Verify the data root is actually a GPFS filesystem.  The GPFS
+   * shared library may be installed (e.g. for client tools) even
+   * when the data directory lives on XFS or ext4.
+   *
+   * TODO: when multi-account lands with per-account filesets on
+   * potentially different filesystems, this check will need to be
+   * per-fileset rather than a single check at init time.
+   */
+  struct statfs sfs;
+  if (::statfs(base_path.c_str(), &sfs) == 0) {
+    if (sfs.f_type != GPFS_SUPER_MAGIC) {
+      ldpp_dout(dpp, 1) << "gpfs: base_path " << base_path
+        << " is not a GPFS filesystem (f_type=0x"
+        << std::hex << sfs.f_type << std::dec
+        << "), falling back to POSIX strategy" << dendl;
+      return nullptr;
+    }
+  } else {
+    ldpp_dout(dpp, 0) << "gpfs: statfs(" << base_path
+      << ") failed: " << cpp_strerror(errno) << dendl;
+    return nullptr;
+  }
+
   void* dl = dlopen(dl_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!dl) {
     ldpp_dout(dpp, 5) << "gpfs: dlopen " << dl_path

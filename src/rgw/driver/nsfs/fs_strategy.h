@@ -229,6 +229,7 @@ public:
 
   static std::unique_ptr<GPFSStrategy> try_create(
     const DoutPrefixProvider* dpp, const std::string& dl_path,
+    const std::string& base_path,
     bool clone_enabled, bool lwe_enabled, bool batch_xattrs);
 
   int link_temp_file(int temp_fd, int dir_fd,
