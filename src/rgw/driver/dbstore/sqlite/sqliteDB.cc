@@ -314,6 +314,7 @@ enum GetUser {
   TYPE,
   MfaIDs,
   AssumedRoleARN,
+  UserAccountID,
   UserAttrs,
   UserVersion,
   UserVersionTag,
@@ -617,6 +618,11 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   op.user.uinfo.type = sqlite3_column_int(stmt, TYPE);
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, MfaIDs, op.user.uinfo.mfa_ids, sdb);
+
+  {
+    const char *acct = (const char*)sqlite3_column_text(stmt, UserAccountID);
+    if (acct) op.user.uinfo.account_id = acct;
+  }
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, UserAttrs, op.user.user_attrs, sdb);
   op.user.user_version.ver = sqlite3_column_int(stmt, UserVersion);
