@@ -1,3 +1,6 @@
+roles:
+- - osd.0
+
 tasks:
 - crimson_store_bench:
     work_load_type: random_write
