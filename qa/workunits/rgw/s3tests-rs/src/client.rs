@@ -93,7 +93,27 @@ fn build_iam_client(access_key: &str, secret_key: &str) -> IamClient {
     IamClient::from_conf(config)
 }
 
-fn build_sts_client(access_key: &str, secret_key: &str) -> StsClient {
+pub fn build_iam_client_with_session_token(
+    access_key: &str,
+    secret_key: &str,
+    session_token: &str,
+) -> IamClient {
+    let cfg = get_config();
+    let creds = Credentials::new(
+        access_key, secret_key,
+        Some(session_token.to_string()),
+        None, "s3tests",
+    );
+    let config = aws_sdk_iam::Config::builder()
+        .behavior_version(aws_sdk_iam::config::BehaviorVersion::latest())
+        .endpoint_url(&cfg.default_endpoint)
+        .region(Region::new("us-east-1"))
+        .credentials_provider(creds)
+        .build();
+    IamClient::from_conf(config)
+}
+
+pub fn build_sts_client(access_key: &str, secret_key: &str) -> StsClient {
     let cfg = get_config();
     let creds = Credentials::new(access_key, secret_key, None, None, "s3tests");
     let config = aws_sdk_sts::Config::builder()
