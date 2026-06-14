@@ -351,9 +351,11 @@ int DB::get_user(const DoutPrefixProvider *dpp,
   if (ret)
     goto out;
 
-  /* Verify if its a valid user */
-  if (params.op.user.uinfo.access_keys.empty() ||
-        params.op.user.uinfo.user_id.id.empty()) {
+  /* Verify if its a valid user.  Check user_version rather than
+   * user_id or access_keys — those fields may be pre-populated as
+   * query parameters, while user_version is only set by list_user
+   * when the SQL query returns a row. */
+  if (!params.op.user.user_version.ver) {
     ldpp_dout(dpp, 0)<<"In GetUser - No user with query(" <<query_str.c_str()<<"), user_id(" << uinfo.user_id <<") found" << dendl;
     return -ENOENT;
   }
