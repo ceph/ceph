@@ -2054,8 +2054,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
   bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
   bool gpfs_batch = g_conf().get_val<bool>("rgw_nsfs_gpfs_batch_xattrs");
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, gpfs_clone,
-                                               gpfs_lwe, gpfs_batch);
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, base_path,
+                                               gpfs_clone, gpfs_lwe,
+                                               gpfs_batch);
   if (!fs_strategy) {
     fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
   }
