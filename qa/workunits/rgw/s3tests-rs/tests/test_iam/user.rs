@@ -1,6 +1,7 @@
 use aws_sdk_iam::types::StatusType;
-use s3_tests_rs::client::get_iam_root_client;
+use s3_tests_rs::client::{build_s3_client, get_iam_root_client, get_iam_root_s3client};
 use s3_tests_rs::config::get_config;
+use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
 
 #[tokio::test]
 async fn test_account_user_create() {
@@ -587,4 +588,229 @@ async fn test_account_current_user_access_key_delete() {
         .iter()
         .any(|k| k.access_key_id() == Some(keyid.as_str()));
     assert!(!found);
+}
+
+#[tokio::test]
+async fn test_account_user_bucket_policy_allow() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_iam_root_client();
+    let cfg = get_config();
+    let name = format!("{}BPol", cfg.iam_name_prefix);
+    let path = &cfg.iam_path_prefix;
+
+    let resp = client
+        .create_user()
+        .user_name(&name)
+        .path(path)
+        .send()
+        .await
+        .unwrap();
+    let user_arn = resp.user().unwrap().arn().to_string();
+
+    let key = client
+        .create_access_key()
+        .user_name(&name)
+        .send()
+        .await
+        .unwrap()
+        .access_key()
+        .unwrap()
+        .clone();
+    let user_s3 = build_s3_client(key.access_key_id(), key.secret_access_key());
+
+    let roots3 = get_iam_root_s3client();
+    let bucket = get_new_bucket(Some(&roots3)).await;
+
+    /* user should be denied — no identity policy allows s3 actions */
+    let err = user_s3.list_objects_v2().bucket(&bucket).send().await;
+    assert!(err.is_err(), "user should be denied without policy");
+
+    /* add a bucket policy allowing the user's ARN */
+    let policy = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": user_arn},
+            "Action": "s3:ListBucket",
+            "Resource": format!("arn:aws:s3:::{}", bucket)
+        }]
+    }).to_string();
+    roots3
+        .put_bucket_policy()
+        .bucket(&bucket)
+        .policy(&policy)
+        .send()
+        .await
+        .unwrap();
+
+    /* now user should be allowed */
+    let resp = user_s3.list_objects_v2().bucket(&bucket).send().await;
+    assert!(resp.is_ok(), "user should be allowed after bucket policy");
+
+    /* clean up */
+    roots3.delete_bucket().bucket(&bucket).send().await.unwrap();
+    client.delete_access_key().user_name(&name).access_key_id(key.access_key_id()).send().await.unwrap();
+    client.delete_user().user_name(&name).send().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_account_user_policy() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_iam_root_client();
+    let cfg = get_config();
+    let name = format!("{}UPol", cfg.iam_name_prefix);
+    let path = &cfg.iam_path_prefix;
+    let policy_name = "List";
+    let bucket_name = get_new_bucket_name();
+
+    let policy1 = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Deny",
+            "Action": "s3:ListBucket",
+            "Resource": format!("arn:aws:s3:::{}", bucket_name)
+        }]
+    }).to_string();
+    let policy2 = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Action": "s3:ListBucket",
+            "Resource": format!("arn:aws:s3:::{}", bucket_name)
+        }]
+    }).to_string();
+
+    /* Get/Put/Delete fail on nonexistent UserName */
+    assert!(client.get_user_policy().user_name(&name).policy_name(policy_name).send().await.is_err());
+    assert!(client.delete_user_policy().user_name(&name).policy_name(policy_name).send().await.is_err());
+    assert!(client.put_user_policy().user_name(&name).policy_name(policy_name).policy_document(&policy1).send().await.is_err());
+
+    client.create_user().user_name(&name).path(path).send().await.unwrap();
+
+    /* Get/Delete fail on nonexistent PolicyName */
+    assert!(client.get_user_policy().user_name(&name).policy_name(policy_name).send().await.is_err());
+    assert!(client.delete_user_policy().user_name(&name).policy_name(policy_name).send().await.is_err());
+
+    /* Put, Get, List */
+    client.put_user_policy().user_name(&name).policy_name(policy_name).policy_document(&policy1).send().await.unwrap();
+
+    let resp = client.get_user_policy().user_name(&name).policy_name(policy_name).send().await.unwrap();
+    assert_eq!(resp.policy_name(), policy_name);
+
+    let resp = client.list_user_policies().user_name(&name).send().await.unwrap();
+    assert_eq!(resp.policy_names(), &[policy_name]);
+
+    /* overwrite with policy2 */
+    client.put_user_policy().user_name(&name).policy_name(policy_name).policy_document(&policy2).send().await.unwrap();
+
+    let resp = client.list_user_policies().user_name(&name).send().await.unwrap();
+    assert_eq!(resp.policy_names(), &[policy_name]);
+
+    /* delete */
+    client.delete_user_policy().user_name(&name).policy_name(policy_name).send().await.unwrap();
+    assert!(client.get_user_policy().user_name(&name).policy_name(policy_name).send().await.is_err());
+
+    let resp = client.list_user_policies().user_name(&name).send().await.unwrap();
+    assert!(resp.policy_names().is_empty());
+
+    client.delete_user().user_name(&name).send().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_account_user_policy_managed() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_iam_root_client();
+    let cfg = get_config();
+    let name = format!("{}UMPol", cfg.iam_name_prefix);
+    let path = &cfg.iam_path_prefix;
+    let policy1 = "arn:aws:iam::aws:policy/AmazonS3FullAccess";
+    let policy2 = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess";
+
+    /* Attach/Detach/List fail on nonexistent user */
+    assert!(client.attach_user_policy().user_name(&name).policy_arn(policy1).send().await.is_err());
+    assert!(client.detach_user_policy().user_name(&name).policy_arn(policy1).send().await.is_err());
+    assert!(client.list_attached_user_policies().user_name(&name).send().await.is_err());
+
+    client.create_user().user_name(&name).path(path).send().await.unwrap();
+
+    /* detach fails on unattached */
+    assert!(client.detach_user_policy().user_name(&name).policy_arn(policy1).send().await.is_err());
+
+    /* attach + idempotent re-attach */
+    client.attach_user_policy().user_name(&name).policy_arn(policy1).send().await.unwrap();
+    client.attach_user_policy().user_name(&name).policy_arn(policy1).send().await.unwrap();
+
+    let resp = client.list_attached_user_policies().user_name(&name).send().await.unwrap();
+    assert_eq!(resp.attached_policies().len(), 1);
+    assert_eq!(resp.attached_policies()[0].policy_name(), Some("AmazonS3FullAccess"));
+
+    /* attach second policy */
+    client.attach_user_policy().user_name(&name).policy_arn(policy2).send().await.unwrap();
+
+    let resp = client.list_attached_user_policies().user_name(&name).send().await.unwrap();
+    assert_eq!(resp.attached_policies().len(), 2);
+    let names: Vec<_> = resp.attached_policies().iter().filter_map(|p| p.policy_name()).collect();
+    assert!(names.contains(&"AmazonS3FullAccess"));
+    assert!(names.contains(&"AmazonS3ReadOnlyAccess"));
+
+    /* detach second */
+    client.detach_user_policy().user_name(&name).policy_arn(policy2).send().await.unwrap();
+    assert!(client.detach_user_policy().user_name(&name).policy_arn(policy2).send().await.is_err());
+
+    let resp = client.list_attached_user_policies().user_name(&name).send().await.unwrap();
+    assert_eq!(resp.attached_policies().len(), 1);
+
+    /* delete user should fail while policy attached */
+    let err = client.delete_user().user_name(&name).send().await;
+    assert!(err.is_err(), "DeleteUser should fail with attached policy");
+
+    /* clean up */
+    client.detach_user_policy().user_name(&name).policy_arn(policy1).send().await.unwrap();
+    client.delete_user().user_name(&name).send().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_account_user_policy_allow() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_iam_root_client();
+    let cfg = get_config();
+    let name = format!("{}UPolA", cfg.iam_name_prefix);
+    let path = &cfg.iam_path_prefix;
+
+    client.create_user().user_name(&name).path(path).send().await.unwrap();
+
+    let key = client
+        .create_access_key()
+        .user_name(&name)
+        .send()
+        .await
+        .unwrap()
+        .access_key()
+        .unwrap()
+        .clone();
+    let user_s3 = build_s3_client(key.access_key_id(), key.secret_access_key());
+
+    /* user should be denied — no identity policy */
+    let err = user_s3.list_buckets().send().await;
+    assert!(err.is_err(), "user should be denied without policy");
+
+    /* add user policy allowing s3:* */
+    let policy = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Action": "s3:*",
+            "Resource": "*"
+        }]
+    }).to_string();
+    client.put_user_policy().user_name(&name).policy_name("AllowStar").policy_document(&policy).send().await.unwrap();
+
+    /* now user should be allowed */
+    let resp = user_s3.list_buckets().send().await;
+    assert!(resp.is_ok(), "user should be allowed after user policy");
+
+    /* clean up */
+    client.delete_user_policy().user_name(&name).policy_name("AllowStar").send().await.unwrap();
+    client.delete_access_key().user_name(&name).access_key_id(key.access_key_id()).send().await.unwrap();
+    client.delete_user().user_name(&name).send().await.unwrap();
 }

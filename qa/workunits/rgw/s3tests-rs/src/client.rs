@@ -45,7 +45,7 @@ pub async fn build_s3_client_from_sdk_config() -> S3Client {
     S3Client::from_conf(builder.build())
 }
 
-fn build_s3_client(access_key: &str, secret_key: &str) -> S3Client {
+pub fn build_s3_client(access_key: &str, secret_key: &str) -> S3Client {
     let cfg = get_config();
     let creds = Credentials::new(access_key, secret_key, None, None, "s3tests");
     let config = aws_sdk_s3::Config::builder()
