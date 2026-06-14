@@ -838,17 +838,31 @@ int DB::load_oidc_provider(const DoutPrefixProvider *dpp,
 
   ret = ProcessOp(dpp, "GetOIDCProvider", &params);
 
-  if (ret) {
-    return ret;
+  if (!ret && !params.op.oidc.list_entries.empty()) {
+    info = params.op.oidc.list_entries.front();
+    return 0;
   }
 
-  if (params.op.oidc.list_entries.empty()) {
-    return -ENOENT;
+  /*
+   * REST handlers extract the OIDC URL from the provider ARN, which
+   * strips the scheme (url_remove_prefix in rgw_rest_oidc_provider.cc).
+   * But store_oidc_provider receives the full URL including scheme
+   * from CreateOpenIDConnectProvider.  The Rados driver sidesteps
+   * this by using url_remove_prefix() as the storage key; we store
+   * the full URL to preserve it for GetOpenIDConnectProvider, so
+   * retry with common scheme prefixes when the bare URL doesn't match.
+   */
+  for (const auto& prefix : {"http://", "https://"}) {
+    params.op.oidc.list_entries.clear();
+    params.op.oidc.info.provider_url = std::string(prefix) + url;
+    ret = ProcessOp(dpp, "GetOIDCProvider", &params);
+    if (!ret && !params.op.oidc.list_entries.empty()) {
+      info = params.op.oidc.list_entries.front();
+      return 0;
+    }
   }
 
-  info = params.op.oidc.list_entries.front();
-
-  return ret;
+  return -ENOENT;
 }
 
 int DB::delete_oidc_provider(const DoutPrefixProvider *dpp,
@@ -859,16 +873,18 @@ int DB::delete_oidc_provider(const DoutPrefixProvider *dpp,
   int ret = 0;
 
   params.op.oidc.info.tenant = tenant;
-  params.op.oidc.info.provider_url = url;
 
-  ret = ProcessOp(dpp, "RemoveOIDCProvider", &params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"delete_oidc_provider failed with err:(" <<ret<<") " << dendl;
-    return ret;
+  /* try the URL as-is, then with scheme prefixes */
+  for (const auto& candidate : {url, "http://" + url, "https://" + url}) {
+    params.op.oidc.info.provider_url = candidate;
+    ret = ProcessOp(dpp, "RemoveOIDCProvider", &params);
+    if (ret) {
+      ldpp_dout(dpp, 0)<<"delete_oidc_provider failed with err:(" <<ret<<") " << dendl;
+      return ret;
+    }
   }
 
-  return ret;
+  return 0;
 }
 
 int DB::list_oidc_providers(const DoutPrefixProvider *dpp,
