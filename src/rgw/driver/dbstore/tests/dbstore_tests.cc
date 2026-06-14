@@ -311,13 +311,11 @@ TEST_F(DBStoreTest, StoreUser) {
   ASSERT_EQ(old_uinfo.user_id.id, uinfo.user_id.id);
   ASSERT_EQ(old_uinfo.user_email, uinfo.user_email);
 
-  /* exclusive create..should not create new one */
+  /* exclusive create of existing user returns -EEXIST */
   uinfo.user_email = "user2_new@dbstore.com";
   objv_tracker.read_version.ver = 1;
   ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(old_uinfo.user_email, "user2@dbstore.com");
-  ASSERT_EQ(objv_tracker.read_version.ver, 1);
+  ASSERT_EQ(ret, -EEXIST);
 
   ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
@@ -2026,10 +2024,10 @@ TEST_F(DBStoreTest, ExclusiveStorePreservesKeys) {
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(objv.read_version.ver, 1u);
 
-  /* exclusive re-store: should return success without modifying */
+  /* exclusive re-store: should return -EEXIST */
   objv.read_version.ver = 1;
   ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
-  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(ret, -EEXIST);
 
   /* key must still be accessible */
   RGWUserInfo found;
