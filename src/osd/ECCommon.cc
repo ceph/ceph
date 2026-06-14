@@ -1584,9 +1584,11 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         m->pushes[pg_shard].push_back(PushOp());
         PushOp &pop = m->pushes[pg_shard].back();
         pop.soid = op.hoid;
-        pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
+        // For multi-zone EC, convert absolute shard to relative shard (shard % (k+m))
+        shard_id_t rel_shard = sinfo.get_rel_shard(pg_shard.shard);
+        pop.version = op.recovery_info.oi.get_version_for_shard(rel_shard);
 
-        op.returned_data->get_sparse_buffer(sinfo.get_rel_shard(pg_shard.shard), pop.data, pop.data_included);
+        op.returned_data->get_sparse_buffer(rel_shard, pop.data, pop.data_included);
         ceph_assert(pop.data.length() == pop.data_included.size());
 
         dout(10) << __func__ << ": pop shard=" << pg_shard
