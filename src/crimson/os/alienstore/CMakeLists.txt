@@ -82,3 +82,7 @@ target_link_libraries(crimson-alienstore
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     blk)
+
+# Same duplicate-symbol workaround as src/crimson/os/CMakeLists.txt, for
+# executables that link crimson-alienstore directly rather than via crimson-os.
+target_link_options(crimson-alienstore INTERFACE -Wl,--allow-multiple-definition)

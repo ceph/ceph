@@ -14,3 +14,7 @@ target_link_libraries(crimson-os
   ${alienstore_lib}
   crimson-seastore
   crimson)
+
+# crimson-alienstore and crimson-common define the same symbols (src/common/*.cc
+# built with and without WITH_CRIMSON); let the first definition win, like ld.bfd.
+target_link_options(crimson-os INTERFACE -Wl,--allow-multiple-definition)
