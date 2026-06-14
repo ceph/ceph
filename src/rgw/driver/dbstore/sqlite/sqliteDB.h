@@ -50,6 +50,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createOIDCProviderTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createGroupTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -352,6 +353,42 @@ class SQLRemoveGroupUser : public SQLiteDB, public RemoveGroupUserOp {
   public:
     SQLRemoveGroupUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveGroupUser() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertAccessKey : public SQLiteDB, public InsertAccessKeyOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertAccessKey(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertAccessKey() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveAccessKey : public SQLiteDB, public RemoveAccessKeyOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveAccessKey(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveAccessKey() { if (stmt) sqlite3_finalize(stmt); }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveUserAccessKeys : public SQLiteDB, public RemoveUserAccessKeysOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveUserAccessKeys(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveUserAccessKeys() { if (stmt) sqlite3_finalize(stmt); }
     int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);

@@ -159,6 +159,16 @@ TEST_F(DBStoreTest, InsertUser) {
 
   ret = db->ProcessOp(dpp, "InsertUser", &params);
   ASSERT_EQ(ret, 0);
+
+  /* populate access_keys join table */
+  for (const auto& [key_id, key] : params.op.user.uinfo.access_keys) {
+    struct DBOpParams ak_params = GlobalParams;
+    ak_params.op.user.uinfo.user_id = params.op.user.uinfo.user_id;
+    ak_params.op.user.uinfo.access_keys.clear();
+    ak_params.op.user.uinfo.access_keys[key_id] = key;
+    ret = db->ProcessOp(dpp, "InsertAccessKey", &ak_params);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST_F(DBStoreTest, GetUser) {
@@ -1901,6 +1911,168 @@ TEST_F(DBStoreTest, StoreUserThenGetByName) {
   EXPECT_EQ(loaded.account_id, "ACCT00000000000000099");
   EXPECT_EQ(loaded.path, "/test/");
   EXPECT_NE(loaded.create_date, ceph::real_time{});
+}
+
+TEST_F(DBStoreTest, MultiKeyUserLookup) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "multi-key-user";
+  uinfo.display_name = "MultiKeyUser";
+  RGWAccessKey ka("keyA", "secretA");
+  uinfo.access_keys["keyA"] = ka;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* add key B and re-store */
+  RGWAccessKey kb("keyB", "secretB");
+  uinfo.access_keys["keyB"] = kb;
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* both keys must resolve to the same user */
+  RGWUserInfo foundA;
+  foundA.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyA", foundA, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(foundA.user_id.id, "multi-key-user");
+
+  RGWUserInfo foundB;
+  foundB.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyB", foundB, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(foundB.user_id.id, "multi-key-user");
+
+  /* remove key A, re-store */
+  uinfo.access_keys.erase("keyA");
+  objv.read_version.ver = 2;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo goneA;
+  goneA.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyA", goneA, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  RGWUserInfo stillB;
+  stillB.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyB", stillB, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(stillB.user_id.id, "multi-key-user");
+}
+
+TEST_F(DBStoreTest, CascadingDeleteKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "cascade-del-user";
+  uinfo.display_name = "CascadeDelUser";
+  RGWAccessKey ka("cdkA", "secretA");
+  RGWAccessKey kb("cdkB", "secretB");
+  uinfo.access_keys["cdkA"] = ka;
+  uinfo.access_keys["cdkB"] = kb;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  ret = db->remove_user(dpp, uinfo, &objv);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo goneA;
+  goneA.user_id.id = "cascade-del-user";
+  ret = db->get_user(dpp, "access_key", "cdkA", goneA, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  RGWUserInfo goneB;
+  goneB.user_id.id = "cascade-del-user";
+  ret = db->get_user(dpp, "access_key", "cdkB", goneB, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+}
+
+TEST_F(DBStoreTest, AccessKeyUniqueness) {
+  RGWUserInfo u1;
+  u1.user_id.id = "unique-key-user1";
+  u1.display_name = "UniqueKeyUser1";
+  RGWAccessKey k("shared-key", "secret1");
+  u1.access_keys["shared-key"] = k;
+
+  ret = db->store_user(dpp, u1, true, nullptr, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo u2;
+  u2.user_id.id = "unique-key-user2";
+  u2.display_name = "UniqueKeyUser2";
+  u2.access_keys["shared-key"] = k;
+
+  ret = db->store_user(dpp, u2, true, nullptr, nullptr, nullptr);
+  /* store_user succeeds but the key now points to u2 (INSERT OR REPLACE) */
+
+  RGWUserInfo found;
+  found.user_id.id = "unique-key-user1";
+  ret = db->get_user(dpp, "access_key", "shared-key", found, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  /* with INSERT OR REPLACE, the key belongs to whichever user stored last */
+}
+
+TEST_F(DBStoreTest, ExclusiveStorePreservesKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "excl-key-user";
+  uinfo.display_name = "ExclKeyUser";
+  RGWAccessKey ka("exclA", "secretA");
+  uinfo.access_keys["exclA"] = ka;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objv.read_version.ver, 1u);
+
+  /* exclusive re-store: should return success without modifying */
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* key must still be accessible */
+  RGWUserInfo found;
+  found.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "exclA", found, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(found.user_id.id, "excl-key-user");
+}
+
+TEST_F(DBStoreTest, ReStoreUpdatesKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "restore-key-user";
+  uinfo.display_name = "ReStoreKeyUser";
+  RGWAccessKey ka("rstA", "secretA");
+  RGWAccessKey kb("rstB", "secretB");
+  uinfo.access_keys["rstA"] = ka;
+  uinfo.access_keys["rstB"] = kb;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* modify keys: remove A, add C */
+  uinfo.access_keys.erase("rstA");
+  RGWAccessKey kc("rstC", "secretC");
+  uinfo.access_keys["rstC"] = kc;
+
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo f;
+  f.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "rstA", f, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  ret = db->get_user(dpp, "access_key", "rstB", f, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(f.user_id.id, "restore-key-user");
+
+  ret = db->get_user(dpp, "access_key", "rstC", f, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(f.user_id.id, "restore-key-user");
 }
 
 int main(int argc, char **argv)
