@@ -30,6 +30,9 @@ import httplib2
 from tasks.rgw import RGWEndpoint
 from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
 from tasks.util.rgw import get_user_summary, get_user_successful_ops
+from tasks.util.rgw import (s3_get_usage, parse_s3_usage_xml,
+                            s3_usage_capacity_entries, s3_usage_log_users,
+                            s3_usage_total_ops)
 
 log = logging.getLogger(__name__)
 
@@ -901,6 +904,16 @@ def task(ctx, config):
 
     total = user_summary['total']
     assert total['successful_ops'] > 0
+
+    # TESTCASE 'usage-s3-getusage' 'usage' 's3-get' 'GET /?usage' 'returns capacity and log entries'
+    status, usage_xml = s3_get_usage(endpoint.url(), access_key, secret_key)
+    assert status == 200, usage_xml
+    usage_root = parse_s3_usage_xml(usage_xml)
+    capacity_entries = s3_usage_capacity_entries(usage_root)
+    assert len(capacity_entries) > 0
+    log_users = s3_usage_log_users(usage_root)
+    assert len(log_users) > 0
+    assert s3_usage_total_ops(usage_root) > 0
 
     # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1],
