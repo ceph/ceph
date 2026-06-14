@@ -1283,7 +1283,6 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
   }
 
   if (mandatory_policy) {
-    // no policies, and policy is mandatory
     ldpp_dout(dpp, 20) << "no policies for a policy mandatory op " << op << dendl;
     return false;
   }
