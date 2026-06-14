@@ -295,8 +295,6 @@ enum GetUser {
   NS,
   DisplayName,
   UserEmail,
-  AccessKeysID,
-  AccessKeysSecret,
   AccessKeys,
   SwiftKeys,
   SubUsers,
@@ -860,6 +858,9 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertGroupUser = make_shared<SQLInsertGroupUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveGroupUser = make_shared<SQLRemoveGroupUser>(&this->db, this->getDBname(), cct);
   dbops.ListGroupUsers = make_shared<SQLListGroupUsers>(&this->db, this->getDBname(), cct);
+  dbops.InsertAccessKey = make_shared<SQLInsertAccessKey>(&this->db, this->getDBname(), cct);
+  dbops.RemoveAccessKey = make_shared<SQLRemoveAccessKey>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUserAccessKeys = make_shared<SQLRemoveUserAccessKeys>(&this->db, this->getDBname(), cct);
   dbops.GetAccountUser = make_shared<SQLGetAccountUser>(&this->db, this->getDBname(), cct);
   dbops.ListAccountUsers = make_shared<SQLListAccountUsers>(&this->db, this->getDBname(), cct);
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
@@ -1021,6 +1022,9 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   if ((cu = createUserTable(dpp, &params)))
     goto out;
 
+  if (createAccessKeysTable(dpp, &params))
+    goto out;
+
   if ((cb = createBucketTable(dpp, &params)))
     goto out;
 
@@ -1136,6 +1140,22 @@ int SQLiteDB::createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
     ldpp_dout(dpp, 0)<<"CreateUserTable failed" << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateUserTable succeeded" << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("AccessKeys", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateAccessKeysTable failed" << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateAccessKeysTable succeeded" << dendl;
 
   return ret;
 }
@@ -2292,6 +2312,98 @@ out:
   return ret;
 }
 
+int SQLInsertAccessKey::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLInsertAccessKey - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertAccessKey");
+out:
+  return ret;
+}
+
+int SQLInsertAccessKey::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_key_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.access_keys.begin()->second.id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLInsertAccessKey::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveAccessKey::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveAccessKey - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveAccessKey");
+out:
+  return ret;
+}
+
+int SQLRemoveAccessKey::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_key_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.access_keys.begin()->second.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveAccessKey::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveUserAccessKeys::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveUserAccessKeys - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveUserAccessKeys");
+out:
+  return ret;
+}
+
+int SQLRemoveUserAccessKeys::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveUserAccessKeys::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
 int SQLListGroupUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int ret = -1;
@@ -2443,22 +2555,6 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_email, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
 
-  if (!params->op.user.uinfo.access_keys.empty()) {
-    string access_key;
-    string key;
-    map<string, RGWAccessKey>::const_iterator it =
-      params->op.user.uinfo.access_keys.begin();
-    const RGWAccessKey& k = it->second;
-    access_key = k.id;
-    key = k.key;
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_id, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, access_key.c_str(), sdb);
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_secret, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, key.c_str(), sdb);
-
-  }
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.access_keys, sdb);
 
@@ -2617,16 +2713,11 @@ int SQLGetUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   if (params->op.query_str == "email") { 
     SQL_BIND_INDEX(dpp, email_stmt, index, p_params.op.user.user_email, sdb);
     SQL_BIND_TEXT(dpp, email_stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
-  } else if (params->op.query_str == "access_key") { 
+  } else if (params->op.query_str == "access_key") {
     if (!params->op.user.uinfo.access_keys.empty()) {
-      string access_key;
-      map<string, RGWAccessKey>::const_iterator it =
-        params->op.user.uinfo.access_keys.begin();
-      const RGWAccessKey& k = it->second;
-      access_key = k.id;
-
-      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_keys_id, sdb);
-      SQL_BIND_TEXT(dpp, ak_stmt, index, access_key.c_str(), sdb);
+      const auto& k = params->op.user.uinfo.access_keys.begin()->second;
+      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_key_id, sdb);
+      SQL_BIND_TEXT(dpp, ak_stmt, index, k.id.c_str(), sdb);
     }
   } else if (params->op.query_str == "user_id") { 
     SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.user_id, sdb);
