@@ -858,6 +858,8 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertGroupUser = make_shared<SQLInsertGroupUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveGroupUser = make_shared<SQLRemoveGroupUser>(&this->db, this->getDBname(), cct);
   dbops.ListGroupUsers = make_shared<SQLListGroupUsers>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUserGroups = make_shared<SQLRemoveUserGroups>(&this->db, this->getDBname(), cct);
+  dbops.ListUserGroups = make_shared<SQLListUserGroups>(&this->db, this->getDBname(), cct);
   dbops.InsertAccessKey = make_shared<SQLInsertAccessKey>(&this->db, this->getDBname(), cct);
   dbops.RemoveAccessKey = make_shared<SQLRemoveAccessKey>(&this->db, this->getDBname(), cct);
   dbops.RemoveUserAccessKeys = make_shared<SQLRemoveUserAccessKeys>(&this->db, this->getDBname(), cct);
@@ -2308,6 +2310,70 @@ int SQLRemoveGroupUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams
 {
   int ret = -1;
   SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveUserGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLRemoveUserGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveUserGroups");
+out:
+  return ret;
+}
+
+int SQLRemoveUserGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+out:
+  return rc;
+}
+
+int SQLRemoveUserGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLListUserGroups::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  if (!*sdb) { ldpp_dout(dpp, 0)<<"In SQLListUserGroups - no db" << dendl; goto out; }
+  InitPrepareParams(dpp, p_params, params);
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListUserGroups");
+out:
+  return ret;
+}
+
+int SQLListUserGroups::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.group.name, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.group.info.name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+out:
+  return rc;
+}
+
+int SQLListUserGroups::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  SQL_EXECUTE(dpp, params, stmt, list_group);
 out:
   return ret;
 }

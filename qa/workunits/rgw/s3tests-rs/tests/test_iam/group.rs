@@ -117,8 +117,8 @@ async fn test_account_group_update() {
     let client = get_iam_root_client();
     let cfg = get_config();
     let path = &cfg.iam_path_prefix;
-    let name = format!("{}G1", cfg.iam_name_prefix);
-    let username = format!("{}U1", cfg.iam_name_prefix);
+    let name = format!("{}GUpd", cfg.iam_name_prefix);
+    let username = format!("{}UUpd", cfg.iam_name_prefix);
 
     let resp = client.create_group().group_name(&name).path(path).send().await.unwrap();
     let group_id = resp.group().unwrap().group_id().to_string();
