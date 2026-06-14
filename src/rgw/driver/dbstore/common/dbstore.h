@@ -1313,7 +1313,7 @@ class ListAccountUsersOp: virtual public DBOp {
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                           AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
                           from '{}' where AccountID = {} AND DisplayName > {} \
-                          ORDER BY DisplayName ASC LIMIT {}";
+                          ORDER BY DisplayName COLLATE NOCASE ASC LIMIT {}";
 
     static constexpr std::string_view CountQuery =
       "SELECT COUNT(*) from '{}' where AccountID = {}";

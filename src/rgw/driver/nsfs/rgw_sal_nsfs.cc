@@ -2700,6 +2700,16 @@ int NSFSDriver::list_account_users(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  if (!path_prefix.empty()) {
+    std::string pp(path_prefix);
+    users.erase(
+        std::remove_if(users.begin(), users.end(),
+            [&pp](const RGWUserInfo& u) {
+              return u.path.substr(0, pp.size()) != pp;
+            }),
+        users.end());
+  }
+
   if (users.size() > max_items) {
     listing.next_marker = users[max_items].display_name;
     users.resize(max_items);
