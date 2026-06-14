@@ -32,7 +32,8 @@ from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
 from tasks.util.rgw import get_user_summary, get_user_successful_ops
 from tasks.util.rgw import (s3_get_usage, parse_s3_usage_xml,
                             s3_usage_capacity_entries, s3_usage_log_users,
-                            s3_usage_total_ops)
+                            s3_usage_log_owners, s3_usage_total_ops,
+                            s3_usage_summary_successful_ops, s3_usage_total_bytes)
 
 log = logging.getLogger(__name__)
 
@@ -913,7 +914,12 @@ def task(ctx, config):
     assert len(capacity_entries) > 0
     log_users = s3_usage_log_users(usage_root)
     assert len(log_users) > 0
+    assert user1 in s3_usage_log_owners(usage_root)
     assert s3_usage_total_ops(usage_root) > 0
+    assert s3_usage_summary_successful_ops(usage_root) > 0
+    assert s3_usage_total_bytes(usage_root) > 0
+    # service-level GET /?usage must reflect the same user ops as usage show
+    assert s3_usage_summary_successful_ops(usage_root) >= total['successful_ops']
 
     # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1],
