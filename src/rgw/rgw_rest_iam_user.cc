@@ -204,6 +204,21 @@ void RGWCreateUser_IAM::execute(optional_yield y)
     }
   }
 
+  /* check name uniqueness within the account — rados enforces this
+   * via its internal name→uid index, but other backends (dbstore)
+   * need an explicit check */
+  {
+    std::unique_ptr<rgw::sal::User> existing;
+    int r = driver->load_account_user_by_name(this, y, info.account_id,
+                                              info.user_id.tenant,
+                                              info.display_name, &existing);
+    if (r == 0) {
+      s->err.message = "User with name " + info.display_name + " already exists";
+      op_ret = -EEXIST;
+      return;
+    }
+  }
+
   std::unique_ptr<rgw::sal::User> user = driver->get_user(info.user_id);
   user->get_info() = info;
 
