@@ -36,6 +36,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
+#define RGW_POSIX_ATTR_VERSION "POSIX-version"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -454,6 +455,9 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
       if (flags & FSEnt::FLAG_CURRENT) {
 	  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
       }
+      if (flags & FSEnt::FLAG_DELETE_MARKER) {
+        bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+      }
       break;
     case ObjectType::MULTIPART:
     case ObjectType::DIRECTORY:
@@ -672,7 +676,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
     std::unique_ptr<FSEnt> del;
     ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
     if (ret >= 0) {
-      ret = del->remove(dpp, y, /*delete_children=*/true);
+      ret = del->remove(dpp, y, /*delete_children=*/true, nullptr);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
                           << dendl;
@@ -709,7 +713,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
+int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result)
 {
   if (!exists()) {
     return 0;
@@ -852,7 +856,7 @@ int Directory::stat(const DoutPrefixProvider* dpp, bool force)
   return 0;
 }
 
-int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
+int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result)
 {
   return delete_directory(parent->get_fd(), fname.c_str(), delete_children, dpp);
 }
@@ -988,7 +992,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     std::unique_ptr<FSEnt> del;
     ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
     if (ret >= 0) {
-      ret = del->remove(dpp, y, /*delete_children=*/true);
+      ret = del->remove(dpp, y, /*delete_children=*/true, nullptr);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
                           << dendl;
@@ -1295,9 +1299,9 @@ int MPDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
   return rename(dpp, y, parent, savename);
 }
 
-int MPDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
+int MPDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result)
 {
-  return Directory::remove(dpp, y, /*delete_children=*/true);
+  return Directory::remove(dpp, y, /*delete_children=*/true, result);
 }
 
 int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
@@ -1461,7 +1465,7 @@ int VersionedDirectory::set_cur_version_ent(const DoutPrefixProvider* dpp, FSEnt
   std::unique_ptr<FSEnt> del;
   int ret = get_ent(dpp, null_yield, get_name(), std::string(), del);
   if (ret >= 0) {
-    ret = del->remove(dpp, null_yield, /*delete_children=*/true);
+    ret = del->remove(dpp, null_yield, /*delete_children=*/true, nullptr);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not remove cur_version " << get_name()
                         << dendl;
@@ -1520,15 +1524,25 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   cur_version = sl->get_target()->clone_base();
   ret = cur_version->open(dpp);
   if (ret < 0) {
-    /* If target doesn't exist, it's a delete marker */
-    cur_version.reset();
-    stx.stx_size = 0;
     return 0;
   }
   ret = cur_version->stat(dpp);
   if (ret < 0)
     return ret;
   stx.stx_size = cur_version->get_stx().stx_size;
+
+  if (cur_version->get_stx().stx_size == 0) {
+    //Possibly a delete marker
+    Attrs attrs;
+    ret = cur_version->read_attrs(dpp, null_yield, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+    bufferlist bl;
+    if (rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+    //  cur_version.reset();
+    }
+  }
 
   return 0;
 }
@@ -1603,7 +1617,7 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     std::unique_ptr<FSEnt> del;
     ret = dst_dir->get_ent(dpp, y, basename, std::string(), del);
     if (ret >= 0) {
-      ret = del->remove(dpp, y, /*delete_children=*/true);
+      ret = del->remove(dpp, y, /*delete_children=*/true, nullptr);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << basename
                           << dendl;
@@ -1666,7 +1680,46 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   return ret;
 }
 
-int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
+int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          std::unique_ptr<File>& marker,
+                                          std::string& name)
+{
+  //TODO: Create a tmp file
+  int ret = marker->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
+  if (ret < 0) {
+    return ret;
+  }
+
+ // XXX: Hack to set the owner on the delete marker
+  Attrs v_attrs;
+  Attrs attrs;
+
+  ret = get_x_attrs(y, dpp, get_fd(), v_attrs, get_name());
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist owner_bl;
+  if (rgw::sal::get_attr(v_attrs, RGW_POSIX_ATTR_OWNER, owner_bl)) {
+    attrs[RGW_POSIX_ATTR_OWNER] = std::move(owner_bl);
+  }
+  buffer::list bl;
+  uint16_t flags = 0;
+  flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+  ceph::encode(flags, bl);
+  attrs[RGW_POSIX_ATTR_VERSION] = std::move(bl);
+  ret = marker->write_attrs(dpp, y, attrs, nullptr);
+  if (ret < 0) {
+    //TODO: Delete the marker file
+    return ret;
+  }
+
+  return 0;
+}
+
+int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
+                               bool delete_children, DeleteResult* result)
 {
   std::string tgtname;
   bool newlink = false;
@@ -1683,18 +1736,31 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
 
     if (ret == 0) {
       /* We're empty, nuke us */
-      return Directory::remove(dpp, y, /*delete_children=*/true);
+      return Directory::remove(dpp, y, /*delete_children=*/true, result);
     }
 
     /* Add a delete marker */
+    std::unique_ptr<File> f;
     rgw_obj_key key = decode_obj_key(get_name());
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
-    newlink = true;
-    ret = remove_symlink(dpp, y);
+
+    result->delete_marker = true;
+    result->version_id = key.instance;
+
+    f = std::make_unique<File>(tgtname, this, ctx);
+    ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
       return ret;
     }
+
+    newlink = true;
+    ret = set_cur_version_ent(dpp, f.get());
+    if (ret < 0) {
+      return ret;
+    }
+    cur_version = std::move(f);
+    return 0;
   } else {
     /* Delete specific version */
     rgw_obj_key key = decode_obj_key(get_name());
@@ -1707,25 +1773,22 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
       ret = f->stat(dpp);
       if (ret < 0)
         return ret;
-      ret = f->remove(dpp, y, /*delete_children=*/true);
-      if (ret < 0)
+      Attrs attrs;
+      ret = f->read_attrs(dpp, y, attrs);
+      if (ret < 0) {
         return ret;
-    } else if (ret == -ENOENT) {
-      /* See if we're removing a delete marker */
-      std::unique_ptr<Symlink> sl =
-          std::make_unique<Symlink>(get_name(), this, ctx);
-      ret = sl->stat(dpp);
-      if (ret == 0) {
-        if (name != sl->get_target()->get_name()) {
-	  /* Symlink didn't match, don't change anything */
-	  return 0;
-	}
       }
-      /* FALLTHROUGH */
+      bufferlist bl;
+      if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+       result->delete_marker = true;
+      }
+      ret = f->remove(dpp, y, /*delete_children=*/true, nullptr);
+      if (ret < 0)
+       return ret;
+      result->version_id = instance_id;
     } else {
       return ret;
     }
-
     /* Possibly move symlink */
     ret = remove_symlink(dpp, y, name);
     if (ret < 0) {
@@ -1749,16 +1812,23 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
     if (tgtname.empty()) {
       /* We're empty, nuke us */
       exist = false;
-      return Directory::remove(dpp, y, /*delete_children=*/true);
+      return Directory::remove(dpp, y, /*delete_children=*/true, result);
     }
   }
-
   if (newlink) {
     exist = true;
-    std::unique_ptr<Symlink> sl =
-        std::make_unique<Symlink>(get_name(), this, tgtname, ctx);
-    return sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
+    std::unique_ptr<FSEnt> f;
+    ret = get_ent(dpp, y, tgtname, std::string(), f);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = set_cur_version_ent(dpp, f.get());
+    if (ret < 0) {
+      return ret;
+    }
+    cur_version = std::move(f);
   }
+
   return 0;
 }
 
@@ -1788,6 +1858,19 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
            (ent->get_name() == cur_version->get_name())) ?
         FSEnt::FLAG_CURRENT :
         FSEnt::FLAG_NONE;
+
+      // Delete markers are zero byte files
+      if (ent->get_stx().stx_size == 0) {
+        Attrs attrs;
+        bufferlist bl;
+        ret = ent->read_attrs(dpp, y, attrs);
+        if (ret < 0) {
+          return ret;
+        }
+        if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+          fill_flags |= FSEnt::FLAG_DELETE_MARKER;
+        }
+      }
 
       ret = ent->fill_cache(dpp, y, cb, fill_flags);
       if (ret < 0)
@@ -1834,7 +1917,7 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
       return -ENOKEY;
   }
 
-  ret = sl->remove(dpp, y, /*delete_children=*/false);
+  ret = sl->remove(dpp, y, /*delete_children=*/false, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -2768,7 +2851,7 @@ int POSIXBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
 {
-  int ret = dir->remove(dpp, y, delete_children);
+  int ret = dir->remove(dpp, y, delete_children, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -3137,8 +3220,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       }
       return ret;
   }
-
-  ret = ent->remove(dpp, y, /*delete_children=*/false);
+  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
@@ -3964,7 +4046,12 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, flags, nullptr, nullptr);
+  int ret = source->delete_object(dpp, y, flags, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  result = source->get_result();
+  return 0;
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
