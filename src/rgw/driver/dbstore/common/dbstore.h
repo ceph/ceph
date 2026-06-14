@@ -1287,7 +1287,7 @@ class GetAccountUserOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag \
+                          AccountID, UserAttrs, UserVersion, UserVersionTag \
                           from '{}' where AccountID = {} AND DisplayName = {}";
 
   public:
@@ -1307,7 +1307,7 @@ class ListAccountUsersOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag \
+                          AccountID, UserAttrs, UserVersion, UserVersionTag \
                           from '{}' where AccountID = {} AND DisplayName > {} \
                           ORDER BY DisplayName ASC LIMIT {}";
 
@@ -1399,7 +1399,7 @@ class GetUserOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
+                          AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1407,7 +1407,7 @@ class GetUserOp: virtual public DBOp {
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                  System, PlacementName, PlacementStorageClass, PlacementTags, \
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                 UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
+                                 AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
 
     static constexpr std::string_view QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1415,7 +1415,7 @@ class GetUserOp: virtual public DBOp {
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                       System, PlacementName, PlacementStorageClass, PlacementTags, \
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                      UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
+                                      AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
 
     static constexpr std::string_view QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
@@ -1423,7 +1423,7 @@ class GetUserOp: virtual public DBOp {
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                   System, PlacementName, PlacementStorageClass, PlacementTags, \
                                   BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                  UserAttrs, UserVersion, UserVersionTag \
+                                  AccountID, UserAttrs, UserVersion, UserVersionTag \
                                   from '{}' where UserID = {}";
 
   public:
@@ -1456,7 +1456,7 @@ class ListUsersOp: virtual public DBOp {
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag from '{}' where \
+                          AccountID, UserAttrs, UserVersion, UserVersionTag from '{}' where \
                           UserID >= {} ORDER BY UserID ASC LIMIT {} ";
 
   public:
