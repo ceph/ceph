@@ -424,13 +424,13 @@ int RGWGetRole::init_processing(optional_yield y)
 void RGWGetRole::execute(optional_yield y)
 {
   s->formatter->open_object_section("GetRoleResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("GetRoleResult");
   s->formatter->open_object_section("Role");
   dump_iam_role(role->get_info(), s->formatter);
   s->formatter->close_section();
+  s->formatter->close_section();
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
 }
@@ -674,13 +674,13 @@ void RGWGetRolePolicy::execute(optional_yield y)
 
   if (op_ret == 0) {
     s->formatter->open_object_section("GetRolePolicyResponse");
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
     s->formatter->open_object_section("GetRolePolicyResult");
     s->formatter->dump_string("PolicyName", policy_name);
     s->formatter->dump_string("RoleName", role_name);
     s->formatter->dump_string("PolicyDocument", perm_policy);
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -704,15 +704,15 @@ void RGWListRolePolicies::execute(optional_yield y)
 {
   std::vector<string> policy_names = role->get_role_policy_names();
   s->formatter->open_object_section("ListRolePoliciesResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("ListRolePoliciesResult");
   s->formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
     s->formatter->dump_string("member", it);
   }
   s->formatter->close_section();
+  s->formatter->close_section();
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
 }
@@ -1026,6 +1026,7 @@ void RGWUpdateRole::execute(optional_yield y)
   if (op_ret == 0) {
     s->formatter->open_object_section("UpdateRoleResponse");
     s->formatter->open_object_section("UpdateRoleResult");
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -1282,9 +1283,6 @@ int RGWListAttachedRolePolicies_IAM::init_processing(optional_yield y)
 void RGWListAttachedRolePolicies_IAM::execute(optional_yield y)
 {
   s->formatter->open_object_section_in_ns("ListAttachedRolePoliciesResponse", RGW_REST_IAM_XMLNS);
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section(); // ResponseMetadata
   s->formatter->open_object_section("ListAttachedRolePoliciesResult");
   s->formatter->open_array_section("AttachedPolicies");
   for (const auto& policy : role->get_info().managed_policies.arns) {
@@ -1298,6 +1296,9 @@ void RGWListAttachedRolePolicies_IAM::execute(optional_yield y)
   }
   s->formatter->close_section(); // AttachedPolicies
   s->formatter->close_section(); // ListAttachedRolePoliciesResult
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section(); // ResponseMetadata
   s->formatter->close_section(); // ListAttachedRolePoliciesResponse
 }
 
