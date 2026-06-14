@@ -1880,6 +1880,29 @@ TEST_F(DBStoreTest, KeylessUserRoundtrip) {
   ASSERT_EQ(ret, -ENOENT);
 }
 
+TEST_F(DBStoreTest, StoreUserThenGetByName) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "store-then-get-user";
+  uinfo.display_name = "StoreGetUser";
+  uinfo.account_id = "ACCT00000000000000099";
+  uinfo.path = "/test/";
+  uinfo.create_date = ceph::real_clock::now();
+
+  map<string, bufferlist> attrs;
+  ret = db->store_user(dpp, uinfo, true, &attrs, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo loaded;
+  ret = db->get_account_user_by_name(dpp, uinfo.account_id,
+                                     uinfo.display_name, loaded);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(loaded.user_id.id, "store-then-get-user");
+  EXPECT_EQ(loaded.display_name, "StoreGetUser");
+  EXPECT_EQ(loaded.account_id, "ACCT00000000000000099");
+  EXPECT_EQ(loaded.path, "/test/");
+  EXPECT_NE(loaded.create_date, ceph::real_time{});
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;
