@@ -689,6 +689,8 @@ async fn multipart_upload_enc(
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SSE-C multipart not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SSE-C multipart not implemented")]
 #[tokio::test]
 async fn test_encryption_sse_c_multipart_upload() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -865,6 +867,8 @@ async fn test_multipart_sse_c_get_part() {
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SSE-C multipart not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SSE-C multipart not implemented")]
 #[tokio::test]
 async fn test_encryption_sse_c_unaligned_multipart_upload() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();

@@ -1769,6 +1769,8 @@ async fn test_bucket_policy_put_obj_s3_noenc() {
         .unwrap();
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecyclev2_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();

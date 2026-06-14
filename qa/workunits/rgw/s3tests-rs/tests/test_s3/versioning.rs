@@ -11,6 +11,7 @@ async fn get_body(response: aws_sdk_s3::operation::get_object::GetObjectOutput) 
     String::from_utf8(bytes.to_vec()).unwrap()
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioning_bucket_create_suspend() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -434,6 +435,7 @@ async fn test_versioning_multi_object_delete() {
     assert!(list_resp.versions().is_empty());
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioned_object_acl() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -497,6 +499,7 @@ async fn test_versioned_object_acl() {
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioned_object_acl_no_version_specified() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -845,6 +848,7 @@ async fn test_versioning_obj_create_versions_remove_special_names() {
     }
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioning_bucket_atomic_upload_return_version_id() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1094,8 +1098,9 @@ async fn test_delete_marker_suspended() {
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[tokio::test]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
+#[tokio::test]
 async fn test_delete_marker_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -1166,6 +1171,7 @@ async fn test_delete_marker_expiration() {
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioned_concurrent_object_create_concurrent_remove() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1268,6 +1274,7 @@ async fn test_versioned_concurrent_object_create_concurrent_remove() {
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_versioned_concurrent_object_create_and_remove() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
