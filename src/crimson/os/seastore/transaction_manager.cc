@@ -945,7 +945,7 @@ TransactionManager::move_region(
             ).handle_error_interruptible(
               move_region_iertr::pass_further(),
               crimson::ct_error::assert_all("invalid error"));
-            auto off = 0;
+            [[maybe_unused]] auto off = 0;
             auto bl = maybe_indirect_extent.get_range(
               src.get_intermediate_offset(),
               src.get_length());

@@ -1453,6 +1453,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
     ctx.t, unaligned_begin.get_aligned_laddr(ctx.tm.get_block_size())
   ).si_then([ctx, data_base, size, this,
 	    unaligned_begin, &object_data](auto mapping) {
+    std::ignore = unaligned_begin;
     assert(mapping.get_key() <= unaligned_begin &&
       mapping.get_key() + mapping.get_length() > unaligned_begin);
     auto data_len = object_data.get_reserved_data_len();
