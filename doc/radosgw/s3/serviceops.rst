@@ -42,7 +42,25 @@ Response Entities
 Get Usage Stats
 ---------------
 
-Gets usage stats per user, similar to the admin command :ref:`rgw_user_usage_stats`.
+Gets usage statistics for the authenticated user, similar to the admin
+command :ref:`rgw_user_usage_stats`.
+
+The response combines three kinds of data:
+
+- **Storage** — current bytes and object counts (``Summary``, ``CapacityUsed``)
+- **Operations** — per-category ops and bandwidth (``Entries``), only when
+  usage logging is enabled on the cluster
+
+Usage Logging
+~~~~~~~~~~~~~
+
+Operation statistics in ``Entries`` require the following setting in the
+appropriate ``ceph.conf`` section, followed by an ``radosgw`` restart::
+
+  rgw enable usage log = true
+
+Without this setting, ``Entries`` is empty but ``CapacityUsed`` and storage
+fields in ``Summary`` are still returned.
 
 Syntax
 ~~~~~~
@@ -53,17 +71,48 @@ Syntax
 
 	Authorization: AWS {access-key}:{hash-of-header-and-secret}
 
+Parameters
+~~~~~~~~~~
+
++--------------+----------------------------------------------------------+---------------+------------+
+| Name         | Description                                              | Example       | Required   |
++==============+==========================================================+===============+============+
+| ``start-date`` | Start of the usage log time range (inclusive).         | ``2024-01-01``| No         |
++--------------+----------------------------------------------------------+---------------+------------+
+| ``end-date``   | End of the usage log time range.                       | ``2025-01-01``| No         |
++--------------+----------------------------------------------------------+---------------+------------+
+
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
 +----------------------------+-------------+-----------------------------------------------------------------+
 | Name                       | Type        | Description                                                     |
 +============================+=============+=================================================================+
-| ``Summary``                | Container   | Summary of total stats by user.                                 |
+| ``Entries``                | Container   | Usage log entries (ops and bandwidth per bucket, per time       |
+|                            |             | window). Empty when usage logging is disabled.                  |
 +----------------------------+-------------+-----------------------------------------------------------------+
-| ``TotalBytes``             | Integer     | Bytes used by user                                              |
+| ``Summary``                | Container   | Aggregated quota settings and total storage for the user.       |
 +----------------------------+-------------+-----------------------------------------------------------------+
-| ``TotalBytesRounded``      | Integer     | Bytes rounded to the nearest 4k boundary                        |
+| ``CapacityUsed``           | Container   | Current storage usage broken down per bucket.                   |
 +----------------------------+-------------+-----------------------------------------------------------------+
-| ``TotalEntries``           | Integer     | Total object entries                                            |
+| ``TotalBytes``             | Integer     | Total bytes used by the user across all buckets.                |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``TotalBytesRounded``      | Integer     | Total bytes rounded to the nearest 4 KiB boundary.              |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``TotalEntries``           | Integer     | Total number of object entries for the user.                    |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``Bucket``                 | String      | Bucket name (inside ``CapacityUsed``).                          |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``Bytes``                  | Integer     | Raw bytes stored in the bucket.                                 |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``Bytes_Rounded``          | Integer     | Bytes stored, rounded to the nearest 4 KiB boundary.            |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``Category``               | String      | Operation category (for example ``put_obj``, ``get_obj``,       |
+|                            |             | ``delete_obj``) inside ``Entries``.                             |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``Ops``                    | Integer     | Number of operations in the category.                           |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``BytesSent``              | Integer     | Bytes sent in response to operations.                           |
++----------------------------+-------------+-----------------------------------------------------------------+
+| ``BytesReceived``          | Integer     | Bytes received in request bodies.                               |
 +----------------------------+-------------+-----------------------------------------------------------------+
