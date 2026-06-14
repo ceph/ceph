@@ -1,3 +1,4 @@
+mod group;
 mod oidc;
 mod role;
 mod sts;

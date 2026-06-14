@@ -397,6 +397,18 @@ int DB::store_user(const DoutPrefixProvider *dpp,
   orig_info.user_id = uinfo.user_id;
   ret = get_user(dpp, string("user_id"), uinfo.user_id.id, orig_info, nullptr, &objv_tracker);
 
+  /* for account users, also check name uniqueness — IAM CreateUser
+   * generates a new user_id each time, so the user_id check above
+   * won't detect a duplicate name */
+  if (ret == -ENOENT && exclusive && !uinfo.account_id.empty()) {
+    RGWUserInfo name_check;
+    int r = get_account_user_by_name(dpp, uinfo.account_id,
+                                     uinfo.display_name, name_check);
+    if (r == 0) {
+      return -EEXIST;
+    }
+  }
+
   if (!ret && obj_ver.ver) {
     /* already exists. */
 
@@ -412,8 +424,7 @@ int DB::store_user(const DoutPrefixProvider *dpp,
     }
 
     if (exclusive) {
-      // return
-      return ret;
+      return -EEXIST;
     }
     obj_ver.ver++;
   } else {
@@ -985,8 +996,9 @@ int DB::store_group(const DoutPrefixProvider *dpp,
   if (exclusive) {
     RGWGroupInfo orig;
     rgw::sal::Attrs dummy_attrs;
-    orig.id = info.id;
-    ret = get_group(dpp, "group_id", orig, dummy_attrs);
+    orig.name = info.name;
+    orig.account_id = info.account_id;
+    ret = get_group(dpp, "name", orig, dummy_attrs);
     if (!ret) {
       return -EEXIST;
     }
