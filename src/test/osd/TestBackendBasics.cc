@@ -187,7 +187,7 @@ TEST_P(TestBackendBasics, WriteThenRead) {
   primary_listener->sent_messages_with_dest.clear();
 
   // Verify object can be read back correctly
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   // For EC backends: verify read messages were sent to shards
   if (backend_config.pool_type == EC) {
@@ -441,6 +441,9 @@ TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
 
   event_loop->unsuspend_to_osd(0);
   event_loop->run_until_idle();
+
+  // Delete object so teardown scrub doesn't verify against stale ObjectTracker state
+  delete_object(obj);
 }
 
 // Emulate a rollback operation. We use multiple objects here in an attempt
@@ -485,6 +488,10 @@ TEST_P(TestBackendBasics, RollbackInvalidateRealistic)
   // Drain: obj_b completes → rollback invalidation fires (bug: growth
   // hole lost) → obj_a's write reads survive → send_reads(0) → assert.
   event_loop->run_until_idle();
+
+  // Delete objects so teardown scrub doesn't verify against stale ObjectTracker state
+  delete_object(obj_a);
+  delete_object(obj_b);
 }
 
 // ---------------------------------------------------------------------------
@@ -885,7 +892,7 @@ TEST_P(TestBackendBasics, MultiZoneWriteThenRead) {
   primary_listener->sent_messages_with_dest.clear();
 
   // Verify object can be read back correctly across zones
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   // Verify read messages were sent to shards across zones
   primary_listener = get_primary_listener();
@@ -962,7 +969,7 @@ TEST_P(TestBackendBasics, MultiZoneFailover) {
   ASSERT_FALSE(failed_osds.contains(new_primary_listener->whoami_shard().osd));
 
   // Perform degraded read after failover and verify data integrity
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   // Verify OSDMap epoch incremented
   EXPECT_GT(new_primary_listener->osdmap->get_epoch(), 1)
@@ -1138,7 +1145,7 @@ TEST_P(TestECFailover, BasicOSDMapUpdate) {
   EXPECT_EQ(primary_listener->osdmap, new_osdmap) << "Listener OSDMap should be updated";
 
   // Verify data can still be read after OSDMap update
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 }
 
 TEST_P(TestECFailover, PrimaryFailover) {
@@ -1192,7 +1199,7 @@ TEST_P(TestECFailover, PrimaryFailover) {
     << "get_primary_backend() should return the new primary";
 
   // Verify degraded read works after failover with EC reconstruction
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   EXPECT_TRUE(new_primary_listener != nullptr) << "Primary listener should exist after failover";
   EXPECT_GT(new_primary_listener->osdmap->get_epoch(), 1)
