@@ -58,6 +58,29 @@ fn build_s3_client(access_key: &str, secret_key: &str) -> S3Client {
     S3Client::from_conf(config)
 }
 
+pub fn build_s3_client_with_session_token(
+    access_key: &str,
+    secret_key: &str,
+    session_token: &str,
+) -> S3Client {
+    let cfg = get_config();
+    let creds = Credentials::new(
+        access_key,
+        secret_key,
+        Some(session_token.to_string()),
+        None,
+        "s3tests-sts",
+    );
+    let config = aws_sdk_s3::Config::builder()
+        .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+        .endpoint_url(&cfg.default_endpoint)
+        .force_path_style(cfg.force_path_style)
+        .region(Region::new("us-east-1"))
+        .credentials_provider(creds)
+        .build();
+    S3Client::from_conf(config)
+}
+
 fn build_iam_client(access_key: &str, secret_key: &str) -> IamClient {
     let cfg = get_config();
     let creds = Credentials::new(access_key, secret_key, None, None, "s3tests");

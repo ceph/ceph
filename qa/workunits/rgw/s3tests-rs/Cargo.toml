@@ -45,7 +45,7 @@ path = "tests/test_s3/mod.rs"
 
 [[test]]
 name = "test_iam"
-path = "tests/test_iam.rs"
+path = "tests/test_iam/mod.rs"
 
 [[test]]
 name = "test_sns"

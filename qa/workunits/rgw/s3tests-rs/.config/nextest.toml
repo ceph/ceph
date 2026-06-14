@@ -58,6 +58,18 @@ default-filter = 'test(signing::)'
 [profile.stress]
 default-filter = 'test(stress::)'
 
+[profile.iam]
+default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::)'
+
+[profile.role]
+default-filter = 'test(role::)'
+
+[profile.oidc]
+default-filter = 'test(oidc::)'
+
+[profile.sts]
+default-filter = 'test(sts::)'
+
 # Composites
 [profile.basic]
 default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'

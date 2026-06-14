@@ -119,7 +119,6 @@ async fn test_put_existing_user_policy() {
         .unwrap();
 }
 
-#[ignore = "VERIFY: RGW XML element order (ResponseMetadata before Result) breaks aws-sdk-iam parser"]
 #[tokio::test]
 async fn test_list_user_policy() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -167,7 +166,6 @@ async fn test_list_user_policy_invalid_user() {
     assert_eq!(err.status, 404);
 }
 
-#[ignore = "VERIFY: RGW XML element order (ResponseMetadata before Result) breaks aws-sdk-iam parser"]
 #[tokio::test]
 async fn test_get_user_policy() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -201,7 +199,6 @@ async fn test_get_user_policy() {
         .unwrap();
 }
 
-#[ignore = "VERIFY: RGW XML element order (ResponseMetadata before Result) breaks aws-sdk-iam parser"]
 #[tokio::test]
 async fn test_get_user_policy_invalid_user() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -236,7 +233,6 @@ async fn test_get_user_policy_invalid_user() {
         .unwrap();
 }
 
-#[ignore = "VERIFY: RGW XML element order (ResponseMetadata before Result) breaks aws-sdk-iam parser"]
 #[tokio::test]
 async fn test_get_user_policy_from_multiple_policies() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -756,7 +752,6 @@ async fn test_get_deleted_user_policy() {
     assert!(result.is_err());
 }
 
-#[ignore = "VERIFY: RGW XML element order breaks aws-sdk-iam parser on GetUserPolicy"]
 #[tokio::test]
 async fn test_delete_user_policy_from_multiple_policies() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
