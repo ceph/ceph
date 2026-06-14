@@ -96,7 +96,6 @@ static const std::string HIDDEN_VERSIONS_PATH = ".versions";
 static const std::string NULL_VERSION_ID = "null";
 
 static constexpr int NSFS_VERSION_RETRIES = 5;
-static constexpr int NSFS_VERSION_DELAY_BASE_MS = 50;
 static const std::string VERSIONS_LOCKFILE = ".versions/.lock";
 
 /* version locking is now handled by FSStrategy::version_lock(),
@@ -192,16 +191,11 @@ static bool is_null_version_fd(int fd)
   return std::string_view(buf, len) == NULL_VERSION_ID;
 }
 
-static std::string nsfs_versions_dir(const std::string& parent_path)
+/* version entry name within .versions/: <leaf>_<version_id> */
+static inline std::string nsfs_ver_entry(const std::string& leaf,
+                                         const std::string& vid)
 {
-  return parent_path + "/" + HIDDEN_VERSIONS_PATH;
-}
-
-static std::string nsfs_version_path(const std::string& parent_path,
-                                     const std::string& leaf_name,
-                                     const std::string& version_id)
-{
-  return nsfs_versions_dir(parent_path) + "/" + leaf_name + "_" + version_id;
+  return leaf + "_" + vid;
 }
 
 static std::string synthesize_etag(const struct statx& stx)
@@ -4004,7 +3998,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
           parent_fd = leaf_dir->get_fd();
         }
         if (parent_fd >= 0) {
-          std::string ver_name = leaf_name + "_" + req_ver;
+          std::string ver_name = nsfs_ver_entry(leaf_name, req_ver);
           int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
                              O_RDONLY | O_DIRECTORY);
           if (vfd >= 0) {
@@ -4783,7 +4777,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
                          O_RDONLY | O_DIRECTORY);
       if (vfd >= 0) {
-        std::string ver_name = leaf_name + "_" + req_version_id;
+        std::string ver_name = nsfs_ver_entry(leaf_name, req_version_id);
         bool is_dm = false;
         int ver_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
         if (ver_fd < 0) {
@@ -4948,7 +4942,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* in suspended mode, remove any existing _null from .versions/ */
   if (!ver_enabled) {
-    std::string null_name = dm_leaf + "_" + NULL_VERSION_ID;
+    std::string null_name = nsfs_ver_entry(dm_leaf, NULL_VERSION_ID);
     ::unlinkat(vfd, null_name.c_str(), 0);
   }
 
@@ -4965,7 +4959,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       std::string cur_ver_id = cur_is_null
         ? NULL_VERSION_ID
         : nsfs_version_id_from_statx(cur_stx);
-      std::string ver_name = dm_leaf + "_" + cur_ver_id;
+      std::string ver_name = nsfs_ver_entry(dm_leaf, cur_ver_id);
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
@@ -5039,7 +5033,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     ::close(dm_fd);
 
     /* rename to final name */
-    std::string dm_name = dm_leaf + "_" + dm_ver_id;
+    std::string dm_name = nsfs_ver_entry(dm_leaf, dm_ver_id);
     ::renameat(vfd, dm_tmp.c_str(), vfd, dm_name.c_str());
 
     result.delete_marker = true;
@@ -5527,7 +5521,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         dpp, open_versions_lockfile(leaf_fd));
 
       if (!ver_enabled) {
-        std::string null_name = leaf_name + "_" + NULL_VERSION_ID;
+        std::string null_name = nsfs_ver_entry(leaf_name, NULL_VERSION_ID);
         ::unlinkat(vfd, null_name.c_str(), 0);
       }
 
@@ -5546,7 +5540,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
           std::string cur_ver_id = cur_is_null
             ? NULL_VERSION_ID
             : nsfs_version_id_from_statx(cur_stx);
-          std::string ver_name = leaf_name + "_" + cur_ver_id;
+          std::string ver_name = nsfs_ver_entry(leaf_name, cur_ver_id);
 
           SafeResult sr = driver->get_fs_strategy()->safe_link(
                                     dpp, leaf_fd, leaf_name, vfd, ver_name,
@@ -5904,7 +5898,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
         /* in suspended mode, remove any existing _null from .versions/ */
         if (!ver_enabled) {
-          std::string null_name = cur_leaf + "_" + NULL_VERSION_ID;
+          std::string null_name = nsfs_ver_entry(cur_leaf, NULL_VERSION_ID);
           ::unlinkat(vfd, null_name.c_str(), 0);
         }
 
@@ -5928,7 +5922,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
             std::string cur_ver_id = cur_is_null
               ? NULL_VERSION_ID
               : nsfs_version_id_from_statx(cur_stx);
-            std::string ver_name = cur_leaf + "_" + cur_ver_id;
+            std::string ver_name = nsfs_ver_entry(cur_leaf, cur_ver_id);
 
             SafeResult sr = driver->get_fs_strategy()->safe_link(
                                       dpp, parent_fd, cur_leaf,
