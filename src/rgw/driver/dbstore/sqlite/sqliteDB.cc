@@ -3,6 +3,7 @@
 
 #include "sqliteDB.h"
 #include "rgw_account.h"
+#include "common/iso_8601.h"
 
 using namespace std;
 
@@ -315,6 +316,8 @@ enum GetUser {
   MfaIDs,
   AssumedRoleARN,
   UserAccountID,
+  UserPath,
+  UserCreateDate,
   UserAttrs,
   UserVersion,
   UserVersionTag,
@@ -622,6 +625,17 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   {
     const char *acct = (const char*)sqlite3_column_text(stmt, UserAccountID);
     if (acct) op.user.uinfo.account_id = acct;
+  }
+  {
+    const char *p = (const char*)sqlite3_column_text(stmt, UserPath);
+    if (p) op.user.uinfo.path = p;
+  }
+  {
+    const char *cd = (const char*)sqlite3_column_text(stmt, UserCreateDate);
+    if (cd) {
+      auto tp = ceph::from_iso_8601(cd, false);
+      if (tp) op.user.uinfo.create_date = *tp;
+    }
   }
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, UserAttrs, op.user.user_attrs, sdb);
@@ -2498,6 +2512,15 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.account_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.account_id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.path, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.path.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.create_date, sdb);
+  {
+    auto cd_str = ceph::to_iso_8601(params->op.user.uinfo.create_date);
+    SQL_BIND_TEXT(dpp, stmt, index, cd_str.c_str(), sdb);
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);
