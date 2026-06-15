@@ -99,6 +99,49 @@ export class CephfsMirroringListComponent implements OnInit {
     this.isAddPathOpen = false;
   }
 
+  openAddPath() {
+    const selected = this.selection.first();
+    if (selected) {
+      this.addPathFsName = selected.local_fs_name;
+      this.addPathFsId = selected.filesystem_id ?? 0;
+      this.addPathDestCluster =
+        selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
+      this.addPathDestFs = selected.fs_name !== '-' ? selected.fs_name : '';
+      this.isAddPathOpen = true;
+    }
+  }
+
+  onPathsAdded(_paths: string[]) {
+    this.isAddPathOpen = false;
+    this.loadDaemonStatus();
+  }
+
+  closeAddPathTearsheet() {
+    this.isAddPathOpen = false;
+  }
+
+  disableMirroring() {
+    const selected = this.selection.first();
+    if (selected) {
+      const fsName = selected.local_fs_name;
+      this.cephfsService.disableMirror(fsName).subscribe({
+        next: () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Mirroring disabled for filesystem '${fsName}'`
+          );
+          this.loadDaemonStatus();
+        },
+        error: () => {
+          this.notificationService.show(
+            NotificationType.error,
+            $localize`Failed to disable mirroring for filesystem '${fsName}'`
+          );
+        }
+      });
+    }
+  }
+
   private buildRows(daemons: Daemon[]): MirroringRow[] {
     const rows: MirroringRow[] = [];
     if (!daemons?.length) {

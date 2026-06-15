@@ -79,6 +79,11 @@ import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
 import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
 import FolderIcon16 from '@carbon/icons/es/folder/16';
+import {
+  CephfsAddMirroringPathComponent,
+  MirroringPathsStepComponent,
+  MirroringScheduleStepComponent,
+} from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
 
 @NgModule({
   imports: [
