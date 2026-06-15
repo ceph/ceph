@@ -18,6 +18,10 @@
 
 RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
+# Route dout/derr log lines off stderr so async cluster logs (e.g. "ERROR:
+# obj.oid is empty") can't interleave mid-line with the cerr messages we grep.
+# Consumed by rgw_global_init, never seen by CLI11 (app.parse reads argv).
+export CEPH_ARGS="--log-to-stderr=false${CEPH_ARGS:+ ${CEPH_ARGS}}"
 PASS=0
 FAIL=0
 SKIP=0
@@ -738,6 +742,35 @@ check_warns "check: --tenant before bucket"                 22 "ERROR: --tenant 
   --tenant foo bucket check
 check_warns "check: duplicate --fix"                        0 "" "$WARN_FIX_DUP" -- \
   bucket check --fix --fix
+
+# binary-flag backward-compat (--fix pilot, add_multilevel_binary_flag).
+# All forms resolve to a bool and exit 0; with no --bucket the check is a silent
+# no-op, so these assert PARSE-level handling (value consumed vs left as a stray,
+# and the warn-and-accept warning). A real stray like "zzz" gives exit 22
+# "unexpected argument", so exit 0 here means the token was consumed by --fix.
+check "check: --fix (bare)"                                 0 "" \
+  bucket check --fix
+check "check: --fix=true"                                   0 "" \
+  bucket check --fix=true
+check "check: --fix true (space, bool consumed)"            0 "" \
+  bucket check --fix true
+check "check: --fix=false"                                  0 "" \
+  bucket check --fix=false
+check "check: --fix false (space, bool consumed)"           0 "" \
+  bucket check --fix false
+# invalid value: warn-and-accept -> treated as set, exit 0 (legacy stored a
+# truthy -EINVAL silently; we keep the truthy result and add a warning).
+check "check: --fix=banana (warn-and-accept)"               0 "Warning: invalid value 'banana' for --fix, treating as set" \
+  bucket check --fix=banana
+# "--fix banana" (space + non-bool) DIVERGES from legacy, which left banana as a
+# stray (exit 1); expected(0,1) consumes it, so it matches the "=banana" form.
+check "check: --fix banana (space non-bool, warn-accept)"   0 "Warning: invalid value 'banana' for --fix, treating as set" \
+  bucket check --fix banana
+# parse-safety on an UNMIGRATED command: must not throw (old add_flag(int) gave
+# exit 104). Legacy ignores --fix here; we stay exit 0. (A spurious warning is
+# printed for an invalid value only -- known minor divergence, exit code right.)
+check "gc list --fix=banana (unmigrated stays parse-safe)"  0 "" \
+  gc list --fix=banana
 
 # check multi-warning combinations
 check_warns "check: --fix + --remove-bad before (2 pos warnings)"       0 "" \
