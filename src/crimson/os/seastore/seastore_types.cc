@@ -952,7 +952,8 @@ ceph::bufferlist encode_record(
 ceph::bufferlist encode_records(
   record_group_t& record_group,
   const journal_seq_t& committed_to,
-  segment_nonce_t current_segment_nonce)
+  segment_nonce_t current_segment_nonce,
+  ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer)
 {
   assert(record_group.size.record_type < record_type_t::MAX);
   assert(record_group.size.block_size > 0);
@@ -976,6 +977,15 @@ ceph::bufferlist encode_records(
   }
   // JOURNAL
   bufferlist bl;
+  // Encode metadata in place into a DMA-passthrough buffer (sized to the
+  // aligned mdlength) so the SPDK writev path hands it to the device with zero
+  // coalescing copy. The data extents are claim_append'd below as their own
+  // (already DMA) segments. No-op when md_buffer is null (heap path).
+  if (md_buffer) {
+    bl.append_buffer(std::move(md_buffer));
+    assert(bl.get_append_buffer_unused_tail_length() ==
+           record_group.size.get_mdlength());
+  }
   record_group_header_t header{
     static_cast<extent_len_t>(record_group.records.size()),
     record_group.size.get_mdlength(),

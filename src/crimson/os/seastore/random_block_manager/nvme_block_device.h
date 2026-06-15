@@ -58,6 +58,13 @@ public:
     return driver ? driver->alloc_io_buffer(len) : ceph::buffer::create_page_aligned(len);
   }
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_journal_md_buffer(
+    size_t len) final {
+    return (driver && driver->dma_passthrough())
+      ? driver->alloc_io_buffer(len)
+      : nullptr;
+  }
+
   open_ertr::future<> open(
     const std::string &in_path,
     seastar::open_flags mode) override;
