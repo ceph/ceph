@@ -34,7 +34,13 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
-import { CephServiceSpec, QatOptions, QatSepcs } from '~/app/shared/models/service.interface';
+import {
+  CephServiceCertificate,
+  CephServiceSpec,
+  CertificateType,
+  QatOptions,
+  QatSepcs
+} from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
@@ -115,6 +121,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ];
   open: boolean = false;
   hostsAndLabels$: Observable<{ hosts: { content: string }[]; labels: { content: string }[] }>;
+  currentCertificate: CephServiceCertificate = null;
+  currentSpecCertificateSource: string = null;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -1051,7 +1059,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
-         this.updateRgwControlStates();
+        this.updateRgwControlStates();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1060,7 +1068,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
-         this.updateRgwControlStates();
+        this.updateRgwControlStates();
       }
     );
   }
@@ -1122,7 +1130,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
   }
 
-  private updateGrafanaPasswordControlState(serviceType = this.serviceForm?.get('service_type')?.value): void {
+  private updateGrafanaPasswordControlState(
+    serviceType = this.serviceForm?.get('service_type')?.value
+  ): void {
     this.toggleFormControlState(
       'grafana_admin_password',
       this.editing && serviceType === 'grafana'

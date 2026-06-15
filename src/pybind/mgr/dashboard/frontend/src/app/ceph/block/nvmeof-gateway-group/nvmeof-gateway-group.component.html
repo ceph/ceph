@@ -10,7 +10,8 @@
           [showEditButton]="true"
           [editButtonLabel]="actionLabels.EDIT"
           [columns]="4"
-          (editClicked)="editSelectedGatewayGroup()">
+          (editClicked)="editSelectedGatewayGroup()"
+        >
         </cd-details-card>
       </ng-container>
 
@@ -26,12 +27,14 @@
         emptyStateTitle="No gateway group created"
         i18n-emptyStateTitle
         emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
-        i18n-emptyStateMessage>
+        i18n-emptyStateMessage
+      >
         <div class="table-actions">
           <cd-table-actions
             [permission]="permission"
             [selection]="selection"
-            [tableActions]="tableActions">
+            [tableActions]="tableActions"
+          >
           </cd-table-actions>
         </div>
       </cd-table>
