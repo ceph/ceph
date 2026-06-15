@@ -60,6 +60,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   showMultiLineText = false; // If true, the value field will use a template that supports multi line text
   @Input()
   multilineTextKeys: string[]; // If set, the value field will use a template that supports multi line text for this key
+  @Input()
+  preserveOrder = false;
 
   // If set, the classAddingTpl is used to enable different css for different values
   @Input()
@@ -139,7 +141,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
         return item;
       })
       .filter((i) => i.value !== null);
-    return _.sortBy(this.renderObjects ? this.insertFlattenObjects(result) : result, 'key');
+    const processed = this.renderObjects ? this.insertFlattenObjects(result) : result;
+    return this.preserveOrder ? processed : _.sortBy(processed, 'key');
   }
 
   private makePairsFromArray(data: any[]): KeyValueItem[] {
