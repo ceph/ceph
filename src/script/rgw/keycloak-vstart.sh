@@ -159,7 +159,7 @@ TOKEN=$(curl -sf -X POST \
 echo "==> extracting thumbprint"
 CERT=$(curl -sf \
 	"http://localhost:${KC_PORT}/realms/${KC_REALM}/protocol/openid-connect/certs" | \
-	jq -r '.keys[0].x5c[0]')
+	jq -r '.keys[] | select(.use=="sig") | .x5c[0]')
 
 THUMBPRINT=$(echo "$CERT" | base64 -d | \
 	openssl x509 -inform DER -fingerprint -sha1 -noout 2>/dev/null | \
@@ -181,17 +181,9 @@ AZP=$(echo "$INTROSPECT" | jq -r '.azp // empty')
 
 echo "    aud=$AUD sub=$SUB azp=$AZP"
 
-# --- create OIDC provider in RGW ---
-
-OIDC_URL="http://localhost:${KC_PORT}/realms/${KC_REALM}"
-echo "==> creating OIDC provider: $OIDC_URL"
-"$BUILD_DIR/bin/radosgw-admin" oidc-provider create \
-	--provider-url "$OIDC_URL" \
-	--client-id "$KC_CLIENT" \
-	--thumbprint "$THUMBPRINT" \
-	-c "$CONF" > /dev/null 2>&1 || true
-
 # --- write [webidentity] to s3tests.conf ---
+# Note: the OIDC provider in RGW is created by the test itself via
+# the IAM CreateOpenIDConnectProvider API, not by radosgw-admin.
 
 echo "==> writing [webidentity] to $S3CONF"
 
@@ -215,6 +207,6 @@ EOF
 echo ""
 echo "==> Keycloak ready on port ${KC_PORT}"
 echo "    realm=${KC_REALM} client=${KC_CLIENT} user=${KC_USER}"
-echo "    OIDC URL: ${OIDC_URL}"
+echo "    OIDC URL: http://localhost:${KC_PORT}/realms/${KC_REALM}"
 echo ""
 echo "To stop: $0 --stop"
