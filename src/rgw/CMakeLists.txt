@@ -111,6 +111,8 @@ set(librgw_common_srcs
   rgw_rest_s3.cc
   rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
+  rgw_rest_user_policy.cc
+  rgw_rest_user.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
   rgw_role.cc
@@ -129,7 +131,6 @@ set(librgw_common_srcs
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
   rgw_iam_managed_policy.cc
-  rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
   rgw_rest_sts.cc

@@ -702,7 +702,7 @@ public:
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
-  virtual void register_admin_apis(RGWRESTMgr* mgr) override {}
+  virtual void register_admin_apis(RGWRESTMgr* mgr) override;
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }

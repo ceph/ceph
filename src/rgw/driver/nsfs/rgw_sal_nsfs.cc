@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_nsfs.h"
+#include "rgw_rest_user.h"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -6111,6 +6112,12 @@ std::unique_ptr<LCSerializer> NSFSLifecycle::get_serializer(const std::string& l
                                                             const std::string& cookie)
 {
   return std::make_unique<LCNSFSSerializer>(driver, oid, lock_name, cookie);
+}
+
+void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("user", new RGWRESTMgr_User);
+  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
 }
 
 } } // namespace rgw::sal
