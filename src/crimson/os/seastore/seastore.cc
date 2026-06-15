@@ -79,18 +79,6 @@ namespace crimson::os::seastore {
 using crimson::os::seastore::omap_manager::BtreeOMapManager;
 using crimson::os::seastore::log_manager::LogManager;
 
-static OMapManager::initialize_omap_ret
-omaptree_initialize(
-  Transaction& t,
-  BtreeOMapManager& mgr,
-  omap_type_t type,
-  Onode& onode,
-  Device& device)
-{
-  return mgr.initialize_omap(
-    t, onode.get_metadata_hint(device.get_block_size()), type);
-}
-
 class FileMDStore final : public SeaStore::MDStore {
   std::string root;
 public:

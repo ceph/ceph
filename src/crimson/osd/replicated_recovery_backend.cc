@@ -730,11 +730,6 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
   }));
 }
 
-static std::optional<std::string> nullopt_if_empty(const std::string& s)
-{
-  return s.empty() ? std::nullopt : std::make_optional(s);
-}
-
 static bool is_too_many_entries_per_chunk(const PushOp* push_op)
 {
   const uint64_t entries_per_chunk =
