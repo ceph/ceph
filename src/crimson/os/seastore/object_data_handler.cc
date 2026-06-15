@@ -1442,7 +1442,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
   context_t ctx, object_data_t &object_data, extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
-  DEBUGT("0x{:x}~0x{:x}, 0x{:x}",
+  DEBUGT("{}~0x{:x}, 0x{:x}",
     ctx.t, object_data.get_reserved_data_base(),
     object_data.get_reserved_data_len(), size);
   ceph_assert(!object_data.is_null());
