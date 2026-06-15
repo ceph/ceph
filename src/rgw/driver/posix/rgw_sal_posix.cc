@@ -17,6 +17,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
+#include "rgw_s3_filter.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
@@ -2399,11 +2400,13 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
 			      const std::string* object_name)
 {
   rgw::notify::EventTypeList event_types = {event_type};
-  return std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
+  auto notif = std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
       s->bucket.get(),
       to_string(s->owner.id),
       s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
       s->req_id);
+  notif->x_meta_map = s->info.x_meta_map;
+  return notif;
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(
@@ -2966,16 +2969,42 @@ int POSIXNotification::publish_reserve(const DoutPrefixProvider *dpp,
     return ret;
   }
 
+  const std::string obj_name = obj ? obj->get_name() : "";
+
   for (auto& [name, filter] : bucket_topics.topics) {
+    bool event_match = false;
     for (auto req_type : event_types) {
       for (auto cfg_type : filter.events) {
 	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
-	  matched.push_back(filter);
-	  goto next_topic;
+	  event_match = true;
+	  break;
 	}
       }
+      if (event_match) break;
     }
-    next_topic:;
+    if (!event_match) continue;
+
+    if (!match(filter.s3_filter.key_filter, obj_name)) {
+      continue;
+    }
+
+    if (!filter.s3_filter.metadata_filter.kv.empty()) {
+      if (!match(filter.s3_filter.metadata_filter, x_meta_map)) {
+	continue;
+      }
+    }
+
+    if (!filter.s3_filter.tag_filter.kv.empty()) {
+      KeyMultiValueMap tags;
+      if (obj_tags) {
+	tags = obj_tags->get_tags();
+      }
+      if (!match(filter.s3_filter.tag_filter, tags)) {
+	continue;
+      }
+    }
+
+    matched.push_back(filter);
   }
 
   return 0;

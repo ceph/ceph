@@ -757,6 +757,8 @@ protected:
   rgw_pubsub_bucket_topics bucket_topics;
   std::vector<rgw_pubsub_topic_filter> matched;
   RGWObjTags* obj_tags_ptr = nullptr;
+  KeyValueMap x_meta_map;
+  friend class NSFSDriver;
 public:
  NSFSNotification(NSFSDriver* _driver,
 		   Object* _obj,
