@@ -39,6 +39,7 @@ import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mir
 import { CephfsMirroringFsSchedulesComponent } from './cephfs-mirroring-fs-schedules/cephfs-mirroring-fs-schedules.component';
 import { CephfsGenerateTokenComponent } from './cephfs-generate-token/cephfs-generate-token.component';
 import { CephfsDownloadTokenComponent } from './cephfs-download-token/cephfs-download-token.component';
+import { CephfsSetupMirroringComponent } from './cephfs-setup-mirroring/cephfs-setup-mirroring.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -140,7 +141,8 @@ import ShareIcon24 from '@carbon/icons/es/share/24';
     CephfsMirroringFsMirrorPathsComponent,
     CephfsMirroringFsSchedulesComponent,
     CephfsGenerateTokenComponent,
-    CephfsDownloadTokenComponent
+    CephfsDownloadTokenComponent,
+    CephfsSetupMirroringComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })

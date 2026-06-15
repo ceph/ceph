@@ -4,7 +4,7 @@ import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { Observable } from 'rxjs';
 
-import { cdEncode } from '../decorators/cd-encode';
+import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import { Daemon } from '../models/cephfs.model';
@@ -132,7 +132,7 @@ export class CephfsService {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
 
-  enableMirror(fsName: string): Observable<any> {
+  enableMirror(@cdEncodeNot fsName: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror/enable`, {
       fs_name: fsName
     });
@@ -143,6 +143,13 @@ export class CephfsService {
       fs_name: fsName,
       client_name: clientName,
       site_name: siteName
+    });
+  }
+
+  createBootstrapPeer(@cdEncodeNot fsName: string, @cdEncodeNot token: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror`, {
+      fs_name: fsName,
+      token: token
     });
   }
 }
