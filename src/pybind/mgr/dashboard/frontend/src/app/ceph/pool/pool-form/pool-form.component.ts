@@ -57,6 +57,11 @@ interface MonitorResponse {
   };
 }
 
+interface EcpDetailField {
+  label: string;
+  plugins?: string[];
+}
+
 @Component({
   selector: 'cd-pool-form',
   templateUrl: './pool-form.component.html',
@@ -64,6 +69,20 @@ interface MonitorResponse {
 })
 export class PoolFormComponent extends CdForm implements OnInit {
   private static readonly DEFAULT_RULE_NAME = 'replicated_rule';
+  private static readonly ECP_DETAIL_FIELDS = new Map<string, EcpDetailField>([
+    ['plugin', { label: $localize`Plugin` }],
+    ['k', { label: $localize`Data chunks (k)` }],
+    ['m', { label: $localize`Coding chunks (m)` }],
+    ['c', { label: $localize`Durability estimator (c)`, plugins: ['shec'] }],
+    ['d', { label: $localize`Helper chunks (d)`, plugins: ['clay'] }],
+    ['l', { label: $localize`Locality (l)`, plugins: ['lrc'] }],
+    ['crush-failure-domain', { label: $localize`Crush failure domain` }],
+    ['crush-num-failure-domains', { label: $localize`Crush num failure domain` }],
+    ['crush-osds-per-failure-domain', { label: $localize`Crush osds per failure domain` }],
+    ['crush-locality', { label: $localize`Crush locality`, plugins: ['lrc'] }],
+    ['scalar_mds', { label: $localize`Scalar mds`, plugins: ['clay'] }],
+    ['crush-device-class', { label: $localize`Crush device class` }]
+  ]);
 
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
@@ -253,10 +272,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.initEcp(info.erasure_code_profiles);
   }
 
-  private initEcp(ecProfiles: ErasureCodeProfile[]) {
-    this.setListControlStatus('erasureProfile', ecProfiles);
-    this.ecProfiles = ecProfiles;
-    this.erasureProfileChange();
+  private initEcp(ecProfiles: ErasureCodeProfile[], selectedName?: string) {
+    this.ecProfiles = [...ecProfiles];
+    this.setListControlStatus('erasureProfile', ecProfiles, selectedName);
+    this.erasureProfileChange(selectedName);
   }
 
   /**
@@ -267,12 +286,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
    * If more than one rule or profile exists the listing will be enabled,
    * otherwise disabled.
    */
-  private setListControlStatus(controlName: string, arr: any[]) {
+  private setListControlStatus(controlName: string, arr: any[], selectedName?: string) {
     const control = this.form.get(controlName);
     const value = control.value;
 
     if (controlName === 'erasureProfile') {
-      if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
+      if (selectedName && arr.some((profile) => profile.name === selectedName)) {
+        control.setValue(selectedName);
+      } else if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
         control.setValue(arr[0].name);
       } else if (arr.length === 0 && value) {
         control.setValue(null);
@@ -710,14 +731,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   addErasureCodeProfile() {
-    this.addModal(ErasureCodeProfileFormModalComponent, (name) => this.reloadECPs(name));
+    this.addModal(ErasureCodeProfileFormModalComponent, (profile: ErasureCodeProfile) =>
+      this.reloadECPs(profile)
+    );
   }
 
-  private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
+  private addModal(modalComponent: Type<any>, reload: (item: any) => void) {
     this.hideOpenTooltips();
     const modalRef = this.modalService.show(modalComponent);
     modalRef.submitAction.subscribe((item: any) => {
-      reload(item.name);
+      reload(item);
     });
   }
 
@@ -726,15 +749,43 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.data.erasureInfo = false;
   }
 
-  private reloadECPs(profileName?: string) {
+  private reloadECPs(profileOrName?: ErasureCodeProfile | string) {
+    const profileName = typeof profileOrName === 'string' ? profileOrName : profileOrName?.name;
+    const createdProfile = typeof profileOrName === 'object' ? profileOrName : undefined;
+
+    if (createdProfile) {
+      this.applyCreatedEcp(createdProfile);
+    }
+
     this.reloadList({
       newItemName: profileName,
       getInfo: () => this.ecpService.list(),
-      initInfo: (profiles) => this.initEcp(profiles),
-      findNewItem: () => this.ecProfiles.find((p: ErasureCodeProfile) => p.name === profileName),
+      initInfo: (profiles: ErasureCodeProfile[]) => {
+        if (createdProfile && !profiles.some((profile) => profile.name === createdProfile.name)) {
+          profiles = [...profiles, createdProfile];
+        }
+        this.initEcp(profiles, profileName);
+      },
+      findNewItem: () =>
+        this.ecProfiles.find((profile: ErasureCodeProfile) => profile.name === profileName) ||
+        createdProfile,
       controlName: 'erasureProfile',
       nameAttribute: 'name'
     });
+  }
+
+  private applyCreatedEcp(profile: ErasureCodeProfile) {
+    let profiles = [...(this.ecProfiles || [])];
+    if (!profiles.some((existing) => existing.name === profile.name)) {
+      profiles = [...profiles, profile];
+    }
+    this.ecProfiles = profiles;
+
+    const control = this.form.get('erasureProfile');
+    control?.enable({ emitEvent: false });
+    control?.setValue(profile.name, { emitEvent: true });
+    this.erasureProfileChange(profile.name);
+    this.cdr.detectChanges();
   }
 
   private reloadList({
@@ -743,7 +794,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     initInfo,
     findNewItem,
     controlName,
-    nameAttribute
+    nameAttribute,
+    afterSelect
   }: {
     newItemName: string;
     getInfo: () => Observable<any>;
@@ -751,6 +803,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     findNewItem: () => any;
     controlName: string;
     nameAttribute?: string;
+    afterSelect?: (value: any) => void;
   }) {
     if (this.modalSubscription) {
       this.modalSubscription.unsubscribe();
@@ -758,13 +811,18 @@ export class PoolFormComponent extends CdForm implements OnInit {
     getInfo().subscribe((items: any) => {
       initInfo(items);
       if (!newItemName) {
+        this.cdr.detectChanges();
         return;
       }
       const item = findNewItem();
       if (item) {
+        const control = this.form.get(controlName);
         const value = nameAttribute ? item[nameAttribute] : item;
-        this.form.get(controlName)?.setValue(value);
+        control?.enable({ emitEvent: false });
+        control?.setValue(value, { emitEvent: true });
+        afterSelect?.(value);
       }
+      this.cdr.detectChanges();
     });
   }
 
@@ -838,7 +896,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   addCrushRule() {
-    this.addModal(CrushRuleFormModalComponent, (name) => this.reloadCrushRules(name));
+    this.addModal(CrushRuleFormModalComponent, (item) => this.reloadCrushRules(item.name));
   }
 
   private reloadCrushRules(ruleName?: string) {
@@ -1091,6 +1149,44 @@ export class PoolFormComponent extends CdForm implements OnInit {
   appSelection(events: SelectOption[]) {
     this.data.applications.selected = events.map((e: SelectOption) => e.name);
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
+  }
+
+  getEcpProfileDetails(): [string, any][] {
+    if (!this.selectedEcp) {
+      return [];
+    }
+    const plugin = this.selectedEcp.plugin;
+    const details: [string, any][] = [];
+
+    PoolFormComponent.ECP_DETAIL_FIELDS.forEach(({ label, plugins }, key) => {
+      if (!this.isEcpDetailFieldEligible(plugins, plugin)) {
+        return;
+      }
+      const value = this.selectedEcp[key];
+      if (!this.isEcpDetailValueVisible(key, value)) {
+        return;
+      }
+      details.push([label, value]);
+    });
+
+    return details;
+  }
+
+  private isEcpDetailFieldEligible(plugins: string[] | undefined, plugin: string): boolean {
+    return !plugins || plugins.includes(plugin);
+  }
+
+  private isEcpDetailValueVisible(key: string, value: any): boolean {
+    if (value === undefined || value === null || value === '') {
+      return false;
+    }
+    if (
+      (key === 'crush-num-failure-domains' || key === 'crush-osds-per-failure-domain') &&
+      value === 0
+    ) {
+      return false;
+    }
+    return true;
   }
 
   erasureProfileChange(selectedName?: string) {
