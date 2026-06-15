@@ -502,7 +502,7 @@ if(WITH_CRIMSON)
   target_compile_options(seastar
   PUBLIC
     # required by any target that links to seastar
-    "-Wno-non-virtual-dtor"
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>"
   PRIVATE
     "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
