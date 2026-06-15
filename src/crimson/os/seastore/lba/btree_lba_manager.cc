@@ -1173,7 +1173,8 @@ void BtreeLBAManager::update_paddr_sync(
       cursor->get_refcount(),
       cursor->get_checksum(),
       cursor->get_extent_type()},
-    nullptr);
+    nullptr,
+    modification_t::TRANS_SYNC);
 }
 
 BtreeLBAManager::move_mapping_ret

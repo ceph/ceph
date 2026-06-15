@@ -141,7 +141,8 @@ struct LBALeafNode
 
   void update(
     internal_const_iterator_t iter,
-    lba_map_val_t val) final;
+    lba_map_val_t val,
+    modification_t mod) final;
 
   internal_const_iterator_t insert(
     internal_const_iterator_t iter,
