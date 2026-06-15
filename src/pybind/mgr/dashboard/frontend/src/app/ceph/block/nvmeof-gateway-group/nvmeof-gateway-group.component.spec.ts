@@ -1,12 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group.component';
-import { GridModule, TabsModule } from 'carbon-components-angular';
+import { GridModule, TabsModule, ModalModule } from 'carbon-components-angular';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { of } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideToastr } from 'ngx-toastr';
+import { Router } from '@angular/router';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
 
 describe('NvmeofGatewayGroupComponent', () => {
   let component: NvmeofGatewayGroupComponent;
@@ -20,13 +25,22 @@ describe('NvmeofGatewayGroupComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientModule, SharedModule, TabsModule, GridModule],
+      imports: [HttpClientModule, SharedModule, TabsModule, GridModule, ModalModule],
       declarations: [NvmeofGatewayGroupComponent],
       providers: [
         provideAnimations(),
         provideToastr(),
-        { provide: NvmeofService, useValue: nvmeofServiceSpy }
-      ]
+        { provide: NvmeofService, useValue: nvmeofServiceSpy },
+        {
+          provide: Router,
+          useValue: { navigate: jest.fn() }
+        },
+        {
+          provide: ModalCdsService,
+          useValue: { show: jest.fn() }
+        }
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
@@ -246,6 +260,46 @@ describe('NvmeofGatewayGroupComponent', () => {
     component.gatewayGroup$.subscribe((data) => {
       expect(data).toEqual(mockData);
       done();
+    });
+  });
+
+  describe('Delete Flow with/without Subsystems', () => {
+    let mockGroup: any;
+
+    beforeEach(() => {
+      mockGroup = {
+        service_name: 'nvmeof.rbd.default',
+        spec: { group: 'default' },
+        subSystemCount: 0
+      };
+      component.selection.first = jest.fn().mockReturnValue(mockGroup);
+    });
+
+    it('should show can-not-delete modal if subsystems exist', () => {
+      const mockSubsystems = [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }];
+      nvmeofService.listSubsystems.mockReturnValue(of(mockSubsystems));
+      const modalService = TestBed.inject(ModalCdsService);
+
+      component.deleteGatewayGroupModal();
+
+      expect(nvmeofService.listSubsystems).toHaveBeenCalledWith('default');
+      expect(modalService.show).toHaveBeenCalledWith(NvmeofGatewayGroupDeleteGuardModalComponent, {
+        gatewayName: 'default',
+        connectedSubsystems: [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }]
+      });
+    });
+
+    it('should show delete confirmation modal if no subsystems exist', () => {
+      nvmeofService.listSubsystems.mockReturnValue(of([]));
+      const modalService = TestBed.inject(ModalCdsService);
+
+      component.deleteGatewayGroupModal();
+
+      expect(nvmeofService.listSubsystems).toHaveBeenCalledWith('default');
+      expect(modalService.show).toHaveBeenCalledWith(
+        DeleteConfirmationModalComponent,
+        expect.any(Object)
+      );
     });
   });
 });
