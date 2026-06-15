@@ -4082,6 +4082,35 @@ int main(int argc, const char **argv)
         argv[new_argc++] = argv[i];
     }
 
+    // Transitional: the bucket subtree is half-migrated. Route the command to
+    // CLI11 or the legacy parser by the first recognized word after "bucket".
+    // Flags and their values are skipped (only command words are matched).
+    // TODO: remove this block and the !route_bucket_to_legacy guard below once
+    // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
+    static const std::set<std::string_view> migrated_bucket_leaves = {
+        "list", "stats", "link", "unlink", "check", "rm", "remove"};
+    static const std::set<std::string_view> legacy_bucket_words = {
+        "limit", "layout", "sync", "rewrite", "reshard", "set-min-shards",
+        "chown", "radoslist", "rados", "shard", "object", "resync", "logging"};
+    bool route_bucket_to_legacy = false;
+    if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
+      for (int i = 1; i < new_argc; ++i) {
+        if (std::string_view(argv[i]) != "bucket" &&
+            std::string_view(argv[i]) != "buckets") {
+          continue;
+        }
+        for (int j = i + 1; j < new_argc; ++j) {
+          std::string_view word(argv[j]);
+          if (migrated_bucket_leaves.count(word)) break;
+          if (legacy_bucket_words.count(word)) {
+            route_bucket_to_legacy = true;
+            break;
+          }
+        }
+        break;
+      }
+    }
+
     CLI::App app{"radosgw-admin"};
     // TODO: keep while CLI11 and legacy parsing coexist. After full migration,
     // decide whether to preserve legacy acceptance of known-but-irrelevant
@@ -4576,43 +4605,47 @@ int main(int argc, const char **argv)
       });
     } // bucket command registrations
 
-    // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
-    try {
-      app.parse(new_argc, argv);
-    } catch (const CLI::RuntimeError& e) {
-      // If --cli11-help was requested, a callback may have thrown RuntimeError
-      // because required options were missing. Show help instead of the error.
+    // Skip CLI11 for legacy-owned commands so it can't reject them or mis-match
+    // a later migrated leaf; the legacy find_command path below handles them.
+    if (!route_bucket_to_legacy) {
+      // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
+      try {
+        app.parse(new_argc, argv);
+      } catch (const CLI::RuntimeError& e) {
+        // If --cli11-help was requested, a callback may have thrown RuntimeError
+        // because required options were missing. Show help instead of the error.
+        if (show_cli11_help) {
+          cout << app.help();
+          return 0;
+        }
+        warn_wrong_position(&app);  // RuntimeError exits before reaching the success-path calls below
+        warn_duplicates(&app);
+        return e.get_exit_code();
+      } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+      }
+
+      // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
       if (show_cli11_help) {
         cout << app.help();
         return 0;
       }
-      warn_wrong_position(&app);  // RuntimeError exits before reaching the success-path calls below
-      warn_duplicates(&app);
-      return e.get_exit_code();
-    } catch (const CLI::ParseError& e) {
-      return app.exit(e);
-    }
 
-    // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
-    if (show_cli11_help) {
-      cout << app.help();
-      return 0;
-    }
+      // Any parsed CLI11 command will appear as a subcommand of app.
+      cli11_parsed = !app.get_subcommands().empty();
+      if (cli11_parsed) {
+        warn_wrong_position(&app);
+        warn_duplicates(&app);
 
-    // Any parsed CLI11 command will appear as a subcommand of app.
-    cli11_parsed = !app.get_subcommands().empty();
-    if (cli11_parsed) {
-      warn_wrong_position(&app);
-      warn_duplicates(&app);
-
-      // Reject stray positional args for any CLI11-parsed command.
-      // With allow_extras() on root, CLI11 ignores unknown args — this check
-      // catches them manually. TODO: remove once allow_extras() is gone (at
-      // that point CLI11 itself rejects unknown arguments).
-      for (const auto& arg : app.remaining(true)) {
-        if (!arg.empty() && arg[0] != '-') {
-          cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
-          return EINVAL;
+        // Reject stray positional args for any CLI11-parsed command.
+        // With allow_extras() on root, CLI11 ignores unknown args — this check
+        // catches them manually. TODO: remove once allow_extras() is gone (at
+        // that point CLI11 itself rejects unknown arguments).
+        for (const auto& arg : app.remaining(true)) {
+          if (!arg.empty() && arg[0] != '-') {
+            cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
+            return EINVAL;
+          }
         }
       }
     }
