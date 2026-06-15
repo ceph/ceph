@@ -17,6 +17,12 @@
 
 set -euo pipefail
 
+# rootless podman needs the systemd user bus; some sessions (screen, tmux,
+# ssh without ForwardAgent) inherit a stale DBUS_SESSION_BUS_ADDRESS
+if [[ -S "/run/user/$(id -u)/bus" ]]; then
+	export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+fi
+
 KC_PORT=8080
 KC_REALM=demorealm
 KC_CLIENT=my_client
@@ -29,13 +35,19 @@ KC_IMAGE=quay.io/keycloak/keycloak:24.0
 
 BUILD_DIR="$(pwd)"
 CONF="$BUILD_DIR/ceph.conf"
-S3CONF="${S3TEST_CONF:-$HOME/dev/s3tests.conf}"
+S3CONF="${S3TEST_CONF:-$BUILD_DIR/s3tests.conf}"
 
 if [[ "${1:-}" == "--stop" ]]; then
 	echo "==> stopping Keycloak container"
 	podman stop "$KC_CONTAINER" 2>/dev/null || true
 	podman rm "$KC_CONTAINER" 2>/dev/null || true
 	exit 0
+fi
+
+if [[ ! -f "$S3CONF" ]]; then
+	echo "error: $S3CONF not found" >&2
+	echo "Run rgw-vstart.sh first, or set S3TEST_CONF to your config file." >&2
+	exit 1
 fi
 
 for cmd in podman jq openssl curl; do
