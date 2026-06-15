@@ -2256,6 +2256,10 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
 
+  if (!RGWPubSubEndpoint::init_all(cct)) {
+    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+  }
+
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
 }
