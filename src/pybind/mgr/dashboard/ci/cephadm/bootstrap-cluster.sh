@@ -20,7 +20,7 @@ else
   mon_ip=$(ip -4 addr show ens3 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
 fi
 
-bootstrap_extra_options='--allow-fqdn-hostname --dashboard-password-noupdate'
+bootstrap_extra_options='--allow-fqdn-hostname --dashboard-password-noupdate --allow-mismatched-release'
 
 # commenting the below lines. Uncomment it when any extra options are
 # needed for the bootstrap.

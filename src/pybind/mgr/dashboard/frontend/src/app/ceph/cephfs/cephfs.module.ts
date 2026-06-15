@@ -71,10 +71,17 @@ import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
 import Renew16 from '@carbon/icons/es/renew/16';
+import TrashIcon16 from '@carbon/icons/es/trash-can/16';
 import ReplicateIcon from '@carbon/icons/es/replicate/32';
 import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
 import ShareIcon from '@carbon/icons/es/share/32';
 import ShareIcon24 from '@carbon/icons/es/share/24';
+import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
+import { MirroringScheduleStepComponent } from './cephfs-add-mirroring-path/mirroring-schedule-step/mirroring-schedule-step.component';
 
 @NgModule({
   imports: [
@@ -125,7 +132,6 @@ import ShareIcon24 from '@carbon/icons/es/share/24';
     CephfsDirectoriesComponent,
     CephfsSubvolumeListComponent,
     CephfsSubvolumeFormComponent,
-    CephfsDirectoriesComponent,
     CephfsSubvolumeGroupComponent,
     CephfsSubvolumegroupFormComponent,
     CephfsSubvolumeSnapshotsListComponent,
@@ -142,7 +148,10 @@ import ShareIcon24 from '@carbon/icons/es/share/24';
     CephfsMirroringFsSchedulesComponent,
     CephfsGenerateTokenComponent,
     CephfsDownloadTokenComponent,
-    CephfsSetupMirroringComponent
+    CephfsSetupMirroringComponent,
+    CephfsAddMirroringPathComponent,
+    MirroringPathsStepComponent,
+    MirroringScheduleStepComponent,
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -154,10 +163,14 @@ export class CephfsModule {
       Close,
       Trash,
       Renew16,
+      TrashIcon16,
       ReplicateIcon,
       ReplicateIcon24,
       ShareIcon,
-      ShareIcon24
+      ShareIcon24,
+      ChevronDown16,
+      ChevronRight16,
+      WarningAltFilled16
     ]);
   }
 }

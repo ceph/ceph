@@ -19,6 +19,7 @@ from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
     allow_empty_body
+from ..controllers.service import Service
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -1334,6 +1335,23 @@ class CephFSMirror(RESTController):
         if error_code != 0:
             raise DashboardException(
                 msg=f'Failed to enable Cephfs mirroring: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("Disable mirroring for a filesystem",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: {}})
+    @RESTController.Collection('POST', path='/disable', status=200)
+    @CreatePermission
+    def disable(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_disable', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to disable Cephfs mirroring: {err}',
                 code=error_code,
                 component='cephfs.mirror'
             )
