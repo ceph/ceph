@@ -156,6 +156,13 @@ function TEST_a_classic_save_outputs() {
 function TEST_b_crimson_save_and_compare() {
     local dir=$1
 
+    if ! { [ -f "./bin/crimson-osd" ] || \
+             [ -f "$CEPH_ROOT/build/bin/crimson-osd" ] || \
+             command -v crimson-osd &>/dev/null; }; then
+        echo "SKIP: crimson-osd binary not found, skipping crimson test"
+        return 0
+    fi
+
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
       --osd_pool_default_crimson=true || return 1
     run_mgr $dir x || return 1
