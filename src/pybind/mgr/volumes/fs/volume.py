@@ -835,36 +835,17 @@ class VolumeClient(CephfsClient["Module"]):
 
     def _send_quarantine_command(self, mds_map, cmd_prefix, path):
         """
-        Send quarantine command to MDS. Try rank-0 first, then other active
-        ranks if the target inode is not authoritative on rank-0.
+        Send quarantine command to any active MDS. The MDS will forward the
+        request to the authoritative rank via rdlock_path_pin_ref() if needed.
         """
-        active_gids = []
         for rank_name, gid in sorted(mds_map.get('up', {}).items()):
             info = mds_map['info'].get(f"gid_{gid}")
             if info and info['state'] in ('up:active', 'up:clientreplay'):
-                active_gids.append((rank_name, gid))
+                cmd_dict = {"prefix": cmd_prefix, "path": path}
+                log.debug("Sending %s to MDS gid %s (%s)", cmd_prefix, gid, rank_name)
+                return self.mgr.tell_command("mds", str(gid), cmd_dict)
 
-        if not active_gids:
-            raise VolumeException(-errno.ENOENT, "No active MDS found")
-
-        cmd_dict = {"prefix": cmd_prefix, "path": path}
-        last_error = None
-        for rank_name, gid in active_gids:
-            log.debug("Trying %s on MDS gid %s (%s)", cmd_prefix, gid, rank_name)
-            rc, outb, outs = self.mgr.tell_command("mds", str(gid), cmd_dict)
-
-            if rc == 0:
-                return rc, outb, outs
-            elif rc == -errno.EAGAIN:
-                log.debug("MDS gid %s returned EAGAIN, trying next", gid)
-                last_error = (rc, outb, outs)
-                continue
-            else:
-                return rc, outb, outs
-
-        if last_error:
-            return last_error
-        raise VolumeException(-errno.EAGAIN, "No MDS is authoritative for this subvolume")
+        raise VolumeException(-errno.ENOENT, "No active MDS found")
 
     ### subvolume snapshot
 
