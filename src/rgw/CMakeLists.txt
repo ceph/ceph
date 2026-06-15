@@ -198,7 +198,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_obj_manifest.cc
           driver/rados/rgw_object_expirer_core.cc
           driver/rados/rgw_otp.cc
-          driver/rados/rgw_pubsub_push.cc
+          rgw_pubsub_push.cc
           driver/rados/rgw_putobj_processor.cc
           driver/rados/rgw_rados.cc
           driver/rados/rgw_reshard.cc

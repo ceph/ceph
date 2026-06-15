@@ -687,12 +687,41 @@ public:
       std::string& _user_tenant,
       std::string& _req_id,
       optional_yield y) override;
+  int read_topic_v2(const std::string& topic_name,
+		    const std::string& tenant,
+		    rgw_pubsub_topic& topic,
+		    RGWObjVersionTracker* objv_tracker,
+		    optional_yield y,
+		    const DoutPrefixProvider* dpp) override;
+  int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+		     RGWObjVersionTracker& objv_tracker,
+		     optional_yield y,
+		     const DoutPrefixProvider* dpp) override;
+  int remove_topic_v2(const std::string& topic_name,
+		      const std::string& tenant,
+		      RGWObjVersionTracker& objv_tracker,
+		      optional_yield y,
+		      const DoutPrefixProvider* dpp) override;
+  int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+				  const std::string& bucket_key,
+				  bool add_mapping,
+				  optional_yield y,
+				  const DoutPrefixProvider* dpp) override;
+  int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+			       std::set<std::string>& bucket_keys,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp) override;
+  int remove_bucket_mapping_from_topics(
+      const rgw_pubsub_bucket_topics& bucket_topics,
+      const std::string& bucket_key,
+      optional_yield y,
+      const DoutPrefixProvider* dpp) override;
   virtual int list_account_topics(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
 				  std::string_view marker,
 				  uint32_t max_items,
-				  TopicList& listing) override { return -ENOTSUP; }
+				  TopicList& listing) override;
 
   virtual int add_persistent_topic(const DoutPrefixProvider* dpp,
 				   optional_yield y,
@@ -813,16 +842,39 @@ public:
 
 class POSIXNotification : public StoreNotification {
 protected:
+  POSIXDriver* driver;
+  rgw::sal::Bucket* bucket = nullptr;
+  std::string user_id;
+  std::string user_tenant;
+  std::string req_id;
+  rgw_pubsub_bucket_topics bucket_topics;
+  std::vector<rgw_pubsub_topic_filter> matched;
+  RGWObjTags* obj_tags_ptr = nullptr;
 public:
- POSIXNotification(Object* _obj,
+ POSIXNotification(POSIXDriver* _driver,
+		   Object* _obj,
 		   Object* _src_obj,
 		   const rgw::notify::EventTypeList& _types)
-		   : StoreNotification(_obj, _src_obj, _types) {}
+		   : StoreNotification(_obj, _src_obj, _types),
+		     driver(_driver) {}
+ POSIXNotification(POSIXDriver* _driver,
+		   Object* _obj,
+		   Object* _src_obj,
+		   const rgw::notify::EventTypeList& _types,
+		   rgw::sal::Bucket* _bucket,
+		   std::string _user_id,
+		   std::string _user_tenant,
+		   std::string _req_id)
+		   : StoreNotification(_obj, _src_obj, _types),
+		     driver(_driver), bucket(_bucket),
+		     user_id(std::move(_user_id)),
+		     user_tenant(std::move(_user_tenant)),
+		     req_id(std::move(_req_id)) {}
  ~POSIXNotification() = default;
 
- virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0; }
+ virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
  virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override { return 0; }
+			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class POSIXUser : public StoreUser {
