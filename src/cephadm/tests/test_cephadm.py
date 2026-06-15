@@ -106,6 +106,125 @@ class TestCephAdm(object):
         _attempt_bind.side_effect = os_error
         assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
+    def test_command_remove_file(self, cephadm_fs):
+        rm_path = '/tmp/cephadm-remove-file-test'
+        cephadm_fs.create_file(rm_path, contents='x')
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', rm_path]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+        assert not cephadm_fs.exists(rm_path)
+
+    def test_command_remove_file_missing_ok(self, cephadm_fs):
+        missing = '/tmp/cephadm-remove-file-missing'
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', missing]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+
+    def test_command_remove_file_refuses_directory(self, cephadm_fs):
+        dpath = '/tmp/cephadm-remove-file-isdir'
+        cephadm_fs.create_dir(dpath)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', dpath]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(dpath)
+
+    def test_command_remove_file_refuses_symlink(self, cephadm_fs):
+        target = '/tmp/cephadm-remove-file-symtarget'
+        link = '/tmp/cephadm-remove-file-symlink'
+        cephadm_fs.create_file(target, contents='x')
+        cephadm_fs.create_symlink(link, target)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', link]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(link)
+
+    def test_command_deploy_file(self, cephadm_fs):
+        import io
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        dest = '/etc/ceph/kube.conf'
+        cephadm_fs.create_dir('/etc/ceph')
+        content = b'hello\xff'
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(content)
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', fsid, '--path', dest, '--mode', '600']
+            ) as ctx:
+                assert _cephadm.command_deploy_file(ctx) == 0
+        assert cephadm_fs.exists(dest)
+        with open(dest, 'rb') as f:
+            assert f.read() == content
+
+    def test_command_deploy_file_rejects_relative_path(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', 'relative/path.conf']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='absolute path'):
+                    _cephadm.command_deploy_file(ctx)
+
+    def test_command_deploy_file_uid_gid_together(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', '/etc/ceph/a', '--uid', '0']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='together'):
+                    _cephadm.command_deploy_file(ctx)
+
+    def test_command_sysctl_dir_list(self, cephadm_fs, capsys):
+        from cephadmlib.constants import SYSCTL_DIR
+        cephadm_fs.create_dir(SYSCTL_DIR)
+        cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'c.conf'))
+        cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'a.conf'))
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+        ) as ctx:
+            assert _cephadm.command_sysctl_dir(ctx) == 0
+        assert capsys.readouterr().out.splitlines() == ['a.conf', 'c.conf']
+
+    def test_command_sysctl_dir_list_missing_dir(self, cephadm_fs):
+        import shutil
+        from cephadmlib.constants import SYSCTL_DIR
+        # cephadm_fs already has /etc (e.g. from UNIT_DIR). Only sysctl.d must be absent.
+        if cephadm_fs.exists(SYSCTL_DIR):
+            shutil.rmtree(SYSCTL_DIR)
+        assert not cephadm_fs.exists(SYSCTL_DIR)
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Not a directory'):
+                _cephadm.command_sysctl_dir(ctx)
+
+    def test_command_sysctl_dir_apply_system(self, cephadm_fs):
+        with with_cephadm_ctx(
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system']
+        ) as ctx:
+            assert _cephadm.command_sysctl_dir(ctx) == 0
+
+    def test_command_sysctl_dir_apply_system_failure(self, cephadm_fs):
+        # Do not let with_cephadm_ctx re-patch cephadm.call back to success (exit 0).
+        with mock.patch('cephadm.call', return_value=('out', 'sysctl failed', 1)):
+            with with_cephadm_ctx(
+                ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system'],
+                mock_cephadm_call_fn=False,
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='sysctl --system failed'):
+                    _cephadm.command_sysctl_dir(ctx)
+
     @mock.patch('cephadm.socket.socket.bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_special_cases(self, _logger, _bind):

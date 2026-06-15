@@ -8,7 +8,7 @@ from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
 from orchestrator import OrchestratorError
 
 try:
@@ -111,6 +111,7 @@ class Executables(RemoteExecutable, enum.Enum):
     SYSCTL = RemoteExecutable('sysctl')
     TOUCH = RemoteExecutable('touch')
     TRUE = RemoteExecutable('true')
+    INVOKER = RemoteExecutable('/usr/libexec/cephadm_invoker.py')
 
     def __str__(self) -> str:
         return self.value
@@ -263,15 +264,41 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
             return self.mgr.wait_async(self._remote_connection(host, addr))
 
+    def _enforce_sudo_hardening(
+        self,
+        host: str,
+        cmd_components: RemoteCommand
+    ) -> None:
+        """
+        Enforce that commands are wrapped with invoker when SSH hardening
+        is enabled.
+        """
+        if not self.mgr.sudo_hardening:
+            return
+
+        is_wrapped = (
+            isinstance(cmd_components.exe, RemoteExecutable)
+            and str(cmd_components.exe) == str(Executables.INVOKER)
+        )
+        if not is_wrapped:
+            msg = (f'SSH hardening is enabled but command is not '
+                   f'wrapped with invoker for host {host}. '
+                   f'Command: {cmd_components}')
+            logger.error(msg)
+            raise OrchestratorError(msg)
+
     async def _execute_command(self,
                                host: str,
                                cmd_components: RemoteCommand,
-                               stdin: Optional[str] = None,
+                               stdin: Optional[Union[str, bytes]] = None,
                                addr: Optional[str] = None,
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
 
         conn = await self._remote_connection(host, addr)
+        # Enforce invoker usage if SSH hardening is enabled
+        self._enforce_sudo_hardening(host, cmd_components)
+
         use_sudo = (self.mgr.ssh_user != 'root')
         rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
@@ -284,7 +311,13 @@ class SSHManager:
         # Retry logic for transient connection/channel errors
         for attempt in range(self.SSH_RETRY_COUNT):
             try:
-                r = await conn.run(str(rcmd), input=stdin)
+                run_kw: Dict[str, Any] = {}
+                if stdin is not None:
+                    run_kw['input'] = stdin
+                    # Bytes stdin: use encoding=None (else asyncssh expects str).
+                    if isinstance(stdin, bytes):
+                        run_kw['encoding'] = None
+                r = await conn.run(str(rcmd), **run_kw)
                 break  # Success, exit retry loop
             # Handle retryable exceptions (connection/channel errors)
             # Note: handle these Exceptions otherwise you might get a weird error like
@@ -377,7 +410,7 @@ class SSHManager:
     def execute_command(self,
                         host: str,
                         cmd: RemoteCommand,
-                        stdin: Optional[str] = None,
+                        stdin: Optional[Union[str, bytes]] = None,
                         addr: Optional[str] = None,
                         log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
@@ -387,7 +420,7 @@ class SSHManager:
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: RemoteCommand,
-                                     stdin: Optional[str] = None,
+                                     stdin: Optional[Union[str, bytes]] = None,
                                      addr: Optional[str] = None,
                                      log_command: Optional[bool] = True
                                      ) -> str:
@@ -401,7 +434,7 @@ class SSHManager:
     def check_execute_command(self,
                               host: str,
                               cmd: RemoteCommand,
-                              stdin: Optional[str] = None,
+                              stdin: Optional[Union[str, bytes]] = None,
                               addr: Optional[str] = None,
                               log_command: Optional[bool] = True,
                               ) -> str:
@@ -417,6 +450,9 @@ class SSHManager:
                                  gid: Optional[int] = None,
                                  addr: Optional[str] = None,
                                  ) -> None:
+        """This method will be used to only write cephadm binary when sudo_hardening is disbaled.
+        Other host files are written via ``cephadm deploy-file`` on the target host.
+        """
         try:
             cephadm_tmp_dir = f"/tmp/cephadm-{self.mgr._cluster_fsid}"
             dirname = os.path.dirname(path)
@@ -443,13 +479,14 @@ class SSHManager:
                 conn = await self._remote_connection(host, addr)
                 async with conn.start_sftp_client() as sftp:
                     await sftp.put(f.name, tmp_path)
-            if uid is not None and gid is not None and mode is not None:
+            if uid is not None and gid is not None:
                 # shlex quote takes str or byte object, not int
                 chown = RemoteCommand(
                     Executables.CHOWN,
                     ['-R', str(uid) + ':' + str(gid), tmp_path]
                 )
                 await self._check_execute_command(host, chown, addr=addr)
+            if mode is not None:
                 chmod = RemoteCommand(Executables.CHMOD, [oct(mode)[2:], tmp_path])
                 await self._check_execute_command(host, chmod, addr=addr)
             mv = RemoteCommand(Executables.MV, ['-Z', tmp_path, path])
@@ -459,18 +496,41 @@ class SSHManager:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
-    def write_remote_file(self,
-                          host: str,
-                          path: str,
-                          content: bytes,
-                          mode: Optional[int] = None,
-                          uid: Optional[int] = None,
-                          gid: Optional[int] = None,
-                          addr: Optional[str] = None,
-                          ) -> None:
-        with self.mgr.async_timeout_handler(host, f'writing file {path}'):
-            self.mgr.wait_async(self._write_remote_file(
-                host, path, content, mode, uid, gid, addr))
+    async def _deploy_cephadm_binary_via_invoker(
+        self,
+        host: str,
+        cephadm_path: str,
+        cephadm_content: bytes,
+        addr: Optional[str] = None
+    ) -> None:
+        """
+        Deploy cephadm binary using the invoker for secure operations.
+        This creates a temp file locally, copies it to remote host, then
+        calls the invoker to perform all deployment operations.
+        """
+        with NamedTemporaryFile(prefix='cephadm-deploy-', delete=False) as local_tmp:
+            local_tmp.write(cephadm_content)
+            local_tmp.flush()
+            local_tmp_path = local_tmp.name
+
+        try:
+            remote_tmp_path = f'/tmp/cephadm-{self.mgr._cluster_fsid}.new'
+
+            conn = await self._remote_connection(host, addr)
+            async with conn.start_sftp_client() as sftp:
+                await sftp.put(local_tmp_path, remote_tmp_path)
+
+            invoker_cmd = RemoteCommand(
+                Executables.INVOKER,
+                ['deploy_binary', remote_tmp_path, cephadm_path]
+            )
+            await self._execute_command(host, invoker_cmd, addr=addr)
+
+        finally:
+            try:
+                os.unlink(local_tmp_path)
+            except OSError:
+                pass
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
