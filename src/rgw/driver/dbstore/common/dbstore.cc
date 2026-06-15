@@ -120,6 +120,22 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.GetOIDCProvider;
   if (!Op.compare("ListOIDCProviders"))
     return dbops.ListOIDCProviders;
+  if (!Op.compare("InsertTopic"))
+    return dbops.InsertTopic;
+  if (!Op.compare("RemoveTopic"))
+    return dbops.RemoveTopic;
+  if (!Op.compare("GetTopic"))
+    return dbops.GetTopic;
+  if (!Op.compare("ListTopics"))
+    return dbops.ListTopics;
+  if (!Op.compare("InsertBucketTopicMapping"))
+    return dbops.InsertBucketTopicMapping;
+  if (!Op.compare("RemoveBucketTopicMapping"))
+    return dbops.RemoveBucketTopicMapping;
+  if (!Op.compare("GetBucketTopicMapping"))
+    return dbops.GetBucketTopicMapping;
+  if (!Op.compare("RemoveBucketFromTopicMappings"))
+    return dbops.RemoveBucketFromTopicMappings;
   if (!Op.compare("InsertGroup"))
     return dbops.InsertGroup;
   if (!Op.compare("RemoveGroup"))
@@ -988,6 +1004,185 @@ int DB::list_oidc_providers(const DoutPrefixProvider *dpp,
   }
 
   providers = std::move(params.op.oidc.list_entries);
+
+  return ret;
+}
+
+int DB::store_topic(const DoutPrefixProvider *dpp,
+    const rgw_pubsub_topic& topic, bool exclusive,
+    obj_version& objv)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  if (exclusive) {
+    rgw_pubsub_topic orig;
+    obj_version orig_v;
+    std::string tenant;
+    if (auto* u = std::get_if<rgw_user>(&topic.owner)) {
+      tenant = u->tenant;
+    }
+    ret = load_topic(dpp, topic.name, tenant, orig, orig_v);
+    if (!ret) {
+      return -EEXIST;
+    }
+  }
+
+  params.op.topic.topic = topic;
+  params.op.topic.topic_version = objv;
+
+  ret = ProcessOp(dpp, "InsertTopic", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"store_topic failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  objv.ver++;
+  return ret;
+}
+
+int DB::load_topic(const DoutPrefixProvider *dpp,
+    const std::string& topic_name, const std::string& tenant,
+    rgw_pubsub_topic& topic, obj_version& objv)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.topic.topic.name = topic_name;
+  params.op.topic.topic.owner = rgw_user(tenant, "");
+
+  ret = ProcessOp(dpp, "GetTopic", &params);
+
+  if (!ret && !params.op.topic.list_entries.empty()) {
+    topic = params.op.topic.list_entries.front();
+    objv = params.op.topic.topic_version;
+    return 0;
+  }
+
+  return -ENOENT;
+}
+
+int DB::remove_topic(const DoutPrefixProvider *dpp,
+    const std::string& topic_name, const std::string& tenant)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  params.op.topic.topic.name = topic_name;
+  params.op.topic.topic.owner = rgw_user(tenant, "");
+
+  ret = ProcessOp(dpp, "RemoveTopic", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_topic failed with err:(" <<ret<<") " << dendl;
+  }
+
+  return ret;
+}
+
+int DB::list_topics(const DoutPrefixProvider *dpp,
+    const std::string& query_str, const rgw_owner& owner,
+    const std::string& marker, uint32_t max_items,
+    std::vector<rgw_pubsub_topic>& topics)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = query_str;
+  params.op.topic.topic.owner = owner;
+  params.op.topic.topic.name = marker;
+  params.op.list_max_count = max_items;
+
+  ret = ProcessOp(dpp, "ListTopics", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"list_topics failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  topics = std::move(params.op.topic.list_entries);
+
+  return ret;
+}
+
+int DB::add_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+    const std::string& topic_name, const std::string& bucket_key)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.topic.topic.name = topic_name;
+  params.op.topic.bucket_name = bucket_key;
+
+  int ret = ProcessOp(dpp, "InsertBucketTopicMapping", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"add_bucket_topic_mapping failed with err:(" <<ret<<") " << dendl;
+  }
+
+  return ret;
+}
+
+int DB::remove_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+    const std::string& topic_name, const std::string& bucket_key)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.topic.topic.name = topic_name;
+  params.op.topic.bucket_name = bucket_key;
+
+  int ret = ProcessOp(dpp, "RemoveBucketTopicMapping", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_bucket_topic_mapping failed with err:(" <<ret<<") " << dendl;
+  }
+
+  return ret;
+}
+
+int DB::get_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+    const std::string& topic_name,
+    std::set<std::string>& bucket_keys)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.topic.topic.name = topic_name;
+
+  ret = ProcessOp(dpp, "GetBucketTopicMapping", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"get_bucket_topic_mapping failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
+  for (auto& b : params.op.topic.bucket_list) {
+    bucket_keys.insert(std::move(b));
+  }
+
+  return ret;
+}
+
+int DB::remove_bucket_from_topic_mappings(const DoutPrefixProvider *dpp,
+    const std::string& bucket_key)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.topic.bucket_name = bucket_key;
+
+  int ret = ProcessOp(dpp, "RemoveBucketFromTopicMappings", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_bucket_from_topic_mappings failed with err:(" <<ret<<") " << dendl;
+  }
 
   return ret;
 }
