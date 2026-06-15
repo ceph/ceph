@@ -41,6 +41,7 @@ public:
   read_ertr::future<> readv(
     device_id_t device_id, uint64_t offset, std::vector<bufferptr> ptrs) final;
   ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(size_t len) final;
+  bool dma_passthrough() const final { return true; }
 
   // NVMeIODriver
   const caps_t &get_caps() const final { return caps; }

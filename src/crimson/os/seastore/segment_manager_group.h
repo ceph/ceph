@@ -67,6 +67,12 @@ public:
     return segment_managers[*device_ids.begin()]->alloc_io_buffer(len);
   }
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_journal_md_buffer(
+    size_t len) const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->alloc_journal_md_buffer(len);
+  }
+
   segment_off_t get_segment_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_segment_size();
