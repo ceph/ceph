@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_posix.h"
+#include "rgw_rest_user.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
@@ -5155,6 +5156,12 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                                             (exists ? 0 : 1), orig_size, accounted_size);
 
   return 0;
+}
+
+void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("user", new RGWRESTMgr_User);
+  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
 }
 
 } } // namespace rgw::sal

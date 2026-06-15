@@ -152,7 +152,8 @@ set(librgw_common_srcs
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
-  driver/json_config/store.cc)
+  driver/json_config/store.cc
+  rgw_rest_user.cc)
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
@@ -203,7 +204,6 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_rest_bucket.cc
           driver/rados/rgw_rest_log.cc
           driver/rados/rgw_rest_realm.cc
-          driver/rados/rgw_rest_user.cc
           driver/rados/rgw_sal_rados.cc
           driver/rados/rgw_service.cc
           driver/rados/rgw_sync.cc

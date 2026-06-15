@@ -35,9 +35,11 @@ fails_on_aws = []
 fails_on_dbstore = []
 fails_on_nsfs = []
 fails_on_posix = []
+rgw_admin = []
 
 [dev-dependencies]
 rstest = "0.24"
+serial_test = "3"
 
 [[test]]
 name = "test_s3"
@@ -50,3 +52,7 @@ path = "tests/test_iam/mod.rs"
 [[test]]
 name = "test_sns"
 path = "tests/test_sns.rs"
+
+[[test]]
+name = "test_rgw"
+path = "tests/test_rgw/mod.rs"
