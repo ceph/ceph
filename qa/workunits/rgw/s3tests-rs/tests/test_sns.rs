@@ -1440,4 +1440,307 @@ mod kafka_tests {
         sns.delete_topic().topic_arn(&topic_arn).send().await.unwrap();
         nuke_topics(&sns, &get_topic_prefix()).await;
     }
+
+    /* --- metadata and tag filters --- */
+
+    /* The AWS SDK only generates <S3Key> filter rules. RGW's metadata
+     * and tag filter extensions use <S3Metadata> and <S3Tags> elements.
+     * This interceptor rewrites the PutBucketNotificationConfiguration
+     * XML body to move x-amz-meta-* rules into <S3Metadata> and
+     * non-key rules into <S3Tags>. */
+    #[derive(Debug, Clone)]
+    struct NotificationFilterRewriter;
+
+    impl aws_smithy_runtime_api::client::interceptors::Intercept for NotificationFilterRewriter {
+        fn name(&self) -> &'static str { "NotificationFilterRewriter" }
+
+        fn modify_before_signing(
+            &self,
+            context: &mut aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut<'_>,
+            _runtime_components: &aws_smithy_runtime_api::client::runtime_components::RuntimeComponents,
+            _cfg: &mut aws_smithy_types::config_bag::ConfigBag,
+        ) -> Result<(), aws_smithy_runtime_api::box_error::BoxError> {
+            let request = context.request_mut();
+            let body_bytes = request.body().bytes()
+                .ok_or("no body")?
+                .to_vec();
+            let body_str = String::from_utf8(body_bytes)?;
+
+            if !body_str.contains("NotificationConfiguration") {
+                return Ok(());
+            }
+
+            let mut result = body_str.clone();
+
+            /* extract filter rules that belong in S3Metadata or S3Tags,
+             * move them from <S3Key> into the correct sibling element */
+            let mut metadata_rules = Vec::new();
+            let mut tag_rules = Vec::new();
+
+            /* find all FilterRule elements and classify them */
+            let mut remaining_key_rules = String::new();
+            let mut pos = 0;
+            while let Some(start) = result[pos..].find("<FilterRule>") {
+                let abs_start = pos + start;
+                if let Some(end) = result[abs_start..].find("</FilterRule>") {
+                    let abs_end = abs_start + end + "</FilterRule>".len();
+                    let rule = &result[abs_start..abs_end];
+
+                    if let (Some(ns), Some(ne)) = (rule.find("<Name>"), rule.find("</Name>")) {
+                        let name = &rule[ns + 6..ne];
+                        if let (Some(vs), Some(ve)) = (rule.find("<Value>"), rule.find("</Value>")) {
+                            let value = &rule[vs + 7..ve];
+                            if name.starts_with("x-amz-meta-") {
+                                metadata_rules.push((name.to_string(), value.to_string()));
+                                pos = abs_end;
+                                continue;
+                            } else if name != "prefix" && name != "suffix" {
+                                tag_rules.push((name.to_string(), value.to_string()));
+                                pos = abs_end;
+                                continue;
+                            }
+                        }
+                    }
+                    remaining_key_rules.push_str(rule);
+                    pos = abs_end;
+                } else {
+                    break;
+                }
+            }
+
+            if metadata_rules.is_empty() && tag_rules.is_empty() {
+                return Ok(());
+            }
+
+            /* rebuild the Filter block with separated elements */
+            let mut extra = String::new();
+            if !metadata_rules.is_empty() {
+                extra.push_str("<S3Metadata>");
+                for (k, v) in &metadata_rules {
+                    extra.push_str(&format!("<FilterRule><Name>{k}</Name><Value>{v}</Value></FilterRule>"));
+                }
+                extra.push_str("</S3Metadata>");
+            }
+            if !tag_rules.is_empty() {
+                extra.push_str("<S3Tags>");
+                for (k, v) in &tag_rules {
+                    extra.push_str(&format!("<FilterRule><Name>{k}</Name><Value>{v}</Value></FilterRule>"));
+                }
+                extra.push_str("</S3Tags>");
+            }
+
+            /* remove the moved rules from <S3Key> and inject the new elements
+             * after </S3Key> inside <Filter> */
+            let mut new_body = result.clone();
+            /* remove all FilterRule elements, then re-add only the key ones */
+            if let Some(s3key_start) = new_body.find("<S3Key>") {
+                if let Some(s3key_end) = new_body.find("</S3Key>") {
+                    let end_pos = s3key_end + "</S3Key>".len();
+                    let before = &new_body[..s3key_start];
+                    let after = &new_body[end_pos..];
+                    if remaining_key_rules.is_empty() {
+                        new_body = format!("{before}{extra}{after}");
+                    } else {
+                        new_body = format!("{before}<S3Key>{remaining_key_rules}</S3Key>{extra}{after}");
+                    }
+                }
+            }
+
+            eprintln!("NotificationFilterRewriter: rewritten body:\n{}", new_body);
+            let new_len = new_body.len();
+            *request.body_mut() = aws_smithy_types::body::SdkBody::from(new_body);
+            request.headers_mut().insert("content-length", new_len.to_string());
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_notification_kafka_filter_metadata() {
+        let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+        let sns = get_sns_root_client();
+        let s3 = get_iam_root_s3client();
+        let broker = get_kafka_broker();
+        let topic_name = get_new_bucket_name();
+        let bucket = get_new_bucket_name();
+
+        let topic_arn = sns.create_topic()
+            .name(&topic_name)
+            .attributes("push-endpoint", format!("kafka://{}", broker))
+            .attributes("kafka-ack-level", "broker")
+            .send().await.unwrap()
+            .topic_arn().unwrap().to_string();
+
+        s3.create_bucket().bucket(&bucket).send().await.unwrap();
+
+        s3.put_bucket_notification_configuration()
+            .bucket(&bucket)
+            .notification_configuration(
+                aws_sdk_s3::types::NotificationConfiguration::builder()
+                    .topic_configurations(
+                        aws_sdk_s3::types::TopicConfiguration::builder()
+                            .id("meta-filter")
+                            .topic_arn(&topic_arn)
+                            .events(aws_sdk_s3::types::Event::S3ObjectCreated)
+                            .filter(
+                                aws_sdk_s3::types::NotificationConfigurationFilter::builder()
+                                    .key(
+                                        aws_sdk_s3::types::S3KeyFilter::builder()
+                                            .filter_rules(
+                                                aws_sdk_s3::types::FilterRule::builder()
+                                                    .name(aws_sdk_s3::types::FilterRuleName::from("x-amz-meta-color"))
+                                                    .value("blue")
+                                                    .build(),
+                                            )
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
+                            .build()
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .customize()
+            .interceptor(NotificationFilterRewriter)
+            .send().await.unwrap();
+
+        let consumer = make_consumer(&broker, &topic_name);
+
+        s3.put_object()
+            .bucket(&bucket)
+            .key("red-obj")
+            .metadata("color", "red")
+            .body(ByteStream::from_static(b"wrong metadata"))
+            .send().await.unwrap();
+
+        s3.put_object()
+            .bucket(&bucket)
+            .key("blue-obj")
+            .metadata("color", "blue")
+            .body(ByteStream::from_static(b"matching metadata"))
+            .send().await.unwrap();
+
+        let msg = wait_for_event(&consumer, "blue-obj", "s3:ObjectCreated:").await;
+        assert_eq!(msg["Records"][0]["s3"]["object"]["key"].as_str().unwrap(), "blue-obj");
+
+        let leak = timeout(Duration::from_secs(3), async {
+            loop {
+                match consumer.recv().await {
+                    Ok(m) => {
+                        if let Some(payload) = m.payload() {
+                            if let Ok(event) = serde_json::from_slice::<serde_json::Value>(payload) {
+                                if let Some(record) = event.get("Records")
+                                    .and_then(|r| r.as_array())
+                                    .and_then(|a| a.first())
+                                {
+                                    if record["s3"]["object"]["key"].as_str() == Some("red-obj") {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }).await;
+        assert!(leak.is_err(), "received event for non-matching metadata value");
+
+        nuke_topics(&sns, &get_topic_prefix()).await;
+    }
+
+    #[tokio::test]
+    async fn test_notification_kafka_filter_tags() {
+        let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+        let sns = get_sns_root_client();
+        let s3 = get_iam_root_s3client();
+        let broker = get_kafka_broker();
+        let topic_name = get_new_bucket_name();
+        let bucket = get_new_bucket_name();
+
+        let topic_arn = sns.create_topic()
+            .name(&topic_name)
+            .attributes("push-endpoint", format!("kafka://{}", broker))
+            .attributes("kafka-ack-level", "broker")
+            .send().await.unwrap()
+            .topic_arn().unwrap().to_string();
+
+        s3.create_bucket().bucket(&bucket).send().await.unwrap();
+
+        s3.put_bucket_notification_configuration()
+            .bucket(&bucket)
+            .notification_configuration(
+                aws_sdk_s3::types::NotificationConfiguration::builder()
+                    .topic_configurations(
+                        aws_sdk_s3::types::TopicConfiguration::builder()
+                            .id("tag-filter")
+                            .topic_arn(&topic_arn)
+                            .events(aws_sdk_s3::types::Event::S3ObjectCreated)
+                            .filter(
+                                aws_sdk_s3::types::NotificationConfigurationFilter::builder()
+                                    .key(
+                                        aws_sdk_s3::types::S3KeyFilter::builder()
+                                            .filter_rules(
+                                                aws_sdk_s3::types::FilterRule::builder()
+                                                    .name(aws_sdk_s3::types::FilterRuleName::from("environment"))
+                                                    .value("production")
+                                                    .build(),
+                                            )
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
+                            .build()
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .customize()
+            .interceptor(NotificationFilterRewriter)
+            .send().await.unwrap();
+
+        let consumer = make_consumer(&broker, &topic_name);
+
+        s3.put_object()
+            .bucket(&bucket)
+            .key("staging-obj")
+            .tagging("environment=staging")
+            .body(ByteStream::from_static(b"wrong tag"))
+            .send().await.unwrap();
+
+        s3.put_object()
+            .bucket(&bucket)
+            .key("prod-obj")
+            .tagging("environment=production")
+            .body(ByteStream::from_static(b"matching tag"))
+            .send().await.unwrap();
+
+        let msg = wait_for_event(&consumer, "prod-obj", "s3:ObjectCreated:").await;
+        assert_eq!(msg["Records"][0]["s3"]["object"]["key"].as_str().unwrap(), "prod-obj");
+
+        let leak = timeout(Duration::from_secs(3), async {
+            loop {
+                match consumer.recv().await {
+                    Ok(m) => {
+                        if let Some(payload) = m.payload() {
+                            if let Ok(event) = serde_json::from_slice::<serde_json::Value>(payload) {
+                                if let Some(record) = event.get("Records")
+                                    .and_then(|r| r.as_array())
+                                    .and_then(|a| a.first())
+                                {
+                                    if record["s3"]["object"]["key"].as_str() == Some("staging-obj") {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }).await;
+        assert!(leak.is_err(), "received event for non-matching tag value");
+
+        nuke_topics(&sns, &get_topic_prefix()).await;
+    }
 }
