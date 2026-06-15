@@ -181,9 +181,7 @@ export const ICON_TYPE = {
   cloudMonitoring: 'cloud--monitoring',
   trash: 'trash-can',
   temperature: 'temperature',
-  left: 'arrow--left',
-  replicate: 'replicate',
-  share: 'share'
+  left: 'arrow--left'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

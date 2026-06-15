@@ -1,0 +1,93 @@
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()"
+                    i18n>Setup filesystem mirroring
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <div class="cds--type-body-compact-01 cds-mb-5"
+         i18n>Create a mirror relationship to replicate selected filesystem paths to another cluster.</div>
+
+    <div class="cds-mb-5">
+      <cd-alert-panel type="info">
+        <div [cdsStack]="'vertical'"
+             [gap]="2">
+          <div class="cds--type-heading-compact-01"
+               i18n>Secure token required</div>
+          <div class="cds--type-body-compact-01"
+               i18n>To connect with the destination cluster, you'll need a secure token from the destination
+            cluster to establish the mirror relationship. Ask your administrator to generate a
+            bootstrap token from the destination cluster.</div>
+        </div>
+      </cd-alert-panel>
+    </div>
+
+    <form [formGroup]="setupForm"
+          #formDir="ngForm"
+          novalidate>
+      <div class="form-item cds-mb-5">
+        <cds-select formControlName="filesystem"
+                    cdValidate
+                    #filesystemRef="cdValidate"
+                    label="Filesystem"
+                    id="filesystem"
+                    [invalid]="filesystemRef.isInvalid"
+                    [invalidText]="fsError"
+                    [helperText]="fsHelper"
+                    i18n>
+          <option value="">Select a filesystem</option>
+          <option *ngFor="let fs of filesystems"
+                  [value]="fs.name">{{ fs.name }}</option>
+        </cds-select>
+        <ng-template #fsError>
+          @if (setupForm.showError('filesystem', formDir, 'required')) {
+          <span i18n>This field is required.</span>
+          }
+        </ng-template>
+        <ng-template #fsHelper>
+          <span i18n>Select the filesystem whose data will be replicated to the destination cluster. Mirroring will be enabled on the selected filesystem.</span>
+        </ng-template>
+      </div>
+
+      <div class="form-item cds-mb-5">
+        <cds-textarea-label for="secureToken"
+                            [helperText]="tokenHelper"
+                            [invalid]="tokenRef.isInvalid"
+                            [invalidText]="tokenError"
+                            i18n>Secure token
+          <textarea cdsTextArea
+                    cdValidate
+                    #tokenRef="cdValidate"
+                    id="secureToken"
+                    formControlName="token"
+                    rows="5"
+                    cols="80"
+                    placeholder="Paste the token generated on the destination cluster."
+                    i18n-placeholder
+                    [invalid]="tokenRef.isInvalid"></textarea>
+        </cds-textarea-label>
+        <ng-template #tokenHelper>
+          <span i18n>Paste the token generated from the destination cluster that will receive the replicated data.</span>
+        </ng-template>
+        <ng-template #tokenError>
+          @if (setupForm.showError('token', formDir, 'required')) {
+          <span i18n>This field is required.</span>
+          }
+          @if (setupForm.showError('token', formDir, 'invalidBase64Json')) {
+          <span i18n>Invalid token. Please enter a valid base64 bootstrap token.</span>
+          }
+        </ng-template>
+      </div>
+    </form>
+  </section>
+
+  <cd-form-button-panel
+      (submitActionEvent)="onSetupMirroring()"
+      (backActionEvent)="closeModal()"
+      [form]="setupForm"
+      [disabled]="isSubmitting"
+      [submitText]="submitText"
+      [modalForm]="true">
+  </cd-form-button-panel>
+</cds-modal>
