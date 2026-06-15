@@ -1397,18 +1397,12 @@ class Module(MgrModule):
                 'prefix': 'config-key get',
                 'key': 'mgr/dashboard/telemetry/metrics/adoption'
             })
-
             adoption_raw = outb.strip() if r == 0 and outb else None
-
             report['dashboard'] = {
                 'adoption': json.loads(adoption_raw or '{}'),
             }
-
         except Exception as e:  # pylint: disable=broad-except
-            self.log.warning(
-                'telemetry: failed to attach dashboard section: %s',
-                e
-            )
+            self.log.warning('telemetry: failed to attach dashboard section: %s', e)
 
         return report
 
