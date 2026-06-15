@@ -33,6 +33,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   pageHeaderSubtitle: string | null = null;
   pageHeaderDescription: string | null = null;
   showBreadcrumbsLayout = true;
+  pageHeaderHidden = false;
   enabledFeature$: Observable<FeatureTogglesMap>;
 
   @HostBinding('class') get class(): string {
@@ -95,12 +96,54 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     this.showBreadcrumbsLayout = !route?.pathFromRoot.some(
       (snapshot) => snapshot.routeConfig?.data?.['showBreadcrumbsLayout'] === false
     );
+
+    const hiddenRoute = this.findRouteWithData(route, 'pageHeaderHidden');
+    if (hiddenRoute?.routeConfig?.data?.['pageHeaderHidden']) {
+      this.pageHeaderHidden = true;
+      this.pageHeaderTitle = null;
+      this.pageHeaderSubtitle = null;
+      this.pageHeaderDescription = null;
+      return;
+    }
+
+    this.pageHeaderHidden = false;
+
+    const titleFromParamRoute = this.findRouteWithData(route, 'pageHeaderTitleFromParam');
+    const titleFromParam = titleFromParamRoute?.routeConfig?.data?.['pageHeaderTitleFromParam'] as
+      | string
+      | undefined;
+
+    if (titleFromParam && titleFromParamRoute?.params[titleFromParam]) {
+      try {
+        this.pageHeaderTitle = decodeURIComponent(titleFromParamRoute.params[titleFromParam]);
+      } catch {
+        this.pageHeaderTitle = titleFromParamRoute.params[titleFromParam];
+      }
+      this.pageHeaderSubtitle = null;
+      this.pageHeaderDescription = null;
+      return;
+    }
+
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
       | { title?: string; subtitle?: string; description?: string }
       | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;
     this.pageHeaderSubtitle = pageHeader?.subtitle ?? null;
     this.pageHeaderDescription = pageHeader?.description ?? null;
+  }
+
+  private findRouteWithData(
+    route: ActivatedRouteSnapshot | null,
+    key: string
+  ): ActivatedRouteSnapshot | null {
+    let current = route;
+    while (current) {
+      if (current.routeConfig?.data?.[key]) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return null;
   }
 
   showTopNotification(name: string, isDisplayed: boolean) {
