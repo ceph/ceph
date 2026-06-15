@@ -47,7 +47,7 @@ class BaseRedfishSystem(BaseSystem):
         "ReadingUnits",
         "Status",
     ]
-    FIRMWARES_FIELDS: List[str] = [
+    FIRMWARE_FIELDS: List[str] = [
         "Name",
         "Description",
         "ReleaseDate",
@@ -81,9 +81,9 @@ class BaseRedfishSystem(BaseSystem):
                 "chassis", "Thermal", TEMPERATURES_FIELDS, "Temperatures"
             ),
         ],
-        "firmwares": [
+        "firmware": [
             ComponentUpdateSpec(
-                "update_service", "FirmwareInventory", FIRMWARES_FIELDS, None
+                "update_service", "FirmwareInventory", FIRMWARE_FIELDS, None
             ),
         ],
     }
@@ -124,7 +124,7 @@ class BaseRedfishSystem(BaseSystem):
                 "network",
                 "processors",
                 "storage",
-                "firmwares",
+                "firmware",
             ],
         )
         self.update_funcs: List[Callable] = []
@@ -230,7 +230,7 @@ class BaseRedfishSystem(BaseSystem):
                 "fans": self.get_fans(),
                 "temperatures": self.get_temperatures(),
             },
-            "firmwares": self.get_firmwares(),
+            "firmware": self.get_firmware(),
         }
         return result
 
@@ -262,8 +262,8 @@ class BaseRedfishSystem(BaseSystem):
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("storage", {}))
 
-    def get_firmwares(self) -> Dict[str, Dict[str, Dict]]:
-        return dict(self._sys.get("firmwares", {}))
+    def get_firmware(self) -> Dict[str, Dict[str, Dict]]:
+        return dict(self._sys.get("firmware", {}))
 
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("power", {}))
@@ -387,8 +387,8 @@ class BaseRedfishSystem(BaseSystem):
     def _update_temperatures(self) -> None:
         self._run_update("temperatures")
 
-    def _update_firmwares(self) -> None:
-        self._run_update("firmwares")
+    def _update_firmware(self) -> None:
+        self._run_update("firmware")
 
     def device_led_on(self, device: str) -> int:
         raise NotImplementedError()

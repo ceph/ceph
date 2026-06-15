@@ -1997,8 +1997,12 @@ Then run the following:
         return self.node_proxy_cache.summary(hostname=hostname)
 
     @handle_orch_error
+    def node_proxy_firmware(self, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.firmware(hostname=hostname)
+
+    @handle_orch_error
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> Dict[str, Any]:
-        return self.node_proxy_cache.firmwares(hostname=hostname)
+        return self.node_proxy_cache.firmware(hostname=hostname)
 
     @handle_orch_error
     def node_proxy_criticals(self, hostname: Optional[str] = None) -> Dict[str, Any]:

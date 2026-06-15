@@ -46,7 +46,7 @@ class TestBaseRedfishSystemInit:
         assert "network" in system.component_list
         assert "processors" in system.component_list
         assert "storage" in system.component_list
-        assert "firmwares" in system.component_list
+        assert "firmware" in system.component_list
         assert "fans" in system.component_list
         assert "temperatures" in system.component_list
 
@@ -110,8 +110,8 @@ class TestBaseRedfishSystemGetters:
     def test_get_temperatures_empty(self, system):
         assert system.get_temperatures() == {}
 
-    def test_get_firmwares_empty(self, system):
-        assert system.get_firmwares() == {}
+    def test_get_firmware_empty(self, system):
+        assert system.get_firmware() == {}
 
     def test_get_status_empty(self, system):
         assert system.get_status() == {}
@@ -127,7 +127,7 @@ class TestBaseRedfishSystemGetSystem:
         system._sys["power"] = {}
         system._sys["fans"] = {}
         system._sys["temperatures"] = {}
-        system._sys["firmwares"] = {}
+        system._sys["firmware"] = {}
         result = system.get_system()
         assert "host" in result
         assert "sn" in result
@@ -140,7 +140,7 @@ class TestBaseRedfishSystemGetSystem:
         assert result["status"]["power"] == {}
         assert result["status"]["fans"] == {}
         assert result["status"]["temperatures"] == {}
-        assert "firmwares" in result
+        assert "firmware" in result
 
 
 class TestBaseRedfishSystemGetSpecs:
@@ -248,7 +248,7 @@ class TestBaseRedfishSystemComponentSpecs:
         assert "power" in BaseRedfishSystem.COMPONENT_SPECS
         assert "fans" in BaseRedfishSystem.COMPONENT_SPECS
         assert "temperatures" in BaseRedfishSystem.COMPONENT_SPECS
-        assert "firmwares" in BaseRedfishSystem.COMPONENT_SPECS
+        assert "firmware" in BaseRedfishSystem.COMPONENT_SPECS
 
     def test_field_lists_non_empty(self):
         assert len(BaseRedfishSystem.NETWORK_FIELDS) > 0
