@@ -93,6 +93,90 @@ class PendingPGs final : public DaemonHealthMetricCollector {
   vector<DaemonKey> osds;
 };
 
+class CephFSMirrorFailure final : public DaemonHealthMetricCollector {
+  bool _is_relevant(daemon_metric type) const override {
+    return type == daemon_metric::CEPHFS_MIRROR_FAILURE;
+  }
+  health_check_t& _get_check(health_check_map_t& cm) const override {
+    return cm.get_or_add("CEPHFS_MIRROR_FAILURE", HEALTH_WARN, "", 1);
+  }
+  bool _update(const DaemonKey& daemon,
+               const DaemonHealthMetric& metric) override {
+    auto failed_count = metric.get_n1();
+    auto failed_time = metric.get_n2();
+    value.n1 += failed_count;
+    value.n2 = std::max(value.n2, failed_time);
+    if (failed_count || failed_time) {
+      daemons.push_back(daemon);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void _summarize(health_check_t& check) const override {
+    if (daemons.empty()) {
+      return;
+    }
+    ostringstream ss;
+    if (daemons.size() > 1) {
+      if (daemons.size() > 10) {
+        ss << "daemons " << vector<DaemonKey>(daemons.begin(), daemons.begin()+10) << "..."
+           << " failed";
+      } else {
+        ss << "daemons " << daemons << " failed";
+      }
+    } else {
+      ss <<  daemons.front() << " failed";
+    }
+    check.summary =
+        fmt::format("{} mirroring enable failures, oldest one failed at {} sec, {}",
+                    value.n1, value.n2, ss.str());
+  }
+  vector<DaemonKey> daemons;
+};
+
+class CephFSMirrorSnapSyncFailure final : public DaemonHealthMetricCollector {
+  bool _is_relevant(daemon_metric type) const override {
+    return type == daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE;
+  }
+  health_check_t& _get_check(health_check_map_t& cm) const override {
+    return cm.get_or_add("CEPHFS_MIRROR_SNAP_SYNC_FAILURE", HEALTH_WARN, "", 1);
+  }
+  bool _update(const DaemonKey& daemon,
+               const DaemonHealthMetric& metric) override {
+    auto failed_count = metric.get_n1();
+    auto failed_time = metric.get_n2();
+    value.n1 += failed_count;
+    value.n2 = std::max(value.n2, failed_time);
+    if (failed_count || failed_time) {
+      daemons.push_back(daemon);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void _summarize(health_check_t& check) const override {
+    if (daemons.empty()) {
+      return;
+    }
+    ostringstream ss;
+    if (daemons.size() > 1) {
+      if (daemons.size() > 10) {
+        ss << "daemons " << vector<DaemonKey>(daemons.begin(), daemons.begin()+10) << "..."
+           << " failed to sync directory(s)";
+      } else {
+        ss << "daemons " << daemons << " failed to sync directory(s)";
+      }
+    } else {
+      ss <<  daemons.front() << " failed to sync directory(s)";
+    }
+    check.summary =
+        fmt::format("{} mirroring directory sync failures, oldest one failed at {} sec, {}",
+                    value.n1, value.n2, ss.str());
+  }
+  vector<DaemonKey> daemons;
+};
+
 } // anonymous namespace
 
 unique_ptr<DaemonHealthMetricCollector>
@@ -103,6 +187,10 @@ DaemonHealthMetricCollector::create(daemon_metric m)
     return std::make_unique<SlowOps>();
   case daemon_metric::PENDING_CREATING_PGS:
     return std::make_unique<PendingPGs>();
+  case daemon_metric::CEPHFS_MIRROR_FAILURE:
+    return std::make_unique<CephFSMirrorFailure>();
+  case daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE:
+    return std::make_unique<CephFSMirrorSnapSyncFailure>();
   default:
     return {};
   }

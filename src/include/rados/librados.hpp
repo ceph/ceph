@@ -13,6 +13,7 @@
 #include "librados.h"
 #include "librados_fwd.hpp"
 #include "rados_types.hpp"
+#include "mgr/DaemonHealthMetric.h"
 
 #include "cls_traits.hpp"
 
@@ -1556,6 +1557,8 @@ inline namespace v14_2_0 {
       const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
     int service_daemon_update_status(
       std::map<std::string,std::string>&& status);
+    int service_daemon_update_health(
+      std::vector<DaemonHealthMetric>&& health_metrics);
 
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid)
