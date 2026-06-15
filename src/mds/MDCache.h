@@ -615,6 +615,9 @@ private:
       mdr = _mdr;
     }
     void finish(int r) override {
+      if (quarantine && cache && mdr) {
+        cache->schedule_quarantine_cleanup(mdr);
+      }
       if (finisher) {
         finisher->complete(r);
         finisher = nullptr;
@@ -624,6 +627,9 @@ private:
     MDCache *cache;
     MDRequestRef mdr;
     Context* finisher = nullptr;
+    bool quarantine = false;
+    unsigned qtine_op = 0;
+    inodeno_t qtine_root_ino;
   };
   MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms);
   MDRequestRef get_quiesce_inode_op(CInode* in) {
@@ -1160,6 +1166,7 @@ private:
   void quarantine_inode(MDRequestRef const& mdr);
   void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
   bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
+  void schedule_quarantine_cleanup(const MDRequestRef& mdr);
   void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
                                        bool is_quarantined);
 
@@ -1632,8 +1639,6 @@ private:
   uint64_t quiesce_threshold;
   std::chrono::milliseconds quiesce_sleep;
 
-  uint64_t qtine_inflight_ops;
-  std::chrono::milliseconds qtine_sleep;
 };
 
 /**

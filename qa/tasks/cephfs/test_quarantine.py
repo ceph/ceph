@@ -7,6 +7,12 @@ incidents (e.g., ransomware attacks). When quarantined:
 - Clients with 'q' flag can access specific quarantined paths
 - Clients with 'Q' flag (or 'allow *') can access all quarantined paths
 - Snapshot data is also protected
+
+NOTE: These tests require FUSE client (ceph-fuse) because they expect
+operations on quarantined subvolumes to fail with errors (EACCES/EPERM).
+Kernel clients without quarantine support will block instead of failing.
+Once the kernel driver implements quarantine support (returning errors
+instead of blocking), these tests can be enabled for kernel clients too.
 """
 
 import errno
@@ -18,6 +24,7 @@ import unittest
 from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -46,6 +53,11 @@ class QuarantineTestBase(CephFSTestCase):
 
     def setUp(self):
         super().setUp()
+        # Quarantine tests expect operations to fail with errors (not block).
+        # This behavior requires FUSE client with quarantine support. Kernel
+        # clients without quarantine support will block instead of failing.
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Quarantine tests require FUSE client")
         self.volname = self.fs.name
         if self.SUBVOLUME_NAME:
             self._fs_cmd("subvolume", "create", self.volname,
@@ -767,6 +779,20 @@ class TestQuarantineDisruptive(QuarantineTestBase):
     def setUp(self):
         super().setUp()
         self._create_test_file()
+
+    def tearDown(self):
+        # After MDS restart the fuse daemon may be in a bad state.
+        # Ensure it's properly killed and remounted before the next test's
+        # setUp tries umount_wait.
+        try:
+            self.mount_a.umount_wait(force=True)
+        except Exception:
+            self.mount_a.kill_cleanup()
+        try:
+            self.mount_a.mount_wait()
+        except Exception:
+            pass
+        super().tearDown()
 
     def test_quarantine_survives_mds_restart(self):
         """Quarantine flag is retained after MDS restart."""

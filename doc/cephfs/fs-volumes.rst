@@ -1437,8 +1437,11 @@ For example:
 
     ceph fs subvolume quarantine enable cephfs mysubvol
 
-After this command completes, all normal clients will have their caps revoked
-and will see errors when trying to access files in the subvolume.
+After this command completes, all normal clients will have their caps revoked.
+Upgraded clients (ceph-fuse and kernel driver with quarantine support) will see
+errors when trying to access files in the subvolume. Older clients without
+quarantine support will have their operations blocked until quarantine is
+disabled.
 
 Disabling Quarantine
 ~~~~~~~~~~~~~~~~~~~~
@@ -1496,14 +1499,19 @@ subvolumes:
         mds 'allow rwQ fsname=<vol_name>' \
         osd 'allow rw tag cephfs data=<vol_name>'
 
-The recovery client can then mount the subvolume using ``ceph-fuse`` and
-perform data recovery while normal clients remain blocked.
+The recovery client can then mount the subvolume using ``ceph-fuse`` or the
+kernel driver and perform data recovery while normal clients remain
+blocked/disallowed.
 
-What Gets Blocked
-~~~~~~~~~~~~~~~~~
+.. note:: In the future, the ``ceph fs subvolume authorize`` command may be
+   enhanced to create client keyrings with quarantine access (``q`` flag)
+   directly.
 
-When a subvolume is quarantined, the following operations are blocked for
-normal (non-recovery) clients:
+What Gets Blocked/Disallowed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When a subvolume is quarantined, the following operations are blocked or
+return errors for normal (non-recovery) clients:
 
 - Reading file contents
 - Writing file contents
