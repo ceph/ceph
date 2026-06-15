@@ -393,7 +393,6 @@ class NSFSDriver : public StoreDriver {
 protected:
   CephContext *cct;
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
-  std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
@@ -414,7 +413,6 @@ public:
     auto db_full_path = std::filesystem::path(db_path) / db_name;
 
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
-    accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
   }
   virtual ~NSFSDriver() { }
 
@@ -707,7 +705,6 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
-  rgw::store::POSIXAccountDB* get_account_db() { return accountDB.get(); }
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
