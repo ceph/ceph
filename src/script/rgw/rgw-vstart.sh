@@ -16,6 +16,8 @@
 #   --gpfs-root DIR     GPFS data directory (default: /mnt/rgw/nsfs)
 #   --clean             Wipe config DB and all data before starting
 #   --debug-rgw N       Debug level (default: 20)
+#   --with-keycloak     Start a local Keycloak container for WebIdentity
+#                       testing (requires podman, jq, openssl, curl)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -29,6 +31,7 @@ GPFS=false
 CLONE=false
 LWE=false
 CLEAN=false
+KEYCLOAK=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -40,6 +43,7 @@ while [[ $# -gt 0 ]]; do
 		--clone)      CLONE=true; GPFS=true; shift ;;
 		--lwe)        LWE=true; GPFS=true; shift ;;
 		--clean)      CLEAN=true; shift ;;
+		--with-keycloak) KEYCLOAK=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -75,6 +79,12 @@ if [[ -f "$PID" ]]; then
 	sleep 1
 fi
 fuser -k 8000/tcp 2>/dev/null || true
+
+# stop any existing Keycloak container from a prior run
+if command -v podman &>/dev/null; then
+	podman stop keycloak-vstart 2>/dev/null || true
+	podman rm keycloak-vstart 2>/dev/null || true
+fi
 
 # --- clean data dirs ---
 # tolerate permission errors from root-owned files (e.g. LMDB
@@ -128,11 +138,16 @@ MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
 
 # --- for non-GPFS, vstart already started the daemon ---
 
-if ! $GPFS; then
-	DATA_DIR="$BUILD_DIR/dev/rgw/$STORE/root"
-	echo "==> radosgw up on port 8000 (data on $DATA_DIR)"
-	exit 0
+DATA_DIR="$BUILD_DIR/dev/rgw/$STORE/root"
+
+if $GPFS; then
+	DATA_DIR="$GPFS_ROOT/root"
 fi
+
+if ! $GPFS; then
+	# non-GPFS: vstart already started the daemon, skip to common tail
+	true
+else
 
 # --- GPFS: kill vstart daemon, patch ceph.conf, restart ---
 #
@@ -212,10 +227,58 @@ echo "==> starting radosgw"
 "${RGW_CMD[@]}"
 
 sleep 2
-if fuser 8000/tcp >/dev/null 2>&1; then
-	echo "==> radosgw up on port 8000 (data on $GPFS_ROOT/root)"
-else
+if ! fuser 8000/tcp >/dev/null 2>&1; then
 	echo "error: radosgw did not start" >&2
 	tail -20 "$BUILD_DIR/out/radosgw.8000.log"
 	exit 1
+fi
+
+fi  # end GPFS block
+
+# --- generate s3tests.conf from SAMPLE ---
+
+SAMPLE="$SRC_DIR/qa/workunits/rgw/s3tests-rs/s3tests.conf.SAMPLE"
+S3CONF="$BUILD_DIR/s3tests.conf"
+
+if [[ -f "$SAMPLE" ]]; then
+	echo "==> generating $S3CONF"
+	cp "$SAMPLE" "$S3CONF"
+	sed -i "s/bucket prefix = yournamehere-/bucket prefix = $(whoami)-/" "$S3CONF"
+else
+	echo "warning: $SAMPLE not found, skipping s3tests.conf generation" >&2
+fi
+
+export S3TEST_CONF="$S3CONF"
+
+# --- optional sidecars ---
+
+if $KEYCLOAK; then
+	echo "==> starting Keycloak sidecar"
+	S3TEST_CONF="$S3CONF" "$SRC_DIR/src/script/rgw/keycloak-vstart.sh"
+fi
+
+# --- status + what-next output ---
+
+S3TESTS_DIR="$SRC_DIR/qa/workunits/rgw/s3tests-rs"
+FEATURE_FLAG="fails_on_nsfs"
+if [[ "$STORE" == "posix" ]]; then
+	FEATURE_FLAG="fails_on_posix"
+fi
+
+echo ""
+echo "==> radosgw up on port 8000 ($STORE, data on $DATA_DIR)"
+echo "    s3tests.conf: $S3CONF"
+if $KEYCLOAK; then
+	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
+fi
+echo ""
+echo "To run tests:"
+echo "  cd $S3TESTS_DIR"
+echo "  S3TEST_CONF=$S3CONF \\"
+echo "    cargo nextest run -P all --test-threads=1 --features $FEATURE_FLAG"
+echo ""
+echo "To stop:"
+echo "  kill \$(cat $PID)"
+if $KEYCLOAK; then
+	echo "  $SRC_DIR/src/script/rgw/keycloak-vstart.sh --stop"
 fi
