@@ -2143,7 +2143,7 @@ int NSFSDriver::load_account_by_id(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2163,7 +2163,7 @@ int NSFSDriver::load_account_by_name(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2182,7 +2182,7 @@ int NSFSDriver::load_account_by_email(const DoutPrefixProvider* dpp,
 {
   RGWObjVersionTracker objv_tracker;
 
-  int ret = accountDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
+  int ret = userDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
       &objv_tracker);
 
   if (ret < 0)
@@ -2199,7 +2199,7 @@ int NSFSDriver::store_account(const DoutPrefixProvider* dpp,
 			  const Attrs& attrs,
 			  RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->store_account(dpp, info, exclusive, &attrs, &objv);
+  int ret = userDB->store_account(dpp, info, exclusive, &attrs, &objv);
 
   if (ret < 0)
     return ret;
@@ -2212,7 +2212,7 @@ int NSFSDriver::delete_account(const DoutPrefixProvider* dpp,
 			     const RGWAccountInfo& info,
 			     RGWObjVersionTracker& objv)
 {
-  int ret = accountDB->remove_account(dpp, info, &objv);
+  int ret = userDB->remove_account(dpp, info, &objv);
 
   if (ret < 0)
     return ret;
@@ -2595,7 +2595,7 @@ std::unique_ptr<RGWRole> NSFSDriver::get_role(std::string name,
     std::multimap<std::string,std::string> tags)
 {
   return std::make_unique<DBStoreRole>(
-      get_account_db(), std::move(name), std::move(tenant),
+      get_user_db(), std::move(name), std::move(tenant),
       std::move(account_id), std::move(path), std::move(trust_policy),
       std::move(description), std::move(max_session_duration_str),
       std::move(tags));
@@ -2603,12 +2603,12 @@ std::unique_ptr<RGWRole> NSFSDriver::get_role(std::string name,
 
 std::unique_ptr<RGWRole> NSFSDriver::get_role(std::string id)
 {
-  return std::make_unique<DBStoreRole>(get_account_db(), std::move(id));
+  return std::make_unique<DBStoreRole>(get_user_db(), std::move(id));
 }
 
 std::unique_ptr<RGWRole> NSFSDriver::get_role(const RGWRoleInfo& info)
 {
-  return std::make_unique<DBStoreRole>(get_account_db(), info);
+  return std::make_unique<DBStoreRole>(get_user_db(), info);
 }
 
 int NSFSDriver::count_account_roles(const DoutPrefixProvider* dpp,
@@ -2616,7 +2616,7 @@ int NSFSDriver::count_account_roles(const DoutPrefixProvider* dpp,
 				    std::string_view account_id,
 				    uint32_t& count)
 {
-  return get_account_db()->count_account_roles(dpp,
+  return get_user_db()->count_account_roles(dpp,
       std::string(account_id), count);
 }
 
@@ -2629,7 +2629,7 @@ int NSFSDriver::list_account_roles(const DoutPrefixProvider* dpp,
 				   RoleList& listing)
 {
   std::vector<RGWRoleInfo> roles;
-  int ret = get_account_db()->list_roles(dpp, "account",
+  int ret = get_user_db()->list_roles(dpp, "account",
       "", std::string(account_id),
       std::string(path_prefix), std::string(marker),
       max_items + 1, roles);
@@ -2654,7 +2654,7 @@ int NSFSDriver::list_roles(const DoutPrefixProvider *dpp,
 			   RoleList& listing)
 {
   std::vector<RGWRoleInfo> roles;
-  int ret = get_account_db()->list_roles(dpp, "tenant",
+  int ret = get_user_db()->list_roles(dpp, "tenant",
       tenant, "",
       path_prefix, marker,
       max_items + 1, roles);
@@ -2744,7 +2744,7 @@ int NSFSDriver::load_group_by_id(const DoutPrefixProvider* dpp,
 				 RGWObjVersionTracker& objv)
 {
   info.id = std::string(id);
-  return get_account_db()->get_group(dpp, "group_id", info, attrs);
+  return get_user_db()->get_group(dpp, "group_id", info, attrs);
 }
 
 int NSFSDriver::load_group_by_name(const DoutPrefixProvider* dpp,
@@ -2756,7 +2756,7 @@ int NSFSDriver::load_group_by_name(const DoutPrefixProvider* dpp,
 {
   info.account_id = std::string(account_id);
   info.name = std::string(name);
-  return get_account_db()->get_group(dpp, "name", info, attrs);
+  return get_user_db()->get_group(dpp, "name", info, attrs);
 }
 
 int NSFSDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
@@ -2764,14 +2764,14 @@ int NSFSDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
 			    RGWObjVersionTracker& objv, bool exclusive,
 			    const RGWGroupInfo* old_info)
 {
-  return get_account_db()->store_group(dpp, info, attrs, exclusive);
+  return get_user_db()->store_group(dpp, info, attrs, exclusive);
 }
 
 int NSFSDriver::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
 			     const RGWGroupInfo& info,
 			     RGWObjVersionTracker& objv)
 {
-  return get_account_db()->remove_group(dpp, info);
+  return get_user_db()->remove_group(dpp, info);
 }
 
 int NSFSDriver::list_group_users(const DoutPrefixProvider* dpp,
@@ -2812,7 +2812,7 @@ int NSFSDriver::count_account_groups(const DoutPrefixProvider* dpp,
 				     std::string_view account_id,
 				     uint32_t& count)
 {
-  return get_account_db()->count_account_groups(dpp,
+  return get_user_db()->count_account_groups(dpp,
       std::string(account_id), count);
 }
 
@@ -2825,7 +2825,7 @@ int NSFSDriver::list_account_groups(const DoutPrefixProvider* dpp,
 				    GroupList& listing)
 {
   std::vector<RGWGroupInfo> groups;
-  int ret = get_account_db()->list_account_groups(dpp,
+  int ret = get_user_db()->list_account_groups(dpp,
       std::string(account_id), std::string(path_prefix),
       std::string(marker), max_items + 1, groups);
   if (ret < 0) {
@@ -2846,7 +2846,7 @@ int NSFSDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
 				    bool exclusive,
 				    RGWObjVersionTracker* objv_tracker)
 {
-  return get_account_db()->store_oidc_provider(dpp, info, exclusive);
+  return get_user_db()->store_oidc_provider(dpp, info, exclusive);
 }
 
 int NSFSDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
@@ -2856,7 +2856,7 @@ int NSFSDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
 				   RGWOIDCProviderInfo& info,
 				   RGWObjVersionTracker* objv_tracker)
 {
-  return get_account_db()->load_oidc_provider(dpp,
+  return get_user_db()->load_oidc_provider(dpp,
       std::string(tenant), std::string(url), info);
 }
 
@@ -2865,7 +2865,7 @@ int NSFSDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
 				     std::string_view tenant,
 				     std::string_view url)
 {
-  return get_account_db()->delete_oidc_provider(dpp,
+  return get_user_db()->delete_oidc_provider(dpp,
       std::string(tenant), std::string(url));
 }
 
@@ -2874,7 +2874,7 @@ int NSFSDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
 				   std::string_view tenant,
 				   std::vector<RGWOIDCProviderInfo>& providers)
 {
-  return get_account_db()->list_oidc_providers(dpp,
+  return get_user_db()->list_oidc_providers(dpp,
       std::string(tenant), providers);
 }
 
@@ -6131,12 +6131,7 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
   int ret = -1;
   const static std::string tenant = "default_ns";
   if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
-    ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
-    return nullptr;
-  }
-
-  if ((ret = driver->get_account_db()->Initialize("", -1)) < 0) {
-    ldout(cct, 0) << "Account DB initialization failed for tenant("<<tenant<<")" << dendl;
+    ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
     return nullptr;
   }
 
