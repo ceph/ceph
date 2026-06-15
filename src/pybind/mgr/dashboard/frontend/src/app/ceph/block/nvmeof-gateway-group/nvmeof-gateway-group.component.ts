@@ -33,6 +33,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -73,6 +74,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   gatewayGroupName = '';
   subsystemCount = 0;
   gatewayCount = 0;
+  selectedGatewayDetails: DetailItem[] = [];
   private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
@@ -221,6 +223,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
+    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {

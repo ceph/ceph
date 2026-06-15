@@ -57,6 +57,8 @@ export interface CephServiceAdditionalSpec {
   ssl_certificate_key: string;
   ssl_protocols: string[];
   ssl_ciphers: string[];
+  certificate_source?: string;
+  custom_sans?: string[];
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
@@ -95,3 +97,33 @@ export enum QatOptions {
   sw = 'sw',
   none = 'none'
 }
+
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
+}
+
+export enum CertMode {
+  externalOnly = 'externalOnly',
+  both = 'both',
+  internalOnly = 'internalOnly'
+}
+
+export interface CephServiceCertificate {
+  has_certificate: boolean;
+  cert_name: string;
+  expiry_date: string;
+  days_to_expiration: number;
+  status: 'valid' | 'expiring' | 'expired' | 'not_configured' | 'invalid';
+  signed_by: string;
+  issuer: string;
+}
+
+export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
+  valid: 'success',
+  expiring: 'warningAlt',
+  expired: 'danger',
+  not_configured: 'warningAlt',
+  invalid: 'danger',
+  default: 'infoCircle'
+};
