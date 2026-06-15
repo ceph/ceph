@@ -6,6 +6,7 @@ import { observeOn } from 'rxjs/operators';
 
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
@@ -18,8 +19,25 @@ describe('CephfsAddMirroringPathComponent', () => {
     addMirrorDirectory: jest.fn()
   };
 
+  const snapScheduleServiceMock = {
+    create: jest.fn()
+  };
+
   const notificationServiceMock = {
     show: jest.fn()
+  };
+
+  const scheduleStepMock = {
+    buildCreatePayload: jest.fn(
+      (_fsName: string, selection: { path: string; subvol?: string; group?: string }) => ({
+        fs: 'testfs',
+        path: selection.path,
+        snap_schedule: '1d',
+        start: '2023-01-01T00:00:00',
+        ...(selection.subvol ? { subvol: selection.subvol } : {}),
+        ...(selection.subvol && selection.group ? { group: selection.group } : {})
+      })
+    )
   };
 
   beforeEach(async () => {
@@ -42,6 +60,7 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapScheduleServiceMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -118,6 +137,9 @@ describe('CephfsAddMirroringPathComponent', () => {
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
       defer(() => of({ path }).pipe(observeOn(asyncScheduler)))
     );
+    snapScheduleServiceMock.create.mockImplementation(() =>
+      defer(() => of({ status: 200 }).pipe(observeOn(asyncScheduler)))
+    );
 
     component.onSubmit();
     tick();
@@ -149,6 +171,9 @@ describe('CephfsAddMirroringPathComponent', () => {
         alreadyMirrored: []
       })
     });
+    snapScheduleServiceMock.create.mockImplementation(() =>
+      defer(() => of({ status: 200 }).pipe(observeOn(asyncScheduler)))
+    );
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
       throwError(() => ({

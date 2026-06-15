@@ -7,7 +7,9 @@ export interface SnapshotSchedule {
   path: string;
   rel_path?: string;
   schedule: string;
+  scheduleCopy?: string;
   retention?: Record<string, number> | string;
+  retentionCopy?: string[];
   start: Date;
   created: Date;
   first?: string;
@@ -44,4 +46,67 @@ export interface SnapshotScheduleFormValue {
 export interface RetentionPolicy {
   retentionInterval: number;
   retentionFrequency: string;
+}
+
+export function parseSchedule(interval: number, frequency: string): string {
+  return `${interval}${frequency}`;
+}
+
+export function parseRetentionPolicies(retentionPolicies: RetentionPolicy[]): string | undefined {
+  const value = retentionPolicies
+    ?.filter((policy) => policy?.retentionInterval != null && policy?.retentionFrequency != null)
+    ?.map((policy) => `${policy.retentionInterval}-${policy.retentionFrequency}`)
+    .join('|');
+
+  return value || undefined;
+}
+
+export function parseScheduleStart(startDate?: string): string {
+  if (!startDate) {
+    return new Date().toISOString().slice(0, 19);
+  }
+
+  return new Date(startDate.replace(/\//g, '-').replace(' ', 'T')).toISOString().slice(0, 19);
+}
+
+export interface SnapshotScheduleCreatePayload {
+  fs: string;
+  path: string;
+  snap_schedule: string;
+  start: string;
+  retention_policy?: string;
+  subvol?: string;
+  group?: string;
+}
+
+export function buildSnapshotScheduleCreatePayload(params: {
+  fs: string;
+  path: string;
+  repeatInterval: number;
+  repeatFrequency: string;
+  startDate?: string;
+  retentionPolicies?: RetentionPolicy[];
+  subvol?: string;
+  group?: string;
+}): SnapshotScheduleCreatePayload {
+  const payload: SnapshotScheduleCreatePayload = {
+    fs: params.fs,
+    path: params.path,
+    snap_schedule: parseSchedule(params.repeatInterval, params.repeatFrequency),
+    start: parseScheduleStart(params.startDate)
+  };
+
+  const retentionPolicy = parseRetentionPolicies(params.retentionPolicies ?? []);
+  if (retentionPolicy) {
+    payload.retention_policy = retentionPolicy;
+  }
+
+  if (params.subvol) {
+    payload.subvol = params.subvol;
+    if (params.group) {
+      payload.group = params.group;
+    }
+  }
+
+  return payload;
 }

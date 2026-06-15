@@ -3,6 +3,12 @@ export interface PathLevel {
   selected: string;
 }
 
+export interface MirroringPathSelection {
+  path: string;
+  subvol?: string;
+  group?: string;
+}
+
 export interface PathEntry {
   fullPath: string;
   levels: PathLevel[];

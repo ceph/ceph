@@ -65,6 +65,10 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     this.syncFormValue();
   }
 
+  getDisplayPath(entry: PathEntry): string {
+    return MirroringPathUtils.normalizePath(entry.fullPath) || '/';
+  }
+
   toggleExpand(index: number): void {
     this.paths[index].expanded = !this.paths[index].expanded;
   }

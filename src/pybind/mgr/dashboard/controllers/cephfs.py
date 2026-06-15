@@ -19,6 +19,7 @@ from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
     allow_empty_body
+from ..controllers.service import Service
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -1203,28 +1204,58 @@ class CephFsSnapshotClone(RESTController):
 @APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
 class CephFSSnapshotSchedule(RESTController):
 
-    def list(self, fs: str, path: str = '/', recursive: bool = True):
-        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                          path, recursive, fs, None, None, 'plain')
-        if len(out) == 0:
+    def list(self, fs: str, path: str = '/', recursive: bool = True, subvol=None, group=None):
+        try:
+            return self._list_snapshot_schedules(fs, path, recursive, subvol, group)
+        except Exception:
             return []
 
-        snapshot_schedule_list = out.split('\n')
+    def _list_snapshot_schedules(self, fs: str, path: str, recursive, subvol, group):
+        # Query params arrive as strings; "false" is truthy unless normalized first.
+        recursive = str_to_bool(recursive)
+
+        # snap_schedule only accepts group together with subvol; group-only paths use path alone.
+        if not subvol:
+            subvol = None
+            group = None
+
+        if not recursive:
+            get_code, status_out, _ = mgr.remote('snap_schedule', 'snap_schedule_get',
+                                                 path, fs, subvol, group, 'json')
+            return self._snapshot_schedule_json_output(get_code, status_out)
+
+        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                          path, recursive, fs, subvol, group, 'plain')
+        if error_code != 0 or not out:
+            return []
+
         output: List[Any] = []
+        for line in out.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            current_path = line.split(' ', 1)[0]
+            if not current_path:
+                continue
+            get_code, status_out, _ = mgr.remote('snap_schedule', 'snap_schedule_get',
+                                                 current_path, fs, subvol, group, 'json')
+            output.extend(self._snapshot_schedule_json_output(get_code, status_out))
 
-        for snap in snapshot_schedule_list:
-            current_path = snap.strip().split(' ')[0]
-            error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
-                                                     current_path, fs, None, None, 'json')
-            output = output + json.loads(status_out)
+        return output
 
-        output_json = json.dumps(output)
-
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to get list of snapshot schedules for path {path}: {err}'
-            )
-        return json.loads(output_json)
+    @staticmethod
+    def _snapshot_schedule_json_output(get_code: int, status_out: str) -> List[Any]:
+        if get_code != 0 or not status_out:
+            return []
+        try:
+            parsed = json.loads(status_out)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict):
+            return [parsed]
+        return []
 
     def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
                subvol=None, group=None):
