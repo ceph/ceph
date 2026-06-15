@@ -27,10 +27,16 @@ Description
 volumes as OSDs, trying to maintain a similar API to ``ceph-disk`` when
 preparing, activating, and creating OSDs.
 
-It deviates from ``ceph-disk`` by not interacting or relying on the udev rules
-that come installed for Ceph. These rules allow automatic detection of
-previously setup devices that are in turn fed into ``ceph-disk`` to activate
-them.
+Unlike ``ceph-disk``, it does not rely on Ceph specific udev rules that
+trigger automatic OSD activation at boot; activation is handled through
+systemd units instead.
+
+To identify block devices (for example in ``inventory`` or ``raw list``),
+``ceph-volume`` reads device metadata from ``/run/udev/data/``, a cache
+maintained by ``systemd-udevd`` on the host. This avoids spawning
+``udevadm`` subprocesses for each device. ``/run/udev`` must be visible to
+``ceph-volume`` (for example when run inside a container), and block devices
+must already have been processed by udev before these commands are invoked.
 
 
 Commands
