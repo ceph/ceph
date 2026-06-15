@@ -3630,14 +3630,47 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
 // Uses add_flag (not add_option) so the flag takes no value — it sets the
 // variable to 1 when present (e.g. --purge-objects alone, no argument after it).
 // Same primary-name lookup logic as add_multilevel_option.
+// force_callback(false) undoes CLI11's forced callback on int-bound flags
+// (CLI11 adds it for counting flags): with the same variable bound at every
+// level, unmatched registrations would otherwise overwrite the parsed value
+// with the default 0. The variables are pre-initialized, so the forced reset
+// is not needed.
 template <typename T>
 CLI::Option* add_multilevel_flag(CLI::App* cmd, const std::string& name, T& var,
                               std::string_view desc = {}) {
   const std::string primary = name.substr(0, name.find(','));
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
     if (!p->get_option_no_throw(primary))
-      p->add_flag(name, var)->group("");
-  return cmd->add_flag(name, var, std::string(desc));
+      p->add_flag(name, var)->group("")->force_callback(false);
+  return cmd->add_flag(name, var, std::string(desc))->force_callback(false);
+}
+
+// Maps a captured binary-flag value to its legacy int var. "false"/"0" -> 0,
+// anything else -> 1 (invalid values warn but set, like legacy's truthy -EINVAL).
+static void parse_binary_flag(const std::string& flag,
+                              const std::string& value, int& out) {
+  if (value.empty() || value == "true" || value == "1") { out = 1; return; }
+  if (value == "false" || value == "0")                 { out = 0; return; }
+  cerr << "Warning: invalid value '" << value << "' for " << flag
+       << ", treating as set" << std::endl;
+  out = 1;
+}
+
+// Binary-flag sibling of add_multilevel_flag: a string option with expected(0,1)
+// at each level, so "--fix false" is consumed (not left as a stray) and parse()
+// stays parse-safe for unmigrated commands. The bound setter converts straight
+// into the command's int var, so no separate capture variable is needed; absent
+// leaves it untouched (add_option_function skips run_callback_for_default()).
+CLI::Option* add_multilevel_binary_flag(CLI::App* cmd, const std::string& name,
+                                        int& target, std::string_view desc = {}) {
+  const std::string primary = name.substr(0, name.find(','));
+  auto setter = [&target, primary](const std::string& v) {
+    parse_binary_flag(primary, v, target);
+  };
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
+    if (!p->get_option_no_throw(primary))
+      p->add_option_function<std::string>(name, setter)->group("")->expected(0, 1)->take_last();
+  return cmd->add_option_function<std::string>(name, setter, std::string(desc))->expected(0, 1)->take_last();
 }
 
 // Builds a display string for warning messages, e.g. "--bucket/-b".
@@ -4262,7 +4295,7 @@ int main(int argc, const char **argv)
       // bucket check options
       add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
       add_multilevel_option(bucket_check, "--tenant",    tenant,      tenant_desc);
-      add_multilevel_flag  (bucket_check, "--fix",                    fix,                    "besides checking bucket index, will also fix it");
+      add_multilevel_binary_flag(bucket_check, "--fix",               fix,                    "besides checking bucket index, will also fix it");
       add_multilevel_flag  (bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
       add_multilevel_flag  (bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
       add_multilevel_flag  (bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
@@ -4271,7 +4304,7 @@ int main(int argc, const char **argv)
       // bucket check olh options
       add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_option(bucket_check_olh, "--tenant",            tenant,             tenant_desc);
-      add_multilevel_flag  (bucket_check_olh, "--fix",               fix,                "besides checking, will also fix it");
+      add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
       add_multilevel_flag  (bucket_check_olh, "--dump-keys",         dump_keys,          "output all checked keys")->ignore_underscore();
       add_multilevel_flag  (bucket_check_olh, "--hide-progress",     hide_progress,      "suppress per-shard progress output")->ignore_underscore();
@@ -4279,7 +4312,7 @@ int main(int argc, const char **argv)
       // bucket check unlinked options
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_option(bucket_check_unlinked, "--tenant",            tenant,             tenant_desc);
-      add_multilevel_flag  (bucket_check_unlinked, "--fix",               fix,                "besides checking, will also fix it");
+      add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
       add_multilevel_flag  (bucket_check_unlinked, "--dump-keys",         dump_keys,          "output all checked keys")->ignore_underscore();
       add_multilevel_flag  (bucket_check_unlinked, "--hide-progress",     hide_progress,      "suppress per-shard progress output")->ignore_underscore();
