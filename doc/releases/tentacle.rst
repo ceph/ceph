@@ -12,7 +12,7 @@ This is the second minor release in the Tentacle series. We recommend that all u
 Release Date
 ------------
 
-June 15, 2026
+June 16, 2026
 
 Notable Changes
 ---------------
@@ -71,7 +71,6 @@ External Block Device (extblkdev)
 Changelog
 ---------
 * (tentacle) ceph-volume: backport PRs 67047 and 67240 (`pr#67343 <https://github.com/ceph/ceph/pull/67343>`_, Guillaume Abrioux, Parfait Detchenou)
-* 20.2.1 (`pr#68185 <https://github.com/ceph/ceph/pull/68185>`_, Ceph Release Team)
 * [tentacle] bluestore, extblkdev: Now plugins can raise health warnings (`pr#68663 <https://github.com/ceph/ceph/pull/68663>`_, Adam Kupczyk, Igor Fedotov, Martin Ohmacht)
 * Backporting PRs 67236 and 67419 (`pr#67533 <https://github.com/ceph/ceph/pull/67533>`_, Adam King)
 * Beacon diff + Stretched cluster (`pr#68347 <https://github.com/ceph/ceph/pull/68347>`_, Leonid Chernin, Samuel Just)
@@ -160,6 +159,7 @@ Changelog
 * mgr: ensure that all modules have started before advertising active mgr (`pr#67850 <https://github.com/ceph/ceph/pull/67850>`_, Laura Flores)
 * mgr: fix continous smb MgrDBNotReady (`pr#68598 <https://github.com/ceph/ceph/pull/68598>`_, Pedro Gonzalez Gomez)
 * mgr: fix PyObject\* refcounting in TTLCache and cleanup logic (`pr#66482 <https://github.com/ceph/ceph/pull/66482>`_, Nitzan Mordechai)
+* mgr: guard close_section calls in get_perf_schema_python (`pr#69436 <https://github.com/ceph/ceph/pull/69436>`_, Lumir Sliva)
 * mgr: isolated CherryPy to prevent global state sharing (`pr#67465 <https://github.com/ceph/ceph/pull/67465>`_, Nizamudeen A, Anmol Babu)
 * mon [stretch-mode]: Allow a max bucket weight diff threshold (`pr#67790 <https://github.com/ceph/ceph/pull/67790>`_, Kamoltat Sirivadhna, Kamoltat (Junior) Sirivadhna)
 * mon/AuthMonitor: add osd w cap for superuser client (`pr#68314 <https://github.com/ceph/ceph/pull/68314>`_, Venky Shankar, Patrick Donnelly)
@@ -176,6 +176,7 @@ Changelog
 * os/bluestore:fix bluestore_volume_selection_reserved_factor usage (`pr#66837 <https://github.com/ceph/ceph/pull/66837>`_, Igor Fedotov)
 * osd/scrub: support an operator-abort command (`pr#67031 <https://github.com/ceph/ceph/pull/67031>`_, Ronen Friedman)
 * osd: add pg-upmap-primary to clean_pg_upmaps (`pr#67407 <https://github.com/ceph/ceph/pull/67407>`_, Laura Flores)
+* osd: Allow multiple objects with same version in missing list (`pr#69450 <https://github.com/ceph/ceph/pull/69450>`_, Alex Ainscow)
 * osd: Avoid assertion on empty object read when reading multiple objects (`pr#68714 <https://github.com/ceph/ceph/pull/68714>`_, Alex Ainscow)
 * osd: Avoid pwlc spanning intervals (`pr#68708 <https://github.com/ceph/ceph/pull/68708>`_, Bill Scales)
 * osd: Change rmissing map key from version_t to eversion_t (`pr#68716 <https://github.com/ceph/ceph/pull/68716>`_, Alex Ainscow)
