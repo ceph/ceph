@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_posix.h"
+#include "rgw_rest_user.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
@@ -5306,6 +5307,13 @@ std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& 
                                                              const std::string& cookie)
 {
   return std::make_unique<LCPOSIXSerializer>(driver, oid, lock_name, cookie);
+
+}
+
+void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("user", new RGWRESTMgr_User);
+  /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
 }
 
 } } // namespace rgw::sal
