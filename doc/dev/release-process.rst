@@ -87,7 +87,7 @@ Once QE has determined a stopping point in the working (e.g., ``squid``) branch,
 
 Notify the "Build Lead" that the release branch is ready.
 
-2. Starting the build
+2a. Starting the build
 =====================
 
 We'll use a stable/regular 19.2.2 release of Squid as an example throughout this document.
@@ -122,6 +122,37 @@ NOTE: if for some reason the build has to be restarted (for example if one distr
 
 
 5. Click ``Build``.
+
+2b. What to do if your build fails
+==================================
+
+The ceph-release-pipeline parent job has three stages.
+
+If your build fails during the "create ceph release tag" stage, troubleshoot the child ceph-tag job and re-run the parent ceph-release-pipeline job with the same parameters.
+
+----
+
+If your build fails during the "package build" stage, troubleshoot the child ceph-dev-pipeline job.  If only one variant failed to build (e.g., centos9 arm64), start a new ceph-release-pipeline job specifying::
+
+    DISTROS=centos9
+    ARCHS=arm64
+    TAG=false <-- VERY IMPORTANT
+
+This will leave the version commit and previously-created tag intact in ceph-releases.git.  You will want the subsequent ceph-dev-pipeline job to reuse that SHA/tag.
+
+Once all of your variants are successfully built, you will have to manually run the ceph-tag job.  For example,::
+
+    BRANCH=tentacle
+    TAG=true
+    TAG_PHASE=push
+    VERSION=20.2.0
+    RELEASE_TYPE=STABLE
+
+Then proceed with the normal release process.
+
+----
+
+If your build fails during the "push ceph release tag" stage, troubleshoot the child ceph-tag job and re-run **just** the ceph-tag job again manually.  Do not re-run ceph-release-pipeline.
 
 3. Release Notes
 ================
