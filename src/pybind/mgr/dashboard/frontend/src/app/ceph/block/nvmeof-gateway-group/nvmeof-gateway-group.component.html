@@ -69,11 +69,9 @@
   </div>
 </ng-template>
 
-<ng-template
-  #deleteTpl
-  let-groupName="groupName"
-  let-subsystemCount="subsystemCount"
->
+<ng-template #deleteTpl
+             let-groupName="groupName"
+             let-subsystemCount="subsystemCount">
   @if (subsystemCount > 0) {
     <cd-alert-panel
       type="warning"
