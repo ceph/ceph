@@ -17,6 +17,7 @@ import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/ceph
 })
 export class CephfsMirroringListComponent implements OnInit {
   columns: CdTableColumn[];
+  isSetupModalOpen = false;
   selection = new CdTableSelection();
 
   private subject$ = new Subject<void>();
@@ -49,6 +50,7 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
       { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
     ];
+    this.loadDaemonStatus();
   }
 
   loadDaemonStatus() {
@@ -65,6 +67,15 @@ export class CephfsMirroringListComponent implements OnInit {
   }
 
   onTokenGenerated(_response: any) {
+    this.loadDaemonStatus();
+  }
+
+  openSetupMirroring() {
+    this.isSetupModalOpen = true;
+  }
+
+  closeSetupModal() {
+    this.isSetupModalOpen = false;
     this.loadDaemonStatus();
   }
 

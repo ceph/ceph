@@ -26,10 +26,18 @@ describe('CephfsMirroringListComponent', () => {
   });
 
   it('should initialize columns correctly on ngOnInit', () => {
+    cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
     component.ngOnInit();
 
     expect(component.columns.length).toBe(6);
     expect(component.columns[0].prop).toBe('local_fs_name');
+  });
+
+  it('should load daemon status on ngOnInit', () => {
+    cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
+    component.daemonStatus$.subscribe();
+    component.ngOnInit();
+    expect(cephfsServiceMock.listDaemonStatus).toHaveBeenCalledTimes(1);
   });
 
   it('should fetch daemon status when loadDaemonStatus() is called', () => {
