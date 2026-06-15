@@ -15,6 +15,8 @@
 #include <map>
 #include "rgw_sal_store.h"
 #include "rgw_common.h"
+#include "rgw_role.h"
+#include "rgw_oidc_provider.h"
 #include "driver/rados/rgw_bucket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -31,6 +33,25 @@ struct DBOpAccountInfo {
   RGWAccountInfo info = {};
   obj_version account_version;
   rgw::sal::Attrs account_attrs;
+};
+
+struct DBOpRoleInfo {
+  RGWRoleInfo info;
+  obj_version role_version;
+  std::vector<RGWRoleInfo> list_entries;
+};
+
+struct DBOpOIDCProviderInfo {
+  RGWOIDCProviderInfo info;
+  std::vector<RGWOIDCProviderInfo> list_entries;
+};
+
+struct DBOpGroupInfo {
+  RGWGroupInfo info;
+  rgw::sal::Attrs group_attrs;
+  std::vector<RGWGroupInfo> list_entries;
+  std::string user_id;
+  std::vector<std::string> user_list;
 };
 
 struct DBOpUserInfo {
@@ -131,6 +152,9 @@ struct DBOpInfo {
    *
    * XXX: Swift keys and subuser not supported for now */
   DBOpAccountInfo account;
+  DBOpRoleInfo role;
+  DBOpOIDCProviderInfo oidc;
+  DBOpGroupInfo group;
   DBOpUserInfo user;
   std::string query_str;
   DBOpBucketInfo bucket;
@@ -146,6 +170,11 @@ struct DBOpParams {
 
   /* Tables */
   std::string account_table;
+  std::string role_table;
+  std::string oidc_table;
+  std::string group_table;
+  std::string group_users_table;
+  std::string access_keys_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -184,6 +213,42 @@ struct DBOpAccountPrepareInfo {
   static constexpr const char* max_groups = ":max_groups";
   static constexpr const char* max_buckets = ":max_buckets";
   static constexpr const char* max_access_keys = ":max_access_keys";
+  static constexpr const char* account_attrs = ":account_attrs";
+};
+
+struct DBOpRolePrepareInfo {
+  static constexpr const char* role_id = ":role_id";
+  static constexpr const char* name = ":role_name";
+  static constexpr const char* tenant = ":role_tenant";
+  static constexpr const char* account_id = ":role_account_id";
+  static constexpr const char* path = ":role_path";
+  static constexpr const char* arn = ":role_arn";
+  static constexpr const char* trust_policy = ":trust_policy";
+  static constexpr const char* perm_policies = ":perm_policies";
+  static constexpr const char* managed_policies = ":managed_policies";
+  static constexpr const char* tags = ":role_tags";
+  static constexpr const char* max_session_duration = ":max_session_duration";
+  static constexpr const char* description = ":role_description";
+  static constexpr const char* creation_date = ":creation_date";
+};
+
+struct DBOpOIDCProviderPrepareInfo {
+  static constexpr const char* provider_url = ":provider_url";
+  static constexpr const char* tenant = ":oidc_tenant";
+  static constexpr const char* client_ids = ":client_ids";
+  static constexpr const char* thumbprints = ":thumbprints";
+  static constexpr const char* provider_arn = ":provider_arn";
+  static constexpr const char* creation_date = ":oidc_creation_date";
+};
+
+struct DBOpGroupPrepareInfo {
+  static constexpr const char* group_id = ":group_id";
+  static constexpr const char* name = ":group_name";
+  static constexpr const char* tenant = ":group_tenant";
+  static constexpr const char* account_id = ":group_account_id";
+  static constexpr const char* path = ":group_path";
+  static constexpr const char* group_attrs = ":group_attrs";
+  static constexpr const char* user_id = ":group_user_id";
 };
 
 struct DBOpUserPrepareInfo {
@@ -192,15 +257,7 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* ns = ":ns";
   static constexpr const char* display_name = ":display_name";
   static constexpr const char* user_email = ":user_email";
-  /* Support only single access_key for now. So store
-   * it separately as primary access_key_id & secret to
-   * be able to query easily.
-   *
-   * In future, when need to support & query from multiple
-   * access keys, better to maintain them in a separate table.
-   */
-  static constexpr const char* access_keys_id = ":access_keys_id";
-  static constexpr const char* access_keys_secret = ":access_keys_secret";
+  static constexpr const char* access_key_id = ":access_key_id";
   static constexpr const char* access_keys = ":access_keys";
   static constexpr const char* swift_keys = ":swift_keys";
   static constexpr const char* subusers = ":subusers";
@@ -218,6 +275,9 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* user_quota = ":user_quota";
   static constexpr const char* type = ":type";
   static constexpr const char* mfa_ids = ":mfa_ids";
+  static constexpr const char* account_id = ":user_account_id";
+  static constexpr const char* path = ":user_path";
+  static constexpr const char* create_date = ":user_create_date";
   static constexpr const char* user_attrs = ":user_attrs";
   static constexpr const char* user_ver = ":user_vers";
   static constexpr const char* user_ver_tag = ":user_ver_tag";
@@ -338,6 +398,9 @@ struct DBOpLCHeadPrepareInfo {
 
 struct DBOpPrepareInfo {
   DBOpAccountPrepareInfo account;
+  DBOpRolePrepareInfo role;
+  DBOpOIDCProviderPrepareInfo oidc;
+  DBOpGroupPrepareInfo group;
   DBOpUserPrepareInfo user;
   std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
@@ -351,6 +414,11 @@ struct DBOpPrepareInfo {
 struct DBOpPrepareParams {
   /* Tables */
   std::string account_table;
+  std::string role_table;
+  std::string oidc_table;
+  std::string group_table;
+  std::string group_users_table;
+  std::string access_keys_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -371,6 +439,28 @@ struct DBOps {
   std::shared_ptr<class InsertAccountOp> InsertAccount;
   std::shared_ptr<class RemoveAccountOp> RemoveAccount;
   std::shared_ptr<class GetAccountOp> GetAccount;
+  std::shared_ptr<class InsertRoleOp> InsertRole;
+  std::shared_ptr<class RemoveRoleOp> RemoveRole;
+  std::shared_ptr<class GetRoleOp> GetRole;
+  std::shared_ptr<class ListRolesOp> ListRoles;
+  std::shared_ptr<class InsertOIDCProviderOp> InsertOIDCProvider;
+  std::shared_ptr<class RemoveOIDCProviderOp> RemoveOIDCProvider;
+  std::shared_ptr<class GetOIDCProviderOp> GetOIDCProvider;
+  std::shared_ptr<class ListOIDCProvidersOp> ListOIDCProviders;
+  std::shared_ptr<class InsertGroupOp> InsertGroup;
+  std::shared_ptr<class RemoveGroupOp> RemoveGroup;
+  std::shared_ptr<class GetGroupOp> GetGroup;
+  std::shared_ptr<class ListGroupsOp> ListGroups;
+  std::shared_ptr<class InsertGroupUserOp> InsertGroupUser;
+  std::shared_ptr<class RemoveGroupUserOp> RemoveGroupUser;
+  std::shared_ptr<class ListGroupUsersOp> ListGroupUsers;
+  std::shared_ptr<class RemoveUserGroupsOp> RemoveUserGroups;
+  std::shared_ptr<class ListUserGroupsOp> ListUserGroups;
+  std::shared_ptr<class InsertAccessKeyOp> InsertAccessKey;
+  std::shared_ptr<class RemoveAccessKeyOp> RemoveAccessKey;
+  std::shared_ptr<class RemoveUserAccessKeysOp> RemoveUserAccessKeys;
+  std::shared_ptr<class GetAccountUserOp> GetAccountUser;
+  std::shared_ptr<class ListAccountUsersOp> ListAccountUsers;
   std::shared_ptr<class InsertUserOp> InsertUser;
   std::shared_ptr<class RemoveUserOp> RemoveUser;
   std::shared_ptr<class GetUserOp> GetUser;
@@ -434,7 +524,57 @@ class DBOp {
       MaxGroups INTEGER ,	\
       MaxBuckets INTEGER ,	\
       MaxAccessKeys INTEGER ,	\
+      AccountAttrs BLOB ,	\
       PRIMARY KEY (AccountID) \n);";
+
+    static constexpr std::string_view CreateRoleTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      RoleID TEXT NOT NULL UNIQUE,		\
+      Name TEXT ,		\
+      Tenant TEXT ,		\
+      AccountID TEXT ,		\
+      Path TEXT ,		\
+      ARN TEXT ,		\
+      TrustPolicy TEXT ,	\
+      PermPolicies BLOB ,	\
+      ManagedPolicies BLOB ,	\
+      Tags BLOB ,		\
+      MaxSessionDuration INTEGER ,	\
+      Description TEXT ,	\
+      CreationDate TEXT ,	\
+      PRIMARY KEY (RoleID) \n);";
+
+    static constexpr std::string_view CreateOIDCProviderTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      ProviderURL TEXT NOT NULL,		\
+      Tenant TEXT ,		\
+      ClientIDs BLOB ,		\
+      Thumbprints BLOB ,	\
+      ProviderARN TEXT ,	\
+      CreationDate TEXT ,	\
+      PRIMARY KEY (ProviderURL, Tenant) \n);";
+
+    static constexpr std::string_view CreateGroupTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      GroupID TEXT NOT NULL UNIQUE,		\
+      Name TEXT ,		\
+      Tenant TEXT ,		\
+      AccountID TEXT ,		\
+      Path TEXT ,		\
+      GroupAttrs BLOB ,		\
+      PRIMARY KEY (GroupID) \n);";
+
+    static constexpr std::string_view CreateGroupUsersTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      GroupID TEXT NOT NULL,		\
+      UserID TEXT NOT NULL,		\
+      PRIMARY KEY (GroupID, UserID) \n);";
+
+    static constexpr std::string_view CreateAccessKeysTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      AccessKeyID TEXT NOT NULL,		\
+      UserID TEXT NOT NULL,			\
+      PRIMARY KEY (AccessKeyID) \n);";
 
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
@@ -444,11 +584,8 @@ class DBOp {
        * make both (UserID, Tenant) as Primary Key.
        *
        * XXX:
-       * - AccessKeys, SwiftKeys, Subusers (map<>) are stored as blob.
-       *   To enable easy query, first accesskey is stored in separate fields
-       *   AccessKeysID, AccessKeysSecret.
-       *   In future, may be have separate table to store these keys and
-       *   query on that table.
+       * - AccessKeys are stored both as a BLOB (full key map) and in
+       *   a separate access_keys join table (for lookup by key ID).
        * - Quota stored as blob .. should be linked to quota table.
        */
       "CREATE TABLE IF NOT EXISTS '{}' (	\
@@ -457,8 +594,6 @@ class DBOp {
       NS TEXT ,		\
       DisplayName TEXT , \
       UserEmail TEXT ,	\
-      AccessKeysID TEXT ,	\
-      AccessKeysSecret TEXT ,	\
       AccessKeys BLOB ,	\
       SwiftKeys BLOB ,	\
       SubUsers BLOB ,		\
@@ -477,6 +612,9 @@ class DBOp {
       TYPE INTEGER ,		\
       MfaIDs BLOB ,	\
       AssumedRoleARN TEXT , \
+      AccountID TEXT , \
+      UserPath TEXT , \
+      UserCreateDate TEXT , \
       UserAttrs   BLOB,   \
       UserVersion   INTEGER,    \
       UserVersionTag TEXT,      \
@@ -710,6 +848,21 @@ class DBOp {
       if (!type.compare("Account"))
         return fmt::format(CreateAccountTableQ,
             params->account_table);
+      if (!type.compare("Role"))
+        return fmt::format(CreateRoleTableQ,
+            params->role_table);
+      if (!type.compare("OIDCProvider"))
+        return fmt::format(CreateOIDCProviderTableQ,
+            params->oidc_table);
+      if (!type.compare("Group"))
+        return fmt::format(CreateGroupTableQ,
+            params->group_table);
+      if (!type.compare("GroupUsers"))
+        return fmt::format(CreateGroupUsersTableQ,
+            params->group_users_table);
+      if (!type.compare("AccessKeys"))
+        return fmt::format(CreateAccessKeysTableQ,
+            params->access_keys_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -767,8 +920,8 @@ class InsertAccountOp : virtual public DBOp {
     static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
                           (AccountID, Tenant, AccountName, Email, \
                            Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                           MaxBuckets, MaxAccessKeys) \
-                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                           MaxBuckets, MaxAccessKeys, AccountAttrs) \
+                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertAccountOp() {}
@@ -780,7 +933,8 @@ class InsertAccountOp : virtual public DBOp {
           params.op.account.quota, params.op.account.bucket_quota,
           params.op.account.max_users, params.op.account.max_roles,
           params.op.account.max_groups, params.op.account.max_buckets,
-          params.op.account.max_access_keys);
+          params.op.account.max_access_keys,
+          params.op.account.account_attrs);
     }
 };
 
@@ -803,17 +957,17 @@ class GetAccountOp: virtual public DBOp {
     static constexpr std::string_view Query = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where AccountID = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where AccountID = {}";
 
     static constexpr std::string_view QueryByName = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where AccountName = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where AccountName = {}";
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                           AccountID, Tenant, AccountName, Email, \
                           Quota, BucketQuota, MaxUsers, MaxRoles, MaxGroups, \
-                          MaxBuckets, MaxAccessKeys from '{}' where Email = {}";
+                          MaxBuckets, MaxAccessKeys, AccountAttrs from '{}' where Email = {}";
 
   public:
     virtual ~GetAccountOp() {}
@@ -828,6 +982,431 @@ class GetAccountOp: virtual public DBOp {
       } else {
         return fmt::format(Query, params.account_table,
             params.op.account.account_id);
+      }
+    }
+};
+
+class InsertRoleOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (RoleID, Name, Tenant, AccountID, Path, ARN, \
+                           TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                           MaxSessionDuration, Description, CreationDate) \
+                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertRoleOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.role_table,
+          params.op.role.role_id, params.op.role.name,
+          params.op.role.tenant, params.op.role.account_id,
+          params.op.role.path, params.op.role.arn,
+          params.op.role.trust_policy, params.op.role.perm_policies,
+          params.op.role.managed_policies, params.op.role.tags,
+          params.op.role.max_session_duration, params.op.role.description,
+          params.op.role.creation_date);
+    }
+};
+
+class RemoveRoleOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where RoleID = {}";
+
+  public:
+    virtual ~RemoveRoleOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.role_table,
+          params.op.role.role_id);
+    }
+};
+
+class GetRoleOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          RoleID, Name, Tenant, AccountID, Path, ARN, \
+                          TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                          MaxSessionDuration, Description, CreationDate \
+                          from '{}' where RoleID = {}";
+
+    static constexpr std::string_view QueryByName = "SELECT \
+                          RoleID, Name, Tenant, AccountID, Path, ARN, \
+                          TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                          MaxSessionDuration, Description, CreationDate \
+                          from '{}' where Name = {} AND Tenant = {}";
+
+    static constexpr std::string_view QueryByNameAccount = "SELECT \
+                          RoleID, Name, Tenant, AccountID, Path, ARN, \
+                          TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                          MaxSessionDuration, Description, CreationDate \
+                          from '{}' where Name = {} COLLATE NOCASE AND AccountID = {}";
+
+  public:
+    virtual ~GetRoleOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "name") {
+        return fmt::format(QueryByName, params.role_table,
+            params.op.role.name, params.op.role.tenant);
+      } else if (params.op.query_str == "name_account") {
+        return fmt::format(QueryByNameAccount, params.role_table,
+            params.op.role.name, params.op.role.account_id);
+      } else {
+        return fmt::format(Query, params.role_table,
+            params.op.role.role_id);
+      }
+    }
+};
+
+class ListRolesOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByTenant = "SELECT \
+                          RoleID, Name, Tenant, AccountID, Path, ARN, \
+                          TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                          MaxSessionDuration, Description, CreationDate \
+                          from '{}' where Tenant = {} AND Path LIKE {} \
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
+
+    static constexpr std::string_view QueryByAccount = "SELECT \
+                          RoleID, Name, Tenant, AccountID, Path, ARN, \
+                          TrustPolicy, PermPolicies, ManagedPolicies, Tags, \
+                          MaxSessionDuration, Description, CreationDate \
+                          from '{}' where AccountID = {} AND Path LIKE {} \
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
+
+    static constexpr std::string_view CountByAccount =
+      "SELECT COUNT(*) from '{}' where AccountID = {}";
+
+  public:
+    virtual ~ListRolesOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "account") {
+        return fmt::format(QueryByAccount, params.role_table,
+            params.op.role.account_id, params.op.role.path,
+            params.op.role.name, params.op.list_max_count);
+      } else if (params.op.query_str == "count_account") {
+        return fmt::format(CountByAccount, params.role_table,
+            params.op.role.account_id);
+      } else {
+        return fmt::format(QueryByTenant, params.role_table,
+            params.op.role.tenant, params.op.role.path,
+            params.op.role.name, params.op.list_max_count);
+      }
+    }
+};
+
+class InsertOIDCProviderOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                           ProviderARN, CreationDate) \
+                          VALUES ({}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant,
+          params.op.oidc.client_ids, params.op.oidc.thumbprints,
+          params.op.oidc.provider_arn, params.op.oidc.creation_date);
+    }
+};
+
+class RemoveOIDCProviderOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where ProviderURL = {} AND Tenant = {}";
+
+  public:
+    virtual ~RemoveOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant);
+    }
+};
+
+class GetOIDCProviderOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                          ProviderARN, CreationDate \
+                          from '{}' where ProviderURL = {} AND Tenant = {}";
+
+  public:
+    virtual ~GetOIDCProviderOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.provider_url, params.op.oidc.tenant);
+    }
+};
+
+class ListOIDCProvidersOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          ProviderURL, Tenant, ClientIDs, Thumbprints, \
+                          ProviderARN, CreationDate \
+                          from '{}' where Tenant = {}";
+
+  public:
+    virtual ~ListOIDCProvidersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.oidc_table,
+          params.op.oidc.tenant);
+    }
+};
+
+class InsertGroupOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (GroupID, Name, Tenant, AccountID, Path, GroupAttrs) \
+                          VALUES ({}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.op.group.group_id, params.op.group.name,
+          params.op.group.tenant, params.op.group.account_id,
+          params.op.group.path, params.op.group.group_attrs);
+    }
+};
+
+class RemoveGroupOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where GroupID = {}";
+
+  public:
+    virtual ~RemoveGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.op.group.group_id);
+    }
+};
+
+class GetGroupOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByID = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where GroupID = {}";
+
+    static constexpr std::string_view QueryByName = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where Name = {} COLLATE NOCASE AND AccountID = {}";
+
+  public:
+    virtual ~GetGroupOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "name") {
+        return fmt::format(QueryByName, params.group_table,
+            params.op.group.name, params.op.group.account_id);
+      } else {
+        return fmt::format(QueryByID, params.group_table,
+            params.op.group.group_id);
+      }
+    }
+};
+
+class ListGroupsOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByAccount = "SELECT \
+                          GroupID, Name, Tenant, AccountID, Path, GroupAttrs \
+                          from '{}' where AccountID = {} AND Path LIKE {} \
+                          AND Name > {} COLLATE NOCASE ORDER BY Name COLLATE NOCASE ASC LIMIT {}";
+
+    static constexpr std::string_view CountByAccount =
+      "SELECT COUNT(*) from '{}' where AccountID = {}";
+
+  public:
+    virtual ~ListGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "count_account") {
+        return fmt::format(CountByAccount, params.group_table,
+            params.op.group.account_id);
+      } else {
+        return fmt::format(QueryByAccount, params.group_table,
+            params.op.group.account_id, params.op.group.path,
+            params.op.group.name, params.op.list_max_count);
+      }
+    }
+};
+
+class InsertGroupUserOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "INSERT OR IGNORE INTO '{}' (GroupID, UserID) VALUES ({}, {});";
+
+  public:
+    virtual ~InsertGroupUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id);
+    }
+};
+
+class RemoveGroupUserOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where GroupID = {} AND UserID = {}";
+
+  public:
+    virtual ~RemoveGroupUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id);
+    }
+};
+
+class RemoveUserGroupsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where UserID = {}";
+
+  public:
+    virtual ~RemoveUserGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.user_id);
+    }
+};
+
+class ListUserGroupsOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          g.GroupID, g.Name, g.Tenant, g.AccountID, g.Path, g.GroupAttrs \
+                          from '{}' g JOIN '{}' gu ON g.GroupID = gu.GroupID \
+                          where gu.UserID = {} AND g.Name > {} COLLATE NOCASE \
+                          ORDER BY g.Name COLLATE NOCASE ASC LIMIT {}";
+
+  public:
+    virtual ~ListUserGroupsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_table,
+          params.group_users_table,
+          params.op.group.user_id, params.op.group.name,
+          params.op.list_max_count);
+    }
+};
+
+class InsertAccessKeyOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "INSERT OR REPLACE INTO '{}' (AccessKeyID, UserID) VALUES ({}, {});";
+
+  public:
+    virtual ~InsertAccessKeyOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.access_key_id, params.op.user.user_id);
+    }
+};
+
+class RemoveAccessKeyOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where AccessKeyID = {}";
+
+  public:
+    virtual ~RemoveAccessKeyOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.access_key_id);
+    }
+};
+
+class RemoveUserAccessKeysOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where UserID = {}";
+
+  public:
+    virtual ~RemoveUserAccessKeysOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.access_keys_table,
+          params.op.user.user_id);
+    }
+};
+
+class ListGroupUsersOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT UserID from '{}' \
+                          where GroupID = {} AND UserID > {} \
+                          ORDER BY UserID ASC LIMIT {}";
+
+  public:
+    virtual ~ListGroupUsersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.group_users_table,
+          params.op.group.group_id, params.op.group.user_id,
+          params.op.list_max_count);
+    }
+};
+
+class GetAccountUserOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          UserID, Tenant, NS, DisplayName, UserEmail, \
+                          AccessKeys, SwiftKeys,\
+                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
+                          System, PlacementName, PlacementStorageClass, PlacementTags, \
+                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
+                          from '{}' where AccountID = {} AND DisplayName = {} COLLATE NOCASE";
+
+  public:
+    virtual ~GetAccountUserOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.user_table,
+          params.op.user.account_id, params.op.user.display_name);
+    }
+};
+
+class ListAccountUsersOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          UserID, Tenant, NS, DisplayName, UserEmail, \
+                          AccessKeys, SwiftKeys,\
+                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
+                          System, PlacementName, PlacementStorageClass, PlacementTags, \
+                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
+                          from '{}' where AccountID = {} AND DisplayName > {} COLLATE NOCASE \
+                          ORDER BY DisplayName COLLATE NOCASE ASC LIMIT {}";
+
+    static constexpr std::string_view CountQuery =
+      "SELECT COUNT(*) from '{}' where AccountID = {}";
+
+  public:
+    virtual ~ListAccountUsersOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "count") {
+        return fmt::format(CountQuery, params.user_table,
+            params.op.user.account_id);
+      } else {
+        return fmt::format(Query, params.user_table,
+            params.op.user.account_id, params.op.user.display_name,
+            params.op.list_max_count);
       }
     }
 };
@@ -847,13 +1426,13 @@ class InsertUserOp : virtual public DBOp {
      */
     static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
                           (UserID, Tenant, NS, DisplayName, UserEmail, \
-                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                           AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
                            BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
-                           UserAttrs, UserVersion, UserVersionTag) \
+                           AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -862,7 +1441,6 @@ class InsertUserOp : virtual public DBOp {
       return fmt::format(Query, params.user_table,
           params.op.user.user_id, params.op.user.tenant, params.op.user.ns,
           params.op.user.display_name, params.op.user.user_email,
-          params.op.user.access_keys_id, params.op.user.access_keys_secret,
           params.op.user.access_keys, params.op.user.swift_keys,
           params.op.user.subusers, params.op.user.suspended,
           params.op.user.max_buckets, params.op.user.op_mask,
@@ -871,6 +1449,8 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.placement_tags, params.op.user.bucket_quota,
           params.op.user.temp_url_keys, params.op.user.user_quota,
           params.op.user.type, params.op.user.mfa_ids,
+          params.op.user.account_id,
+          params.op.user.path, params.op.user.create_date,
           params.op.user.user_attrs, params.op.user.user_ver,
           params.op.user.user_ver_tag);
     }
@@ -897,35 +1477,37 @@ class GetUserOp: virtual public DBOp {
      * in list_user() cbk in sqliteDB.cc */
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
 
     static constexpr std::string_view QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
-                                 AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                 AccessKeys, SwiftKeys,\
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                  System, PlacementName, PlacementStorageClass, PlacementTags, \
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                 UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
+                                 AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
 
     static constexpr std::string_view QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
-                                      AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                      AccessKeys, SwiftKeys,\
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                       System, PlacementName, PlacementStorageClass, PlacementTags, \
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                      UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
+                                      AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
+                                      from '{}' where UserID = \
+                                      (SELECT UserID from '{}' where AccessKeyID = {})";
 
     static constexpr std::string_view QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
-                                  AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                                  AccessKeys, SwiftKeys,\
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                                   System, PlacementName, PlacementStorageClass, PlacementTags, \
                                   BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                  UserAttrs, UserVersion, UserVersionTag \
+                                  AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag \
                                   from '{}' where UserID = {}";
 
   public:
@@ -938,7 +1520,8 @@ class GetUserOp: virtual public DBOp {
       } else if (params.op.query_str == "access_key") {
         return fmt::format(QueryByAccessKeys,
             params.user_table,
-            params.op.user.access_keys_id);
+            params.access_keys_table,
+            params.op.user.access_key_id);
       } else if (params.op.query_str == "user_id") {
         return fmt::format(QueryByUserID,
             params.user_table,
@@ -954,11 +1537,11 @@ class GetUserOp: virtual public DBOp {
 class ListUsersOp: virtual public DBOp {
     static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
+                          AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                           System, PlacementName, PlacementStorageClass, PlacementTags, \
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag from '{}' where \
+                          AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag from '{}' where \
                           UserID >= {} ORDER BY UserID ASC LIMIT {} ";
 
   public:
@@ -1631,6 +2214,11 @@ class DB {
     const std::string table_name_prefix;
     rgw::sal::Driver* driver;
     const std::string account_table;
+    const std::string role_table;
+    const std::string oidc_table;
+    const std::string group_table;
+    const std::string group_users_table;
+    const std::string access_keys_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -1654,6 +2242,11 @@ class DB {
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
     table_name_prefix(std::filesystem::path(db_name).filename()),
     account_table(table_name_prefix + "_account_table"),
+    role_table(table_name_prefix + "_role_table"),
+    oidc_table(table_name_prefix + "_oidc_table"),
+    group_table(table_name_prefix + "_group_table"),
+    group_users_table(table_name_prefix + "_group_users_table"),
+    access_keys_table(table_name_prefix + "_access_keys_table"),
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
@@ -1665,9 +2258,13 @@ class DB {
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
-
     table_name_prefix(db_name),
     account_table(db_name+"_account_table"),
+    role_table(db_name+"_role_table"),
+    oidc_table(db_name+"_oidc_table"),
+    group_table(db_name+"_group_table"),
+    group_users_table(db_name+"_group_users_table"),
+    access_keys_table(db_name+"_access_keys_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -1681,6 +2278,11 @@ class DB {
     const std::string getDBname() { return db_name; }
     const std::string getDBfile() { return db_name + ".db"; }
     const std::string getAccountTable() { return account_table; }
+    const std::string getRoleTable() { return role_table; }
+    const std::string getOIDCTable() { return oidc_table; }
+    const std::string getGroupTable() { return group_table; }
+    const std::string getGroupUsersTable() { return group_users_table; }
+    const std::string getAccessKeysTable() { return access_keys_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
@@ -1760,6 +2362,61 @@ class DB {
         RGWObjVersionTracker *pobjv_tracker);
     int remove_account(const DoutPrefixProvider *dpp,
         const RGWAccountInfo &ainfo, RGWObjVersionTracker *pobjv_tracker);
+    int get_role(const DoutPrefixProvider *dpp,
+        const std::string& query_str, RGWRoleInfo& rinfo);
+    int store_role(const DoutPrefixProvider *dpp,
+        const RGWRoleInfo& rinfo, bool exclusive);
+    int remove_role(const DoutPrefixProvider *dpp,
+        const RGWRoleInfo& rinfo);
+    int list_roles(const DoutPrefixProvider *dpp,
+        const std::string& query_str,
+        const std::string& tenant, const std::string& account_id,
+        const std::string& path_prefix, const std::string& marker,
+        uint32_t max_items, std::vector<RGWRoleInfo>& roles);
+    int count_account_roles(const DoutPrefixProvider *dpp,
+        const std::string& account_id, uint32_t& count);
+    int store_oidc_provider(const DoutPrefixProvider *dpp,
+        const RGWOIDCProviderInfo& info, bool exclusive);
+    int load_oidc_provider(const DoutPrefixProvider *dpp,
+        const std::string& tenant, const std::string& url,
+        RGWOIDCProviderInfo& info);
+    int delete_oidc_provider(const DoutPrefixProvider *dpp,
+        const std::string& tenant, const std::string& url);
+    int list_oidc_providers(const DoutPrefixProvider *dpp,
+        const std::string& tenant,
+        std::vector<RGWOIDCProviderInfo>& providers);
+    int get_group(const DoutPrefixProvider *dpp,
+        const std::string& query_str, RGWGroupInfo& info,
+        rgw::sal::Attrs& attrs);
+    int store_group(const DoutPrefixProvider *dpp,
+        const RGWGroupInfo& info, const rgw::sal::Attrs& attrs,
+        bool exclusive);
+    int remove_group(const DoutPrefixProvider *dpp,
+        const RGWGroupInfo& info);
+    int add_group_user(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& user_id);
+    int remove_group_user(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& user_id);
+    int list_group_users(const DoutPrefixProvider *dpp,
+        const std::string& group_id, const std::string& marker,
+        uint32_t max_items, std::vector<std::string>& user_ids);
+    int list_user_groups(const DoutPrefixProvider *dpp,
+        const std::string& user_id, const std::string& marker,
+        uint32_t max_items, std::vector<RGWGroupInfo>& groups);
+    int list_account_groups(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& path_prefix,
+        const std::string& marker, uint32_t max_items,
+        std::vector<RGWGroupInfo>& groups);
+    int count_account_groups(const DoutPrefixProvider *dpp,
+        const std::string& account_id, uint32_t& count);
+    int get_account_user_by_name(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& username,
+        RGWUserInfo& uinfo);
+    int count_account_users(const DoutPrefixProvider *dpp,
+        const std::string& account_id, uint32_t& count);
+    int list_account_users(const DoutPrefixProvider *dpp,
+        const std::string& account_id, const std::string& marker,
+        uint32_t max_items, std::vector<RGWUserInfo>& users);
     int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,

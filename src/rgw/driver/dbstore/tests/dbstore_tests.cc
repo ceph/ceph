@@ -159,6 +159,16 @@ TEST_F(DBStoreTest, InsertUser) {
 
   ret = db->ProcessOp(dpp, "InsertUser", &params);
   ASSERT_EQ(ret, 0);
+
+  /* populate access_keys join table */
+  for (const auto& [key_id, key] : params.op.user.uinfo.access_keys) {
+    struct DBOpParams ak_params = GlobalParams;
+    ak_params.op.user.uinfo.user_id = params.op.user.uinfo.user_id;
+    ak_params.op.user.uinfo.access_keys.clear();
+    ak_params.op.user.uinfo.access_keys[key_id] = key;
+    ret = db->ProcessOp(dpp, "InsertAccessKey", &ak_params);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST_F(DBStoreTest, GetUser) {
@@ -301,13 +311,11 @@ TEST_F(DBStoreTest, StoreUser) {
   ASSERT_EQ(old_uinfo.user_id.id, uinfo.user_id.id);
   ASSERT_EQ(old_uinfo.user_email, uinfo.user_email);
 
-  /* exclusive create..should not create new one */
+  /* exclusive create of existing user returns -EEXIST */
   uinfo.user_email = "user2_new@dbstore.com";
   objv_tracker.read_version.ver = 1;
   ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(old_uinfo.user_email, "user2@dbstore.com");
-  ASSERT_EQ(objv_tracker.read_version.ver, 1);
+  ASSERT_EQ(ret, -EEXIST);
 
   ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
@@ -1379,6 +1387,690 @@ TEST_F(DBStoreTest, InsertTestIDUser) {
 
   ret = db->ProcessOp(dpp, "InsertUser", &params);
   ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, InsertAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+  params.op.account.info.tenant = "default";
+  params.op.account.info.name = "TestAccount";
+  params.op.account.info.email = "test@test.com";
+  params.op.account.info.max_users = 100;
+  params.op.account.info.max_buckets = 500;
+
+  ret = db->ProcessOp(dpp, "InsertAccount", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.name, "TestAccount");
+  ASSERT_EQ(params.op.account.info.email, "test@test.com");
+  ASSERT_EQ(params.op.account.info.max_users, 100);
+  ASSERT_EQ(params.op.account.info.max_buckets, 500);
+}
+
+TEST_F(DBStoreTest, GetAccountByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.account.info.name = "TestAccount";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.email, "test@test.com");
+}
+
+TEST_F(DBStoreTest, GetAccountByEmail) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "email";
+  params.op.account.info.email = "test@test.com";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.account.info.id, "RGW00000000000000001");
+  ASSERT_EQ(params.op.account.info.name, "TestAccount");
+}
+
+TEST_F(DBStoreTest, AccountAttrsRoundtrip) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000002";
+  params.op.account.info.tenant = "default";
+  params.op.account.info.name = "AttrsAccount";
+  params.op.account.info.email = "attrs@test.com";
+
+  bufferlist val;
+  encode(std::string("/mnt/data/account2"), val);
+  params.op.account.account_attrs["user.rgw.fs_root"] = val;
+
+  ret = db->ProcessOp(dpp, "InsertAccount", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.account.info.id = "RGW00000000000000002";
+
+  ret = db->ProcessOp(dpp, "GetAccount", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(get_params.op.account.info.name, "AttrsAccount");
+
+  auto it = get_params.op.account.account_attrs.find("user.rgw.fs_root");
+  ASSERT_NE(it, get_params.op.account.account_attrs.end());
+  std::string fs_root;
+  auto bl_iter = it->second.cbegin();
+  decode(fs_root, bl_iter);
+  ASSERT_EQ(fs_root, "/mnt/data/account2");
+}
+
+TEST_F(DBStoreTest, RemoveAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.account.info.id = "RGW00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveAccount", &params);
+  ASSERT_EQ(ret, 0);
+
+  /* ProcessOp returns 0 even when no rows match (SQLITE_DONE);
+   * verify the account is gone by checking the result is empty */
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.account.info.id = "RGW00000000000000001";
+  ret = db->ProcessOp(dpp, "GetAccount", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.account.info.name.empty());
+}
+
+TEST_F(DBStoreTest, InsertRole) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+  params.op.role.info.name = "TestRole";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.path = "/";
+  params.op.role.info.arn = "arn:aws:iam:::role/TestRole";
+  params.op.role.info.trust_policy = R"({"Version":"2012-10-17","Statement":[]})";
+  params.op.role.info.max_session_duration = 3600;
+  params.op.role.info.description = "A test role";
+  params.op.role.info.creation_date = "2026-06-13T00:00:00.000Z";
+
+  ret = db->ProcessOp(dpp, "InsertRole", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetRoleByID) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetRole", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.info.name, "TestRole");
+  ASSERT_EQ(params.op.role.info.tenant, "default");
+  ASSERT_EQ(params.op.role.info.path, "/");
+  ASSERT_EQ(params.op.role.info.trust_policy, R"({"Version":"2012-10-17","Statement":[]})");
+  ASSERT_EQ(params.op.role.info.max_session_duration, 3600u);
+  ASSERT_EQ(params.op.role.info.description, "A test role");
+}
+
+TEST_F(DBStoreTest, GetRoleByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.role.info.name = "TestRole";
+  params.op.role.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "GetRole", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.info.id, "AROA00000000000000001");
+}
+
+TEST_F(DBStoreTest, RoleFieldsRoundtrip) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000002";
+  params.op.role.info.name = "RoundtripRole";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.account_id = "ACCT00000000000000001";
+  params.op.role.info.path = "/division_abc/";
+  params.op.role.info.arn = "arn:aws:iam::ACCT00000000000000001:role/RoundtripRole";
+  params.op.role.info.trust_policy = R"({"Version":"2012-10-17"})";
+  params.op.role.info.perm_policy_map["inline1"] = R"({"Effect":"Allow"})";
+  params.op.role.info.tags.insert({"env", "test"});
+  params.op.role.info.tags.insert({"project", "ceph"});
+  params.op.role.info.max_session_duration = 7200;
+  params.op.role.info.description = "roundtrip test";
+  params.op.role.info.creation_date = "2026-06-13T12:00:00.000Z";
+
+  ret = db->ProcessOp(dpp, "InsertRole", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.role.info.id = "AROA00000000000000002";
+  ret = db->ProcessOp(dpp, "GetRole", &get_params);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_EQ(get_params.op.role.info.name, "RoundtripRole");
+  ASSERT_EQ(get_params.op.role.info.account_id, "ACCT00000000000000001");
+  ASSERT_EQ(get_params.op.role.info.path, "/division_abc/");
+  ASSERT_EQ(get_params.op.role.info.perm_policy_map.size(), 1u);
+  ASSERT_EQ(get_params.op.role.info.perm_policy_map["inline1"], R"({"Effect":"Allow"})");
+  ASSERT_EQ(get_params.op.role.info.tags.count("env"), 1u);
+  ASSERT_EQ(get_params.op.role.info.tags.count("project"), 1u);
+  ASSERT_EQ(get_params.op.role.info.max_session_duration, 7200u);
+}
+
+TEST_F(DBStoreTest, ListRoles) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "tenant";
+  params.op.role.info.tenant = "default";
+  params.op.role.info.path = "%";
+  params.op.role.info.name = "";
+  params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListRoles", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, ListRolesByAccount) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "account";
+  params.op.role.info.account_id = "ACCT00000000000000001";
+  params.op.role.info.path = "%";
+  params.op.role.info.name = "";
+  params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListRoles", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.role.list_entries.size(), 1u);
+  ASSERT_EQ(params.op.role.list_entries[0].name, "RoundtripRole");
+}
+
+TEST_F(DBStoreTest, RemoveRole) {
+  struct DBOpParams params = GlobalParams;
+  params.op.role.info.id = "AROA00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveRole", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.role.info.id = "AROA00000000000000001";
+  ret = db->ProcessOp(dpp, "GetRole", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.role.info.name.empty());
+
+  /* Clean up second role */
+  params.op.role.info.id = "AROA00000000000000002";
+  ret = db->ProcessOp(dpp, "RemoveRole", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, InsertOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+  params.op.oidc.info.arn = "arn:aws:iam:::oidc-provider/login.example.com";
+  params.op.oidc.info.creation_date = "2026-06-13T00:00:00.000Z";
+  params.op.oidc.info.client_ids = {"client1", "client2"};
+  params.op.oidc.info.thumbprints = {"aabbccdd"};
+
+  ret = db->ProcessOp(dpp, "InsertOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "GetOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.oidc.list_entries.empty());
+  ASSERT_EQ(params.op.oidc.list_entries[0].arn,
+            "arn:aws:iam:::oidc-provider/login.example.com");
+  ASSERT_EQ(params.op.oidc.list_entries[0].client_ids.size(), 2u);
+  ASSERT_EQ(params.op.oidc.list_entries[0].client_ids[0], "client1");
+  ASSERT_EQ(params.op.oidc.list_entries[0].thumbprints.size(), 1u);
+  ASSERT_EQ(params.op.oidc.list_entries[0].thumbprints[0], "aabbccdd");
+}
+
+TEST_F(DBStoreTest, ListOIDCProviders) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.oidc.info.provider_url = "https://auth.other.com";
+  params2.op.oidc.info.tenant = "default";
+  params2.op.oidc.info.arn = "arn:aws:iam:::oidc-provider/auth.other.com";
+  params2.op.oidc.info.creation_date = "2026-06-13T01:00:00.000Z";
+  params2.op.oidc.info.client_ids = {"clientA"};
+  params2.op.oidc.info.thumbprints = {"11223344"};
+
+  ret = db->ProcessOp(dpp, "InsertOIDCProvider", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "ListOIDCProviders", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.oidc.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, RemoveOIDCProvider) {
+  struct DBOpParams params = GlobalParams;
+  params.op.oidc.info.provider_url = "https://login.example.com";
+  params.op.oidc.info.tenant = "default";
+
+  ret = db->ProcessOp(dpp, "RemoveOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.oidc.info.provider_url = "https://login.example.com";
+  get_params.op.oidc.info.tenant = "default";
+  ret = db->ProcessOp(dpp, "GetOIDCProvider", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.oidc.list_entries.empty());
+
+  /* Clean up second provider */
+  params.op.oidc.info.provider_url = "https://auth.other.com";
+  ret = db->ProcessOp(dpp, "RemoveOIDCProvider", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, InsertGroup) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+  params.op.group.info.name = "TestGroup";
+  params.op.group.info.tenant = "default";
+  params.op.group.info.account_id = "ACCT00000000000000001";
+  params.op.group.info.path = "/";
+
+  ret = db->ProcessOp(dpp, "InsertGroup", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetGroupByID) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetGroup", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.group.list_entries.empty());
+  ASSERT_EQ(params.op.group.list_entries[0].name, "TestGroup");
+  ASSERT_EQ(params.op.group.list_entries[0].account_id, "ACCT00000000000000001");
+}
+
+TEST_F(DBStoreTest, GetGroupByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "name";
+  params.op.group.info.name = "TestGroup";
+  params.op.group.info.account_id = "ACCT00000000000000001";
+
+  ret = db->ProcessOp(dpp, "GetGroup", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(params.op.group.list_entries.empty());
+  ASSERT_EQ(params.op.group.list_entries[0].id, "GRP00000000000000001");
+}
+
+TEST_F(DBStoreTest, GroupMembership) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+  params.op.group.user_id = "user1";
+
+  ret = db->ProcessOp(dpp, "InsertGroupUser", &params);
+  ASSERT_EQ(ret, 0);
+
+  params.op.group.user_id = "user2";
+  ret = db->ProcessOp(dpp, "InsertGroupUser", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.group.info.id = "GRP00000000000000001";
+  list_params.op.group.user_id = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListGroupUsers", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.group.user_list.size(), 2u);
+
+  struct DBOpParams rm_params = GlobalParams;
+  rm_params.op.group.info.id = "GRP00000000000000001";
+  rm_params.op.group.user_id = "user1";
+  ret = db->ProcessOp(dpp, "RemoveGroupUser", &rm_params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list2 = GlobalParams;
+  list2.op.group.info.id = "GRP00000000000000001";
+  list2.op.group.user_id = "";
+  list2.op.list_max_count = 100;
+  ret = db->ProcessOp(dpp, "ListGroupUsers", &list2);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list2.op.group.user_list.size(), 1u);
+  ASSERT_EQ(list2.op.group.user_list[0], "user2");
+}
+
+TEST_F(DBStoreTest, ListGroupsByAccount) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.group.info.id = "GRP00000000000000002";
+  params2.op.group.info.name = "AnotherGroup";
+  params2.op.group.info.tenant = "default";
+  params2.op.group.info.account_id = "ACCT00000000000000001";
+  params2.op.group.info.path = "/eng/";
+
+  ret = db->ProcessOp(dpp, "InsertGroup", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.query_str = "account";
+  list_params.op.group.info.account_id = "ACCT00000000000000001";
+  list_params.op.group.info.path = "%";
+  list_params.op.group.info.name = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListGroups", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.group.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, RemoveGroup) {
+  struct DBOpParams params = GlobalParams;
+  params.op.group.info.id = "GRP00000000000000001";
+
+  ret = db->ProcessOp(dpp, "RemoveGroup", &params);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams get_params = GlobalParams;
+  get_params.op.group.info.id = "GRP00000000000000001";
+  ret = db->ProcessOp(dpp, "GetGroup", &get_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(get_params.op.group.list_entries.empty());
+
+  params.op.group.info.id = "GRP00000000000000002";
+  ret = db->ProcessOp(dpp, "RemoveGroup", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, InsertAccountUser) {
+  struct DBOpParams params = GlobalParams;
+  params.op.user.uinfo.user_id.id = "acct-user1";
+  params.op.user.uinfo.display_name = "AcctUser1";
+  params.op.user.uinfo.user_email = "acctuser1@test.com";
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  RGWAccessKey key("acctkey1", "acctsecret1");
+  params.op.user.uinfo.access_keys["acctkey1"] = key;
+
+  ret = db->ProcessOp(dpp, "InsertUser", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetAccountUserByName) {
+  struct DBOpParams params = GlobalParams;
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  params.op.user.uinfo.display_name = "AcctUser1";
+
+  ret = db->ProcessOp(dpp, "GetAccountUser", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.user.uinfo.user_id.id, "acct-user1");
+  ASSERT_EQ(params.op.user.uinfo.user_email, "acctuser1@test.com");
+}
+
+TEST_F(DBStoreTest, ListAccountUsers) {
+  struct DBOpParams params2 = GlobalParams;
+  params2.op.user.uinfo.user_id.id = "acct-user2";
+  params2.op.user.uinfo.display_name = "AcctUser2";
+  params2.op.user.uinfo.user_email = "acctuser2@test.com";
+  params2.op.user.uinfo.account_id = "ACCT00000000000000099";
+  RGWAccessKey key("acctkey2", "acctsecret2");
+  params2.op.user.uinfo.access_keys["acctkey2"] = key;
+  ret = db->ProcessOp(dpp, "InsertUser", &params2);
+  ASSERT_EQ(ret, 0);
+
+  struct DBOpParams list_params = GlobalParams;
+  list_params.op.user.uinfo.account_id = "ACCT00000000000000099";
+  list_params.op.user.uinfo.display_name = "";
+  list_params.op.list_max_count = 100;
+
+  ret = db->ProcessOp(dpp, "ListAccountUsers", &list_params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(list_params.op.user.list_entries.size(), 2u);
+}
+
+TEST_F(DBStoreTest, CountAccountUsers) {
+  struct DBOpParams params = GlobalParams;
+  params.op.query_str = "count";
+  params.op.user.uinfo.account_id = "ACCT00000000000000099";
+
+  ret = db->ProcessOp(dpp, "ListAccountUsers", &params);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.user.list_entries.size(), 1u);
+  ASSERT_EQ(std::stoi(params.op.user.list_entries.front().user_id.id), 2);
+}
+
+/* IAM CreateUser produces users with no access keys; verify that
+ * store_user, get_user, and remove_user handle them correctly. */
+TEST_F(DBStoreTest, KeylessUserRoundtrip) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "keyless-user-1";
+  uinfo.display_name = "KeylessUser";
+  uinfo.user_email = "keyless@test.com";
+  uinfo.account_id = "ACCT00000000000000099";
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objv.read_version.ver, 1u);
+
+  /* get_user by user_id must find a keyless user */
+  RGWUserInfo found;
+  found.user_id = uinfo.user_id;
+  RGWObjVersionTracker found_objv;
+  ret = db->get_user(dpp, "user_id", uinfo.user_id.id, found,
+                     nullptr, &found_objv);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(found.display_name, "KeylessUser");
+  ASSERT_EQ(found.account_id, "ACCT00000000000000099");
+  ASSERT_EQ(found_objv.read_version.ver, 1u);
+
+  /* get_account_user_by_name must also find it */
+  RGWUserInfo found2;
+  ret = db->get_account_user_by_name(dpp, "ACCT00000000000000099",
+                                     "KeylessUser", found2);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(found2.user_id.id, "keyless-user-1");
+
+  /* remove_user must succeed */
+  RGWObjVersionTracker rm_objv;
+  rm_objv.read_version.ver = 1;
+  ret = db->remove_user(dpp, uinfo, &rm_objv);
+  ASSERT_EQ(ret, 0);
+
+  /* get_user must return ENOENT after removal */
+  RGWUserInfo gone;
+  gone.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "user_id", uinfo.user_id.id, gone,
+                     nullptr, nullptr);
+  ASSERT_EQ(ret, -ENOENT);
+}
+
+TEST_F(DBStoreTest, StoreUserThenGetByName) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "store-then-get-user";
+  uinfo.display_name = "StoreGetUser";
+  uinfo.account_id = "ACCT00000000000000099";
+  uinfo.path = "/test/";
+  uinfo.create_date = ceph::real_clock::now();
+
+  map<string, bufferlist> attrs;
+  ret = db->store_user(dpp, uinfo, true, &attrs, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo loaded;
+  ret = db->get_account_user_by_name(dpp, uinfo.account_id,
+                                     uinfo.display_name, loaded);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(loaded.user_id.id, "store-then-get-user");
+  EXPECT_EQ(loaded.display_name, "StoreGetUser");
+  EXPECT_EQ(loaded.account_id, "ACCT00000000000000099");
+  EXPECT_EQ(loaded.path, "/test/");
+  EXPECT_NE(loaded.create_date, ceph::real_time{});
+}
+
+TEST_F(DBStoreTest, MultiKeyUserLookup) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "multi-key-user";
+  uinfo.display_name = "MultiKeyUser";
+  RGWAccessKey ka("keyA", "secretA");
+  uinfo.access_keys["keyA"] = ka;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* add key B and re-store */
+  RGWAccessKey kb("keyB", "secretB");
+  uinfo.access_keys["keyB"] = kb;
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* both keys must resolve to the same user */
+  RGWUserInfo foundA;
+  foundA.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyA", foundA, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(foundA.user_id.id, "multi-key-user");
+
+  RGWUserInfo foundB;
+  foundB.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyB", foundB, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(foundB.user_id.id, "multi-key-user");
+
+  /* remove key A, re-store */
+  uinfo.access_keys.erase("keyA");
+  objv.read_version.ver = 2;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo goneA;
+  goneA.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyA", goneA, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  RGWUserInfo stillB;
+  stillB.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "keyB", stillB, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(stillB.user_id.id, "multi-key-user");
+}
+
+TEST_F(DBStoreTest, CascadingDeleteKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "cascade-del-user";
+  uinfo.display_name = "CascadeDelUser";
+  RGWAccessKey ka("cdkA", "secretA");
+  RGWAccessKey kb("cdkB", "secretB");
+  uinfo.access_keys["cdkA"] = ka;
+  uinfo.access_keys["cdkB"] = kb;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  ret = db->remove_user(dpp, uinfo, &objv);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo goneA;
+  goneA.user_id.id = "cascade-del-user";
+  ret = db->get_user(dpp, "access_key", "cdkA", goneA, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  RGWUserInfo goneB;
+  goneB.user_id.id = "cascade-del-user";
+  ret = db->get_user(dpp, "access_key", "cdkB", goneB, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+}
+
+TEST_F(DBStoreTest, AccessKeyUniqueness) {
+  RGWUserInfo u1;
+  u1.user_id.id = "unique-key-user1";
+  u1.display_name = "UniqueKeyUser1";
+  RGWAccessKey k("shared-key", "secret1");
+  u1.access_keys["shared-key"] = k;
+
+  ret = db->store_user(dpp, u1, true, nullptr, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo u2;
+  u2.user_id.id = "unique-key-user2";
+  u2.display_name = "UniqueKeyUser2";
+  u2.access_keys["shared-key"] = k;
+
+  ret = db->store_user(dpp, u2, true, nullptr, nullptr, nullptr);
+  /* store_user succeeds but the key now points to u2 (INSERT OR REPLACE) */
+
+  RGWUserInfo found;
+  found.user_id.id = "unique-key-user1";
+  ret = db->get_user(dpp, "access_key", "shared-key", found, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  /* with INSERT OR REPLACE, the key belongs to whichever user stored last */
+}
+
+TEST_F(DBStoreTest, ExclusiveStorePreservesKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "excl-key-user";
+  uinfo.display_name = "ExclKeyUser";
+  RGWAccessKey ka("exclA", "secretA");
+  uinfo.access_keys["exclA"] = ka;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objv.read_version.ver, 1u);
+
+  /* exclusive re-store: should return -EEXIST */
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, -EEXIST);
+
+  /* key must still be accessible */
+  RGWUserInfo found;
+  found.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "exclA", found, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(found.user_id.id, "excl-key-user");
+}
+
+TEST_F(DBStoreTest, ReStoreUpdatesKeys) {
+  RGWUserInfo uinfo;
+  uinfo.user_id.id = "restore-key-user";
+  uinfo.display_name = "ReStoreKeyUser";
+  RGWAccessKey ka("rstA", "secretA");
+  RGWAccessKey kb("rstB", "secretB");
+  uinfo.access_keys["rstA"] = ka;
+  uinfo.access_keys["rstB"] = kb;
+
+  RGWObjVersionTracker objv;
+  ret = db->store_user(dpp, uinfo, true, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* modify keys: remove A, add C */
+  uinfo.access_keys.erase("rstA");
+  RGWAccessKey kc("rstC", "secretC");
+  uinfo.access_keys["rstC"] = kc;
+
+  objv.read_version.ver = 1;
+  ret = db->store_user(dpp, uinfo, false, nullptr, &objv, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  RGWUserInfo f;
+  f.user_id = uinfo.user_id;
+  ret = db->get_user(dpp, "access_key", "rstA", f, nullptr, nullptr);
+  EXPECT_EQ(ret, -ENOENT);
+
+  ret = db->get_user(dpp, "access_key", "rstB", f, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(f.user_id.id, "restore-key-user");
+
+  ret = db->get_user(dpp, "access_key", "rstC", f, nullptr, nullptr);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(f.user_id.id, "restore-key-user");
 }
 
 int main(int argc, char **argv)

@@ -240,7 +240,7 @@ options:
 	--rgw_frontend specify the rgw frontend configuration
 	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
-	--rgw_store storage backend: rados|dbstore|posix
+	--rgw_store storage backend: rados|dbstore|posix|nsfs
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	--cyanstore use cyanstore as the osd objectstore backend
@@ -993,6 +993,26 @@ EOF
         rgw posix base path = $posix_dir/root
         rgw posix userdb dir = $posix_dir/userdb
         rgw posix database root = $posix_dir/lmdb
+
+EOF
+    fi
+    if [ "$rgw_store" == "nsfs" ] ; then
+        nsfs_dir="$CEPH_DEV_DIR/rgw/nsfs"
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$nsfs_dir/root"
+            prun rm -rf "$nsfs_dir/lmdb"
+            prun rm -rf "$nsfs_dir/userdb"
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore/config.db"
+        fi
+
+        prun mkdir -p $nsfs_dir/root $nsfs_dir/lmdb $nsfs_dir/userdb "$CEPH_DEV_DIR/rgw/dbstore"
+        wconf <<EOF
+        rgw backend store = nsfs
+        rgw config store = dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+        rgw nsfs base path = $nsfs_dir/root
+        rgw nsfs userdb dir = $nsfs_dir/userdb
+        rgw nsfs database root = $nsfs_dir/lmdb
 
 EOF
     fi
@@ -1940,7 +1960,7 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*;oidc-provider=*;users=*;buckets=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
@@ -1955,27 +1975,25 @@ do_rgw_create_users()
         --display-name tenanteduser \
         --email tenanteduser@example.com -c $conf_fn > /dev/null
 
-    if [ "$rgw_store" == "rados" ] ; then
-        # create accounts/users for iam s3tests
-        a1_akey='AAAAAAAAAAAAAAAAAAaa'
-        a1_skey='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-        $CEPH_BIN/radosgw-admin account create --account-id RGW11111111111111111 --account-name Account1 --email account1@ceph.com -c $conf_fn > /dev/null
-        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1root --account-root \
-            --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey -c $conf_fn > /dev/null
+    # create accounts/users for iam s3tests (all backends)
+    a1_akey='AAAAAAAAAAAAAAAAAAaa'
+    a1_skey='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    $CEPH_BIN/radosgw-admin account create --account-id RGW11111111111111111 --account-name Account1 --email account1@ceph.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1root --account-root \
+        --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey -c $conf_fn > /dev/null
 
-        a2_akey='BBBBBBBBBBBBBBBBBBbb'
-        a2_skey='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-        $CEPH_BIN/radosgw-admin account create --account-id RGW22222222222222222 --account-name Account2 --email account2@ceph.com -c $conf_fn > /dev/null
-        $CEPH_BIN/radosgw-admin user create --account-id RGW22222222222222222 --uid testacct2root --account-root \
-            --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey -c $conf_fn > /dev/null
+    a2_akey='BBBBBBBBBBBBBBBBBBbb'
+    a2_skey='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    $CEPH_BIN/radosgw-admin account create --account-id RGW22222222222222222 --account-name Account2 --email account2@ceph.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create --account-id RGW22222222222222222 --uid testacct2root --account-root \
+        --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey -c $conf_fn > /dev/null
 
-        a1u_akey='CCCCCCCCCCCCCCCCCCcc'
-        a1u_skey='cccccccccccccccccccccccccccccccccccccccc'
-        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1user \
-            --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey -c $conf_fn > /dev/null
-        $CEPH_BIN/radosgw-admin user policy attach --uid testacct1user \
-            --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null
-    fi
+    a1u_akey='CCCCCCCCCCCCCCCCCCcc'
+    a1u_skey='cccccccccccccccccccccccccccccccccccccccc'
+    $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1user \
+        --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user policy attach --uid testacct1user \
+        --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null
 
     # Create Swift user
     debug echo "setting up user tester"
