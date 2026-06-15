@@ -3346,9 +3346,11 @@ paths:
           content:
             application/json:
               schema:
+                properties: {}
                 type: object
             application/vnd.ceph.api.v1.0+json:
               schema:
+                properties: {}
                 type: object
           description: Resource created.
         '202':
@@ -3371,7 +3373,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Enable snapshot mirroring for a filesystem
+      summary: Enable mirroring for a filesystem
       tags:
       - CephfsMirror
   /api/cephfs/mirror/token:

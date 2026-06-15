@@ -118,6 +118,31 @@ class CephFSMirrorTest(ControllerTestCase):
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_peer_bootstrap_create',
                                            fs_name, client_name, site_name)
 
+    def test_enable_success(self):
+        fs_name = 'test_fs'
+        mgr.remote = Mock(return_value=(0, '{}', ''))
+
+        self._post('/api/cephfs/mirror/enable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(201)
+        self.assertJsonBody({})
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_enable', fs_name)
+
+    def test_enable_error(self):
+        fs_name = 'test_fs'
+        error_message = 'Failed to enable mirroring'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post('/api/cephfs/mirror/enable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to enable Cephfs mirroring', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_enable', fs_name)
+
     def test_create_success(self):
         fs_name = 'test_fs'
         token = 'bootstrap-token-12345'

@@ -9,7 +9,7 @@
          class="jump-in-row">
       <div cdsCol
            [columnNumbers]="{lg: 4, md: 4, sm: 4}">
-        <cds-clickable-tile>
+        <cds-clickable-tile (click)="openSetupMirroring()">
           <div cdsStack="vertical"
                gap="5">
             <p class="cds--type-heading-compact-01"
@@ -75,3 +75,11 @@
   </cd-cephfs-generate-token>
 }
 
+<!-- Setup mirroring modal -->
+@if (isSetupModalOpen) {
+  <cd-cephfs-setup-mirroring
+    [open]="true"
+    (close)="closeSetupModal()"
+    (mirroringSetup)="closeSetupModal()">
+  </cd-cephfs-setup-mirroring>
+}

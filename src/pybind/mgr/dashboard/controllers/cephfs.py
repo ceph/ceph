@@ -1322,19 +1322,18 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out)
 
-    @EndpointDoc("Enable snapshot mirroring for a filesystem",
+    @EndpointDoc("Enable mirroring for a filesystem",
                  parameters={
                      'fs_name': (str, 'File system name'),
                  },
-                 responses={200: {}})
-    @Endpoint('POST')
+                 responses={201: {}})
+    @RESTController.Collection('POST', path='/enable', status=201)
     @CreatePermission
     def enable(self, fs_name: str):
-        error_code, out, err = mgr.remote(
-            'mirroring', 'snapshot_mirror_enable', fs_name)
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_enable', fs_name)
         if error_code != 0:
             raise DashboardException(
-                msg=f'Failed to enable mirroring for filesystem: {err}',
+                msg=f'Failed to enable Cephfs mirroring: {err}',
                 code=error_code,
                 component='cephfs.mirror'
             )
@@ -1368,8 +1367,10 @@ class CephFSMirror(RESTController):
                  responses={200: {}})
     @CreatePermission
     def create(self, fs_name: str, token: str):
+        import urllib.parse
+        decoded_token = urllib.parse.unquote(token)
         error_code, out, err = mgr.remote(
-            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, token)
+            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, decoded_token)
         if error_code != 0:
             raise DashboardException(
                 msg=f'Failed to import the token to create bootstrap peer: {err}',

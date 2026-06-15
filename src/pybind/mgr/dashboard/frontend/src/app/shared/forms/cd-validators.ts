@@ -293,6 +293,29 @@ export class CdValidators {
   }
 
   /**
+   * Validator that checks whether the control value is a Base64 encoded JSON string.
+   * Whitespace characters are ignored. Skips validation when value is empty.
+   * @returns {ValidatorFn} Returns error map with `invalidBase64Json` if validation fails.
+   */
+  static base64Json(): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      const value = (control.value || '').replace(/\s/g, '');
+      if (isEmptyInputValue(value)) {
+        return null;
+      }
+      if (!/^[A-Za-z0-9+/]+=*$/.test(value)) {
+        return { invalidBase64Json: true };
+      }
+      try {
+        JSON.parse(atob(value));
+        return null;
+      } catch {
+        return { invalidBase64Json: true };
+      }
+    };
+  }
+
+  /**
    * Validate form control if condition is true with validators.
    *
    * @param {AbstractControl} formControl

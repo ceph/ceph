@@ -111,4 +111,14 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne(`api/cephfs/remove/${volName}`);
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should create bootstrap peer without encoding body fields', () => {
+    service.createBootstrapPeer('my fs', 'token/with/special=chars').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      fs_name: 'my fs',
+      token: 'token/with/special=chars'
+    });
+  });
 });
