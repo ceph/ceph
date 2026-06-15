@@ -145,6 +145,20 @@ void ServiceDaemon::add_or_update_fs_attribute(fs_cluster_id_t fscid, std::strin
   schedule_update_status();
 }
 
+void ServiceDaemon::remove_fs_attribute(fs_cluster_id_t fscid, std::string_view key) {
+  dout(10) << ": fscid=" << fscid << dendl;
+  {
+    std::scoped_lock locker(m_lock);
+    auto fs_it = m_filesystems.find(fscid);
+    if (fs_it == m_filesystems.end()) {
+      return;
+    }
+
+    fs_it->second.fs_attributes.erase(std::string(key));
+  }
+  schedule_update_status();
+}
+
 void ServiceDaemon::add_or_update_peer_attribute(fs_cluster_id_t fscid, const Peer &peer,
                                                  std::string_view key, AttributeValue value) {
   dout(10) << ": fscid=" << fscid << dendl;
@@ -162,6 +176,25 @@ void ServiceDaemon::add_or_update_peer_attribute(fs_cluster_id_t fscid, const Pe
     }
 
     peer_it->second[std::string(key)] = value;
+  }
+  schedule_update_status();
+}
+
+void ServiceDaemon::remove_peer_attribute(fs_cluster_id_t fscid, const Peer &peer, std::string_view key) {
+  dout(10) << ": fscid=" << fscid << dendl;
+  {
+    std::scoped_lock locker(m_lock);
+    auto fs_it = m_filesystems.find(fscid);
+    if (fs_it == m_filesystems.end()) {
+      return;
+    }
+
+    auto peer_it = fs_it->second.peer_attributes.find(peer);
+    if (peer_it == fs_it->second.peer_attributes.end()) {
+      return;
+    }
+
+    peer_it->second.erase(std::string(key));
   }
   schedule_update_status();
 }

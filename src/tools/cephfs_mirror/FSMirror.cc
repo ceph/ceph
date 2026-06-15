@@ -431,6 +431,7 @@ void FSMirror::add_peer(const Peer &peer) {
   }
   m_peer_replayers.emplace(peer, std::move(replayer));
   ceph_assert(m_peer_replayers.size() == 1); // support only a single peer
+  m_service_daemon->remove_peer_attribute(m_filesystem.fscid, peer, SERVICE_DAEMON_PEER_INIT_FAILED_KEY);
   if (m_perf_counters) {
     m_perf_counters->inc(l_cephfs_mirror_fs_mirror_peers);
   }
