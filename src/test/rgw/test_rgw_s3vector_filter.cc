@@ -431,6 +431,18 @@ TEST_F(S3VectorFilterTest, UnknownOperatorRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, EmptyOrArrayRejected) {
+  auto result = build(R"({"$or": []})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, EmptyAndArrayRejected) {
+  auto result = build(R"({"$and": []})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 TEST_F(S3VectorFilterTest, InvalidBooleanValueRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, true}};
   auto result = build(R"({"active": {"$eq": "yes"}})", keys);

@@ -346,6 +346,12 @@ namespace rgw::s3vector {
           return std::nullopt;
         }
         // top level logical operators
+        if (child->find_first().end()) {
+          ldpp_dout(dpp, 1) << "ERROR: s3vector filter: " << name << " requires a non-empty array of conditions" << dendl;
+          errors.push_back({"filter", fmt::format("{} requires a non-empty array of conditions", name)});
+          free_filter_exprs(combined);
+          return std::nullopt;
+        }
         FilterExprs logical;
         bool first = true;
         bool has_column = false;
