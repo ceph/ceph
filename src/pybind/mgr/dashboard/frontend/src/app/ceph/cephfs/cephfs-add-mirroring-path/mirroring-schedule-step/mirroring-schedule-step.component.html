@@ -1,0 +1,167 @@
+<form
+  [formGroup]="formGroup"
+  novalidate
+>
+  <div cdsGrid
+       [narrow]="true">
+    <div cdsCol
+         [columnNumbers]="{ md: 4 }">
+      <div cdsRow
+           class="form-heading">
+        <h3 class="cds--type-heading-03"
+            i18n>Create snapshot schedule</h3>
+        <p class="cds--type-label-02"
+           i18n>Set how often snapshots should run and how long to keep them.</p>
+      </div>
+      <!-- Schedule name -->
+      <div
+        class="form-item"
+        cdsRow
+      >
+        <div
+          cdsCol
+        >
+          <cds-text-label
+            labelInputID="scheduleName"
+            i18n
+            helperText="Use a name to identify this schedule. (e.g. Hourly production backup)"
+            i18n-helperText
+          >
+            Schedule name (optional)
+            <input
+              cdsText
+              type="text"
+              id="scheduleName"
+              formControlName="scheduleName"
+              placeholder="Use a name to identify this schedule. (e.g. Hourly production...)"
+              i18n-placeholder
+            />
+          </cds-text-label>
+        </div>
+      </div>
+
+      <!-- Schedule type -->
+      <div
+        class="form-item"
+        cdsRow
+      >
+        <div
+          cdsCol
+        >
+          <cds-radio-group
+            [orientation]="'horizontal'"
+            formControlName="scheduleType"
+            legend="Schedule type"
+            i18n-legend
+            (change)="onScheduleTypeChange($event)"
+          >
+            <cds-radio [value]="'interval'" i18n>Interval</cds-radio>
+            <cds-radio [value]="'cron'" i18n>Cron</cds-radio>
+          </cds-radio-group>
+        </div>
+      </div>
+
+      <!-- Interval + Frequency -->
+      <ng-container *ngIf="scheduleType === 'interval'">
+        <div
+          cdsRow
+          class="form-item form-item-append"
+        >
+          <div
+            cdsCol
+          >
+            <cds-number
+              label="Interval"
+              i18n-label
+              formControlName="repeatInterval"
+              min="1"
+            >
+            </cds-number>
+          </div>
+          <div
+            cdsCol
+          >
+            <cds-select
+              formControlName="repeatFrequency"
+              label="Frequency"
+              i18n-label
+              id="repeatFrequency"
+            >
+              <option *ngFor="let freq of repeatFrequencies"
+                      [value]="freq[1]">{{ freq[0] }}</option>
+            </cds-select>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- Cron expression -->
+      <ng-container *ngIf="scheduleType === 'cron'">
+        <div
+          class="form-item"
+          cdsRow
+        >
+          <div
+            cdsCol
+          >
+            <cds-text-label labelInputID="cronExpression" i18n>Cron expression
+              <input cdsText type="text" id="cronExpression" formControlName="cronExpression" placeholder="e.g. 0 * * * *" i18n-placeholder />
+            </cds-text-label>
+          </div>
+        </div>
+      </ng-container>
+
+   
+
+      <!-- Retention duration + Frequency -->
+      <div
+        cdsRow
+        class="form-item form-item-append"
+      >
+        <div
+          cdsCol
+        >
+          <cds-number
+            label="Retention duration"
+            i18n-label
+            formControlName="retentionInterval"
+            min="1"
+          >
+          </cds-number>
+        </div>
+        <div
+          cdsCol
+        >
+          <cds-select
+            formControlName="retentionFrequency"
+            label="Frequency"
+            i18n-label
+            id="retentionFrequency"
+          >
+            <option *ngFor="let freq of retentionFrequencies"
+                    [value]="freq[1]">{{ freq[0] }}</option>
+          </cds-select>
+        </div>
+      </div>
+
+      <!-- Retention count -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+        <div
+          cdsCol
+        >
+          <cds-number
+            label="Retention count (optional)"
+            i18n-label
+            formControlName="retentionCount"
+            min="1"
+            helperText="Use this to limit how many snapshots are kept."
+            i18n-helperText
+          >
+          </cds-number>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>

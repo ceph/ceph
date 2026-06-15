@@ -131,4 +131,48 @@ export class CephfsService {
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
+
+  deployCephfsMirror(): Observable<any> {
+    return this.http.post('ui-api/cephfs/mirror/configure', {});
+  }
+
+  enableMirror(fsName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/enable`, {
+      fs_name: fsName
+    });
+  }
+
+  disableMirror(fsName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/disable`, {
+      fs_name: fsName
+    });
+  }
+
+  createBootstrapToken(fsName: string, clientName: string, siteName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/token`, {
+      fs_name: fsName,
+      client_name: clientName,
+      site_name: siteName
+    });
+  }
+
+  createBootstrapPeer(fsName: string, @cdEncodeNot token: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror`, {
+      fs_name: fsName,
+      token: token
+    });
+  }
+
+  addMirrorDirectory(fsName: string, path: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/directory`, {
+      fs_name: fsName,
+      path: path
+    });
+  }
+
+  listMirrorDirectories(fsName: string): Observable<any> {
+    return this.http.get(`${this.baseURL}/mirror/directory`, {
+      params: { fs_name: fsName }
+    });
+  }
 }

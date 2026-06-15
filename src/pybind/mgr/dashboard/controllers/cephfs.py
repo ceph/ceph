@@ -19,6 +19,7 @@ from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
     allow_empty_body
+from ..controllers.service import Service
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -1321,6 +1322,42 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
         return json.loads(out)
+
+    @EndpointDoc("Enable snapshot mirroring for a filesystem",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: {}})
+    @Endpoint('POST')
+    @CreatePermission
+    def enable(self, fs_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_enable', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to enable mirroring for filesystem: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("Disable snapshot mirroring for a filesystem",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: {}})
+    @Endpoint('POST')
+    @CreatePermission
+    def disable(self, fs_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_disable', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to disable mirroring for filesystem: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
 
     @EndpointDoc("Create bootstrap token",
                  parameters={
