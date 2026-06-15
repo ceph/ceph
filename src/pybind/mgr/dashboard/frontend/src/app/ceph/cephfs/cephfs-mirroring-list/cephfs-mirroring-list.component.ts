@@ -4,6 +4,7 @@ import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
@@ -34,7 +35,15 @@ export class CephfsMirroringListComponent implements OnInit {
 
   ngOnInit() {
     this.columns = [
-      { name: $localize`Filesystem`, prop: 'local_fs_name', flexGrow: 2 },
+      {
+        name: $localize`Filesystem`,
+        prop: 'local_fs_name',
+        flexGrow: 2,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: ['/cephfs/mirroring', '::prop', 'overview']
+        }
+      },
       { name: $localize`Destination cluster`, prop: 'remote_cluster_name', flexGrow: 2 },
       { name: $localize`Mirroring status`, prop: 'mirroring_status', flexGrow: 2 },
       { name: $localize`Bytes replicated`, prop: 'bytes_replicated', flexGrow: 2 },
