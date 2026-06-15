@@ -83,6 +83,12 @@ public:
   /// from its registered hugepage pool, enabling the zero-copy paths.
   virtual ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(
     size_t len);
+
+  /// Whether alloc_io_buffer() yields DMA-passthrough memory, i.e. a single
+  /// sector-aligned buffer can be handed to the device with zero coalescing
+  /// copy (SPDK). The kernel transport returns false. Lets the journal encode
+  /// record metadata in place into such a buffer instead of bouncing it.
+  virtual bool dma_passthrough() const { return false; }
 };
 using BlockIODriverRef = std::unique_ptr<BlockIODriver>;
 
