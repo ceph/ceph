@@ -234,7 +234,8 @@ class UpgradeState:
                  prior_autoscale: Optional[bool] = True,
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
-                 health_warnings_muted: Optional[bool] = False
+                 health_warnings_muted: Optional[bool] = False,
+                 rotated_osd_mds_keyrings: Optional[bool] = False
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -259,6 +260,7 @@ class UpgradeState:
         self.prior_autoscale = prior_autoscale
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
+        self.rotated_osd_mds_keyrings = rotated_osd_mds_keyrings
         self.health_warnings_muted = health_warnings_muted
 
     def to_json(self) -> dict:
@@ -284,7 +286,8 @@ class UpgradeState:
             'prior_autoscale': self.prior_autoscale,
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
-            'health_warnings_muted': self.health_warnings_muted
+            'health_warnings_muted': self.health_warnings_muted,
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings
         }
 
     @classmethod
@@ -871,7 +874,7 @@ class CephadmUpgrade:
                 })
                 return False
             except Exception as e:
-                logger.exception('Upgrade: unexpected exception during _do_upgrade')
+                logger.exception(f'Upgrade: unexpected exception during _do_upgrade: {str(e)}')
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
                     'summary': 'Upgrade: failed due to an unexpected exception',
@@ -1204,6 +1207,26 @@ class CephadmUpgrade:
             self.mgr.set_store('upgrade_state', None)
             return
         self.mgr.set_store('upgrade_state', json.dumps(self.upgrade_state.to_json()))
+
+    def _save_rotated_daemon_ids(self, osd_ids: List[str], mds_ids: List[str]) -> None:
+        rotated_raw = self.mgr.get_store('rotated_osd_mds_daemons')
+        rotated: Dict[str, List[str]] = {}
+        # if this is the first attempt at saving this get_store will
+        # give us a NoneType that cannot be passed to json.loads
+        if rotated_raw is None:
+            rotated = {'osd': [], 'mds': []}
+        else:
+            rotated = json.loads(rotated_raw)
+            for dtype in ['osd', 'mds']:
+                if dtype not in rotated:
+                    rotated[dtype] = []
+
+        rotated['osd'].extend(osd_ids)
+        rotated['mds'].extend(mds_ids)
+        self.mgr.set_store('rotated_osd_mds_daemons', json.dumps(rotated))
+
+    def _clear_rotated_daemon_entry(self) -> None:
+        self.mgr.set_store('rotated_osd_mds_daemons', None)
 
     def get_distinct_container_image_settings(self) -> Dict[str, str]:
         # get all distinct container_image settings
@@ -1541,6 +1564,67 @@ class CephadmUpgrade:
 
         return True, to_upgrade
 
+    def handle_osd_mds_key_rotation(self, target_image: str, target_digests: Optional[List[str]] = None) -> bool:
+        # all OSD and mds daemons must be upgraded before we can rotate their keyrings
+        # returns True if rotation of these daemon's keyrings is complete, False if not
+        if not self.upgrade_state:
+            return False
+        if self.upgrade_state.rotated_osd_mds_keyrings:
+            # rotations are already complete. Nothing to check
+            return True
+        osd_daemons = self.mgr.cache.get_daemons_by_type('osd')
+        mds_daemons = self.mgr.cache.get_daemons_by_type('mds')
+        daemons_to_check = osd_daemons + mds_daemons
+        rotated_osd_ids: List[str] = []
+        rotated_mds_ids: List[str] = []
+        assert target_digests is not None
+        _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(daemons_to_check, target_digests, target_image)
+
+        def _rotate_key(dspec: CephadmDaemonDeploySpec) -> bool:
+            # attempts to rotate keyring. Returns boolean marking if rotation succeeded
+            try:
+                dspec.keyring = None
+                self.mgr.key_rotate(dspec)
+            except Exception as e:
+                self._fail_upgrade('UPGRADE_KEY_ROTATION', {
+                    'severity': 'warning',
+                    'summary': f'Rotation of cephx key for daemon {dspec.name()} on host {dspec.host} failed.',
+                    'count': 1,
+                    'detail': [
+                        f'Upgrade daemon key rotation: {dspec.name()}: {e}'
+                    ],
+                })
+                logger.error(f'Exception during rotation of osd/mds keyrings: {str(e)}')
+                return False
+            return True
+
+        save_counter = 0
+        if not still_needing_upgrade:
+            for osd_daemon in osd_daemons:
+                if not _rotate_key(CephadmDaemonDeploySpec.from_daemon_description(osd_daemon)):
+                    return False
+                assert osd_daemon.daemon_id
+                rotated_osd_ids.append(osd_daemon.daemon_id)
+                save_counter += 1
+                if save_counter >= 10:
+                    self._save_rotated_daemon_ids(rotated_osd_ids, rotated_mds_ids)
+                    save_counter = 0
+                    rotated_osd_ids = []
+            for mds_daemon in mds_daemons:
+                if not _rotate_key(CephadmDaemonDeploySpec.from_daemon_description(mds_daemon)):
+                    return False
+                assert mds_daemon.daemon_id
+                rotated_mds_ids.append(mds_daemon.daemon_id)
+                save_counter += 1
+                if save_counter >= 10:
+                    self._save_rotated_daemon_ids(rotated_osd_ids, rotated_mds_ids)
+                    save_counter = 0
+                    rotated_mds_ids = []
+        self._save_rotated_daemon_ids(rotated_osd_ids, rotated_mds_ids)
+        self.upgrade_state.rotated_osd_mds_keyrings = True
+        self._save_upgrade_state()
+        return True
+
     def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
         if self.upgrade_state:
             if self.upgrade_state.rotated_mgr_mon_auth_key_daemons is None:
@@ -1669,21 +1753,6 @@ class CephadmUpgrade:
 
         for d_entry in to_upgrade:
             daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d_entry[0])
-
-            try:
-                if daemon_spec.daemon_type in ['mds', 'osd']:
-                    daemon_spec.keyring = None
-                    self.mgr.key_rotate(daemon_spec)
-            except Exception as e:
-                self._fail_upgrade('UPGRADE_KEY_ROTATION', {
-                    'severity': 'warning',
-                    'summary': f'Rotation of cephx key for daemon {daemon_spec.name()} on host {daemon_spec.host} failed.',
-                    'count': 1,
-                    'detail': [
-                        f'Upgrade daemon key rotation: {daemon_spec.name()}: {e}'
-                    ],
-                })
-                return
 
             action = 'Upgrading' if not d_entry[1] else 'Redeploying'
             try:
@@ -1911,6 +1980,9 @@ class CephadmUpgrade:
             })
         else:
             logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+
+        if self.upgrade_state.rotated_osd_mds_keyrings:
+            self._clear_rotated_daemon_entry()
 
         if self.upgrade_state.health_warnings_muted:
             self._unmute_upgrade_related_health_warnings()
@@ -2152,6 +2224,11 @@ class CephadmUpgrade:
             # complete mds upgrade?
             if daemon_type == 'mds':
                 self._complete_mds_upgrade()
+
+            if daemon_type in ['mds', 'osd']:
+                # back out if this is not complete or fails
+                if not self.handle_osd_mds_key_rotation(target_image, target_digests):
+                    return
 
             # Make sure all metadata is up to date before saying we are done upgrading this daemon type
             if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
