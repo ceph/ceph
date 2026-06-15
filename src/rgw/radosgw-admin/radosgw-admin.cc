@@ -4265,7 +4265,7 @@ int main(int argc, const char **argv)
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
       add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc)->ignore_underscore();
-      add_multilevel_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing")->ignore_underscore();
 
       // bucket stats options
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
@@ -4278,7 +4278,7 @@ int main(int argc, const char **argv)
           ->ignore_underscore()
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
-      add_multilevel_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command")->ignore_underscore();
 
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
@@ -4296,9 +4296,9 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
       add_multilevel_option(bucket_check, "--tenant",    tenant,      tenant_desc);
       add_multilevel_binary_flag(bucket_check, "--fix",               fix,                    "besides checking bucket index, will also fix it");
-      add_multilevel_flag  (bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
-      add_multilevel_flag  (bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
-      add_multilevel_flag  (bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
       add_multilevel_option(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum number of concurrent I/O operations")->ignore_underscore();
 
       // bucket check olh options
@@ -4320,10 +4320,10 @@ int main(int argc, const char **argv)
       // bucket rm options
       add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_rm, "--tenant",    tenant,      tenant_desc);
-      add_multilevel_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it")->ignore_underscore();
-      add_multilevel_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC")->ignore_underscore();
-      add_multilevel_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency")->ignore_underscore();
-      add_multilevel_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4499,10 +4499,7 @@ int main(int argc, const char **argv)
           [&bucket_name, &cli11_action,
            &tenant, &fix, &remove_bad, &check_head_obj_locator,
            &bucket_op, &stream_flusher_ptr, &formatter] {
-        // Validate inside the action, not the callback: int-bound flags given
-        // before the subcommand are not visible at callback time (CLI11
-        // counting-flag semantics with multi-level registration), but are
-        // visible here. This also matches where legacy ran the check.
+
         cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
                         &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
           if (check_head_obj_locator) {

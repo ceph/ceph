@@ -772,6 +772,31 @@ check "check: --fix banana (space non-bool, warn-accept)"   0 "Warning: invalid 
 check "gc list --fix=banana (unmigrated stays parse-safe)"  0 "" \
   gc list --fix=banana
 
+# Binary-flag rollout: one "=banana" per migrated flag confirms it uses
+# add_multilevel_binary_flag (warn-and-accept, correct flag name) and is treated
+# as SET. The exit matches legacy's truthy -EINVAL outcome (verified bare ==
+# =true == =banana for each flag); the warning is the one intended addition.
+check "list: --allow-unordered=banana"          0 "Warning: invalid value 'banana' for --allow-unordered, treating as set" \
+  bucket list --allow-unordered=banana
+check "stats: --show-restore-stats=banana"      0 "Warning: invalid value 'banana' for --show-restore-stats, treating as set" \
+  bucket stats --show-restore-stats=banana
+check "check: --remove-bad=banana"              0 "Warning: invalid value 'banana' for --remove-bad, treating as set" \
+  bucket check --remove-bad=banana
+check "check: --check-objects=banana"           0 "Warning: invalid value 'banana' for --check-objects, treating as set" \
+  bucket check --check-objects=banana
+# set -> locator path needs a bucket name -> exit 22 (same as bare/=true)
+check "check: --check-head-obj-locator=banana"  22 "Warning: invalid value 'banana' for --check-head-obj-locator, treating as set" \
+  bucket check --check-head-obj-locator=banana
+check "rm: --purge-objects=banana"              0 "Warning: invalid value 'banana' for --purge-objects, treating as set" \
+  bucket rm --purge-objects=banana
+check "rm: --bypass-gc=banana"                  0 "Warning: invalid value 'banana' for --bypass-gc, treating as set" \
+  bucket rm --bypass-gc=banana
+# set -> corrupt-index guard fires (requires --yes-i-really-mean-it) -> exit 1
+check "rm: --inconsistent-index=banana"         1 "Warning: invalid value 'banana' for --inconsistent-index, treating as set" \
+  bucket rm --inconsistent-index=banana
+check "rm: --yes-i-really-mean-it=banana"       0 "Warning: invalid value 'banana' for --yes-i-really-mean-it, treating as set" \
+  bucket rm --yes-i-really-mean-it=banana
+
 # check multi-warning combinations
 check_warns "check: --fix + --remove-bad before (2 pos warnings)"       0 "" \
   "$WARN_FIX_POS" "$WARN_REMOVE_BAD_POS" -- \
