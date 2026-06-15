@@ -22,26 +22,18 @@ Notable Changes
 MDS (Metadata Server)
 ---------------------
 
-* Upgrade Testing Architecture: Split up existing upgrade sequences into distinct CentOS Stream 9 and Rocky Linux 10 automated test variants across multiple upgrade suites (including parallel, stress-split, and telemetry suites).
-* Queueing Logic Update: Retry requests are now added directly to the MDSRank wait queue rather than going through the finisher.
-* Optimization: Removed duplicate context completion calls and adjusted scan_stray_dir after refining the MDSContext class.
-* Reversion: Reverted a prior change that moved MDSContext completion handling to the finish method.
 * Segmentation fault fixed due to incorrect queueing of request retries.
 
 OSD (Object Storage Daemon)
 ---------------------------
 
-* FastEC Activation: Always updates the pwlc epoch when activating.
 * PGLog Missed List: Fixed a bug to ensure the correct version is attached to the missing list when ignoring log entries.
 * Data Integrity Asserts: Added assertions to explicitly catch potential corruption in the OSD missing list.
-* Data Structure Changes: Modified the rmissing map key type from version_t to eversion_t.
-* Rollback & Vector Fixes: Corrected rollback logic for partial write object information (OI) and optimized Erasure Coding (EC) by ensuring Twiddle creates a full-sized vector.
 
 RGW (RADOS Gateway)
 -------------------
 
 * Lifecycle Management: Fixed lifecycle transition issues affecting encrypted multipart objects.
-* Multisite Concurrency: Improved concurrency handling when a value of 1 is provided by the caller, added logging for concurrency state transitions within adj_concurrency, exposed lock latency as a performance counter for data synchronization, and fixed an uninitialized LatencyMonitor average by shifting to an exponentially weighted moving average.
 * REST & Query Handling: RESTArgs::get_string() now properly URL-decodes incoming query parameters.
 
 RADOS / librados / neorados
