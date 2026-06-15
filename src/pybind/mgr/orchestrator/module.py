@@ -520,7 +520,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         table_heading_mapping = {
             'summary': ['HOST', 'SN', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
             'fullreport': [],
-            'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
+            'firmware': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
             'criticals': ['HOST', 'SYS_ID', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
             'memory': ['HOST', 'SYS_ID', 'NAME', 'STATUS', 'STATE'],
             'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'SLOT', 'FW', 'STATUS', 'STATE'],
@@ -530,6 +530,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
             'temperatures': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
         }
+
+        if category == 'firmwares':
+            category = 'firmware'
 
         if category not in table_heading_mapping.keys():
             return HandleCommandResult(stdout=f"'{category}' is not a valid category.")
@@ -560,8 +563,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 completion = self.node_proxy_fullreport(hostname=hostname)
                 fullreport: Dict[str, Any] = raise_if_exception(completion)
                 output = json.dumps(fullreport)
-        elif category == 'firmwares':
-            output = 'Missing host name' if hostname is None else self._firmwares_table(hostname, table, format)
+        elif category == 'firmware':
+            output = 'Missing host name' if hostname is None else self._firmware_table(hostname, table, format)
         elif category == 'criticals':
             output = self._criticals_table(hostname, table, format)
         else:
@@ -569,8 +572,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(stdout=output)
 
-    def _firmwares_table(self, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
-        completion = self.node_proxy_firmwares(hostname=hostname)
+    def _firmware_table(self, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
+        completion = self.node_proxy_firmware(hostname=hostname)
         data = raise_if_exception(completion)
         # data = self.node_proxy_firmware(hostname=hostname)
         if format == Format.json:

@@ -81,7 +81,7 @@ supported categories are:
 * power
 * fans
 * temperatures
-* firmwares
+* firmware
 * criticals
 
 Examples
@@ -135,7 +135,7 @@ firmwares details
 
 .. code-block:: bash
 
-  # ceph orch hardware status node-10 --category firmwares
+  # ceph orch hardware status node-10 --category firmware
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
   |    HOST    |                                 COMPONENT                                  |                             NAME                             |         DATE         |   VERSION   | STATUS |
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
@@ -180,6 +180,6 @@ Developpers
 .. automethod:: NodeProxyEndpoint.processors
 .. automethod:: NodeProxyEndpoint.fans
 .. automethod:: NodeProxyEndpoint.temperatures
-.. automethod:: NodeProxyEndpoint.firmwares
+.. automethod:: NodeProxyEndpoint.firmware
 .. automethod:: NodeProxyEndpoint.led
 
