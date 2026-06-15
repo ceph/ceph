@@ -70,7 +70,8 @@ RecordBatch::add_pending(
 
 RecordBatch::encode_ret_t RecordBatch::encode_batch(
   const journal_seq_t& committed_to,
-  segment_nonce_t segment_nonce)
+  segment_nonce_t segment_nonce,
+  ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer)
 {
   assert(state == state_t::PENDING);
   assert(pending.get_size() > 0);
@@ -83,7 +84,8 @@ RecordBatch::encode_ret_t RecordBatch::encode_batch(
   submitting_size = pending.get_size();
   submitting_length = pending.size.get_encoded_length();
   submitting_mdlength = pending.size.get_mdlength();
-  auto bl = encode_records(pending, committed_to, segment_nonce);
+  auto bl = encode_records(pending, committed_to, segment_nonce,
+                           std::move(md_buffer));
   // Note: pending is cleared here
   assert(bl.length() == submitting_length);
   return {_write_base, std::move(bl)};
@@ -117,7 +119,8 @@ RecordBatch::submit_pending_fast(
   record_group_t&& group,
   extent_len_t block_size,
   const journal_seq_t& committed_to,
-  segment_nonce_t segment_nonce)
+  segment_nonce_t segment_nonce,
+  ceph::unique_leakable_ptr<ceph::buffer::raw> md_buffer)
 {
   assert(group.get_size() == 1);
   auto& record = group.records[0];
@@ -126,7 +129,8 @@ RecordBatch::submit_pending_fast(
   assert(state == state_t::EMPTY);
   assert(evaluate_submit(record.size, block_size).submit_size == new_size);
   assert(group.size == new_size);
-  auto bl = encode_records(group, committed_to, segment_nonce);
+  auto bl = encode_records(group, committed_to, segment_nonce,
+                           std::move(md_buffer));
   // Note: group is cleared here
   assert(bl.length() == new_size.get_encoded_length());
   return bl;
@@ -331,7 +335,8 @@ RecordSubmitter::submit(
       std::move(rg),
       block_size,
       get_committed_to(),
-      journal_allocator.get_nonce());
+      journal_allocator.get_nonce(),
+      journal_allocator.alloc_record_md_buffer(sizes.get_mdlength()));
     DEBUG("{} fast submit {}, committed_to={}, outstanding_io={} ...",
           get_name(), sizes, get_committed_to(), num_outstanding_io);
     write_result_t result{
@@ -566,7 +571,8 @@ void RecordSubmitter::flush_current_batch()
   assert(stats.record_batch_stats.num_io ==
          stats.io_depth_stats.num_io);
   auto encode_ret = p_batch->encode_batch(
-    get_committed_to(), journal_allocator.get_nonce());
+    get_committed_to(), journal_allocator.get_nonce(),
+    journal_allocator.alloc_record_md_buffer(sizes.get_mdlength()));
   // Note: rg is cleared
   auto write_base = encode_ret.write_base;
   auto write_len = encode_ret.bl.length();

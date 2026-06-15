@@ -143,6 +143,13 @@ public:
     return driver ? driver->alloc_io_buffer(len) : ceph::buffer::create_page_aligned(len);
   }
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_journal_md_buffer(
+    size_t len) final {
+    return (driver && driver->dma_passthrough())
+      ? driver->alloc_io_buffer(len)
+      : nullptr;
+  }
+
   open_ertr::future<SegmentRef> open(segment_id_t id) override;
 
   release_ertr::future<> release(segment_id_t id) override;

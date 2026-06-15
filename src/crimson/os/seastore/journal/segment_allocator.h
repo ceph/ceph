@@ -102,6 +102,11 @@ class SegmentAllocator : public JournalAllocator {
       record.extents.size());
   }
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw>
+  alloc_record_md_buffer(extent_len_t mdlength) final {
+    return sm_group.alloc_journal_md_buffer(mdlength);
+  }
+
  private:
   open_ret do_open(bool is_mkfs);
 
