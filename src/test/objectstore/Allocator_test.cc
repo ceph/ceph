@@ -795,6 +795,338 @@ TEST_P(AllocTest, test_alloc_spatial_locality)
 }
 
 
+// ====================================================================
+// get_free_extents tests
+// ====================================================================
+
+TEST_P(AllocTest, test_get_free_extents_empty)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+TEST_P(AllocTest, test_get_free_extents_fully_free)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+  }
+  EXPECT_EQ((uint64_t)capacity, total);
+  alloc->shutdown();
+}
+
+// A free extent straddling range_end must be clipped to the range boundary.
+TEST_P(AllocTest, test_get_free_extents_clipping_range_end)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  // free [4*block, 6*block), query only [0, 5*block)
+  alloc->init_add_free(4 * block_size, 2 * block_size);
+
+  uint64_t range_end = 5 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, range_end, 0, &out);
+  EXPECT_GE(cursor, range_end);
+  for (auto& e : out) {
+    EXPECT_LE(e.offset + e.length, range_end);
+  }
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ((uint64_t)block_size, total);
+  alloc->shutdown();
+}
+
+// A free extent entirely outside the query range must not be returned.
+TEST_P(AllocTest, test_get_free_extents_outside_range)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  uint64_t range_end = 4 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, range_end, 0, &out);
+  EXPECT_GE(cursor, range_end);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+// range_begin == range_end must return immediately with no extents emitted.
+TEST_P(AllocTest, test_get_free_extents_empty_range)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  free_extent_vector_t out;
+  uint64_t point = 4 * block_size;
+  uint64_t cursor = alloc->get_free_extents(point, point, 0, &out);
+  EXPECT_EQ(point, cursor);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+// get_free_extents must append to out, not clear it — a pre-existing sentinel
+// must survive at index 0.
+TEST_P(AllocTest, test_get_free_extents_appends_to_out)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, block_size);
+
+  free_extent_vector_t out;
+  out.emplace_back(999u, 1u); // sentinel
+  alloc->get_free_extents(0, capacity, 0, &out);
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(999u, out[0].offset);
+  EXPECT_EQ(1u, out[0].length);
+  EXPECT_EQ(0u, out[1].offset);
+  EXPECT_EQ(4096u, out[1].length);
+  alloc->shutdown();
+}
+
+// Returned extents must be in strictly ascending offset order.
+TEST_P(AllocTest, test_get_free_extents_ascending_order)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(8 * block_size, block_size);
+  alloc->init_add_free(12 * block_size, block_size);
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+  ASSERT_EQ(out.size(), 4u);
+  for (size_t i = 1; i < out.size(); ++i) {
+    EXPECT_LT(out[i-1].offset, out[i].offset);
+  }
+  alloc->shutdown();
+}
+
+// max_count limits extents per call; the returned cursor is a valid resume
+// point so driving it in a loop with max_count=2 covers all 4 extents.
+TEST_P(AllocTest, test_get_free_extents_max_count_batching)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(2 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  free_extent_vector_t out;
+
+  // First batch must respect max_count and must not exhaust all extents.
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 2, &out);
+  EXPECT_EQ(2u, out.size());
+  EXPECT_LT(cursor, (uint64_t)capacity);
+
+  // Resume from cursor until done; each batch must respect max_count.
+  int calls = 0;
+  while (cursor < (uint64_t)capacity) {
+    size_t before = out.size();
+    cursor = alloc->get_free_extents(cursor, capacity, 2, &out);
+    EXPECT_LE(out.size(), before + 2);
+    if (out.size() == before) break;  // no new extents: enumeration complete
+    ASSERT_LE(++calls, 10) << "cursor walk did not terminate";
+  }
+  EXPECT_EQ(4u, out.size());
+
+  // All four offsets must be distinct (no duplicates across batches).
+  for (size_t i = 1; i < out.size(); ++i) {
+    EXPECT_NE(out[i-1].offset, out[i].offset);
+  }
+  alloc->shutdown();
+}
+
+// Driving get_free_extents in a cursor loop must cover every free byte exactly
+// once.
+TEST_P(AllocTest, test_get_free_extents_cursor_walk)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 200 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 100; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  while (cursor < (uint64_t)capacity) {
+    cursor = alloc->get_free_extents(cursor, capacity, 32, &out);
+  }
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// max_count=1 walks one extent per call; the walk terminates and yields all
+// extents with no skips.
+TEST_P(AllocTest, test_get_free_extents_max_count_one)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(2 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  int iterations = 0;
+  while (cursor < (uint64_t)capacity) {
+    size_t prev = out.size();
+    cursor = alloc->get_free_extents(cursor, capacity, 1, &out);
+    EXPECT_LE(out.size(), prev + 1);
+    ASSERT_LE(++iterations, 1000) << "cursor walk did not terminate";
+  }
+  EXPECT_EQ(4u, out.size());
+  alloc->shutdown();
+}
+
+// ====================================================================
+// foreach_interruptible tests
+// ====================================================================
+
+TEST_P(AllocTest, test_foreach_interruptible_empty)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+
+  int calls = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t) { ++calls; });
+  EXPECT_EQ(0, calls);
+  alloc->shutdown();
+}
+
+TEST_P(AllocTest, test_foreach_interruptible_fully_free)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  uint64_t total = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) { total += len; });
+  EXPECT_EQ(alloc->get_free(), total);
+  alloc->shutdown();
+}
+
+// 50 disjoint free extents: foreach_interruptible must report the correct total.
+TEST_P(AllocTest, test_foreach_interruptible_disjoint_extents)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 100 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 50; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  uint64_t total = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) { total += len; });
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// With no concurrent mutation, foreach_interruptible and foreach must visit the
+// exact same (offset, length) pairs in the same order.
+TEST_P(AllocTest, test_foreach_interruptible_matches_foreach)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 100 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 50; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+
+  std::vector<std::pair<uint64_t, uint64_t>> fe_extents, fi_extents;
+  alloc->foreach([&](uint64_t off, uint64_t len) {
+    fe_extents.emplace_back(off, len);
+  });
+  alloc->foreach_interruptible([&](uint64_t off, uint64_t len) {
+    fi_extents.emplace_back(off, len);
+  });
+  EXPECT_EQ(fe_extents, fi_extents);
+  alloc->shutdown();
+}
+
+// 1500 disjoint free extents forces foreach_interruptible to issue multiple
+// get_free_extents batches (internal batch_size is 1024).
+TEST_P(AllocTest, test_foreach_interruptible_many_extents)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 3000 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 1500; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  uint64_t total = 0;
+  int calls = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) {
+    total += len;
+    ++calls;
+  });
+  EXPECT_EQ(expected_free, total);
+  EXPECT_EQ(1500, calls);
+  alloc->shutdown();
+}
+
+// foreach_interruptible must correctly visit a single free block located at the
+// start, middle, and end of the device.
+TEST_P(AllocTest, test_foreach_interruptible_single_block_positions)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+
+  auto run = [&](uint64_t free_offset) {
+    init_alloc(capacity, block_size);
+    alloc->init_add_free(free_offset, block_size);
+
+    struct Seen { uint64_t offset; uint64_t length; };
+    std::vector<Seen> seen;
+    alloc->foreach_interruptible([&](uint64_t off, uint64_t len) {
+      seen.push_back({off, len});
+    });
+    ASSERT_EQ(1u, seen.size());
+    EXPECT_EQ(free_offset, seen[0].offset);
+    EXPECT_EQ((uint64_t)block_size, seen[0].length);
+    alloc->shutdown();
+  };
+
+  run(0);                    // start of device
+  run(8 * block_size);       // middle of device
+  run(15 * block_size);      // last block
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
