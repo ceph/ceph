@@ -93,6 +93,9 @@ pub struct S3TestConfig {
     pub webidentity_azp: Option<String>,
     pub webidentity_realm: Option<String>,
 
+    // kafka (optional — present when kafka-vstart.sh has run)
+    pub kafka_broker: Option<String>,
+
     // optional
     pub cloud: Option<CloudConfig>,
 }
@@ -270,6 +273,8 @@ fn load_config() -> Result<S3TestConfig, String> {
         webidentity_sub: ini.get("webidentity", "sub").map(|s| s.to_string()),
         webidentity_azp: ini.get("webidentity", "azp").map(|s| s.to_string()),
         webidentity_realm: ini.get("webidentity", "KC_REALM").map(|s| s.to_string()),
+
+        kafka_broker: ini.get("kafka", "broker").map(|s| s.to_string()),
 
         cloud: load_cloud_config(&ini),
     })
