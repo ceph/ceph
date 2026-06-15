@@ -15,6 +15,8 @@
 
 #include "rgw_sal_nsfs.h"
 #include "rgw_rest_user.h"
+#include "rgw_pubsub_push.h"
+#include "rgw_pubsub.h"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -2067,12 +2069,17 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
+  if (!RGWPubSubEndpoint::init_all(cct)) {
+    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+  }
+
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
 }
 
 void NSFSDriver::finalize()
 {
+  RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
 }
 
@@ -2332,7 +2339,11 @@ std::unique_ptr<Notification> NSFSDriver::get_notification(rgw::sal::Object* obj
 			      const std::string* object_name)
 {
   rgw::notify::EventTypeList event_types = {event_type};
-  return std::make_unique<NSFSNotification>(obj, src_obj, event_types);
+  return std::make_unique<NSFSNotification>(this, obj, src_obj, event_types,
+      s->bucket.get(),
+      to_string(s->owner.id),
+      s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
+      s->req_id);
 }
 
 std::unique_ptr<Notification> NSFSDriver::get_notification(
@@ -2345,7 +2356,8 @@ std::unique_ptr<Notification> NSFSDriver::get_notification(
     std::string& _user_tenant,
     std::string& _req_id,
     optional_yield y) {
-  return std::make_unique<NSFSNotification>(obj, src_obj, event_types);
+  return std::make_unique<NSFSNotification>(this, obj, src_obj, event_types,
+      _bucket, _user_id, _user_tenant, _req_id);
 }
 
 // TODO: marker and other params
@@ -2876,6 +2888,177 @@ int NSFSDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
 {
   return get_user_db()->list_oidc_providers(dpp,
       std::string(tenant), providers);
+}
+
+/* --- Notification publish methods --- */
+
+int NSFSNotification::publish_reserve(const DoutPrefixProvider *dpp,
+				      RGWObjTags* obj_tags)
+{
+  obj_tags_ptr = obj_tags;
+
+  if (!bucket) {
+    return 0;
+  }
+
+  int ret = get_bucket_notifications(dpp, bucket, bucket_topics);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto& [name, filter] : bucket_topics.topics) {
+    for (auto req_type : event_types) {
+      for (auto cfg_type : filter.events) {
+	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
+	  matched.push_back(filter);
+	  goto next_topic;
+	}
+      }
+    }
+    next_topic:;
+  }
+
+  return 0;
+}
+
+int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
+				     uint64_t size,
+				     const ceph::real_time& mtime,
+				     const std::string& etag,
+				     const std::string& version)
+{
+  if (matched.empty()) {
+    return 0;
+  }
+
+  for (auto& filter : matched) {
+    const auto& dest = filter.topic.dest;
+    if (dest.push_endpoint.empty()) {
+      continue;
+    }
+
+    rgw_pubsub_s3_event event;
+    event.eventTime = mtime;
+    event.eventName = rgw::notify::to_string(event_types.front());
+    event.userIdentity = user_id;
+    event.x_amz_request_id = req_id;
+    event.configurationId = filter.s3_id;
+    if (bucket) {
+      event.bucket_name = bucket->get_name();
+      event.bucket_ownerIdentity = to_string(bucket->get_owner());
+      event.bucket_id = bucket->get_bucket_id();
+    }
+    if (obj) {
+      event.object_key = obj->get_name();
+    }
+    event.object_size = size;
+    event.object_etag = etag;
+    event.object_versionId = version;
+
+    try {
+      RGWHTTPArgs args(dest.push_endpoint_args, dpp);
+      auto endpoint = RGWPubSubEndpoint::create(
+	  dest.push_endpoint, filter.topic.name, args,
+	  dpp->get_cct());
+      int r = endpoint->send(dpp, event, null_yield);
+      if (r < 0) {
+	ldpp_dout(dpp, 1) << "ERROR: notification endpoint send failed: "
+			  << dest.push_endpoint << " ret=" << r << dendl;
+      }
+    } catch (const RGWPubSubEndpoint::configuration_error& e) {
+      ldpp_dout(dpp, 1) << "ERROR: notification endpoint config error: "
+			<< e.what() << dendl;
+    }
+  }
+
+  return 0;
+}
+
+/* --- Topic SAL methods --- */
+
+int NSFSDriver::read_topic_v2(const std::string& topic_name,
+			      const std::string& tenant,
+			      rgw_pubsub_topic& topic,
+			      RGWObjVersionTracker* objv_tracker,
+			      optional_yield y,
+			      const DoutPrefixProvider* dpp)
+{
+  obj_version objv;
+  int ret = get_user_db()->load_topic(dpp, topic_name, tenant, topic, objv);
+  if (!ret && objv_tracker) {
+    objv_tracker->read_version = objv;
+  }
+  return ret;
+}
+
+int NSFSDriver::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+			       RGWObjVersionTracker& objv_tracker,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->store_topic(dpp, topic, exclusive, objv_tracker.write_version);
+}
+
+int NSFSDriver::remove_topic_v2(const std::string& topic_name,
+				const std::string& tenant,
+				RGWObjVersionTracker& objv_tracker,
+				optional_yield y,
+				const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_topic(dpp, topic_name, tenant);
+}
+
+int NSFSDriver::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					    const std::string& bucket_key,
+					    bool add_mapping,
+					    optional_yield y,
+					    const DoutPrefixProvider* dpp)
+{
+  if (add_mapping) {
+    return get_user_db()->add_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  } else {
+    return get_user_db()->remove_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  }
+}
+
+int NSFSDriver::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					 std::set<std::string>& bucket_keys,
+					 optional_yield y,
+					 const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->get_bucket_topic_mapping(dpp, topic.name, bucket_keys);
+}
+
+int NSFSDriver::remove_bucket_mapping_from_topics(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& bucket_key,
+    optional_yield y,
+    const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_bucket_from_topic_mappings(dpp, bucket_key);
+}
+
+int NSFSDriver::list_account_topics(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view account_id,
+				    std::string_view marker,
+				    uint32_t max_items,
+				    TopicList& listing)
+{
+  rgw_owner owner = rgw_account_id(std::string(account_id));
+  std::vector<rgw_pubsub_topic> topics;
+  int ret = get_user_db()->list_topics(dpp, "owner", owner,
+      std::string(marker), max_items, topics);
+  if (ret) {
+    return ret;
+  }
+  for (auto& t : topics) {
+    listing.topics.push_back(std::move(t.name));
+  }
+  if (!listing.topics.empty()) {
+    listing.next_marker = listing.topics.back();
+  }
+  return 0;
 }
 
 struct meta_list_handle {

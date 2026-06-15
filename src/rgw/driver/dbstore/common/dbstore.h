@@ -22,6 +22,7 @@
 #include "global/global_init.h"
 #include "common/ceph_context.h"
 #include "rgw_multi.h"
+#include "rgw_pubsub.h"
 
 #include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
@@ -52,6 +53,14 @@ struct DBOpGroupInfo {
   std::vector<RGWGroupInfo> list_entries;
   std::string user_id;
   std::vector<std::string> user_list;
+};
+
+struct DBOpTopicInfo {
+  rgw_pubsub_topic topic;
+  obj_version topic_version;
+  std::vector<rgw_pubsub_topic> list_entries;
+  std::string bucket_name;
+  std::vector<std::string> bucket_list;
 };
 
 struct DBOpUserInfo {
@@ -155,6 +164,7 @@ struct DBOpInfo {
   DBOpRoleInfo role;
   DBOpOIDCProviderInfo oidc;
   DBOpGroupInfo group;
+  DBOpTopicInfo topic;
   DBOpUserInfo user;
   std::string query_str;
   DBOpBucketInfo bucket;
@@ -175,6 +185,8 @@ struct DBOpParams {
   std::string group_table;
   std::string group_users_table;
   std::string access_keys_table;
+  std::string topic_table;
+  std::string bucket_topic_mapping_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -249,6 +261,17 @@ struct DBOpGroupPrepareInfo {
   static constexpr const char* path = ":group_path";
   static constexpr const char* group_attrs = ":group_attrs";
   static constexpr const char* user_id = ":group_user_id";
+};
+
+struct DBOpTopicPrepareInfo {
+  static constexpr const char* topic_name = ":topic_name";
+  static constexpr const char* tenant = ":topic_tenant";
+  static constexpr const char* owner = ":topic_owner";
+  static constexpr const char* arn = ":topic_arn";
+  static constexpr const char* dest = ":topic_dest";
+  static constexpr const char* opaque_data = ":topic_opaque_data";
+  static constexpr const char* policy_text = ":topic_policy_text";
+  static constexpr const char* bucket_name = ":topic_bucket_name";
 };
 
 struct DBOpUserPrepareInfo {
@@ -401,6 +424,7 @@ struct DBOpPrepareInfo {
   DBOpRolePrepareInfo role;
   DBOpOIDCProviderPrepareInfo oidc;
   DBOpGroupPrepareInfo group;
+  DBOpTopicPrepareInfo topic;
   DBOpUserPrepareInfo user;
   std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
@@ -419,6 +443,8 @@ struct DBOpPrepareParams {
   std::string group_table;
   std::string group_users_table;
   std::string access_keys_table;
+  std::string topic_table;
+  std::string bucket_topic_mapping_table;
   std::string user_table;
   std::string bucket_table;
   std::string object_table;
@@ -447,6 +473,14 @@ struct DBOps {
   std::shared_ptr<class RemoveOIDCProviderOp> RemoveOIDCProvider;
   std::shared_ptr<class GetOIDCProviderOp> GetOIDCProvider;
   std::shared_ptr<class ListOIDCProvidersOp> ListOIDCProviders;
+  std::shared_ptr<class InsertTopicOp> InsertTopic;
+  std::shared_ptr<class RemoveTopicOp> RemoveTopic;
+  std::shared_ptr<class GetTopicOp> GetTopic;
+  std::shared_ptr<class ListTopicsOp> ListTopics;
+  std::shared_ptr<class InsertBucketTopicMappingOp> InsertBucketTopicMapping;
+  std::shared_ptr<class RemoveBucketTopicMappingOp> RemoveBucketTopicMapping;
+  std::shared_ptr<class GetBucketTopicMappingOp> GetBucketTopicMapping;
+  std::shared_ptr<class RemoveBucketFromTopicMappingsOp> RemoveBucketFromTopicMappings;
   std::shared_ptr<class InsertGroupOp> InsertGroup;
   std::shared_ptr<class RemoveGroupOp> RemoveGroup;
   std::shared_ptr<class GetGroupOp> GetGroup;
@@ -575,6 +609,25 @@ class DBOp {
       AccessKeyID TEXT NOT NULL,		\
       UserID TEXT NOT NULL,			\
       PRIMARY KEY (AccessKeyID) \n);";
+
+    static constexpr std::string_view CreateTopicTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      TopicName TEXT NOT NULL,		\
+      Tenant TEXT ,		\
+      Owner BLOB ,		\
+      TopicARN TEXT ,		\
+      Dest BLOB ,		\
+      OpaqueData TEXT ,	\
+      PolicyText TEXT ,	\
+      ObjVersion INTEGER ,	\
+      ObjVersionTag TEXT ,	\
+      PRIMARY KEY (TopicName, Tenant) \n);";
+
+    static constexpr std::string_view CreateBucketTopicMappingTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' (	\
+      TopicName TEXT NOT NULL,		\
+      BucketName TEXT NOT NULL,		\
+      PRIMARY KEY (TopicName, BucketName) \n);";
 
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
@@ -863,6 +916,12 @@ class DBOp {
       if (!type.compare("AccessKeys"))
         return fmt::format(CreateAccessKeysTableQ,
             params->access_keys_table);
+      if (!type.compare("Topic"))
+        return fmt::format(CreateTopicTableQ,
+            params->topic_table);
+      if (!type.compare("BucketTopicMapping"))
+        return fmt::format(CreateBucketTopicMappingTableQ,
+            params->bucket_topic_mapping_table);
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -1159,6 +1218,143 @@ class ListOIDCProvidersOp: virtual public DBOp {
     static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.oidc_table,
           params.op.oidc.tenant);
+    }
+};
+
+class InsertTopicOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (TopicName, Tenant, Owner, TopicARN, Dest, \
+                           OpaqueData, PolicyText, ObjVersion, ObjVersionTag) \
+                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {});";
+
+  public:
+    virtual ~InsertTopicOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.topic_table,
+          params.op.topic.topic_name, params.op.topic.tenant,
+          params.op.topic.owner, params.op.topic.arn,
+          params.op.topic.dest, params.op.topic.opaque_data,
+          params.op.topic.policy_text,
+          params.op.list_max_count, // reused for ObjVersion
+          params.op.topic.bucket_name); // reused for ObjVersionTag
+    }
+};
+
+class RemoveTopicOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where TopicName = {} AND Tenant = {}";
+
+  public:
+    virtual ~RemoveTopicOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.topic_table,
+          params.op.topic.topic_name, params.op.topic.tenant);
+    }
+};
+
+class GetTopicOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT \
+                          TopicName, Tenant, Owner, TopicARN, Dest, \
+                          OpaqueData, PolicyText, ObjVersion, ObjVersionTag \
+                          from '{}' where TopicName = {} AND Tenant = {}";
+
+  public:
+    virtual ~GetTopicOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.topic_table,
+          params.op.topic.topic_name, params.op.topic.tenant);
+    }
+};
+
+class ListTopicsOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view QueryByTenant = "SELECT \
+                          TopicName, Tenant, Owner, TopicARN, Dest, \
+                          OpaqueData, PolicyText, ObjVersion, ObjVersionTag \
+                          from '{}' where Tenant = {} \
+                          AND TopicName > {} ORDER BY TopicName ASC LIMIT {}";
+
+    static constexpr std::string_view QueryByOwner = "SELECT \
+                          TopicName, Tenant, Owner, TopicARN, Dest, \
+                          OpaqueData, PolicyText, ObjVersion, ObjVersionTag \
+                          from '{}' where Owner = {} \
+                          AND TopicName > {} ORDER BY TopicName ASC LIMIT {}";
+
+  public:
+    virtual ~ListTopicsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "owner") {
+        return fmt::format(QueryByOwner, params.topic_table,
+            params.op.topic.owner, params.op.topic.topic_name,
+            params.op.list_max_count);
+      } else {
+        return fmt::format(QueryByTenant, params.topic_table,
+            params.op.topic.tenant, params.op.topic.topic_name,
+            params.op.list_max_count);
+      }
+    }
+};
+
+class InsertBucketTopicMappingOp : virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+                          (TopicName, BucketName) VALUES ({}, {});";
+
+  public:
+    virtual ~InsertBucketTopicMappingOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_topic_mapping_table,
+          params.op.topic.topic_name, params.op.topic.bucket_name);
+    }
+};
+
+class RemoveBucketTopicMappingOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where TopicName = {} AND BucketName = {}";
+
+  public:
+    virtual ~RemoveBucketTopicMappingOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_topic_mapping_table,
+          params.op.topic.topic_name, params.op.topic.bucket_name);
+    }
+};
+
+class GetBucketTopicMappingOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query = "SELECT BucketName \
+                          from '{}' where TopicName = {}";
+
+  public:
+    virtual ~GetBucketTopicMappingOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_topic_mapping_table,
+          params.op.topic.topic_name);
+    }
+};
+
+class RemoveBucketFromTopicMappingsOp: virtual public DBOp {
+  private:
+    static constexpr std::string_view Query =
+      "DELETE from '{}' where BucketName = {}";
+
+  public:
+    virtual ~RemoveBucketFromTopicMappingsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query, params.bucket_topic_mapping_table,
+          params.op.topic.bucket_name);
     }
 };
 
@@ -2219,6 +2415,8 @@ class DB {
     const std::string group_table;
     const std::string group_users_table;
     const std::string access_keys_table;
+    const std::string topic_table;
+    const std::string bucket_topic_mapping_table;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -2247,6 +2445,8 @@ class DB {
     group_table(table_name_prefix + "_group_table"),
     group_users_table(table_name_prefix + "_group_users_table"),
     access_keys_table(table_name_prefix + "_access_keys_table"),
+    topic_table(table_name_prefix + "_topic_table"),
+    bucket_topic_mapping_table(table_name_prefix + "_bucket_topic_mapping_table"),
     user_table(table_name_prefix + "_user_table"),
     bucket_table(table_name_prefix + "_bucket_table"),
     quota_table(table_name_prefix + "_quota_table"),
@@ -2265,6 +2465,8 @@ class DB {
     group_table(db_name+"_group_table"),
     group_users_table(db_name+"_group_users_table"),
     access_keys_table(db_name+"_access_keys_table"),
+    topic_table(db_name+"_topic_table"),
+    bucket_topic_mapping_table(db_name+"_bucket_topic_mapping_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
     quota_table(db_name+"_quota_table"),
@@ -2283,6 +2485,8 @@ class DB {
     const std::string getGroupTable() { return group_table; }
     const std::string getGroupUsersTable() { return group_users_table; }
     const std::string getAccessKeysTable() { return access_keys_table; }
+    const std::string getTopicTable() { return topic_table; }
+    const std::string getBucketTopicMappingTable() { return bucket_topic_mapping_table; }
     const std::string getUserTable() { return user_table; }
     const std::string getBucketTable() { return bucket_table; }
     const std::string getQuotaTable() { return quota_table; }
@@ -2409,6 +2613,27 @@ class DB {
         std::vector<RGWGroupInfo>& groups);
     int count_account_groups(const DoutPrefixProvider *dpp,
         const std::string& account_id, uint32_t& count);
+    int store_topic(const DoutPrefixProvider *dpp,
+        const rgw_pubsub_topic& topic, bool exclusive,
+        obj_version& objv);
+    int load_topic(const DoutPrefixProvider *dpp,
+        const std::string& topic_name, const std::string& tenant,
+        rgw_pubsub_topic& topic, obj_version& objv);
+    int remove_topic(const DoutPrefixProvider *dpp,
+        const std::string& topic_name, const std::string& tenant);
+    int list_topics(const DoutPrefixProvider *dpp,
+        const std::string& query_str, const rgw_owner& owner,
+        const std::string& marker, uint32_t max_items,
+        std::vector<rgw_pubsub_topic>& topics);
+    int add_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+        const std::string& topic_name, const std::string& bucket_key);
+    int remove_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+        const std::string& topic_name, const std::string& bucket_key);
+    int get_bucket_topic_mapping(const DoutPrefixProvider *dpp,
+        const std::string& topic_name,
+        std::set<std::string>& bucket_keys);
+    int remove_bucket_from_topic_mappings(const DoutPrefixProvider *dpp,
+        const std::string& bucket_key);
     int get_account_user_by_name(const DoutPrefixProvider *dpp,
         const std::string& account_id, const std::string& username,
         RGWUserInfo& uinfo);
