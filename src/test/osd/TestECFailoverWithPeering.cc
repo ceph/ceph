@@ -273,11 +273,7 @@ public:
 
     // Step 11: Verify data is readable after second recovery
     std::cout << "Step 11: Verifying data after second zone recovery" << std::endl;
-    if (degraded_write_size < object_size) {
-      verify_object(obj_name, expected_data, 0, object_size);
-    } else {
-      verify_object(obj_name, expected_data, 0, object_size);
-    }
+    verify_object(obj_name);
 
     // Step 12: Scrub to verify data integrity after both recoveries
     std::cout << "Step 12: Scrubbing object to verify data integrity after both recoveries" << std::endl;
@@ -334,9 +330,10 @@ TEST_P(TestECFailoverWithPeering, OSDFailureWithPeering) {
   int failed_osd = 1;  // Fail shard 1 which contains part of the data
 
   create_and_write_verify(obj_name, test_data_full);
+  // Measure the number of reads that occur.
   event_loop->reset_stats();
   bufferlist pre_failover_read;
-  verify_object(obj_name, test_data_read, 0, object_size);
+  read_object(obj_name, 0, read_length, pre_failover_read, object_size);
   ASSERT_EQ(4, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
 
   // Use fixture helper to mark OSD as down
@@ -344,7 +341,7 @@ TEST_P(TestECFailoverWithPeering, OSDFailureWithPeering) {
   
   // Reset EventLoop stats before post-failover read
   event_loop->reset_stats();
-  verify_object(obj_name, test_data_read, 0, object_size);
+  verify_object(obj_name);
   ASSERT_EQ(k * 2, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
 }
 
@@ -396,7 +393,7 @@ TEST_P(TestECFailoverWithPeering, PrimaryFailoverWithPeering) {
     << "New primary should be in Active state";
   
   // Verify reads work after primary failover (with EC reconstruction)
-  verify_object(obj_name, test_data, 0, test_data.length());
+  verify_object(obj_name);
 }
 
 TEST_P(TestECFailoverWithPeering, MultipleOSDFailuresWithPeering) {
@@ -580,7 +577,7 @@ TEST_P(TestECFailoverWithPeering, MultiZoneFailoverWithPeering) {
   // Perform degraded read after failover
   // With 2 zones of k=4,m=2 each, losing one zone (6 OSDs) leaves us with
   // 6 remaining OSDs, which is exactly k+m and sufficient for EC reconstruction
-  verify_object(obj_name, test_data, 0, test_data.length());
+  verify_object(obj_name);
 }
 
 TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
@@ -722,7 +719,7 @@ TEST_P(
   // Ensure all shards have completed peering and applied rollback transactions
   ASSERT_TRUE(all_shards_active()) << "All shards should be active after peering";
 
-  verify_object(obj_name, pattern_a, 0, pattern_a.length());
+  verify_object(obj_name);
 
   std::cout << "\n=== RollbackAfterOSDFailure Test Complete ===" << std::endl;
 }
@@ -1558,6 +1555,67 @@ TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
 
   std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
+/**
+ * Test that ObjectTracker verification detects corruption during scrub.
+ * This proves that the scrub integration with ObjectTracker is working.
+ */
+TEST_P(TestECFailoverWithPeering, ObjectTrackerDetectsCorruption) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  // Enable object tracking for this test
+  enable_object_tracking();
+  ASSERT_TRUE(get_object_tracker() != nullptr) << "ObjectTracker should be enabled";
+
+  const std::string obj_name = "test_tracker_corruption";
+  const uint64_t object_size = k * stripe_unit;
+  
+  // Create test data
+  bufferlist bl = create_random_buffer(object_size);
+  std::string test_data(bl.c_str(), bl.length());
+  
+  std::cout << "Writing object '" << obj_name << "' (" << object_size << " bytes)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+  
+  // Verify tracker has recorded the object
+  ASSERT_TRUE(get_object_tracker()->object_exists(obj_name))
+    << "ObjectTracker should have recorded the object";
+  
+  // Verify the object matches tracker expectations before corruption
+  std::cout << "Verifying object before corruption" << std::endl;
+  bool corruption_before = scrub_object(obj_name);
+  EXPECT_FALSE(corruption_before)
+    << "Scrub should not detect corruption before we corrupt the object";
+  
+  // Now corrupt the object on the primary shard
+  std::cout << "Corrupting object '" << obj_name << "' on primary shard" << std::endl;
+  hobject_t hoid = make_test_object(obj_name);
+  
+  // Get primary shard
+  MockPGBackendListener* primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Should have primary listener";
+  pg_shard_t primary_shard = primary_listener->pg_whoami;
+  
+  // Corrupt the data
+  corrupt_shard_data(hoid, primary_shard);
+  
+  // Now scrub should detect the corruption via ObjectTracker verification
+  std::cout << "Scrubbing corrupted object - should detect corruption" << std::endl;
+  bool corruption_after = scrub_object(obj_name);
+  
+  EXPECT_TRUE(corruption_after)
+    << "Scrub should detect corruption after we corrupted the object. "
+    << "ObjectTracker verification should catch the mismatch between "
+    << "expected data and actual corrupted data.";
+  
+  std::cout << "Test completed: ObjectTracker " 
+            << (corruption_after ? "successfully detected" : "FAILED to detect")
+            << " corruption during scrub" << std::endl;
+  
+  // Mark the corrupted shard as down to prevent teardown scrub from failing
+  std::cout << "Marking corrupted shard " << primary_shard.osd << " as down" << std::endl;
+  mark_osd_down(primary_shard.osd);
+}
+
 
 TEST_P(TestECFailoverWithPeering, OSD0DownAddNewOSDRecovery) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
@@ -1594,7 +1652,7 @@ TEST_P(TestECFailoverWithPeering, OSD0DownAddNewOSDRecovery) {
   run_recovery(obj_name, true, test_data);
   
   // Verify the object can be read after recovery
-  verify_object(obj_name, test_data, 0, test_data.length());
+  verify_object(obj_name);
   EXPECT_TRUE(primary_is_clean()) << "Primary should be clean after recovery";
 }
 

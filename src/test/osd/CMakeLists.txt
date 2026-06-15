@@ -123,6 +123,7 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockStore.cc
+  ObjectTracker.cc
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 
@@ -153,6 +154,16 @@ add_executable(unittest_ecfailover_with_peering
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ecfailover_with_peering ec_isa ec_jerasure)
+
+# unittest_objecttracker
+add_executable(unittest_objecttracker
+  TestObjectTracker.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_objecttracker)
+target_link_libraries(unittest_objecttracker osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc

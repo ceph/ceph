@@ -445,11 +445,10 @@ void PGBackendTestFixture::do_transaction(
 void PGBackendTestFixture::do_create_and_write_impl(
   const std::string& obj_name,
   const std::string& data,
+  const eversion_t& at_version,
   bool& completed,
   int& result)
 {
-  // Auto-generate version
-  eversion_t at_version = get_next_version();
   
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -520,7 +519,7 @@ void PGBackendTestFixture::do_create_and_write_impl(
   
   // Create completion lambda for write-specific cleanup
   // Capture completed and result by reference from caller
-  auto write_complete = [test_pg, hoid, obc, &completed, &result](int r) {
+  auto write_complete = [test_pg, hoid, obc, object_tracker=this->object_tracker, obj_name, data, at_version, &completed, &result](int r) {
     // Note: we do NOT update obc->obs after completion — it was already
     // updated above before submit, matching PrimaryLogPG behavior.
     // ECTransaction::attr_updates() will have updated attr_cache[OI_ATTR]
@@ -544,6 +543,10 @@ void PGBackendTestFixture::do_create_and_write_impl(
       obc->obs.exists = false;
       obc->attr_cache.clear();
       test_pg->outstanding_writes.erase(hoid);
+    }
+    
+    if (r == 0 && object_tracker) {
+      object_tracker->record_create(obj_name, data, at_version);
     }
     
     // Mark as completed and store result
@@ -570,11 +573,12 @@ int PGBackendTestFixture::create_and_write(
   
   bool completed = false;
   int result = -EINPROGRESS;
+  eversion_t version = get_next_version();
   
-  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name, data]() {
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, &version, obj_name, data]() {
     // Call the impl function which will set up the completion callback
     // The callback will update 'completed' and 'result' when it fires
-    do_create_and_write_impl(obj_name, data, completed, result);
+    do_create_and_write_impl(obj_name, data, version, completed, result);
   });
   
   // Run the event loop to complete the transaction
@@ -681,6 +685,7 @@ void PGBackendTestFixture::do_write_impl(
   uint64_t offset,
   const std::string& data,
   uint64_t object_size,
+  const eversion_t& at_version,
   bool& completed,
   int& result)
 {
@@ -708,7 +713,6 @@ void PGBackendTestFixture::do_write_impl(
 
   // Prior version comes from the object's current version
   eversion_t prior_version = obc->obs.oi.version;
-  eversion_t at_version = get_next_version();
 
   // Build the NEW OI
   object_info_t new_oi = obc->obs.oi;
@@ -741,7 +745,7 @@ void PGBackendTestFixture::do_write_impl(
   
   // Create completion lambda for write-specific cleanup
   // Capture completed and result by reference from caller
-  auto write_complete = [test_pg, hoid, obc, prior_version, object_size, &completed, &result](int r) {
+  auto write_complete = [test_pg, hoid, obc, prior_version, object_size, object_tracker=this->object_tracker, obj_name, offset, data, at_version, &completed, &result](int r) {
     // Decrement outstanding writes counter
     if (test_pg->outstanding_writes[hoid] > 0) {
       test_pg->outstanding_writes[hoid]--;
@@ -758,6 +762,10 @@ void PGBackendTestFixture::do_write_impl(
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
       test_pg->outstanding_writes.erase(hoid);
+    }
+    
+    if (r == 0 && object_tracker) {
+      object_tracker->record_data_write(obj_name, offset, data, at_version);
     }
     
     // Mark as completed and store result
@@ -786,9 +794,10 @@ int PGBackendTestFixture::write(
   
   bool completed = false;
   int result = -EINPROGRESS;
+  eversion_t version = get_next_version();
   
-  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name, offset, data, object_size]() {
-    do_write_impl(obj_name, offset, data, object_size, completed, result);
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, &version, obj_name, offset, data, object_size]() {
+    do_write_impl(obj_name, offset, data, object_size, version, completed, result);
   });
   
   // Run the event loop to complete the transaction
@@ -810,8 +819,9 @@ int PGBackendTestFixture::delete_object(const std::string& obj_name)
   
   bool completed = false;
   int result = -EINPROGRESS;
+  eversion_t at_version = get_next_version();
   
-  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name]() {
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, at_version, obj_name]() {
     hobject_t hoid = make_test_object(obj_name);
     
     // Get OBC
@@ -831,7 +841,6 @@ int PGBackendTestFixture::delete_object(const std::string& obj_name)
     delta_stats.num_bytes = -(int64_t)obc->obs.oi.size;
     
     eversion_t prior_version = obc->obs.oi.version;
-    eversion_t at_version = get_next_version();
     
     // Create log entry for delete
     std::vector<pg_log_entry_t> log_entries;
@@ -845,10 +854,14 @@ int PGBackendTestFixture::delete_object(const std::string& obj_name)
     TestPG* test_pg = get_test_pg();
     
     // Create completion lambda
-    auto delete_complete = [test_pg, hoid, &completed, &result](int r) {
+    auto delete_complete = [test_pg, hoid, object_tracker=this->object_tracker, obj_name, at_version, &completed, &result](int r) {
       // Clean up outstanding writes and attr_cache
       test_pg->outstanding_writes.erase(hoid);
-      
+
+      if (r == 0 && object_tracker) {
+        object_tracker->record_delete(obj_name, at_version);
+      }
+
       // Mark as completed and store result
       completed = true;
       result = r;
@@ -927,21 +940,70 @@ int PGBackendTestFixture::read_object(
   }
 }
 
-void PGBackendTestFixture::verify_object(
+int PGBackendTestFixture::read_attribute(
   const std::string& obj_name,
-  const std::string& expected_data,
-  size_t offset,
-  size_t object_size)
+  const std::string& attr_name,
+  bufferlist& out_value)
 {
+  hobject_t hoid = make_test_object(obj_name);
+  PGBackend* primary_backend = get_primary_backend();
+  if (!primary_backend) {
+    return -EINVAL;
+  }
+  
+  return primary_backend->objects_get_attr(hoid, attr_name, &out_value);
+}
+
+void PGBackendTestFixture::verify_attribute(
+  const std::string& obj_name,
+  const std::string& attr_name,
+  const std::string& expected_value)
+{
+  // Verify against tracked state first
+  ceph_assert(object_tracker);
+  auto tracked_value = object_tracker->get_expected_attribute(obj_name, attr_name);
+  ASSERT_TRUE(tracked_value.has_value())
+    << "ObjectTracker has no record of attribute " << attr_name << " for " << obj_name;
+  ASSERT_EQ(*tracked_value, expected_value)
+      << "Provided expected_value doesn't match ObjectTracker's tracked state for attribute "
+      << attr_name << " on " << obj_name;
+  
+  // Read the actual attribute
+  bufferlist attr_bl;
+  int result = read_attribute(obj_name, attr_name, attr_bl);
+  
+  ASSERT_EQ(result, 0) << "Failed to read attribute " << attr_name << " from " << obj_name;
+  
+  std::string actual_value(attr_bl.c_str(), attr_bl.length());
+  ASSERT_EQ(actual_value, expected_value)
+    << "Attribute " << attr_name << " on " << obj_name << " doesn't match expected value";
+}
+
+void PGBackendTestFixture::verify_object(const std::string& obj_name)
+{
+  ceph_assert(object_tracker);
+  
+  // Get the expected size from the object tracker
+  uint64_t object_size = object_tracker->get_expected_size(obj_name);
+  
+  // Get the expected data for the entire object (offset 0, full size)
+  std::string expected_data =
+    object_tracker->get_expected_data(obj_name, 0, object_size);
+
   bufferlist read_data;
-  int read_result = read_object(obj_name, offset, expected_data.length(), read_data, object_size);
+  int read_result = read_object(obj_name, 0, expected_data.length(), read_data, object_size);
 
-  ASSERT_GE(read_result, 0) << "Read should complete successfully";
-  ASSERT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
+  ASSERT_GE(read_result, 0) << "Read should complete successfully for " << obj_name;
 
-  if (read_data.length() == expected_data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    ASSERT_EQ(read_string, expected_data) << "Data should match";
+  std::string read_string(read_data.c_str(), read_data.length());
+  ASSERT_EQ(read_string, expected_data) << "Data should match for " << obj_name;
+
+  const auto* tracked_object = object_tracker->get_object_state(obj_name);
+  ASSERT_NE(tracked_object, nullptr)
+    << "ObjectTracker has no record of object " << obj_name;
+
+  for (const auto& [attr_name, attr_write] : tracked_object->attributes) {
+    verify_attribute(obj_name, attr_name, attr_write.value);
   }
 }
 
@@ -953,7 +1015,7 @@ void PGBackendTestFixture::create_and_write_verify(
 
   ASSERT_GE(result, 0) << "Write should complete successfully";
   // Always verify - tests should only use this helper when success is expected
-  verify_object(obj_name, data, 0, data.length());
+  verify_object(obj_name);
 }
 
 void PGBackendTestFixture::write_verify(
@@ -968,18 +1030,7 @@ void PGBackendTestFixture::write_verify(
   std::string msg_suffix = context_msg.empty() ? "" : " (" + context_msg + ")";
   ASSERT_GE(result, 0) << "Write should complete successfully" << msg_suffix;
 
-  // Always verify - tests should only use this helper when success is expected
-  bufferlist read_data;
-  int read_result = read_object(obj_name, offset, data.length(), read_data,
-                                 std::max(object_size, offset + data.length()));
-
-  ASSERT_GE(read_result, 0) << "Read should complete successfully" << msg_suffix;
-  ASSERT_EQ(read_data.length(), data.length()) << "Read data length should match" << msg_suffix;
-
-  if (read_data.length() == data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    ASSERT_EQ(read_string, data) << "Written data should match" << msg_suffix;
-  }
+  verify_object(obj_name);
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,7 +1163,7 @@ void PGBackendTestFixture::do_write_attribute_impl(
   TestPG* test_pg = get_test_pg();
   
   // Capture completed and result by reference from caller
-  auto write_complete = [test_pg, hoid, obc, prior_version, &completed, &result](int r) {
+  auto write_complete = [test_pg, hoid, obc, prior_version, object_tracker=this->object_tracker, obj_name, attr_name, attr_value, at_version, &completed, &result](int r) {
     if (test_pg->outstanding_writes[hoid] > 0) {
       test_pg->outstanding_writes[hoid]--;
       if (test_pg->outstanding_writes[hoid] == 0) {
@@ -1124,6 +1175,12 @@ void PGBackendTestFixture::do_write_attribute_impl(
       obc->obs.oi.version = prior_version;
       obc->attr_cache.clear();
       test_pg->outstanding_writes.erase(hoid);
+    }
+    
+    // Record in object tracker after successful write (excluding OI_ATTR as requested)
+    // Only record if object_tracker is still valid (may be null during teardown)
+    if (r == 0 && attr_name != OI_ATTR && object_tracker) {
+      object_tracker->record_attribute_write(obj_name, attr_name, attr_value, at_version);
     }
     
     // Mark as completed and store result
@@ -1263,6 +1320,7 @@ void PGBackendTestFixture::scrub_all_objects()
     EXPECT_FALSE(corrupted)
       << "Object '" << obj_name << "' found to be corrupted during teardown scrub";
   }
+
 }
 
 bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
@@ -1376,7 +1434,10 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
 
   auto result = scrub_backend.scrub_compare_maps(false, *snap_reader);
 
-  return !result.inconsistent_objs.empty();
+  bool scrub_found_corruption = !result.inconsistent_objs.empty();
+  verify_object(obj_name);
+  
+  return scrub_found_corruption;
 }
 
 
