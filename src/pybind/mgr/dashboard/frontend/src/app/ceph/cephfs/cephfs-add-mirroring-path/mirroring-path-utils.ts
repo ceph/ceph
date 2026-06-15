@@ -1,4 +1,4 @@
-import { PathEntry } from './mirroring-path.model';
+import { MirroringPathSelection, PathEntry } from './mirroring-path.model';
 
 const VOLUMES_ROOT = '/volumes';
 
@@ -28,10 +28,6 @@ export class MirroringPathUtils {
     return `${VOLUMES_ROOT}/${segments.join('/')}`;
   }
 
-  static getSelectedSegments(entry: PathEntry): string[] {
-    return entry.levels.map((level) => level.selected).filter(Boolean);
-  }
-
   static pathsOverlap(a: string, b: string): boolean {
     const left = MirroringPathUtils.normalizePath(a);
     const right = MirroringPathUtils.normalizePath(b);
@@ -56,5 +52,30 @@ export class MirroringPathUtils {
 
   static isAlreadyTrackedMirrorError(message: string): boolean {
     return /already tracked/i.test(message ?? '');
+  }
+
+  static toMirroringPathSelections(entries: PathEntry[]): MirroringPathSelection[] {
+    return entries
+      .map((entry) => {
+        const path = MirroringPathUtils.normalizePath(entry.fullPath);
+        if (!path) {
+          return null;
+        }
+        const selection: MirroringPathSelection = { path };
+        const segments = path.split('/').filter(Boolean);
+        if (segments[0] === 'volumes' && segments.length >= 3) {
+          selection.group = segments[1];
+          selection.subvol = segments[2];
+        }
+        return selection;
+      })
+      .filter((selection): selection is MirroringPathSelection => !!selection);
+  }
+
+  static findPathSelection(
+    path: string,
+    selections: MirroringPathSelection[]
+  ): MirroringPathSelection {
+    return selections.find((selection) => selection.path === path) ?? { path };
   }
 }

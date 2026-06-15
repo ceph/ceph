@@ -206,7 +206,10 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   onSubmit() {
     this.stepContents?.forEach((wrapper, index) => {
       const form = wrapper.stepComponent?.formGroup;
-      if (!form) return;
+      if (!form) {
+        this._updateStepInvalid(index, false);
+        return;
+      }
 
       form.markAllAsTouched();
       form.updateValueAndValidity({ emitEvent: true });

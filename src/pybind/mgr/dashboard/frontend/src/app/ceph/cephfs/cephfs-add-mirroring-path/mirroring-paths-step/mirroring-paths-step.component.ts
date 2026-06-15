@@ -1,6 +1,6 @@
 import { Component, DestroyRef, inject, Input, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormControl } from '@angular/forms';
+import { FormControl, Validators } from '@angular/forms';
 import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, finalize, map, switchMap, take } from 'rxjs/operators';
 
@@ -8,7 +8,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 import { MirroringPathUtils } from '../mirroring-path-utils';
-import { createPathEntry, PathEntry } from '../mirroring-path.model';
+import { createPathEntry, MirroringPathSelection, PathEntry } from '../mirroring-path.model';
 
 const VOLUMES_ROOT = '/volumes';
 const LS_DEPTH = 1;
@@ -33,7 +33,10 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
   ngOnInit(): void {
     this.formGroup = new CdFormGroup({
-      pathsControl: new FormControl<string[]>([], { nonNullable: true })
+      pathsControl: new FormControl<string[]>([], {
+        nonNullable: true,
+        validators: [Validators.required]
+      })
     });
     this.paths = [createPathEntry()];
     this.syncFormValue();
@@ -48,9 +51,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     const control = this.pathsControl;
     if (!control.invalid || !(control.touched || control.dirty)) {
       return '';
-    }
-    if (control.hasError('alreadyMirrored')) {
-      return $localize`Selected path(s) are already mirrored. Select a path that is not already mirrored.`;
     }
     return $localize`Select at least one path to continue.`;
   }
@@ -123,26 +123,16 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     return { toAdd, alreadyMirrored };
   }
 
+  getPathSelections(): MirroringPathSelection[] {
+    return MirroringPathUtils.toMirroringPathSelections(this.paths);
+  }
+
   addTrackedPath(path: string): void {
     const normalized = MirroringPathUtils.normalizePath(path);
     if (normalized) {
       this.trackedPaths.add(normalized);
       this.syncFormValue();
     }
-  }
-
-  refreshTrackedPaths(): Observable<void> {
-    if (!this.fsName) {
-      return of(undefined);
-    }
-    return this.cephfsService.listMirrorDirectories(this.fsName).pipe(
-      map((paths) => {
-        this.trackedPaths = new Set(paths.map(MirroringPathUtils.normalizePath).filter(Boolean));
-        this.syncFormValue();
-      }),
-      catchError(() => of(undefined)),
-      take(1)
-    );
   }
 
   private loadInitialData(): void {
@@ -251,7 +241,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     if (toAdd.length) {
       control.setErrors(null);
     } else if (alreadyMirrored.length) {
-      control.setErrors({ alreadyMirrored: true });
+      control.setErrors(null);
     } else {
       control.setErrors({ required: true });
     }

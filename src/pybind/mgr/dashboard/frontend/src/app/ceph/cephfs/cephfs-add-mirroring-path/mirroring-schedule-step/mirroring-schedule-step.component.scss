@@ -1,0 +1,13 @@
+form {
+  max-width: 50%;
+}
+
+cd-date-time-picker ::ng-deep {
+  [cdsCol] {
+    padding: 0;
+  }
+
+  [cdsRow] {
+    margin: 0;
+  }
+}

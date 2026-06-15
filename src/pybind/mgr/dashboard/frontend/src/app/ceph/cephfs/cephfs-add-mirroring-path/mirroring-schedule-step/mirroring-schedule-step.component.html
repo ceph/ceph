@@ -1,0 +1,72 @@
+<form
+  [formGroup]="formGroup"
+  novalidate
+  >
+<div class="form-heading">
+    <p class="cds--type-heading-03"
+        i18n>Create snapshot schedule</p>
+    <p class="cds--type-label-02"
+       i18n>Set how often snapshots should run and how long to keep them.</p>
+  </div>
+
+  <div class="cds--row form-item form-item-append">
+    <div class="cds--col">
+      <cds-number
+        label="Interval"
+        i18n-label
+        formControlName="repeatInterval"
+        min="1"
+      ></cds-number>
+    </div>
+    <div class="cds--col">
+      <cds-select
+        formControlName="repeatFrequency"
+        label="Frequency"
+        i18n-label
+        id="repeatFrequency"
+      >
+        @for (freq of repeatFrequencies; track freq[1]) {
+          <option [value]="freq[1]">{{ freq[0] }}</option>
+        }
+      </cds-select>
+    </div>
+  </div>
+
+      <cd-date-time-picker
+        name="Start time"
+        i18n-name
+        [control]="formGroup.get('startDate')"
+      ></cd-date-time-picker>
+
+  <div class="cds--row form-item form-item-append">
+    <div class="cds--col">
+      <cds-number
+        label="Retention duration"
+        i18n-label
+        formControlName="retentionInterval"
+        min="1"
+      ></cds-number>
+    </div>
+    <div class="cds--col">
+      <cds-select
+        formControlName="retentionFrequency"
+        label="Frequency"
+        i18n-label
+        id="retentionFrequency"
+      >
+        @for (freq of retentionFrequencies; track freq[1]) {
+          <option [value]="freq[1]">{{ freq[0] }}</option>
+        }
+      </cds-select>
+    </div>
+  </div>
+
+  <div class="form-item">
+    <cds-number
+      formControlName="retentionCount"
+      min="1"
+      helperText="Use this to limit how many snapshots are kept."
+      i18n-helperText
+    ></cds-number>
+  </div>
+</form>

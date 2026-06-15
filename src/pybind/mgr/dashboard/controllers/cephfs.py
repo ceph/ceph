@@ -1203,9 +1203,9 @@ class CephFsSnapshotClone(RESTController):
 @APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
 class CephFSSnapshotSchedule(RESTController):
 
-    def list(self, fs: str, path: str = '/', recursive: bool = True):
+    def list(self, fs: str, path: str = '/', recursive: bool = True, subvol=None, group=None):
         error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                          path, recursive, fs, None, None, 'plain')
+                                          path, recursive, fs, subvol, group, 'plain')
         if len(out) == 0:
             return []
 
@@ -1215,7 +1215,7 @@ class CephFSSnapshotSchedule(RESTController):
         for snap in snapshot_schedule_list:
             current_path = snap.strip().split(' ')[0]
             error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
-                                                     current_path, fs, None, None, 'json')
+                                                     current_path, fs, subvol, group, 'json')
             output = output + json.loads(status_out)
 
         output_json = json.dumps(output)

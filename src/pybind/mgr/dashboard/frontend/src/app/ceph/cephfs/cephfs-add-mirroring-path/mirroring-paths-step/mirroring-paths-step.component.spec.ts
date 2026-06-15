@@ -69,7 +69,7 @@ describe('MirroringPathsStepComponent', () => {
     expect(component.pathsError).toContain('Select at least one path');
   });
 
-  it('should hide already mirrored paths from dropdown options', fakeAsync(() => {
+  it('should treat already mirrored paths as valid selections', fakeAsync(() => {
     mockLsDirTree();
     cephfsServiceMock.listMirrorDirectories.mockReturnValue(of(['/volumes/g1/sv1']));
 
@@ -99,8 +99,8 @@ describe('MirroringPathsStepComponent', () => {
     component.onLevelChange(0, 1, 'sv1');
     component.pathsControl.markAsTouched();
 
-    expect(component.pathsControl.hasError('alreadyMirrored')).toBe(true);
-    expect(component.pathsError).toContain('already mirrored');
+    expect(component.pathsControl.valid).toBe(true);
+    expect(component.pathsError).toBe('');
   }));
 
   it('should not load initial data when fsName is missing', () => {
@@ -177,32 +177,6 @@ describe('MirroringPathsStepComponent', () => {
       toAdd: ['/volumes/g1/sv2'],
       alreadyMirrored: []
     });
-  }));
-
-  it('should refresh tracked paths from the server', fakeAsync(() => {
-    mockLsDirTree();
-    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
-
-    component.fsName = 'testfs';
-    component.fsId = 1;
-    component.ngOnInit();
-    tick();
-
-    component.onLevelChange(0, 0, 'g1');
-    tick();
-    component.onLevelChange(0, 1, 'sv1');
-    expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1']);
-
-    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of(['/volumes/g1/sv1']));
-
-    let completed = false;
-    component.refreshTrackedPaths().subscribe(() => {
-      completed = true;
-    });
-    tick();
-
-    expect(completed).toBe(true);
-    expect(component.getSubmitPaths().alreadyMirrored).toEqual(['/volumes/g1/sv1']);
   }));
 
   it('should add tracked path locally after successful submit', fakeAsync(() => {

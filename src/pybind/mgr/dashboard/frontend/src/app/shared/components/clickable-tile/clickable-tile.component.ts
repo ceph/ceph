@@ -1,10 +1,9 @@
-import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'cd-clickable-tile',
   templateUrl: './clickable-tile.component.html',
   styleUrls: ['./clickable-tile.component.scss'],
-  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class ClickableTileComponent {

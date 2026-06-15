@@ -1,18 +1,22 @@
-import { Component, DestroyRef, inject, OnInit, ViewChild } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, inject, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Step } from 'carbon-components-angular';
-import { from, of } from 'rxjs';
+import { from, Observable, of } from 'rxjs';
 import { catchError, concatMap, finalize, map, switchMap, tap, toArray } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { MirroringPathUtils } from './mirroring-path-utils';
-import { PathSubmitFailure, PathSubmitOutput } from './mirroring-path.model';
+import { MirroringPathSelection } from './mirroring-path.model';
 import { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
+import { MirroringScheduleStepComponent } from './mirroring-schedule-step/mirroring-schedule-step.component';
 
-import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
+export { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
+export { MirroringScheduleStepComponent } from './mirroring-schedule-step/mirroring-schedule-step.component';
 
 @Component({
   selector: 'cd-cephfs-add-mirroring-path',
@@ -21,13 +25,13 @@ import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
   standalone: false
 })
 export class CephfsAddMirroringPathComponent implements OnInit {
-  @ViewChild('pathsStep') pathsStep!: MirroringPathsStepComponent;
+  @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
 
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private cephfsService = inject(CephfsService);
+  private snapScheduleService = inject(CephfsSnapshotScheduleService);
   private notificationService = inject(NotificationService);
-  private destroyRef = inject(DestroyRef);
 
   fsName = '';
   fsId = 0;
@@ -40,6 +44,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   ];
   isSubmitLoading = false;
 
+  private cachedToAdd: string[] = [];
+  private cachedAlreadyMirrored: string[] = [];
+  private cachedPathSelections: MirroringPathSelection[] = [];
+
   ngOnInit(): void {
     this.fsId = Number(this.route.snapshot.paramMap.get('fsId'));
     const fsName = this.route.snapshot.paramMap.get('fsName') ?? '';
@@ -50,141 +58,195 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     }
   }
 
-  onSubmit(): void {
-    const pathsStep = this.pathsStep;
-    if (!pathsStep?.formGroup) {
+  onStepChanged(): void {
+    this.cachePathsStepState();
+    this.syncPathsStepValidity();
+  }
+
+  onSubmit(_payload?: unknown): void {
+    this.cachePathsStepState();
+    this.syncPathsStepValidity();
+
+    const scheduleStep = this.getScheduleStep();
+    if (!scheduleStep?.formGroup) {
       return;
     }
 
-    pathsStep.formGroup.markAllAsTouched();
-    pathsStep.formGroup.updateValueAndValidity();
-    if (pathsStep.formGroup.invalid) {
+    scheduleStep.formGroup.markAllAsTouched();
+    scheduleStep.formGroup.updateValueAndValidity();
+    if (scheduleStep.formGroup.invalid) {
+      return;
+    }
+
+    const { toAdd, alreadyMirrored } = this.getSubmitPathState();
+    const pathsToProcess = [...toAdd, ...alreadyMirrored];
+
+    if (!pathsToProcess.length) {
+      this.notificationService.show(
+        NotificationType.error,
+        $localize`Select at least one path to continue.`
+      );
       return;
     }
 
     this.isSubmitLoading = true;
+    const skippedByServer: string[] = [];
+    const pathSelections = this.cachedPathSelections;
 
-    pathsStep
-      .refreshTrackedPaths()
+    from(pathsToProcess)
       .pipe(
-        switchMap(() => {
-          const { toAdd, alreadyMirrored } = pathsStep.getSubmitPaths();
-
-          if (!toAdd.length) {
-            this.showSubmitSummary({
-              failed: [],
-              alreadyMirrored,
-              skippedByServer: [],
-              succeeded: []
-            });
-            return of([] as (string | null)[]);
-          }
-
-          const skippedByServer: string[] = [];
-          const failed: PathSubmitFailure[] = [];
-
-          return from(toAdd).pipe(
-            concatMap((path) => {
-              if (!pathsStep.getSubmitPaths().toAdd.includes(path)) {
-                skippedByServer.push(path);
-                return of(null);
-              }
-
-              return this.cephfsService.addMirrorDirectory(this.fsName, path).pipe(
-                tap(() => pathsStep.addTrackedPath(path)),
-                map(() => path),
-                catchError((error) => {
-                  const detail =
-                    error?.error?.detail ||
-                    error?.message ||
-                    $localize`Failed to add mirroring path '${path}'`;
-                  if (MirroringPathUtils.isAlreadyTrackedMirrorError(detail)) {
-                    pathsStep.addTrackedPath(path);
-                    skippedByServer.push(path);
-                    return of(null);
-                  }
-                  failed.push({ path, detail });
-                  return of(null);
-                })
-              );
-            }),
-            toArray(),
-            tap((results) => {
-              const succeeded = results.filter((path): path is string => !!path);
-              this.showSubmitSummary({
-                failed,
-                alreadyMirrored,
-                skippedByServer,
-                succeeded
-              });
-            })
-          );
-        }),
+        concatMap((path) =>
+          alreadyMirrored.includes(path)
+            ? this.addScheduleForMirroredPath(path, scheduleStep, pathSelections)
+            : this.addMirroringPath(path, scheduleStep, pathSelections, skippedByServer)
+        ),
+        toArray(),
         finalize(() => {
           this.isSubmitLoading = false;
-        }),
-        takeUntilDestroyed(this.destroyRef)
+          const serverOnlySkipped = skippedByServer.filter(
+            (path) => !alreadyMirrored.includes(path)
+          );
+          if (serverOnlySkipped.length) {
+            this.showSkippedPathsWarning(serverOnlySkipped.length);
+          }
+        })
       )
       .subscribe((results) => {
-        const succeeded = results.filter((path): path is string => !!path);
-        if (succeeded.length) {
+        if (results.some((path) => !!path)) {
           this.closeTearsheet(true);
         }
       });
   }
 
-  onCancel(): void {
+  onClose(): void {
     this.closeTearsheet(false);
+  }
+
+  private cachePathsStepState(): void {
+    const pathsStep = this.getPathsStep();
+    if (!pathsStep) {
+      return;
+    }
+    const { toAdd, alreadyMirrored } = pathsStep.getSubmitPaths();
+    this.cachedToAdd = toAdd;
+    this.cachedAlreadyMirrored = alreadyMirrored;
+    this.cachedPathSelections = pathsStep.getPathSelections();
+  }
+
+  private getSubmitPathState(): { toAdd: string[]; alreadyMirrored: string[] } {
+    const pathsStep = this.getPathsStep();
+    if (pathsStep) {
+      return pathsStep.getSubmitPaths();
+    }
+    return { toAdd: this.cachedToAdd, alreadyMirrored: this.cachedAlreadyMirrored };
+  }
+
+  private getPathsStep(): MirroringPathsStepComponent | undefined {
+    return this.tearsheet?.stepContents?.first?.stepComponent as MirroringPathsStepComponent;
+  }
+
+  private getScheduleStep(): MirroringScheduleStepComponent | undefined {
+    return this.tearsheet?.stepContents?.toArray()[1]
+      ?.stepComponent as MirroringScheduleStepComponent;
+  }
+
+  private syncPathsStepValidity(): void {
+    const hasSelection = this.cachedToAdd.length + this.cachedAlreadyMirrored.length > 0;
+    this.steps = this.steps.map((step, index) =>
+      index === 0 ? { ...step, invalid: !hasSelection } : step
+    );
+  }
+
+  private addScheduleForMirroredPath(
+    path: string,
+    scheduleStep: MirroringScheduleStepComponent,
+    pathSelections: MirroringPathSelection[]
+  ): Observable<string | null> {
+    const selection = MirroringPathUtils.findPathSelection(path, pathSelections);
+    const schedulePayload = scheduleStep.buildCreatePayload(this.fsName, selection);
+
+    return this.snapScheduleService.create(schedulePayload).pipe(
+      map(() => path),
+      tap(() => {
+        this.notificationService.show(
+          NotificationType.success,
+          $localize`Snapshot schedule added for mirrored path '${path}' on ${this.fsName}`
+        );
+      }),
+      catchError((error) => {
+        this.notificationService.show(
+          NotificationType.error,
+          this.getErrorDetail(error, $localize`Failed to create snapshot schedule for '${path}'`)
+        );
+        return of(null);
+      })
+    );
+  }
+
+  private addMirroringPath(
+    path: string,
+    scheduleStep: MirroringScheduleStepComponent,
+    pathSelections: MirroringPathSelection[],
+    skippedByServer: string[]
+  ): Observable<string | null> {
+    const selection = MirroringPathUtils.findPathSelection(path, pathSelections);
+    const schedulePayload = scheduleStep.buildCreatePayload(this.fsName, selection);
+    const pathsStep = this.getPathsStep();
+
+    return this.cephfsService.addMirrorDirectory(this.fsName, path).pipe(
+      switchMap(() =>
+        this.snapScheduleService.create(schedulePayload).pipe(
+          map(() => path),
+          catchError((error) => {
+            this.notificationService.show(
+              NotificationType.error,
+              this.getErrorDetail(
+                error,
+                $localize`Failed to create snapshot schedule for '${path}'`
+              )
+            );
+            return of(path);
+          })
+        )
+      ),
+      tap(() => {
+        pathsStep?.addTrackedPath(path);
+        this.notificationService.show(
+          NotificationType.success,
+          $localize`Mirroring path '${path}' and schedule added to ${this.fsName}`
+        );
+      }),
+      catchError((error) => {
+        const detail = this.getErrorDetail(
+          error,
+          $localize`Failed to add mirroring path '${path}'`
+        );
+        if (MirroringPathUtils.isAlreadyTrackedMirrorError(detail)) {
+          pathsStep?.addTrackedPath(path);
+          skippedByServer.push(path);
+          return of(null);
+        }
+        this.notificationService.show(NotificationType.error, detail);
+        return of(null);
+      })
+    );
+  }
+
+  private showSkippedPathsWarning(count: number): void {
+    this.notificationService.show(
+      NotificationType.warning,
+      $localize`Skipped ${count} path(s) that are already mirrored.`
+    );
+  }
+
+  private getErrorDetail(error: unknown, fallback: string): string {
+    const err = error as { error?: { detail?: string }; message?: string };
+    return err?.error?.detail || err?.message || fallback;
   }
 
   private closeTearsheet(reload: boolean): void {
     this.router.navigate([CEPHFS_MIRRORING_URL, { outlets: { modal: null } }], {
       state: reload ? { reload: true } : undefined
     });
-  }
-
-  private showSubmitSummary(outcome: PathSubmitOutput): void {
-    const { failed, alreadyMirrored, skippedByServer, succeeded } = outcome;
-    const serverOnlySkipped = skippedByServer.filter((path) => !alreadyMirrored.includes(path));
-
-    if (alreadyMirrored.length) {
-      this.notificationService.show(
-        NotificationType.warning,
-        $localize`Skipped ${alreadyMirrored.length} path(s) that are already mirrored.`
-      );
-    }
-
-    if (serverOnlySkipped.length) {
-      this.notificationService.show(
-        NotificationType.warning,
-        $localize`Skipped ${serverOnlySkipped.length} path(s) that are already mirrored.`
-      );
-    }
-
-    if (succeeded.length) {
-      if (succeeded.length === 1) {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Mirroring path '${succeeded[0]}' added to ${this.fsName}`
-        );
-      } else {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Added ${succeeded.length} mirroring paths to ${this.fsName}`,
-          succeeded.join('\n')
-        );
-      }
-    }
-
-    if (!failed.length) {
-      return;
-    }
-
-    const title =
-      failed.length === 1
-        ? $localize`Failed to add mirroring path`
-        : $localize`Failed to add ${failed.length} mirroring paths`;
-    const message = failed.map(({ path, detail }) => `${path}: ${detail}`).join('\n');
-    this.notificationService.show(NotificationType.error, title, message);
   }
 }

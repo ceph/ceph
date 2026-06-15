@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs/internal/Observable';
 import { catchError, map } from 'rxjs/operators';
@@ -57,16 +57,20 @@ export class CephfsSnapshotScheduleService {
     subvol,
     group
   }: Record<string, any>): Observable<any> {
-    let deleteUrl = `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
-      path
-    )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
+    let params = new HttpParams();
+    params = params.append('schedule', schedule);
+    params = params.append('start', start);
     if (retentionPolicy) {
-      deleteUrl += `&retention_policy=${retentionPolicy}`;
+      params = params.append('retention_policy', retentionPolicy);
     }
     if (subvol && group) {
-      deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
+      params = params.append('subvol', subvol);
+      params = params.append('group', group);
     }
-    return this.http.delete(deleteUrl);
+    return this.http.delete(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/delete_snapshot`,
+      { params }
+    );
   }
 
   checkScheduleExists(
@@ -122,11 +126,26 @@ export class CephfsSnapshotScheduleService {
     );
   }
 
-  getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
+  getSnapshotSchedule(
+    path: string,
+    fs: string,
+    recursive = true,
+    subvol?: string,
+    group?: string
+  ): Observable<SnapshotSchedule[]> {
+    let params = new HttpParams();
+    params = params.append('path', path);
+    params = params.append('recursive', String(recursive));
+    if (subvol) {
+      params = params.append('subvol', subvol);
+      if (group) {
+        params = params.append('group', group);
+      }
+    }
     return this.http
-      .get<SnapshotSchedule[]>(
-        `${this.baseURL}/snapshot/schedule/${fs}?path=${path}&recursive=${recursive}`
-      )
+      .get<SnapshotSchedule[]>(`${this.baseURL}/snapshot/schedule/${encodeURIComponent(fs)}`, {
+        params
+      })
       .pipe(
         catchError(() => {
           return of([]);
@@ -137,14 +156,16 @@ export class CephfsSnapshotScheduleService {
   getSnapshotScheduleList(
     path: string,
     fs: string,
-    recursive = true
+    recursive = true,
+    subvol?: string,
+    group?: string
   ): Observable<SnapshotSchedule[]> {
-    return this.getSnapshotSchedule(path, fs, recursive).pipe(
+    return this.getSnapshotSchedule(path, fs, recursive, subvol, group).pipe(
       map((snapList: SnapshotSchedule[]) =>
         uniqWith(
           snapList.map((snapItem: SnapshotSchedule) => ({
             ...snapItem,
-            scheduleCopy: this.parseScheduleCopy(snapItem.schedule),
+            scheduleCopy: snapItem?.schedule ? this.parseScheduleCopy(snapItem.schedule) : '',
             status: snapItem.active ? 'Active' : 'Inactive',
             subvol: snapItem?.subvol,
             retentionCopy: this.parseRetentionCopy(snapItem?.retention),
@@ -156,7 +177,8 @@ export class CephfsSnapshotScheduleService {
           })),
           isEqual
         )
-      )
+      ),
+      catchError(() => of([]))
     );
   }
 

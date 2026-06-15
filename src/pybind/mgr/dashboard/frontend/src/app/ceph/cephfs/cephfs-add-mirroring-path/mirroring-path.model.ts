@@ -3,6 +3,12 @@ export interface PathLevel {
   selected: string;
 }
 
+export interface MirroringPathSelection {
+  path: string;
+  subvol?: string;
+  group?: string;
+}
+
 export interface PathEntry {
   fullPath: string;
   levels: PathLevel[];
@@ -15,16 +21,4 @@ export function createPathEntry(expanded = true): PathEntry {
     levels: [{ options: [], selected: '' }],
     expanded
   };
-}
-
-export interface PathSubmitFailure {
-  path: string;
-  detail: string;
-}
-
-export interface PathSubmitOutput {
-  failed: PathSubmitFailure[];
-  alreadyMirrored: string[];
-  skippedByServer: string[];
-  succeeded: string[];
 }

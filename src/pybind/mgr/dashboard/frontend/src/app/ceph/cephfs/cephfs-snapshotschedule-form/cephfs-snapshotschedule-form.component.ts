@@ -28,6 +28,8 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
+  buildSnapshotScheduleCreatePayload,
+  parseRetentionPolicies,
   RetentionPolicy,
   SnapshotSchedule,
   SnapshotScheduleFormValue
@@ -262,17 +264,6 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
       time.minute
     )}:${this.convertNumberToString(time.second)}`;
   }
-  parseSchedule(interval: number, frequency: string): string {
-    return `${interval}${frequency}`;
-  }
-
-  parseRetentionPolicies(retentionPolicies: RetentionPolicy[]) {
-    return retentionPolicies
-      ?.filter((r) => r?.retentionInterval !== null && r?.retentionFrequency !== null)
-      ?.map?.((r) => `${r.retentionInterval}-${r.retentionFrequency}`)
-      .join('|');
-  }
-
   submit() {
     this.validateSchedule()(this.snapScheduleForm).subscribe({
       next: () => {
@@ -301,8 +292,8 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
             path: this.path,
             subvol: this.subvol,
             group: this.group,
-            retention_to_add: this.parseRetentionPolicies(retentionPoliciesToAdd) || null,
-            retention_to_remove: this.parseRetentionPolicies(this.retentionPoliciesToRemove) || null
+            retention_to_add: parseRetentionPolicies(retentionPoliciesToAdd) || null,
+            retention_to_remove: parseRetentionPolicies(this.retentionPoliciesToRemove) || null
           };
 
           this.taskWrapper
@@ -321,28 +312,17 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
               }
             });
         } else {
-          const snapScheduleObj = {
+          const snapScheduleObj = buildSnapshotScheduleCreatePayload({
             fs: this.fsName,
             path: values.directory,
-            snap_schedule: this.parseSchedule(values?.repeatInterval, values?.repeatFrequency),
-            start: new Date(values?.startDate.replace(/\//g, '-').replace(' ', 'T'))
-              .toISOString()
-              .slice(0, 19)
-          };
-
-          const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
-
-          if (retentionPoliciesValues) {
-            snapScheduleObj['retention_policy'] = retentionPoliciesValues;
-          }
-
-          if (this.isSubvolume) {
-            snapScheduleObj['subvol'] = this.subvolume;
-          }
-
-          if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
-            snapScheduleObj['group'] = this.subvolumeGroup;
-          }
+            repeatInterval: values.repeatInterval,
+            repeatFrequency: values.repeatFrequency,
+            startDate: values.startDate,
+            retentionPolicies: values.retentionPolicies,
+            subvol: this.isSubvolume ? this.subvolume : undefined,
+            group:
+              this.isSubvolume && !this.isDefaultSubvolumeGroup ? this.subvolumeGroup : undefined
+          });
           this.taskWrapper
             .wrapTaskAroundCall({
               task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {

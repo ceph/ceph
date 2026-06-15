@@ -8,7 +8,7 @@ except ImportError:
     from unittest.mock import Mock, patch
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, CephFSSnapshotSchedule
 from ..tests import ControllerTestCase
 
 
@@ -374,3 +374,24 @@ class CephFSMirrorStatusTest(ControllerTestCase):
             response = self.json_body()
             self.assertFalse(response.get('available'))
             self.assertIn('Cephfs mirror module is not enabled', response.get('message', ''))
+
+
+class CephFSSnapshotScheduleTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([CephFSSnapshotSchedule])
+
+    def test_list_recursive_returns_schedule(self):
+        schedule_line = '/volumes/g/s/uuid 1d {}'
+        schedule_json = '[{"path":"/volumes/g/s/uuid","schedule":"1d"}]'
+        mgr.remote = Mock(side_effect=[
+            (0, schedule_line, ''),
+            (0, schedule_json, ''),
+        ])
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs'
+                  '?path=/volumes/g/s/uuid&recursive=true')
+        self.assertStatus(200)
+        self.assertJsonBody([{'path': '/volumes/g/s/uuid', 'schedule': '1d'}])
+
