@@ -27,6 +27,7 @@ regex = "1"
 sha1 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart"] }
 tempfile = "3"
+rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
 
 [features]
 default = ["fails_on_rgw"]
@@ -36,6 +37,7 @@ fails_on_dbstore = []
 fails_on_nsfs = []
 fails_on_posix = []
 rgw_admin = []
+has_kafka = ["rdkafka"]
 
 [dev-dependencies]
 rstest = "0.24"
