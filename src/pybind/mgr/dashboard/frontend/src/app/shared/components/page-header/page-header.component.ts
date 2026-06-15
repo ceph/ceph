@@ -19,4 +19,5 @@ export class PageHeaderComponent {
   @Input({ required: true }) title: string;
   @Input() subtitle: string = '';
   @Input() description: string = '';
+  @Input() tabsLayout = false;
 }

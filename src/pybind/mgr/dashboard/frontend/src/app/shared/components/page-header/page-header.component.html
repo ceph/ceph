@@ -1,13 +1,30 @@
 <header data-testid="page-header">
   <div>
-    <cds-tile class="border-top padding-inline-0">
-      <p class="cds--type-heading-04">{{ title }}</p>
-      @if (subtitle) {
-        <p class="cds--type-heading-03">{{ subtitle }}</p>
-      }
-      @if (description) {
-        <p class="cds--type-body-01">{{ description }}</p>
-      }
+    <cds-tile
+      class="border-top padding-inline-0"
+      [class.cd-page-header__tile--tabs]="tabsLayout"
+    >
+      <div
+        cdsStack="vertical"
+        [gap]="6"
+        [class.cd-page-header--tabs-layout]="tabsLayout"
+      >
+        <div
+          cdsStack="vertical"
+          [gap]="2"
+        >
+          <p class="cds--type-heading-04 cds-m-0">{{ title }}</p>
+          @if (subtitle) {
+            <p class="cds--type-heading-03 cds-m-0">{{ subtitle }}</p>
+          }
+          @if (description) {
+            <p class="cds--type-body-01 cds-m-0">{{ description }}</p>
+          }
+        </div>
+        <div [class.cd-page-header__tabs]="tabsLayout">
+          <ng-content></ng-content>
+        </div>
+      </div>
     </cds-tile>
   </div>
 </header>

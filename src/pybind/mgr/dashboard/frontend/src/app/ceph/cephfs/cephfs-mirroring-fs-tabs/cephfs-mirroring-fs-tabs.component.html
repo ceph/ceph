@@ -1,0 +1,27 @@
+<cd-page-header [title]="displayFsName"
+               [tabsLayout]="true">
+  <cds-tabs [followFocus]="true"
+            [isNavigation]="true"
+            [cacheActive]="false"
+            class="cds-mb-0">
+    <cds-tab heading="Overview"
+             i18n-heading
+             [active]="activeTab === Tabs.overview"
+             (selected)="onSelected(Tabs.overview)">
+    </cds-tab>
+    <cds-tab heading="Mirror paths"
+             i18n-heading
+             [active]="activeTab === Tabs.mirrorPaths"
+             (selected)="onSelected(Tabs.mirrorPaths)">
+    </cds-tab>
+    <cds-tab heading="Schedules"
+             i18n-heading
+             [active]="activeTab === Tabs.schedules"
+             (selected)="onSelected(Tabs.schedules)">
+    </cds-tab>
+  </cds-tabs>
+</cd-page-header>
+
+<div class="cds-mt-5">
+  <router-outlet></router-outlet>
+</div>
