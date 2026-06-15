@@ -51,6 +51,8 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createGroupTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createGroupUsersTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createAccessKeysTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createTopicTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createBucketTopicMappingTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -276,6 +278,129 @@ class SQLListOIDCProviders : public SQLiteDB, public ListOIDCProvidersOp {
   public:
     SQLListOIDCProviders(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLListOIDCProviders() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertTopic : public SQLiteDB, public InsertTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveTopic : public SQLiteDB, public RemoveTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetTopic : public SQLiteDB, public GetTopicOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetTopic(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetTopic() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListTopics : public SQLiteDB, public ListTopicsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt *owner_stmt = NULL;
+  public:
+    SQLListTopics(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListTopics() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (owner_stmt)
+        sqlite3_finalize(owner_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertBucketTopicMapping : public SQLiteDB, public InsertBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLInsertBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveBucketTopicMapping : public SQLiteDB, public RemoveBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetBucketTopicMapping : public SQLiteDB, public GetBucketTopicMappingOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLGetBucketTopicMapping(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetBucketTopicMapping() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveBucketFromTopicMappings : public SQLiteDB, public RemoveBucketFromTopicMappingsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL;
+  public:
+    SQLRemoveBucketFromTopicMappings(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveBucketFromTopicMappings() {
       if (stmt)
         sqlite3_finalize(stmt);
     }
