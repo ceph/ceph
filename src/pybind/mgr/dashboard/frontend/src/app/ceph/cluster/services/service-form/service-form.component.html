@@ -1419,7 +1419,7 @@
            i18n>Choose Certificate Authority</label>
     <cds-radio-group formControlName="certificateType"
                      orientation="horizontal"
-                     helperText="Select how certificates will be signed for this service. Choose internal to use the cluster’s CA, or external to upload certificates signed by your organization."
+                     helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
                      i18n-helperText>
       <cds-radio [value]="CertificateType.internal"
                  (change)="onCertificateTypeChange(CertificateType.internal)"

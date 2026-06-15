@@ -43,7 +43,6 @@ export class DetailsCardComponent {
   onEditClick(): void {
     this.editClicked.emit();
   }
-
   getVisibleDetails(): DetailItem[] {
     return (this.details || []).filter((detail) => !detail.hidden);
   }

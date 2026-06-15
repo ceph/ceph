@@ -1,7 +1,7 @@
 <div class="content-theme">
   @if (mode === 'details' && groupName) {
-  <cd-details-card cardTitle="Details" i18n-cardTitle [details]="gatewayDetails" [showEditButton]="false"
-    class="cds-mb-5">
+  <cd-details-card cardTitle="Details" i18n-cardTitle [details]="gatewayDetails" [showEditButton]="true"
+    editButtonLabel="Edit" i18n-editButtonLabel (editClicked)="onEditGateway()" class="cds-mb-5">
   </cd-details-card>
   }
 
