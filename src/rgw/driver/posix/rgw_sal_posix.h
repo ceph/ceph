@@ -675,12 +675,41 @@ public:
       std::string& _user_tenant,
       std::string& _req_id,
       optional_yield y) override;
+  int read_topic_v2(const std::string& topic_name,
+		    const std::string& tenant,
+		    rgw_pubsub_topic& topic,
+		    RGWObjVersionTracker* objv_tracker,
+		    optional_yield y,
+		    const DoutPrefixProvider* dpp) override;
+  int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+		     RGWObjVersionTracker& objv_tracker,
+		     optional_yield y,
+		     const DoutPrefixProvider* dpp) override;
+  int remove_topic_v2(const std::string& topic_name,
+		      const std::string& tenant,
+		      RGWObjVersionTracker& objv_tracker,
+		      optional_yield y,
+		      const DoutPrefixProvider* dpp) override;
+  int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+				  const std::string& bucket_key,
+				  bool add_mapping,
+				  optional_yield y,
+				  const DoutPrefixProvider* dpp) override;
+  int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+			       std::set<std::string>& bucket_keys,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp) override;
+  int remove_bucket_mapping_from_topics(
+      const rgw_pubsub_bucket_topics& bucket_topics,
+      const std::string& bucket_key,
+      optional_yield y,
+      const DoutPrefixProvider* dpp) override;
   virtual int list_account_topics(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view account_id,
 				  std::string_view marker,
 				  uint32_t max_items,
-				  TopicList& listing) override { return -ENOTSUP; }
+				  TopicList& listing) override;
 
   virtual int add_persistent_topic(const DoutPrefixProvider* dpp,
 				   optional_yield y,

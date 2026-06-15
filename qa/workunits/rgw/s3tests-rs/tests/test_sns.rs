@@ -35,8 +35,6 @@ fn get_topic_prefix() -> String {
     cfg.bucket_prefix.replace("{random}", "").trim_matches('-').to_string()
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_account_topic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -89,8 +87,6 @@ async fn test_account_topic() {
     nuke_topics(&sns, &get_topic_prefix()).await;
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_cross_account_topic() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -128,8 +124,6 @@ async fn test_cross_account_topic() {
     nuke_topics(&sns_alt, &get_topic_prefix()).await;
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_account_topic_publish() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -164,8 +158,6 @@ async fn test_account_topic_publish() {
     nuke_topics(&sns, &get_topic_prefix()).await;
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: SNS not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: SNS not implemented")]
 #[tokio::test]
 async fn test_cross_account_topic_publish() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -232,4 +224,172 @@ async fn test_cross_account_topic_publish() {
         .unwrap();
 
     nuke_topics(&sns, &get_topic_prefix()).await;
+}
+
+/* --- Kafka delivery tests --- */
+
+#[cfg(feature = "has_kafka")]
+mod kafka_tests {
+    use super::*;
+    use aws_sdk_s3::primitives::ByteStream;
+    use rdkafka::consumer::{Consumer, StreamConsumer};
+    use rdkafka::config::ClientConfig;
+    use rdkafka::Message;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    fn get_kafka_broker() -> String {
+        let cfg = s3_tests_rs::config::get_config();
+        cfg.kafka_broker.clone()
+            .expect("kafka_broker not configured — run kafka-vstart.sh or set [kafka] broker in s3tests.conf")
+    }
+
+    fn make_consumer(broker: &str, topic: &str) -> StreamConsumer {
+        let consumer: StreamConsumer = ClientConfig::new()
+            .set("bootstrap.servers", broker)
+            .set("group.id", &format!("s3tests-{}", rand::random::<u32>()))
+            .set("auto.offset.reset", "earliest")
+            .set("enable.auto.commit", "false")
+            .create()
+            .expect("failed to create Kafka consumer");
+        consumer.subscribe(&[topic])
+            .expect("failed to subscribe to topic");
+        consumer
+    }
+
+    async fn wait_for_event(consumer: &StreamConsumer, key: &str, event_prefix: &str) -> serde_json::Value {
+        timeout(Duration::from_secs(10), async {
+            loop {
+                match consumer.recv().await {
+                    Ok(m) => {
+                        if let Some(payload) = m.payload() {
+                            if let Ok(event) = serde_json::from_slice::<serde_json::Value>(payload) {
+                                if let Some(record) = event.get("Records")
+                                    .and_then(|r| r.as_array())
+                                    .and_then(|a| a.first())
+                                {
+                                    let obj_key = record["s3"]["object"]["key"]
+                                        .as_str().unwrap_or("");
+                                    let event_name = record["eventName"]
+                                        .as_str().unwrap_or("");
+                                    if obj_key == key && event_name.starts_with(event_prefix) {
+                                        return event;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }).await.expect("timed out waiting for Kafka notification")
+    }
+
+    #[tokio::test]
+    async fn test_notification_kafka_basic() {
+        let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+        let sns = get_sns_root_client();
+        let s3 = get_iam_root_s3client();
+        let broker = get_kafka_broker();
+        let topic_name = get_new_bucket_name();
+        let bucket = get_new_bucket_name();
+
+        let topic_arn = sns.create_topic()
+            .name(&topic_name)
+            .attributes("push-endpoint", format!("kafka://{}", broker))
+            .attributes("kafka-ack-level", "broker")
+            .send().await.unwrap()
+            .topic_arn().unwrap().to_string();
+
+        s3.create_bucket().bucket(&bucket).send().await.unwrap();
+
+        s3.put_bucket_notification_configuration()
+            .bucket(&bucket)
+            .notification_configuration(
+                aws_sdk_s3::types::NotificationConfiguration::builder()
+                    .topic_configurations(
+                        aws_sdk_s3::types::TopicConfiguration::builder()
+                            .id("kafka-test")
+                            .topic_arn(&topic_arn)
+                            .events(aws_sdk_s3::types::Event::S3ObjectCreated)
+                            .build()
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .send().await.unwrap();
+
+        let consumer = make_consumer(&broker, &topic_name);
+
+        let obj_key = "test-kafka-object";
+        s3.put_object()
+            .bucket(&bucket)
+            .key(obj_key)
+            .body(ByteStream::from_static(b"hello kafka"))
+            .send().await.unwrap();
+
+        let msg = wait_for_event(&consumer, obj_key, "s3:ObjectCreated:").await;
+
+        let record = &msg["Records"][0];
+        assert_eq!(record["s3"]["object"]["key"].as_str().unwrap(), obj_key);
+        assert_eq!(record["s3"]["bucket"]["name"].as_str().unwrap(), bucket);
+
+        nuke_topics(&sns, &get_topic_prefix()).await;
+    }
+
+    #[tokio::test]
+    async fn test_notification_kafka_delete() {
+        let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+        let sns = get_sns_root_client();
+        let s3 = get_iam_root_s3client();
+        let broker = get_kafka_broker();
+        let topic_name = get_new_bucket_name();
+        let bucket = get_new_bucket_name();
+
+        let topic_arn = sns.create_topic()
+            .name(&topic_name)
+            .attributes("push-endpoint", format!("kafka://{}", broker))
+            .attributes("kafka-ack-level", "broker")
+            .send().await.unwrap()
+            .topic_arn().unwrap().to_string();
+
+        s3.create_bucket().bucket(&bucket).send().await.unwrap();
+
+        s3.put_bucket_notification_configuration()
+            .bucket(&bucket)
+            .notification_configuration(
+                aws_sdk_s3::types::NotificationConfiguration::builder()
+                    .topic_configurations(
+                        aws_sdk_s3::types::TopicConfiguration::builder()
+                            .id("kafka-delete")
+                            .topic_arn(&topic_arn)
+                            .events(aws_sdk_s3::types::Event::S3ObjectRemoved)
+                            .build()
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .send().await.unwrap();
+
+        let obj_key = "test-kafka-delete";
+        s3.put_object()
+            .bucket(&bucket)
+            .key(obj_key)
+            .body(ByteStream::from_static(b"delete me"))
+            .send().await.unwrap();
+
+        let consumer = make_consumer(&broker, &topic_name);
+
+        s3.delete_object()
+            .bucket(&bucket)
+            .key(obj_key)
+            .send().await.unwrap();
+
+        let msg = wait_for_event(&consumer, obj_key, "s3:ObjectRemoved:").await;
+
+        let record = &msg["Records"][0];
+        assert_eq!(record["s3"]["object"]["key"].as_str().unwrap(), obj_key);
+
+        nuke_topics(&sns, &get_topic_prefix()).await;
+    }
 }

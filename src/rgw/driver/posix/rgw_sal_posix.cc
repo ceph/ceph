@@ -2819,6 +2819,93 @@ int POSIXDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
       std::string(tenant), providers);
 }
 
+/* --- Topic SAL methods --- */
+
+int POSIXDriver::read_topic_v2(const std::string& topic_name,
+			       const std::string& tenant,
+			       rgw_pubsub_topic& topic,
+			       RGWObjVersionTracker* objv_tracker,
+			       optional_yield y,
+			       const DoutPrefixProvider* dpp)
+{
+  obj_version objv;
+  int ret = get_user_db()->load_topic(dpp, topic_name, tenant, topic, objv);
+  if (!ret && objv_tracker) {
+    objv_tracker->read_version = objv;
+  }
+  return ret;
+}
+
+int POSIXDriver::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+				RGWObjVersionTracker& objv_tracker,
+				optional_yield y,
+				const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->store_topic(dpp, topic, exclusive, objv_tracker.write_version);
+}
+
+int POSIXDriver::remove_topic_v2(const std::string& topic_name,
+				 const std::string& tenant,
+				 RGWObjVersionTracker& objv_tracker,
+				 optional_yield y,
+				 const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_topic(dpp, topic_name, tenant);
+}
+
+int POSIXDriver::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					     const std::string& bucket_key,
+					     bool add_mapping,
+					     optional_yield y,
+					     const DoutPrefixProvider* dpp)
+{
+  if (add_mapping) {
+    return get_user_db()->add_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  } else {
+    return get_user_db()->remove_bucket_topic_mapping(dpp, topic.name, bucket_key);
+  }
+}
+
+int POSIXDriver::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+					  std::set<std::string>& bucket_keys,
+					  optional_yield y,
+					  const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->get_bucket_topic_mapping(dpp, topic.name, bucket_keys);
+}
+
+int POSIXDriver::remove_bucket_mapping_from_topics(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& bucket_key,
+    optional_yield y,
+    const DoutPrefixProvider* dpp)
+{
+  return get_user_db()->remove_bucket_from_topic_mappings(dpp, bucket_key);
+}
+
+int POSIXDriver::list_account_topics(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     std::string_view account_id,
+				     std::string_view marker,
+				     uint32_t max_items,
+				     TopicList& listing)
+{
+  rgw_owner owner = rgw_account_id(std::string(account_id));
+  std::vector<rgw_pubsub_topic> topics;
+  int ret = get_user_db()->list_topics(dpp, "owner", owner,
+      std::string(marker), max_items, topics);
+  if (ret) {
+    return ret;
+  }
+  for (auto& t : topics) {
+    listing.topics.push_back(std::move(t.name));
+  }
+  if (!listing.topics.empty()) {
+    listing.next_marker = listing.topics.back();
+  }
+  return 0;
+}
+
 struct meta_list_handle {
   std::string marker;
   std::string section;
