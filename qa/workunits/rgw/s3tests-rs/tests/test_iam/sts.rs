@@ -7,6 +7,14 @@ use s3_tests_rs::client::{
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
 
+fn require_webidentity(cfg: &s3_tests_rs::config::S3TestConfig) -> (String, String) {
+    let token = cfg.webidentity_token.as_ref()
+        .expect("webidentity not configured — run keycloak-vstart.sh first");
+    let realm = cfg.webidentity_realm.as_ref()
+        .expect("webidentity realm not configured");
+    (token.clone(), realm.clone())
+}
+
 #[tokio::test]
 async fn test_assume_role() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -357,4 +365,81 @@ async fn test_cross_account_role_get_role() {
     iam_root.delete_role().role_name(&role_name).send().await.unwrap();
     iam_alt.delete_access_key().user_name(&user_name).access_key_id(key.access_key_id()).send().await.unwrap();
     iam_alt.delete_user().user_name(&user_name).send().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_assume_role_with_web_identity() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let iam = get_iam_root_client();
+    let cfg = get_config();
+    let token = match cfg.webidentity_token.as_ref() {
+        Some(t) => t.clone(),
+        None => { eprintln!("SKIP: webidentity not configured"); return; }
+    };
+    let realm = cfg.webidentity_realm.as_deref().unwrap_or("demorealm");
+    let path = &cfg.iam_path_prefix;
+    let aud = cfg.webidentity_aud.as_deref().unwrap_or("account");
+
+    let role_name = format!("{}WebIdRole", cfg.iam_name_prefix);
+    let thumbprint = cfg.webidentity_thumbprint.as_deref().unwrap_or("");
+    let oidc_url = format!("http://localhost:8080/realms/{}", realm);
+
+    /* create OIDC provider in RGW */
+    let oidc_resp = iam.create_open_id_connect_provider()
+        .url(&oidc_url)
+        .client_id_list(aud)
+        .thumbprint_list(thumbprint)
+        .send()
+        .await
+        .unwrap();
+    let oidc_arn = oidc_resp.open_id_connect_provider_arn().unwrap().to_string();
+
+    /* create role trusting the OIDC provider */
+    let oidc_app_id_key = format!("localhost:8080/realms/{}:app_id", realm);
+    let trust_policy = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Federated": [&oidc_arn]},
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {"StringEquals": {
+                &oidc_app_id_key: aud
+            }}
+        }]
+    }).to_string();
+
+    let role = iam.create_role().role_name(&role_name).path(path)
+        .assume_role_policy_document(&trust_policy).send().await.unwrap();
+    let role_arn = role.role().unwrap().arn().to_string();
+
+    let role_policy = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": {"Effect": "Allow", "Action": "s3:*", "Resource": "arn:aws:s3:::*"}
+    }).to_string();
+    iam.put_role_policy().role_name(&role_name).policy_name("S3Full")
+        .policy_document(&role_policy).send().await.unwrap();
+
+    /* assume role with web identity token */
+    let sts = get_sts_client();
+    let resp = sts.assume_role_with_web_identity()
+        .role_arn(&role_arn)
+        .role_session_name("webid-test")
+        .web_identity_token(&token)
+        .send()
+        .await
+        .unwrap();
+
+    let creds = resp.credentials().unwrap();
+    let s3 = build_s3_client_with_session_token(
+        creds.access_key_id(), creds.secret_access_key(), creds.session_token());
+
+    let bucket = get_new_bucket_name();
+    s3.create_bucket().bucket(&bucket).send().await.unwrap();
+    s3.delete_bucket().bucket(&bucket).send().await.unwrap();
+
+    /* clean up */
+    iam.delete_role_policy().role_name(&role_name).policy_name("S3Full").send().await.unwrap();
+    iam.delete_role().role_name(&role_name).send().await.unwrap();
+    iam.delete_open_id_connect_provider()
+        .open_id_connect_provider_arn(&oidc_arn).send().await.unwrap();
 }

@@ -84,6 +84,15 @@ pub struct S3TestConfig {
     pub iam_name_prefix: String,
     pub iam_path_prefix: String,
 
+    // webidentity (optional — present when keycloak-vstart.sh has run)
+    pub webidentity_token: Option<String>,
+    pub webidentity_user_token: Option<String>,
+    pub webidentity_thumbprint: Option<String>,
+    pub webidentity_aud: Option<String>,
+    pub webidentity_sub: Option<String>,
+    pub webidentity_azp: Option<String>,
+    pub webidentity_realm: Option<String>,
+
     // optional
     pub cloud: Option<CloudConfig>,
 }
@@ -253,6 +262,14 @@ fn load_config() -> Result<S3TestConfig, String> {
         bucket_prefix,
         iam_name_prefix,
         iam_path_prefix,
+
+        webidentity_token: ini.get("webidentity", "token").map(|s| s.to_string()),
+        webidentity_user_token: ini.get("webidentity", "user_token").map(|s| s.to_string()),
+        webidentity_thumbprint: ini.get("webidentity", "thumbprint").map(|s| s.to_string()),
+        webidentity_aud: ini.get("webidentity", "aud").map(|s| s.to_string()),
+        webidentity_sub: ini.get("webidentity", "sub").map(|s| s.to_string()),
+        webidentity_azp: ini.get("webidentity", "azp").map(|s| s.to_string()),
+        webidentity_realm: ini.get("webidentity", "KC_REALM").map(|s| s.to_string()),
 
         cloud: load_cloud_config(&ini),
     })
