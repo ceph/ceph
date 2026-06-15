@@ -99,6 +99,10 @@ extern "C" {
 #include "driver/rados/rgw_sal_rados.h"
 #endif
 #include "driver/rados/rgw_bl_rados.h"
+#ifdef WITH_RADOSGW_POSIX
+#include "driver/posix/rgw_sal_posix.h"
+#include "driver/posix/posix_system_user.h"
+#endif
 
 #include <iomanip>
 
@@ -7161,6 +7165,7 @@ int main(int argc, const char **argv)
   std::string err_msg;
 
   bool output_user_info = true;
+  rgw_user old_ruser; // used for user rename op
 
   switch (opt_cmd) {
   case OPT::USER_INFO:
@@ -7188,6 +7193,17 @@ int main(int argc, const char **argv)
         return -ret;
       }
     }
+    //TODO: check if posix store is being used
+    if (dpp()->get_cct()->_conf->rgw_posix_user_mapping_type != "none") {
+      POSIXSystemUser posix_user;
+      posix_user.set_uid(geteuid());
+      posix_user.set_gid(getegid());
+      ret = static_cast<rgw::sal::POSIXDriver*>(driver)->get_sys_mgr()->update_posix_user(dpp(), rgw_user{ user_op.get_user_id() }, posix_user);
+      if (ret < 0) {
+        cerr << "could not map user: " << err_msg << std::endl;
+        return ret;
+      }
+    }
     break;
   case OPT::USER_RM:
     ret = ruser.remove(dpp(), user_op, null_yield, &err_msg);
@@ -7197,8 +7213,17 @@ int main(int argc, const char **argv)
     }
 
     output_user_info = false;
+    // TODO: check if using posix store 
+    if (dpp()->get_cct()->_conf->rgw_posix_user_mapping_type != "none") {
+      ret = static_cast<rgw::sal::POSIXDriver*>(driver)->get_sys_mgr()->remove_posix_user(dpp(), rgw_user{ user_op.get_user_id() });
+      if (ret < 0) {
+        cerr << "could not remove user from mapping: " << err_msg << std::endl;
+        return ret;
+      }
+    }
     break;
   case OPT::USER_RENAME:
+    old_ruser = user_op.get_user_info().user_id;
     if (yes_i_really_mean_it) {
       user_op.set_overwrite_new_user(true);
     }
@@ -7211,6 +7236,26 @@ int main(int argc, const char **argv)
       return -ret;
     }
 
+    // TODO: check if using posix store 
+    if (dpp()->get_cct()->_conf->rgw_posix_user_mapping_type != "none") {
+      POSIXSystemUser posix_user;
+      ret = static_cast<rgw::sal::POSIXDriver*>(driver)->get_sys_mgr()->find_posix_user(dpp(), old_ruser, posix_user);
+      if (ret < 0) {
+        cerr << "could not find user in mapping: " << err_msg << std::endl;
+        return ret;
+      }
+      ret = static_cast<rgw::sal::POSIXDriver*>(driver)->get_sys_mgr()->remove_posix_user(dpp(), old_ruser);
+      if (ret < 0) {
+        cerr << "could not remove user from mapping: " << err_msg << std::endl;
+        return ret;
+      }
+      rgw_user new_ruser{ user_op.get_new_uid() };
+      ret = static_cast<rgw::sal::POSIXDriver*>(driver)->get_sys_mgr()->update_posix_user(dpp(), new_ruser, posix_user);
+      if (ret < 0) {
+        cerr << "could not map user: " << err_msg << std::endl;
+        return ret;
+      }
+    }
     break;
   case OPT::USER_ENABLE:
   case OPT::USER_SUSPEND:

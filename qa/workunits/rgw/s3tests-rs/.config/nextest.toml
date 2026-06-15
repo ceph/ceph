@@ -1,0 +1,78 @@
+# Nextest profiles for running test categories.
+# Usage: cargo nextest run -P <profile-name>
+#
+# Profiles use default parallelism.  For serial execution (useful when
+# debugging a single-threaded vstart daemon), add --test-threads=1.
+
+[profile.bucket-list]
+default-filter = 'test(bucket_list::)'
+
+[profile.object-ops]
+default-filter = 'test(object_ops::)'
+
+[profile.multipart]
+default-filter = 'test(multipart::)'
+
+[profile.versioning]
+default-filter = 'test(versioning::)'
+
+[profile.copy]
+default-filter = 'test(copy::)'
+
+[profile.acl]
+default-filter = 'test(acl::)'
+
+[profile.tagging]
+default-filter = 'test(tagging::)'
+
+[profile.conditional]
+default-filter = 'test(conditional::)'
+
+[profile.encryption]
+default-filter = 'test(encryption::)'
+
+[profile.bucket-policy]
+default-filter = 'test(bucket_policy::)'
+
+[profile.object-lock]
+default-filter = 'test(object_lock::)'
+
+[profile.cors]
+default-filter = 'test(cors::)'
+
+[profile.lifecycle]
+default-filter = 'test(lifecycle::)'
+
+[profile.post-object]
+default-filter = 'test(post_object::)'
+
+[profile.bucket-logging]
+default-filter = 'test(bucket_logging::)'
+
+[profile.headers]
+default-filter = 'test(headers::)'
+
+[profile.signing]
+default-filter = 'test(signing::)'
+
+[profile.stress]
+default-filter = 'test(stress::)'
+
+[profile.iam]
+default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::)'
+
+[profile.role]
+default-filter = 'test(role::)'
+
+[profile.oidc]
+default-filter = 'test(oidc::)'
+
+[profile.sts]
+default-filter = 'test(sts::)'
+
+# Composites
+[profile.basic]
+default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
+
+[profile.all]
+default-filter = 'all()'

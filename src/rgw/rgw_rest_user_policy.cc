@@ -261,13 +261,13 @@ void RGWGetUserPolicy::execute(optional_yield y)
   }
 
   s->formatter->open_object_section_in_ns("GetUserPolicyResponse", RGW_REST_IAM_XMLNS);
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("GetUserPolicyResult");
   encode_json("PolicyName", policy_name , s->formatter);
   encode_json("UserName", user_name, s->formatter);
   encode_json("PolicyDocument", policy->second, s->formatter);
+  s->formatter->close_section();
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
 }
@@ -305,9 +305,6 @@ void RGWListUserPolicies::execute(optional_yield y)
   }
 
   s->formatter->open_object_section_in_ns("ListUserPoliciesResponse", RGW_REST_IAM_XMLNS);
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("ListUserPoliciesResult");
   s->formatter->open_array_section("PolicyNames");
   auto policy = policies.lower_bound(marker);
@@ -321,6 +318,9 @@ void RGWListUserPolicies::execute(optional_yield y)
     encode_json("Marker", policy->first, s->formatter);
   }
   s->formatter->close_section(); // ListUserPoliciesResult
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
   s->formatter->close_section(); // ListUserPoliciesResponse
 }
 
@@ -670,9 +670,6 @@ void RGWListAttachedUserPolicies_IAM::execute(optional_yield y)
   }
 
   s->formatter->open_object_section_in_ns("ListAttachedUserPoliciesResponse", RGW_REST_IAM_XMLNS);
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
   s->formatter->open_object_section("ListAttachedUserPoliciesResult");
   s->formatter->open_array_section("AttachedPolicies");
   auto policy = policies.arns.lower_bound(marker);
@@ -692,6 +689,9 @@ void RGWListAttachedUserPolicies_IAM::execute(optional_yield y)
     encode_json("Marker", *policy, s->formatter);
   }
   s->formatter->close_section(); // ListAttachedUserPoliciesResult
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
   s->formatter->close_section(); // ListAttachedUserPoliciesResponse
 }
 
