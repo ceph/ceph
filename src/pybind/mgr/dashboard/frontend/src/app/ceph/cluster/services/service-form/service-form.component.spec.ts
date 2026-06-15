@@ -558,6 +558,22 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(server_key).toBeNull();
       });
 
+      it('should not show certs and keys field with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        fixture.detectChanges();
+        const root_ca_cert = fixture.debugElement.query(By.css('#root_ca_cert'));
+        const client_cert = fixture.debugElement.query(By.css('#client_cert'));
+        const client_key = fixture.debugElement.query(By.css('#client_key'));
+        const server_cert = fixture.debugElement.query(By.css('#server_cert'));
+        const server_key = fixture.debugElement.query(By.css('#server_key'));
+        expect(root_ca_cert).toBeNull();
+        expect(client_cert).toBeNull();
+        expect(client_key).toBeNull();
+        expect(server_cert).toBeNull();
+        expect(server_key).toBeNull();
+      });
+
       it('should submit nvmeof without mTLS', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
@@ -572,6 +588,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'external');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');
@@ -585,11 +602,30 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           unmanaged: false,
           group: 'default',
           enable_auth: true,
+          ssl: true,
+          certificate_source: 'inline',
           root_ca_cert: 'root_ca_cert',
           client_cert: 'client_cert',
           client_key: 'client_key',
           server_cert: 'server_cert',
           server_key: 'server_key'
+        });
+      });
+
+      it('should submit nvmeof with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'rbd.default',
+          placement: {},
+          unmanaged: false,
+          pool: 'rbd',
+          group: 'default',
+          enable_auth: true,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
     });
