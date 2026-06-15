@@ -176,9 +176,7 @@ export const ICON_TYPE = {
   rightArrow: 'caret--right',
   locked: 'locked',
   cloudMonitoring: 'cloud--monitoring',
-  trash: 'trash-can',
-  replicate: 'replicate',
-  share: 'share'
+  trash: 'trash-can'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
