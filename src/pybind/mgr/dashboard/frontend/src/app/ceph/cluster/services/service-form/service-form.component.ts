@@ -875,6 +875,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         });
     }
     this.detectChanges();
+    this.updateRgwPlacementControlsState();
+    this.updateGrafanaPasswordControlState();
   }
 
   detectChanges(): void {
@@ -1048,7 +1050,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
-        this.updateRgwControlStates();
+         this.updateRgwControlStates();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1057,7 +1059,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
-        this.updateRgwControlStates();
+         this.updateRgwControlStates();
       }
     );
   }
@@ -1088,6 +1090,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   onServiceTypeChange(selectedServiceType: string) {
     this.setServiceId(selectedServiceType);
+    this.updateGrafanaPasswordControlState(selectedServiceType);
 
     this.serviceIds = this.serviceList
       ?.filter((service) => service['service_type'] === selectedServiceType)
@@ -1109,6 +1112,33 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       this.serviceForm.get('count').disable();
     } else {
       this.serviceForm.get('count').enable();
+    }
+  }
+
+  private updateRgwPlacementControlsState(): void {
+    this.toggleFormControlState('realm_name', this.editing || this.realmList.length === 0);
+    this.toggleFormControlState('zonegroup_name', this.editing || this.zonegroupList.length === 0);
+    this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
+  }
+
+  private updateGrafanaPasswordControlState(serviceType = this.serviceForm?.get('service_type')?.value): void {
+    this.toggleFormControlState(
+      'grafana_admin_password',
+      this.editing && serviceType === 'grafana'
+    );
+  }
+
+  private toggleFormControlState(controlName: string, disabled: boolean): void {
+    const control = this.serviceForm.get(controlName);
+    if (!control) {
+      return;
+    }
+    if (disabled && control.enabled) {
+      control.disable({ emitEvent: false });
+      return;
+    }
+    if (!disabled && control.disabled) {
+      control.enable({ emitEvent: false });
     }
   }
 

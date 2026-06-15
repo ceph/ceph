@@ -130,7 +130,6 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
 @NgModule({
   imports: [
     CommonModule,
-    ProductiveCardComponent,
     FormsModule,
     ReactiveFormsModule,
     NgbAlertModule,
@@ -174,7 +173,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     LayerModule,
     LayoutModule,
     TilesModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
