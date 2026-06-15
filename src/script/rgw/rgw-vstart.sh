@@ -18,6 +18,8 @@
 #   --debug-rgw N       Debug level (default: 20)
 #   --with-keycloak     Start a local Keycloak container for WebIdentity
 #                       testing (requires podman, jq, openssl, curl)
+#   --with-kafka        Start a local Kafka broker for notification testing
+#                       (requires podman)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -32,6 +34,7 @@ CLONE=false
 LWE=false
 CLEAN=false
 KEYCLOAK=false
+KAFKA=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -44,6 +47,7 @@ while [[ $# -gt 0 ]]; do
 		--lwe)        LWE=true; GPFS=true; shift ;;
 		--clean)      CLEAN=true; shift ;;
 		--with-keycloak) KEYCLOAK=true; shift ;;
+		--with-kafka) KAFKA=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -80,10 +84,12 @@ if [[ -f "$PID" ]]; then
 fi
 fuser -k 8000/tcp 2>/dev/null || true
 
-# stop any existing Keycloak container from a prior run
+# stop any existing sidecar containers from a prior run
 if command -v podman &>/dev/null; then
 	podman stop keycloak-vstart 2>/dev/null || true
 	podman rm keycloak-vstart 2>/dev/null || true
+	podman stop kafka-vstart 2>/dev/null || true
+	podman rm kafka-vstart 2>/dev/null || true
 fi
 
 # --- clean data dirs ---
@@ -257,6 +263,11 @@ if $KEYCLOAK; then
 	S3TEST_CONF="$S3CONF" "$SRC_DIR/src/script/rgw/keycloak-vstart.sh"
 fi
 
+if $KAFKA; then
+	echo "==> starting Kafka sidecar"
+	S3TEST_CONF="$S3CONF" "$SRC_DIR/src/script/rgw/kafka-vstart.sh"
+fi
+
 # --- status + what-next output ---
 
 S3TESTS_DIR="$SRC_DIR/qa/workunits/rgw/s3tests-rs"
@@ -271,6 +282,9 @@ echo "    s3tests.conf: $S3CONF"
 if $KEYCLOAK; then
 	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
 fi
+if $KAFKA; then
+	echo "    Kafka: localhost:9092 (endpoint: kafka://localhost:9092)"
+fi
 echo ""
 echo "To run tests:"
 echo "  cd $S3TESTS_DIR"
@@ -281,4 +295,7 @@ echo "To stop:"
 echo "  kill \$(cat $PID)"
 if $KEYCLOAK; then
 	echo "  $SRC_DIR/src/script/rgw/keycloak-vstart.sh --stop"
+fi
+if $KAFKA; then
+	echo "  $SRC_DIR/src/script/rgw/kafka-vstart.sh --stop"
 fi
