@@ -206,7 +206,7 @@ class NodeProxyEndpoint:
         for sys_id in data.keys():
             for member in data[sys_id].keys():
                 member_data = data[sys_id][member]
-                if member == 'firmwares':
+                if member in ('firmware', 'firmwares'):
                     continue
                 _status = self._get_health_value(member_data)
                 if _status and _status != 'ok':
@@ -626,11 +626,17 @@ class NodeProxyEndpoint:
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        return self.firmware(**kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def firmware(self, **kw: Any) -> Dict[str, Any]:
         """
         Handles GET request to retrieve firmware information.
 
         This function is exposed to handle GET requests and fetches firmware data using
-        the 'firmwares' method from the NodeProxyCache class.
+        the 'firmware' method from the NodeProxyCache class.
 
         :param kw: Keyword arguments for the request.
         :type kw: dict
@@ -641,7 +647,7 @@ class NodeProxyEndpoint:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy_cache.firmwares(**kw)
+            results = self.mgr.node_proxy_cache.firmware(**kw)
         except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results

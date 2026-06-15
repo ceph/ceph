@@ -1636,6 +1636,12 @@ class NodeProxyCache:
         self.oob: Dict[str, Any] = {}
         self.keyrings: Dict[str, str] = {}
 
+    @staticmethod
+    def _host_firmware(host_data: Dict[str, Any]) -> Any:
+        if 'firmware' in host_data:
+            return host_data['firmware']
+        return host_data.get('firmwares', {})
+
     def load(self) -> None:
         _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
         self.oob = json.loads(_oob)
@@ -1755,7 +1761,7 @@ class NodeProxyCache:
                 _result[host]['status'][component] = state
             _result[host]['sn'] = data['sn']
             _result[host]['host'] = data['host']
-            _result[host]['status']['firmwares'] = data['firmwares']
+            _result[host]['status']['firmware'] = self._host_firmware(data)
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
@@ -1783,7 +1789,7 @@ class NodeProxyCache:
                 raise KeyError(f'Invalid host {host} or component {endpoint}.')
         return _result
 
-    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+    def firmware(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves firmware information for a specific hostname or all hosts.
 
@@ -1798,7 +1804,7 @@ class NodeProxyCache:
         :rtype: Dict[str, Any]
         """
         hosts = self._resolve_hosts(**kw)
-        return {host: self.data[host]['firmwares'] for host in hosts}
+        return {host: self._host_firmware(self.data[host]) for host in hosts}
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
         if hostname not in self.data:
