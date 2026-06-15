@@ -122,8 +122,8 @@ size_t PGRecovery::start_primary_recovery_ops(
   unsigned started = 0;
   int skipped = 0;
 
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(
+    eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
   while (started < max_to_start && p != missing.get_rmissing().end()) {
     // TODO: chain futures here to enable yielding to scheduler?
     hobject_t soid;
