@@ -1,4 +1,11 @@
 * DASHBOARD: Added support for RGW zonegroup hostnames and wildcard certificates for virtual-host-style bucket access
+* RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
+  on its OSDs, with OSDs shared across multiple roots contributing proportionally
+  less to each root's allocation.
+  
+* CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
+  update and remove existing key-value pairs that are part of a snapshot
+  metadata via libcephfs API ceph_do_snap_md_op().
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
