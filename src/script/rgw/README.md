@@ -11,8 +11,8 @@ clusters use `vstart.sh` directly.
 cd build
 ninja -j$(nproc) radosgw radosgw-admin ceph-conf
 
-# 2. Start cluster (nsfs, clean state, with Keycloak for WebIdentity)
-../src/script/rgw/rgw-vstart.sh --store nsfs --clean --with-keycloak
+# 2. Start cluster (nsfs, clean state, with sidecars)
+../src/script/rgw/rgw-vstart.sh --store nsfs --clean --with-keycloak --with-kafka
 
 # 3. Run tests (the script prints this command with correct paths)
 cd ../qa/workunits/rgw/s3tests-rs
@@ -62,6 +62,7 @@ Run from the **build directory**:
 | `--store nsfs\|posix` | `nsfs` | Backend store |
 | `--clean` | off | Wipe config DB and all data before starting |
 | `--with-keycloak` | off | Start a local Keycloak container (see below) |
+| `--with-kafka` | off | Start a local Kafka broker (see below) |
 | `--gpfs` | off | Redirect data root to GPFS mount (nsfs only) |
 | `--clone` | off | Enable GPFS clone_snap+clone_copy (implies `--gpfs`) |
 | `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
@@ -77,7 +78,7 @@ Run from the **build directory**:
 4. For GPFS: kills the vstart daemon, patches `ceph.conf` to redirect
    the data root to the GPFS mount, and restarts the daemon
 5. Generates `build/s3tests.conf` from the in-tree SAMPLE template
-6. Starts sidecar services (`--with-keycloak`)
+6. Starts sidecar services (`--with-keycloak`, `--with-kafka`)
 7. Prints cluster status and a copy-paste test command
 
 ### s3tests.conf
@@ -124,6 +125,31 @@ To stop Keycloak manually:
 
 ```bash
 ../src/script/rgw/keycloak-vstart.sh --stop
+```
+
+### Kafka (--with-kafka)
+
+Starts a single-node Kafka broker via podman (KRaft mode, no
+ZooKeeper) for S3 bucket notification testing.  Writes the `[kafka]`
+section to `build/s3tests.conf` with the broker endpoint.
+
+**Prerequisites:** podman
+
+Create topics with the `kafka://localhost:9092` push endpoint:
+
+```bash
+aws sns create-topic --name my-topic \
+  --attributes '{"push-endpoint":"kafka://localhost:9092","kafka-ack-level":"broker"}' \
+  --endpoint-url http://localhost:8000
+```
+
+The container is named `kafka-vstart` and is automatically stopped
+and removed on the next `rgw-vstart.sh` invocation.
+
+To stop Kafka manually:
+
+```bash
+../src/script/rgw/kafka-vstart.sh --stop
 ```
 
 ### Running as root (for LWE)
