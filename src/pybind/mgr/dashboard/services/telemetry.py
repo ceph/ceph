@@ -10,7 +10,7 @@ Business logic is centralized here; controllers delegate to this service.
 
 import json
 import logging
-from typing import Any, Dict, TypedDict
+from typing import TypedDict
 
 from .. import mgr
 from ..plugins.ttl_cache import ttl_cache
@@ -56,11 +56,17 @@ class DashboardTelemetryService:
             AdoptionMetrics with monitoring stack status
         """
         adoption_raw = mgr.get_store(KV_ADOPTION)
-        
-        if adoption_raw:
+
+        if not adoption_raw:
+            return cls._detect_and_cache_adoption()
+
+        try:
             return json.loads(adoption_raw)
-        
-        return cls._detect_and_cache_adoption()
+        except (TypeError, json.JSONDecodeError):
+            logger.warning(
+                'telemetry: invalid cached adoption metrics; recomputing'
+            )
+            return cls._detect_and_cache_adoption()
 
     @classmethod
     def _detect_and_cache_adoption(cls) -> AdoptionMetrics:
