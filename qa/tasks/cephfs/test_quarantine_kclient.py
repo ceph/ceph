@@ -12,14 +12,12 @@ lifecycles interfere with each other.
 These tests only run in teuthology with kclient mount configuration.
 """
 
-import errno
 import logging
 import os
 import time
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.kernel_mount import KernelMount
-from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 

@@ -22,6 +22,7 @@ import os
 import time
 import unittest
 from io import StringIO
+from typing import Optional
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -47,7 +48,7 @@ class QuarantineTestBase(CephFSTestCase):
     """
 
     MDSS_REQUIRED = 1
-    SUBVOLUME_NAME = None  # must be set by subclass
+    SUBVOLUME_NAME: Optional[str] = None
     TEST_FILE = "testfile.txt"
     TEST_DATA = "Test data for quarantine."
 
