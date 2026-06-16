@@ -1934,6 +1934,7 @@ SeaStore::Shard::_do_transaction_step(
       if ((*sp)->is_reusable()) {
         DEBUGT("[onode_cache] hit oid={}", *ctx.transaction, oid);
         onodes[op->oid] = *sp;
+        onodes[op->oid]->register_with_transaction(*ctx.transaction);
       } else {
         DEBUGT("[onode_cache] stale (cursor invalidated) oid={}", *ctx.transaction, oid);
       }

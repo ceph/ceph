@@ -103,6 +103,10 @@ class tree_cursor_t final
   // Returns false if the leaf extent has been invalidated by GC or conflict.
   bool is_leaf_extent_valid() const;
 
+  // Registers the leaf node extent with t's read_set so that prepare_mutate
+  // can find it via read_set.count().
+  void add_leaf_to_read_set(Transaction& t) const;
+
   /**
    * is_invalid
    *
@@ -398,6 +402,7 @@ class Node
 
 public:
   bool is_node_extent_valid() const;
+  void add_node_extent_to_read_set(Transaction& t) const;
 
  protected:
   Node(NodeImplURef&&);

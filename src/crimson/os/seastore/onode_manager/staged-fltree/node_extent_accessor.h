@@ -356,6 +356,11 @@ class NodeExtentAccessorT {
     return !is_retired() && extent->is_valid();
   }
 
+  NodeExtentRef get_extent_ref() const {
+    assert(!is_retired());
+    return extent;
+  }
+
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {

@@ -85,6 +85,7 @@ class NodeImpl {
   virtual extent_len_t total_size() const = 0;
   virtual bool is_extent_retired() const = 0;
   virtual bool is_node_extent_valid() const = 0;
+  virtual void add_to_transaction(Transaction& t) const = 0;
   virtual std::optional<key_view_t> get_pivot_index() const = 0;
   virtual bool is_size_underflow() const = 0;
 

@@ -47,6 +47,13 @@ bool Value::is_cursor_leaf_extent_valid() const
   return p_cursor && p_cursor->is_leaf_extent_valid();
 }
 
+void Value::add_cursor_leaf_to_read_set(Transaction& t) const
+{
+  if (p_cursor) {
+    p_cursor->add_leaf_to_read_set(t);
+  }
+}
+
 void Value::invalidate()
 {
   p_cursor.reset();

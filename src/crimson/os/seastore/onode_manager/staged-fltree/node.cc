@@ -192,6 +192,13 @@ bool tree_cursor_t::is_leaf_extent_valid() const
   return is_tracked() && ref_leaf_node->is_node_extent_valid();
 }
 
+void tree_cursor_t::add_leaf_to_read_set(Transaction& t) const
+{
+  if (is_tracked()) {
+    ref_leaf_node->add_node_extent_to_read_set(t);
+  }
+}
+
 /*
  * tree_cursor_t::Cache
  */
@@ -302,6 +309,11 @@ Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
 bool Node::is_node_extent_valid() const
 {
   return impl->is_node_extent_valid();
+}
+
+void Node::add_node_extent_to_read_set(Transaction& t) const
+{
+  impl->add_to_transaction(t);
 }
 
 Node::~Node()
