@@ -1989,3 +1989,97 @@ async fn test_get_paginated_multipart_object_attributes() {
         assert!(part.checksum_sha256().is_none());
     }
 }
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_get_multipart_checksum_object_attributes() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "multipart_checksum";
+    let part_size = 5 * 1024 * 1024;
+    let nparts = 3;
+    let objlen = nparts * part_size;
+
+    let create_resp = client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .checksum_algorithm(ChecksumAlgorithm::Sha256)
+        .send()
+        .await
+        .unwrap();
+    let upload_id = create_resp.upload_id().unwrap().to_string();
+
+    let mut parts = Vec::new();
+    let mut checksums = Vec::new();
+    for pn in 1..=nparts {
+        let body: Vec<u8> = (0..part_size).map(|i| (((pn - 1) * part_size + i) % 256) as u8).collect();
+
+        let resp = client
+            .upload_part()
+            .bucket(&bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .part_number(pn as i32)
+            .body(ByteStream::from(body))
+            .checksum_algorithm(ChecksumAlgorithm::Sha256)
+            .send()
+            .await
+            .unwrap();
+
+        let cksum = resp.checksum_sha256().unwrap().to_string();
+        checksums.push(cksum.clone());
+        parts.push(
+            CompletedPart::builder()
+                .e_tag(resp.e_tag().unwrap_or_default())
+                .checksum_sha256(&cksum)
+                .part_number(pn as i32)
+                .build(),
+        );
+    }
+
+    let complete_resp = client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(parts)).build())
+        .send()
+        .await
+        .unwrap();
+    let upload_checksum = complete_resp.checksum_sha256().unwrap().to_string();
+
+    let attrs = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+    let resp = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(ObjectAttributes::Etag)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs);
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.object_size(), Some(objlen as i64));
+    assert_eq!(
+        resp.checksum().unwrap().checksum_sha256().unwrap(),
+        &upload_checksum
+    );
+
+    let obj_parts = resp.object_parts().unwrap();
+    assert_eq!(obj_parts.total_parts_count(), Some(nparts as i32));
+
+    for (i, part) in obj_parts.parts().iter().enumerate() {
+        assert_eq!(part.part_number(), Some((i + 1) as i32));
+        if i < nparts - 1 {
+            assert_eq!(part.size(), Some(part_size as i64));
+        } else {
+            assert_eq!(part.size(), Some(part_size as i64));
+        }
+        assert_eq!(part.checksum_sha256().unwrap(), &checksums[i]);
+    }
+}

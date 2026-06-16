@@ -1375,6 +1375,75 @@ async fn test_bucket_policy_put_obj_s3_incorrect_algo_sse_s3() {
         .unwrap();
 }
 
+// --- SSE-C with GetObjectAttributes ---
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_get_sse_c_encrypted_object_attributes() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "obj";
+    let objlen = 1000;
+    let data = vec![b'A'; objlen];
+
+    let put_resp = client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data))
+        .sse_customer_algorithm("AES256")
+        .sse_customer_key(SSE_KEY_A)
+        .sse_customer_key_md5(SSE_KEY_A_MD5)
+        .send()
+        .await
+        .unwrap();
+    let etag = put_resp.e_tag().unwrap().trim_matches('"').to_string();
+    assert!(!etag.is_empty());
+
+    let attrs_str = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+
+    // GetObjectAttributes without SSE-C headers should fail
+    let result = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs_str);
+        })
+        .send()
+        .await;
+    assert!(result.is_err());
+
+    // GetObjectAttributes with SSE-C headers should succeed
+    let attrs_str2 = "ETag,Checksum,ObjectParts,StorageClass,ObjectSize";
+    let resp = client
+        .get_object_attributes()
+        .bucket(&bucket)
+        .key(key)
+        .object_attributes(aws_sdk_s3::types::ObjectAttributes::Etag)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert("x-amz-object-attributes", attrs_str2);
+            req.headers_mut().insert("x-amz-server-side-encryption-customer-algorithm", "AES256");
+            req.headers_mut().insert("x-amz-server-side-encryption-customer-key", SSE_KEY_A);
+            req.headers_mut().insert("x-amz-server-side-encryption-customer-key-MD5", SSE_KEY_A_MD5);
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.object_size(), Some(objlen as i64));
+    assert_eq!(resp.e_tag().unwrap(), &etag);
+    assert_eq!(
+        *resp.storage_class().unwrap(),
+        aws_sdk_s3::types::StorageClass::Standard
+    );
+    assert!(resp.object_parts().is_none());
+}
+
 #[tokio::test]
 async fn test_get_object_torrent() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();

@@ -91,6 +91,7 @@ static inline bool parse_xattr_name(const std::string& xattr, std::string& key) 
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
 #define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
+#define RGW_NSFS_ATTR_MULTIPART_PART_CKSUMS "multipart_part_cksums"
 
 #define RGW_NSFS_ATTR_VERSION_ID "version_id"
 #define RGW_NSFS_ATTR_DELETE_MARKER "delete_marker"
@@ -3922,6 +3923,9 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
     return 0;
   }
 
+  std::vector<rgw::cksum::Cksum> part_cksums;
+  decode_raw_attr(state.attrset, RGW_NSFS_ATTR_MULTIPART_PART_CKSUMS, part_cksums);
+
   int nparts = part_sizes.size();
   int start = marker;
   int emitted = 0;
@@ -3934,6 +3938,9 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
     Part part;
     part.part_number = i + 1;
     part.part_size = part_sizes[i];
+    if (i < (int)part_cksums.size() && part_cksums[i].type != rgw::cksum::Type::none) {
+      part.cksum = part_cksums[i];
+    }
     int ret = each_func(part);
     if (ret < 0) {
       return ret;
@@ -5564,6 +5571,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
   std::vector<uint64_t> part_sizes;
+  std::vector<rgw::cksum::Cksum> part_cksums;
 
   ofs = accounted_size = 0;
 
@@ -5648,6 +5656,11 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 #endif
 
       part_sizes.push_back(part->get_size());
+      if (auto& ck = part->get_cksum(); ck) {
+        part_cksums.push_back(*ck);
+      } else {
+        part_cksums.emplace_back();
+      }
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
@@ -5674,6 +5687,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     uint16_t pc = total_parts;
     encode_attr(attrs, RGW_NSFS_ATTR_MULTIPART_PART_COUNT, pc);
     encode_attr(attrs, RGW_NSFS_ATTR_MULTIPART_PART_SIZES, part_sizes);
+    encode_attr(attrs, RGW_NSFS_ATTR_MULTIPART_PART_CKSUMS, part_cksums);
   }
 
   NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);

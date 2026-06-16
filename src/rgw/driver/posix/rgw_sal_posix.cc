@@ -65,6 +65,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
 #define RGW_POSIX_ATTR_MULTIPART_PART_SIZES "POSIX-Multipart-Part-Sizes"
+#define RGW_POSIX_ATTR_MULTIPART_PART_CKSUMS "POSIX-Multipart-Part-Cksums"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -3845,6 +3846,9 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
     return 0;
   }
 
+  std::vector<rgw::cksum::Cksum> part_cksums;
+  decode_raw_attr(state.attrset, RGW_POSIX_ATTR_MULTIPART_PART_CKSUMS, part_cksums);
+
   int nparts = part_sizes.size();
   int start = marker;
   int emitted = 0;
@@ -3857,6 +3861,9 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
     Part part;
     part.part_number = i + 1;
     part.part_size = part_sizes[i];
+    if (i < (int)part_cksums.size() && part_cksums[i].type != rgw::cksum::Type::none) {
+      part.cksum = part_cksums[i];
+    }
     int ret = each_func(part);
     if (ret < 0) {
       return ret;
@@ -4929,6 +4936,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
   std::vector<uint64_t> part_sizes;
+  std::vector<rgw::cksum::Cksum> part_cksums;
 
   ofs = accounted_size = 0;
 
@@ -5013,6 +5021,11 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 #endif
 
       part_sizes.push_back(part->get_size());
+      if (auto& ck = part->get_cksum(); ck) {
+        part_cksums.push_back(*ck);
+      } else {
+        part_cksums.emplace_back();
+      }
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
@@ -5039,6 +5052,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     uint16_t pc = total_parts;
     encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc);
     encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes);
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_CKSUMS, part_cksums);
 
     ret = shadow->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
