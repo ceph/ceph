@@ -325,6 +325,37 @@ check "stats: --marker missing value"      114 "--marker: 1 required TEXT missin
 
 # ============================================================
 echo ""
+echo "=== bucket layout ==="
+# ============================================================
+
+check "layout: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket layout strayarg
+check "layout: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket layout
+check "layout: stray between bucket and layout" 22 "ERROR: unexpected argument: 'extra'" \
+  bucket extra layout
+
+check "layout: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket layout --fakeflag
+
+check "layout: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+  bucket layout --bucket
+check "layout: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+  bucket layout --bucket-id
+check "layout: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+  bucket layout --tenant
+check "layout: --format missing value"    114 "--format: 1 required TEXT missing" \
+  bucket layout --format
+
+# handler-level (cluster): bucket_name.empty() is checked inside the action,
+# nonexistent bucket fails init_bucket silently with exit 2 (legacy quirk kept)
+check_cluster "layout: missing --bucket" 22 "ERROR: bucket not specified" -- \
+  bucket layout
+check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- \
+  bucket layout --bucket cli11-no-such-bucket
+
+# ============================================================
+echo ""
 echo "=== bucket link ==="
 # ============================================================
 
@@ -1287,6 +1318,14 @@ if cluster_running; then
         bucket stats --show-restore-stats --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket stats --format json" 0 "" -- \
         bucket stats --format json --bucket "$_test_bucket"
+
+      # bucket layout: dumps the bucket's layout as JSON (index/log generations)
+      check_cluster "integration: bucket layout" 0 "current_index" -- \
+        bucket layout --bucket "$_test_bucket"
+      check_cluster "integration: bucket layout --format json" 0 "current_index" -- \
+        bucket layout --bucket "$_test_bucket" --format json
+      check_cluster "integration: bucket layout --tenant ''" 0 "current_index" -- \
+        bucket layout --bucket "$_test_bucket" --tenant ""
 
       # bucket unlink: unlink the bucket from the user
       check_cluster "integration: bucket unlink" 0 "" -- \

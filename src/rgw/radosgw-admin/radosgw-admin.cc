@@ -977,7 +977,6 @@ static SimpleCmd::Commands all_cmds = {
   { "key create", OPT::KEY_CREATE },
   { "key rm", OPT::KEY_RM },
   { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
-  { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
@@ -4068,9 +4067,9 @@ int main(int argc, const char **argv)
     // TODO: remove this block and the !route_bucket_to_legacy guard below once
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
-        "list", "stats", "link", "unlink", "check", "rm", "remove"};
+        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout"};
     static const std::set<std::string_view> legacy_bucket_words = {
-        "limit", "layout", "sync", "rewrite", "reshard", "set-min-shards",
+        "limit", "sync", "rewrite", "reshard", "set-min-shards",
         "chown", "radoslist", "rados", "shard", "object", "resync", "logging"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
@@ -4259,6 +4258,7 @@ int main(int argc, const char **argv)
       auto* bucket_check_unlinked = bucket_check->add_subcommand("unlinked", "check for object versions that are not visible in a bucket listing");
       auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "remove bucket");
       bucket_rm->alias("remove");
+      auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -4333,6 +4333,12 @@ int main(int argc, const char **argv)
       add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC")->ignore_underscore();
       add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency")->ignore_underscore();
       add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+
+      // bucket layout options
+      add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_layout, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4580,6 +4586,30 @@ int main(int argc, const char **argv)
             RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
                                             bypass_gc, false, false);
           }
+          return 0;
+        };
+      });
+
+      bucket_layout->callback(
+          [&cli11_readonly, &cli11_action,
+           &bucket_name, &bucket_id, &tenant, &bucket, &formatter] {
+        cli11_readonly = true;
+
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &bucket,
+                        &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          const auto& bucket_info = bucket->get_info();
+          formatter->open_object_section("layout");
+          encode_json("layout", bucket_info.layout, formatter.get());
+          formatter->close_section();
+          formatter->flush(cout);
           return 0;
         };
       });
@@ -5343,7 +5373,6 @@ int main(int argc, const char **argv)
 			 OPT::ACCOUNT_STATS,
 			 OPT::ACCOUNT_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
-			 OPT::BUCKET_LAYOUT,
 			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
@@ -8380,22 +8409,6 @@ int main(int argc, const char **argv)
 	"************************************" << std::endl;
       return -ret;
     }
-  }
-
-  if (opt_cmd == OPT::BUCKET_LAYOUT) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    const auto& bucket_info = bucket->get_info();
-    formatter->open_object_section("layout");
-    encode_json("layout", bucket_info.layout, formatter.get());
-    formatter->close_section();
-    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SHARD_OBJECTS) {
