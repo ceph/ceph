@@ -4282,6 +4282,9 @@ bool Client::_flush(Inode *in, Context *onfinish)
 
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
+    if (in->cap_refs[CEPH_CAP_FILE_BUFFER] || in->cap_refs[CEPH_CAP_FILE_CACHE]) {
+      _flushed(in);
+    }
     onfinish->complete(0);
     return true;
   }
@@ -4326,14 +4329,12 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
   // Called from ObjectCacher's finisher without client_lock (write oncommit is
   // not wrapped in C_Lock).  Re-acquire client_lock for cap bookkeeping.
-  if (is_unmounting()) {
-    return;
-  }
-
   bool invalidated = false;
+  bool clean = false;
   {
     auto oc_lock = objectcacher->acquire_cache_lock();
     invalidated = oset->invalidated;
+    clean = !oset->dirty_or_tx;
   }
 
   Inode *in = static_cast<Inode *>(oset->parent);
@@ -4343,8 +4344,11 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
   if (invalidated) {
     return;
   }
-  if (!in->oset.dirty_or_tx) {
+  if (clean) {
     _flushed(in);
+    if (is_unmounting()) {
+      delay_put_inodes(true);
+    }
   }
 }
 
@@ -6290,6 +6294,9 @@ void Client::_unmount(bool abort)
 	_release(in);
 	_flush(in, new C_Client_FlushComplete(this, in));
       }
+    }
+    if (!abort && !blocklisted) {
+      objectcacher->wait_for_flush_callbacks();
     }
   }
 
