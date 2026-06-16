@@ -20,6 +20,8 @@
 #                       testing (requires podman, jq, openssl, curl)
 #   --with-kafka        Start a local Kafka broker for notification testing
 #                       (requires podman)
+#   --with-vault        Start a local HashiCorp Vault for SSE-KMS / SSE-S3
+#                       testing (requires podman, curl)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -35,6 +37,7 @@ LWE=false
 CLEAN=false
 KEYCLOAK=false
 KAFKA=false
+VAULT=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
 		--clean)      CLEAN=true; shift ;;
 		--with-keycloak) KEYCLOAK=true; shift ;;
 		--with-kafka) KAFKA=true; shift ;;
+		--with-vault) VAULT=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -90,6 +94,8 @@ if command -v podman &>/dev/null; then
 	podman rm keycloak-vstart 2>/dev/null || true
 	podman stop kafka-vstart 2>/dev/null || true
 	podman rm kafka-vstart 2>/dev/null || true
+	podman stop vault-vstart 2>/dev/null || true
+	podman rm vault-vstart 2>/dev/null || true
 fi
 
 # --- clean data dirs ---
@@ -136,11 +142,33 @@ fi
 # --- run vstart.sh (bootstraps users + config) ---
 
 echo "==> running vstart.sh --rgw_store $STORE"
+
+VSTART_OPTS=(
+	-o "rgw_${STORE}_cache_max_buckets=500"
+	-o 'rgw_multipart_min_part_size=32'
+)
+
+if $VAULT; then
+	VSTART_OPTS+=(
+		-o 'rgw_crypt_s3_kms_backend=vault'
+		-o 'rgw_crypt_vault_auth=token'
+		-o "rgw_crypt_vault_addr=http://127.0.0.1:8200"
+		-o "rgw_crypt_vault_token_file=$BUILD_DIR/vault-token"
+		-o 'rgw_crypt_vault_secret_engine=transit'
+		-o 'rgw_crypt_vault_prefix=/v1/transit/'
+		-o 'rgw_crypt_sse_s3_backend=vault'
+		-o 'rgw_crypt_sse_s3_vault_auth=token'
+		-o "rgw_crypt_sse_s3_vault_addr=http://127.0.0.1:8200"
+		-o "rgw_crypt_sse_s3_vault_token_file=$BUILD_DIR/vault-token"
+		-o 'rgw_crypt_sse_s3_vault_secret_engine=transit'
+		-o 'rgw_crypt_sse_s3_vault_prefix=/v1/transit/'
+	)
+fi
+
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
 	"$SRC_DIR/src/vstart.sh" -n -d \
 	--rgw_store "$STORE" \
-	-o "rgw_${STORE}_cache_max_buckets=500" \
-	-o 'rgw_multipart_min_part_size=32'
+	"${VSTART_OPTS[@]}"
 
 # --- for non-GPFS, vstart already started the daemon ---
 
@@ -268,12 +296,28 @@ if $KAFKA; then
 	S3TEST_CONF="$S3CONF" "$SRC_DIR/src/script/rgw/kafka-vstart.sh"
 fi
 
+if $VAULT; then
+	echo "==> starting Vault sidecar"
+	"$SRC_DIR/src/script/rgw/vault-vstart.sh"
+
+	# inject kms_keyid values into [s3 main] section
+	if [[ -f "$S3CONF" ]]; then
+		sed -i 's/^#kms_keyid = .*/kms_keyid = testkey-1/' "$S3CONF"
+		if ! grep -q '^kms_keyid2' "$S3CONF"; then
+			sed -i '/^kms_keyid = /a kms_keyid2 = testkey-2' "$S3CONF"
+		fi
+	fi
+fi
+
 # --- status + what-next output ---
 
 S3TESTS_DIR="$SRC_DIR/qa/workunits/rgw/s3tests-rs"
 FEATURE_FLAG="fails_on_nsfs"
 if [[ "$STORE" == "posix" ]]; then
 	FEATURE_FLAG="fails_on_posix"
+fi
+if $VAULT; then
+	FEATURE_FLAG="${FEATURE_FLAG},has_vault"
 fi
 
 echo ""
@@ -284,6 +328,9 @@ if $KEYCLOAK; then
 fi
 if $KAFKA; then
 	echo "    Kafka: localhost:9092 (endpoint: kafka://localhost:9092)"
+fi
+if $VAULT; then
+	echo "    Vault: http://localhost:8200 (transit keys: testkey-1, testkey-2)"
 fi
 echo ""
 echo "To run tests:"
@@ -298,4 +345,7 @@ if $KEYCLOAK; then
 fi
 if $KAFKA; then
 	echo "  $SRC_DIR/src/script/rgw/kafka-vstart.sh --stop"
+fi
+if $VAULT; then
+	echo "  $SRC_DIR/src/script/rgw/vault-vstart.sh --stop"
 fi
