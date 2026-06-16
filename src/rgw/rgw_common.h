@@ -1338,6 +1338,7 @@ struct req_state : DoutPrefixProvider {
    * overwritten */
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> object;
+  std::vector<std::unique_ptr<rgw::sal::Object>> objects;
   std::string src_tenant_name;
   std::string src_bucket_name;
   std::unique_ptr<rgw::sal::Object> src_object;
