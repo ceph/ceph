@@ -281,6 +281,43 @@ else:
                 NVMeoFClient.pb2.get_thread_stats_req()
             )
 
+        @UpdatePermission
+        @Endpoint('PUT', '/refresh_network')
+        @NvmeofCLICommand(
+            "nvmeof gateway refresh_network", model.GwRefreshNetworkStatus,
+            alias="nvmeof gw refresh_network",
+            success_message_template=("Refreshed configured network masks for subsystem "
+                                      "{nqn} on this gateway: Successful{added}{removed}"),
+            success_message_map={
+                "added": lambda v, _f: f"\nAdded: {', '.join(v)}" if v else "",
+                "removed": lambda v, _f: f"\nRemoved: {', '.join(v)}" if v else "",
+            }
+        )
+        @EndpointDoc(
+            "Re-evaluate subsystem network masks and update auto-listeners for this gateway",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+            },
+        )
+        @convert_to_model(model.GwRefreshNetworkStatus)
+        @handle_nvmeof_error
+        def refresh_network(self, nqn: str, gw_group: Optional[str] = None,
+                            server_address: Optional[str] = None,
+                            traddr: Optional[str] = None):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.gw_refresh_network(
+                NVMeoFClient.pb2.gw_refresh_network_req(subsystem_nqn=nqn)
+            )
+
     @APIRouter("/nvmeof/spdk", Scope.NVME_OF)
     @APIDoc("NVMe-oF SPDK Management API", "NVMe-oF SPDK")
     class NVMeoFSpdk(RESTController):
