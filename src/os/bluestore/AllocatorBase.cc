@@ -207,3 +207,31 @@ void AllocatorBase::FreeStateHistogram::foreach(
     ++i;
   }
 }
+void AllocatorPerf::_init_logger(std::string_view name) {
+  PerfCountersBuilder b(cct,
+                        "bluestore-alloc-" + std::string(name),
+                        l_bluestore_allocator_first,
+                        l_bluestore_allocator_last);
+
+  b.add_time_avg(l_bluestore_allocator_alloc_process_lat,
+    "alloc_process_lat",
+    "Allocator processing latency",
+    "apl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_allocator_lock_wait_lat,
+    "lock_wait_lat",
+    "Allocator lock wait latency",
+    "lwl",
+    PerfCountersBuilder::PRIO_USEFUL);
+
+  logger = b.create_perf_counters();
+
+  cct->get_perfcounters_collection()->add(logger);
+}
+void AllocatorPerf::_shutdown_logger() {
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+}
