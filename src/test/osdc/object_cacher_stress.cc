@@ -63,7 +63,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   FakeWriteback writeback(g_ceph_context, &lock, delay_ns);
 
-  ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
+  ObjectCacher obc(g_ceph_context, "test", writeback, NULL, NULL,
 		   g_conf()->client_oc_size,
 		   g_conf()->client_oc_max_objects,
 		   g_conf()->client_oc_max_dirty,
@@ -183,7 +183,7 @@ int correctness_test(uint64_t delay_ns)
   ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   MemWriteback writeback(g_ceph_context, &lock, delay_ns);
 
-  ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
+  ObjectCacher obc(g_ceph_context, "test", writeback, NULL, NULL,
 		   1<<21, // max cache size, 2MB
 		   1, // max objects, just one
 		   1<<18, // max dirty, 256KB
@@ -334,9 +334,10 @@ int correctness_test(uint64_t delay_ns)
     std::cout << "unclean buffers left over!" << std::endl;
     vector<ObjectExtent> discard_extents;
     int i = 0;
-    for (auto oi = object_set.objects.begin(); !oi.end(); ++oi) {
+    object_set.for_each_object([&](ObjectCacher::Object *ob) {
       discard_extents.emplace_back(oid, i++, 0, 1<<22, 0);
-    }
+      return true;  // continue iteration
+    });
     obc.discard_set(&object_set, discard_extents);
     lock.unlock();
     obc.stop();

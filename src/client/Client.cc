@@ -459,7 +459,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   // osd interfaces
   writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
 					    &client_lock));
-  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
+  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
@@ -3684,9 +3684,15 @@ void Client::_put_inode(Inode *in, int n)
     remove_all_caps(in);
 
     ldout(cct, 10) << __func__ << " deleting " << *in << dendl;
-    bool unclean = objectcacher->release_set(&in->oset);
-    ceph_assert(!unclean);
-    inode_map.erase(in->vino());
+    {
+      auto oc_lock = objectcacher->acquire_cache_lock();
+      if (is_unmounting()) {
+	objectcacher->purge_set(&in->oset);
+      }
+      bool unclean = objectcacher->release_set(&in->oset);
+      ceph_assert(!unclean);
+      inode_map.erase(in->vino());
+    }
     if (use_faked_inos())
       _release_faked_ino(in);
 
@@ -4310,11 +4316,28 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
-  //  std::scoped_lock l(client_lock);
-  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));   // will be called via dispatch() -> objecter -> ...
+  // Called from ObjectCacher's finisher without client_lock (write oncommit is
+  // not wrapped in C_Lock).  Re-acquire client_lock for cap bookkeeping.
+  if (is_unmounting()) {
+    return;
+  }
+
+  bool invalidated = false;
+  {
+    auto oc_lock = objectcacher->acquire_cache_lock();
+    invalidated = oset->invalidated;
+  }
+
   Inode *in = static_cast<Inode *>(oset->parent);
   ceph_assert(in);
-  _flushed(in);
+
+  std::scoped_lock l(client_lock);
+  if (invalidated) {
+    return;
+  }
+  if (!in->oset.dirty_or_tx) {
+    _flushed(in);
+  }
 }
 
 void Client::_flushed(Inode *in)

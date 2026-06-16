@@ -129,7 +129,7 @@ void ObjectCacherObjectDispatch<I>::init() {
                 << " max_dirty_age=" << max_dirty_age << dendl;
 
   m_object_cacher = new ObjectCacher(cct, m_image_ctx->perfcounter->get_name(),
-                                     *m_writeback_handler, m_cache_lock,
+                                     *m_writeback_handler,
                                      nullptr, nullptr, cache_size,
                                      10,  /* reset this in init */
                                      init_max_dirty, target_dirty,
