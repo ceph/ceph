@@ -2575,3 +2575,164 @@ async fn test_object_write_with_chunked_transfer_encoding() {
         .await
         .unwrap();
 }
+
+#[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw — https://tracker.ceph.com/issues/64841")]
+#[tokio::test]
+async fn test_100_continue_error_retry() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let not_bucket = format!("{}-but-doesnt-exist", bucket);
+    let result = client
+        .put_object()
+        .bucket(&not_bucket)
+        .key("foo")
+        .body(ByteStream::from_static(b"bar"))
+        .send()
+        .await;
+    assert_s3_err!(result, 404, "NoSuchBucket");
+
+    // second request on same client should still work
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key("foo")
+        .body(ByteStream::from_static(b"bar"))
+        .send()
+        .await
+        .unwrap();
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_atomic_conditional_write_1mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "testobj";
+    let file_size = 1024 * 1024;
+
+    let data_a = vec![b'A'; file_size];
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data_a))
+        .send()
+        .await
+        .unwrap();
+
+    // verify A
+    let resp = client.get_object().bucket(&bucket).key(key).send().await.unwrap();
+    let body = resp.body.collect().await.unwrap().into_bytes();
+    assert!(body.iter().all(|&b| b == b'A'));
+
+    // overwrite with B using If-Match: *
+    let data_b = vec![b'B'; file_size];
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data_b))
+        .customize()
+        .mutate_request(|req| {
+            req.headers_mut().insert("If-Match", "*");
+        })
+        .send()
+        .await
+        .unwrap();
+
+    // verify B
+    let resp = client.get_object().bucket(&bucket).key(key).send().await.unwrap();
+    let body = resp.body.collect().await.unwrap().into_bytes();
+    assert!(body.iter().all(|&b| b == b'B'));
+}
+
+#[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[tokio::test]
+async fn test_atomic_dual_conditional_write_1mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "testobj";
+    let file_size = 1024 * 1024;
+
+    // write A
+    let data_a = vec![b'A'; file_size];
+    let resp_a = client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data_a))
+        .send()
+        .await
+        .unwrap();
+    let etag_a = resp_a.e_tag().unwrap().trim_matches('"').to_string();
+
+    // write B with If-Match on A's etag — should succeed
+    let data_b = vec![b'B'; file_size];
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data_b))
+        .if_match(&etag_a)
+        .send()
+        .await
+        .unwrap();
+
+    // write C with If-Match on A's stale etag — should fail (B replaced A)
+    let data_c = vec![b'C'; file_size];
+    let result = client
+        .put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(ByteStream::from(data_c))
+        .if_match(&etag_a)
+        .send()
+        .await;
+    assert_s3_err!(result, 412, "PreconditionFailed");
+
+    // verify B won
+    let resp = client.get_object().bucket(&bucket).key(key).send().await.unwrap();
+    let body = resp.body.collect().await.unwrap().into_bytes();
+    assert!(body.iter().all(|&b| b == b'B'));
+}
+
+#[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[tokio::test]
+async fn test_atomic_write_bucket_gone() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    // delete the bucket first
+    client.delete_bucket().bucket(&bucket).send().await.unwrap();
+
+    // PutObject to deleted bucket → 404
+    let result = client
+        .put_object()
+        .bucket(&bucket)
+        .key("foo")
+        .body(ByteStream::from(vec![b'A'; 1024 * 1024]))
+        .send()
+        .await;
+    assert_s3_err!(result, 404, "NoSuchBucket");
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_account_usage() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let resp = s3_tests_rs::http::signed_request(
+        reqwest::Method::GET,
+        "",
+        "usage",
+        None,
+    )
+    .await;
+    assert_eq!(resp.status, 200);
+    let body = resp.body;
+    assert!(body.contains("QuotaMaxBytes") || body.contains("Usage"));
+}

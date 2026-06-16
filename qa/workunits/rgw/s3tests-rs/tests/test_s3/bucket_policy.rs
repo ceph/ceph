@@ -1,5 +1,5 @@
 use aws_sdk_s3::primitives::ByteStream;
-use s3_tests_rs::client::{get_alt_client, get_client, get_unauthenticated_client};
+use s3_tests_rs::client::{get_alt_client, get_client, get_iam_root_client, get_iam_root_s3client, build_s3_client, get_unauthenticated_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{create_objects_in_new_bucket, get_new_bucket};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
@@ -2338,4 +2338,136 @@ async fn test_bucket_policy_put_obj_request_obj_tag() {
         .send()
         .await
         .unwrap();
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_bucket_policy_deny_self_denied_policy() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let root_client = get_iam_root_s3client();
+    let iam_client = get_iam_root_client();
+    let bucket = get_new_bucket(Some(&root_client)).await;
+
+    let resource1 = format!("arn:aws:s3:::{}", bucket);
+    let resource2 = format!("arn:aws:s3:::{}/*", bucket);
+    let policy = json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": [
+                "s3:PutBucketPolicy",
+                "s3:GetBucketPolicy",
+                "s3:DeleteBucketPolicy",
+            ],
+            "Resource": [resource1, resource2]
+        }]
+    });
+    let policy_str = serde_json::to_string(&policy).unwrap();
+
+    root_client
+        .put_bucket_policy()
+        .bucket(&bucket)
+        .policy(&policy_str)
+        .send()
+        .await
+        .unwrap();
+
+    // create an IAM user under the same account
+    let user_name = format!("policyuser-{}", rand::random::<u32>());
+    iam_client.create_user().user_name(&user_name).send().await.unwrap();
+    let keys = iam_client
+        .create_access_key()
+        .user_name(&user_name)
+        .send()
+        .await
+        .unwrap();
+    let ak = keys.access_key().unwrap();
+    let user_s3 = build_s3_client(
+        ak.access_key_id(),
+        ak.secret_access_key(),
+    );
+
+    // non-root user should be denied
+    let result = user_s3.get_bucket_policy().bucket(&bucket).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+    let result = user_s3.delete_bucket_policy().bucket(&bucket).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+    let result = user_s3.put_bucket_policy().bucket(&bucket).policy(&policy_str).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    // root account should still be able to manage policy
+    let resp = root_client.get_bucket_policy().bucket(&bucket).send().await.unwrap();
+    assert!(!resp.policy().unwrap_or_default().is_empty());
+    root_client.delete_bucket_policy().bucket(&bucket).send().await.unwrap();
+    root_client.put_bucket_policy().bucket(&bucket).policy(&policy_str).send().await.unwrap();
+
+    // cleanup
+    iam_client.delete_access_key().user_name(&user_name).access_key_id(ak.access_key_id()).send().await.unwrap();
+    iam_client.delete_user().user_name(&user_name).send().await.unwrap();
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_bucket_policy_deny_self_denied_policy_confirm_header() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let root_client = get_iam_root_s3client();
+    let iam_client = get_iam_root_client();
+    let bucket = get_new_bucket(Some(&root_client)).await;
+
+    let resource1 = format!("arn:aws:s3:::{}", bucket);
+    let resource2 = format!("arn:aws:s3:::{}/*", bucket);
+    let policy = json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": [
+                "s3:PutBucketPolicy",
+                "s3:GetBucketPolicy",
+                "s3:DeleteBucketPolicy",
+            ],
+            "Resource": [resource1, resource2]
+        }]
+    });
+    let policy_str = serde_json::to_string(&policy).unwrap();
+
+    // put with ConfirmRemoveSelfBucketAccess
+    root_client
+        .put_bucket_policy()
+        .bucket(&bucket)
+        .policy(&policy_str)
+        .confirm_remove_self_bucket_access(true)
+        .send()
+        .await
+        .unwrap();
+
+    // create an IAM user under the same account
+    let user_name = format!("policyuser-{}", rand::random::<u32>());
+    iam_client.create_user().user_name(&user_name).send().await.unwrap();
+    let keys = iam_client
+        .create_access_key()
+        .user_name(&user_name)
+        .send()
+        .await
+        .unwrap();
+    let ak = keys.access_key().unwrap();
+    let user_s3 = build_s3_client(
+        ak.access_key_id(),
+        ak.secret_access_key(),
+    );
+
+    // non-root user should be denied
+    let result = user_s3.get_bucket_policy().bucket(&bucket).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    // with ConfirmRemoveSelfBucketAccess, root should ALSO be denied
+    let result = root_client.get_bucket_policy().bucket(&bucket).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+    let result = root_client.delete_bucket_policy().bucket(&bucket).send().await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    // cleanup
+    iam_client.delete_access_key().user_name(&user_name).access_key_id(ak.access_key_id()).send().await.unwrap();
+    iam_client.delete_user().user_name(&user_name).send().await.unwrap();
 }

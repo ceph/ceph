@@ -1989,3 +1989,182 @@ async fn test_get_paginated_multipart_object_attributes() {
         assert!(part.checksum_sha256().is_none());
     }
 }
+
+#[tokio::test]
+async fn test_multipart_upload_complete_without_create() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let result = client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key("mymultipart")
+        .upload_id("abc1234def")
+        .multipart_upload(
+            CompletedMultipartUpload::builder()
+                .parts(
+                    CompletedPart::builder()
+                        .e_tag("1234")
+                        .part_number(1)
+                        .build(),
+                )
+                .build(),
+        )
+        .send()
+        .await;
+    assert_s3_err!(result, 404, "NoSuchUpload");
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_multipart_upload_resend_part() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "mymultipart";
+    let part_size = 5 * 1024 * 1024;
+    let objlen = 30 * 1024 * 1024;
+    let nparts = objlen / part_size;
+    let content_type = "text/bla";
+    let metadata = std::collections::HashMap::from([("foo".to_string(), "bar".to_string())]);
+
+    let resp = client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .content_type(content_type)
+        .metadata("foo", "bar")
+        .send()
+        .await
+        .unwrap();
+    let upload_id = resp.upload_id().unwrap().to_string();
+
+    let mut data = Vec::with_capacity(objlen);
+    let mut parts = Vec::new();
+
+    for pn in 1..=nparts {
+        let part_data: Vec<u8> = (0..part_size).map(|i| (((pn - 1) * part_size + i) % 256) as u8).collect();
+        data.extend_from_slice(&part_data);
+
+        let resp = client
+            .upload_part()
+            .bucket(&bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .part_number(pn as i32)
+            .body(ByteStream::from(part_data.clone()))
+            .send()
+            .await
+            .unwrap();
+
+        parts.push(
+            CompletedPart::builder()
+                .e_tag(resp.e_tag().unwrap_or_default())
+                .part_number(pn as i32)
+                .build(),
+        );
+
+        // resend part 1 with same data — last writer should win
+        if pn == 1 {
+            let resend_resp = client
+                .upload_part()
+                .bucket(&bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .part_number(1)
+                .body(ByteStream::from(part_data))
+                .send()
+                .await
+                .unwrap();
+            parts[0] = CompletedPart::builder()
+                .e_tag(resend_resp.e_tag().unwrap_or_default())
+                .part_number(1)
+                .build();
+        }
+    }
+
+    client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(parts)).build())
+        .send()
+        .await
+        .unwrap();
+
+    let resp = client.get_object().bucket(&bucket).key(key).send().await.unwrap();
+    assert_eq!(resp.content_type().unwrap(), content_type);
+    assert_eq!(resp.metadata().unwrap().get("foo").unwrap(), "bar");
+    let body = get_body(resp).await;
+    assert_eq!(body.len(), objlen);
+    assert_eq!(body, data);
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_multipart_resend_first_finishes_last() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "mymultipart";
+    let file_size = 8;
+
+    let resp = client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    let upload_id = resp.upload_id().unwrap().to_string();
+
+    let body_a = vec![b'A'; file_size];
+    let body_b = vec![b'B'; file_size];
+
+    // upload part 1 with content A
+    client
+        .upload_part()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .body(ByteStream::from(body_a))
+        .send()
+        .await
+        .unwrap();
+
+    // re-upload part 1 with content B — should replace A
+    let resp_b = client
+        .upload_part()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .body(ByteStream::from(body_b.clone()))
+        .send()
+        .await
+        .unwrap();
+
+    let parts = vec![
+        CompletedPart::builder()
+            .e_tag(resp_b.e_tag().unwrap_or_default())
+            .part_number(1)
+            .build(),
+    ];
+
+    client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(parts)).build())
+        .send()
+        .await
+        .unwrap();
+
+    let resp = client.get_object().bucket(&bucket).key(key).send().await.unwrap();
+    let body = get_body(resp).await;
+    assert_eq!(body, body_b);
+}
