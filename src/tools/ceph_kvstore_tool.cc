@@ -26,6 +26,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 
+#include "common/pretty_binary.h"
 #include "kvstore_tool.h"
 
 using namespace std;
@@ -34,6 +35,8 @@ void usage(const char *pname)
 {
   std::cout << "Usage: " << pname << " <rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
+    << "Options:\n"
+    << "  --pretty-binary-key    Use/dump binary keys in a print pretty format\n"
     << "Commands:\n"
     << "  list [prefix]\n"
     << "  list-crc [prefix]\n"
@@ -56,6 +59,33 @@ void usage(const char *pname)
     << std::endl;
 }
 
+std::string format_key(const std::string &key, bool pretty_binary_key = false)
+{
+  if (pretty_binary_key) {
+    return pretty_binary_string(key);
+  }
+  return url_escape(key);
+}
+
+std::string parse_key(const std::string &key, bool pretty_binary_key, std::string &err)
+{
+  err.clear();
+  try {
+    if (pretty_binary_key)
+      return pretty_binary_string_reverse(key);
+    return url_unescape(key);
+  } catch (const std::invalid_argument &e) {
+    std::ostringstream oss;
+    oss << "invalid pretty binary string: " << e.what();
+    err = oss.str();
+  } catch (const std::runtime_error &e)
+  {
+    err = e.what();
+  }
+
+  return "";
+}
+
 int main(int argc, const char *argv[])
 {
   auto args = argv_to_vec(argc, argv);
@@ -63,6 +93,17 @@ int main(int argc, const char *argv[])
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
+
+  bool pretty_binary_key = [&args] { //pick --pretty-binary-key from args
+    auto arg_it = std::find_if(args.begin(), args.end(),
+        [](const char* val) {return strcmp(val, "--pretty-binary-key") == 0;});
+    if (arg_it != args.end()) {
+      args.erase(arg_it);
+      return true;
+    }
+    return false;
+  }();
+  
   if (ceph_argparse_need_usage(args)) {
     usage(argv[0]);
     exit(0);
@@ -131,13 +172,13 @@ int main(int argc, const char *argv[])
       prefix = url_unescape(argv[4]);
 
     bool do_crc = (cmd == "list-crc");
-    st.list(prefix, do_crc, false);
+    st.list(prefix, do_crc, pretty_binary_key, false);
 
   } else if (cmd == "dump") {
     string prefix;
     if (argc > 4)
       prefix = url_unescape(argv[4]);
-    st.list(prefix, false, true);
+    st.list(prefix, false, pretty_binary_key, true);
 
   } else if (cmd == "exists") {
     string key;
@@ -146,11 +187,17 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    if (argc > 5)
-      key = url_unescape(argv[5]);
+    if (argc > 5) {
+      std::string err;
+      key = parse_key(argv[5], pretty_binary_key, err);
+      if (!err.empty()) {
+        std::cerr << err << std::endl;
+        return 1;
+      }
+    }
 
     bool ret = st.exists(prefix, key);
-    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") "
+    std::cout << "(" << url_escape(prefix) << ", " << format_key(key, pretty_binary_key) << ") "
       << (ret ? "exists" : "does not exist")
       << std::endl;
     return (ret ? 0 : 1);
@@ -161,11 +208,16 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string key(url_unescape(argv[5]));
+    std::string err;
+    std::string key = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
-    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ")";
+    std::cout << "(" << url_escape(prefix) << ", " << format_key(key, pretty_binary_key) << ")";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
       return 1;
@@ -208,11 +260,16 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string key(url_unescape(argv[5]));
+    std::string err;
+    string key = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
-    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") ";
+    std::cout << "(" << url_escape(prefix) << ", " << format_key(key, pretty_binary_key) << ") ";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
       return 1;
@@ -230,16 +287,21 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string key(url_unescape(argv[5]));
+    std::string err;
+    string key = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
     if (!exists) {
-      std::cerr << "(" << url_escape(prefix) << "," << url_escape(key)
+      std::cerr << "(" << url_escape(prefix) << "," << format_key(key, pretty_binary_key)
                 << ") does not exist" << std::endl;
       return 1;
     }
-    std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
+    std::cout << "(" << url_escape(prefix) << "," << format_key(key, pretty_binary_key)
               << ") size " << byte_u_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
@@ -248,7 +310,12 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string key(url_unescape(argv[5]));
+    std::string err;
+    string key = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
     string subcmd(argv[6]);
 
     bufferlist val;
@@ -275,7 +342,7 @@ int main(int argc, const char *argv[])
     bool ret = st.set(prefix, key, val);
     if (!ret) {
       std::cerr << "error setting ("
-                << url_escape(prefix) << "," << url_escape(key) << ")" << std::endl;
+                << url_escape(prefix) << "," << format_key(key, pretty_binary_key) << ")" << std::endl;
       return 1;
     }
   } else if (cmd == "rm") {
@@ -284,12 +351,17 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string key(url_unescape(argv[5]));
+    std::string err;
+    string key = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
 
     bool ret = st.rm(prefix, key);
     if (!ret) {
       std::cerr << "error removing ("
-                << url_escape(prefix) << "," << url_escape(key) << ")"
+                << url_escape(prefix) << "," << format_key(key, pretty_binary_key) << ")"
 		<< std::endl;
       return 1;
     }
@@ -338,7 +410,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::ofstream fs(argv[4]);
-    uint32_t crc = st.traverse(string(), true, false, &fs);
+    uint32_t crc = st.traverse(string(), true, pretty_binary_key, false, &fs);
     std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {
@@ -356,8 +428,19 @@ int main(int argc, const char *argv[])
       return 1;
     }
     string prefix(url_unescape(argv[4]));
-    string start(url_unescape(argv[5]));
-    string end(url_unescape(argv[6]));
+    std::string err;
+    string start = parse_key(argv[5], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
+    string end = parse_key(argv[6], pretty_binary_key, err);
+    if (!err.empty()) {
+      std::cerr << err << std::endl;
+      return 1;
+    }
+    std::cout << "(" << url_escape(prefix) << "," << format_key(start, pretty_binary_key)
+              << " ~ " << format_key(end, pretty_binary_key) << ")" << std::endl;
     st.compact_range(prefix, start, end);
   } else if (cmd == "stats") {
     st.print_stats();
