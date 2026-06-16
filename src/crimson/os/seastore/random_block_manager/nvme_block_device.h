@@ -56,6 +56,11 @@ public:
     : RBMDevice(device_path, dtype, id, store_index) {}
   ~NVMeBlockDevice() = default;
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(
+    size_t len) final {
+    return driver ? driver->alloc_io_buffer(len) : ceph::buffer::create_page_aligned(len);
+  }
+
   open_ertr::future<> open(
     const std::string &in_path,
     seastar::open_flags mode) override;

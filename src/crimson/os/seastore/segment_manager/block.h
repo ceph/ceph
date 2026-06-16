@@ -13,6 +13,7 @@
 #include "crimson/common/layout.h"
 
 #include "crimson/os/seastore/block_io_driver.h"
+#include "crimson/os/seastore/seastore_dma_alloc.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 namespace crimson::os::seastore::segment_manager::block {
@@ -42,8 +43,7 @@ public:
   }
 
   SegmentStateTracker(size_t segments, size_t block_size)
-    : bptr(ceph::buffer::create_page_aligned(
-	     get_raw_size(segments, block_size))),
+    : bptr(alloc_dma_or_page_aligned(get_raw_size(segments, block_size))),
       layout(bptr.length())
   {
     ::memset(
@@ -137,6 +137,11 @@ public:
   }
 
   ~BlockSegmentManager();
+
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(
+    size_t len) final {
+    return driver ? driver->alloc_io_buffer(len) : ceph::buffer::create_page_aligned(len);
+  }
 
   open_ertr::future<SegmentRef> open(segment_id_t id) override;
 

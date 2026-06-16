@@ -1,5 +1,6 @@
 set(crimson_seastore_srcs
   cached_extent.cc
+  seastore_dma_alloc.cc
   lba_mapping.cc
   seastore_types.cc
   segment_manager.cc
