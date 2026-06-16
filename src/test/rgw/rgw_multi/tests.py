@@ -4195,6 +4195,164 @@ def test_topic_notification_sync():
         topic_list = conn.list_topics()
         assert_equal(len(topic_list), 0)
 
+def test_sync_notification_events():
+    """test that s3:ObjectSynced:* events are sent when an object is
+    replicated from one zone to another via multisite data sync.
+    covers: persistent notifications, s3:ObjectSynced:Create events.
+    related: https://tracker.ceph.com/issues/67178"""
+    from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+    import socket
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # need at least 2 rw zones for a meaningful multisite test
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('sync notification test requires >= 2 rw zones')
+
+    zone_a = zonegroup_conns.rw_zones[0]
+    zone_b = zonegroup_conns.rw_zones[1]
+
+    # get a reachable ip for the http receiver
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('10.255.255.255', 1))
+        host = s.getsockname()[0]
+    finally:
+        s.close()
+
+    # http receiver that stores received events
+    received_events = []
+    received_lock = threading.Lock()
+
+    class NotificationHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body = self.rfile.read(content_length)
+                try:
+                    event = json.loads(body)
+                    with received_lock:
+                        received_events.append(event)
+                    log.info('http receiver got event: %s', str(event))
+                except Exception:
+                    log.warning('http receiver got non-json body: %s', body)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            pass
+
+    # let the os assign a free port
+    http_server = ThreadingHTTPServer((host, 0), NotificationHandler)
+    port = http_server.server_address[1]
+    http_thread = threading.Thread(target=http_server.serve_forever)
+    http_thread.daemon = True
+    http_thread.start()
+    log.info('http receiver started on %s:%d', host, port)
+
+    topic_arn = None
+    bucket_name = None
+    try:
+        # wait for zones to sync
+        zonegroup_meta_checkpoint(zonegroup)
+        time.sleep(config.checkpoint_delay)
+
+        # create topic with real http endpoint on zone_a
+        # subscribe to s3:ObjectSynced:* events
+        topic_name = gen_topic_name()
+        endpoint_address = 'http://' + host + ':' + str(port)
+        attributes = {
+            'push-endpoint': endpoint_address,
+            'persistent': 'true',
+        }
+        topic_arn = zone_a.create_topic(topic_name, attributes)
+        log.info('created topic=%s arn=%s endpoint=%s', topic_name, topic_arn, endpoint_address)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        # verify topic synced to zone_b
+        zone_b_topics = zone_b.list_topics()
+        zone_b_arns = [t['TopicArn'] for t in zone_b_topics]
+        assert_true(topic_arn in zone_b_arns,
+                    'topic did not sync to secondary zone')
+
+        # create bucket on zone_a
+        bucket_name = gen_bucket_name()
+        bucket = zone_a.create_bucket(bucket_name)
+        log.info('created bucket=%s on zone=%s', bucket_name, zone_a.name)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        # create notification subscribing to s3:ObjectSynced:Create
+        notification_id = 'notif-' + run_prefix
+        topic_conf = [{'Id': notification_id,
+                       'TopicArn': topic_arn,
+                       'Events': ['s3:ObjectSynced:Create']}]
+        zone_a.create_notification(bucket.name, topic_conf)
+        log.info('created notification=%s on bucket=%s', notification_id, bucket_name)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        # verify notification synced to zone_b
+        zone_b_notifs = zone_b.list_notifications(bucket.name)
+        assert_true(len(zone_b_notifs) > 0,
+                    'notification did not sync to secondary zone')
+
+        # put object on zone_b (the secondary)
+        # this will sync to zone_a, triggering s3:ObjectSynced:Create on zone_a
+        key = 'test-object'
+        zone_b.s3_client.put_object(Bucket=bucket_name, Key=key, Body=b'test content')
+        log.info('put object=%s on zone=%s', key, zone_b.name)
+
+        # poll for notification delivery with timeout
+        # the sync notification fires on zone_a when the object arrives via data sync
+        deadline = time.time() + config.checkpoint_retries * config.checkpoint_delay
+        while time.time() < deadline:
+            with received_lock:
+                if len(received_events) > 0:
+                    break
+            time.sleep(config.checkpoint_delay)
+
+        # verify notification was delivered to the http receiver
+        with received_lock:
+            event_count = len(received_events)
+
+        log.info('http receiver got %d events', event_count)
+        assert_true(event_count > 0,
+                    'no sync notifications delivered to http endpoint')
+
+        # verify event contains expected fields
+        with received_lock:
+            event = received_events[0]
+        assert_true('Records' in event, 'event missing Records field')
+        record = event['Records'][0]
+        assert_equal(record['s3']['bucket']['name'], bucket_name)
+        assert_equal(record['s3']['object']['key'], key)
+        assert_true('ObjectSynced' in record['eventName'],
+                    'expected ObjectSynced event, got: %s' % record['eventName'])
+
+        log.info('sync notification delivery verified: %s', record['eventName'])
+
+    finally:
+        http_server.shutdown()
+        http_thread.join(5)
+        http_server.server_close()
+        if bucket_name is not None:
+            try:
+                zone_a.delete_notifications(bucket_name)
+            except Exception as e:
+                log.warning('failed to delete notifications: %s', e)
+            try:
+                zone_a.delete_bucket(bucket_name)
+            except Exception as e:
+                log.warning('failed to delete bucket: %s', e)
+        if topic_arn is not None:
+            try:
+                zone_a.delete_topic(topic_arn)
+            except Exception as e:
+                log.warning('failed to delete topic: %s', e)
+
 def test_account_metadata_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
