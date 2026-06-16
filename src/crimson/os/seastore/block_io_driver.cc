@@ -287,6 +287,15 @@ BlockIODriverRef make_block_io_driver(
     return std::make_unique<KernelBlockIODriver>();
   }
   // SPDK requested (transport id set).
+  if (dtype == device_type_t::ZBD) {
+    // ZBD needs the ZNS command set, which BlockIODriver does not model — refuse
+    // rather than silently fall back or corrupt a zoned namespace. ZBD never
+    // routes through this factory in practice (see ZBDSegmentManager), but guard
+    // here too for safety.
+    throw std::invalid_argument(
+      "seastore_spdk_transport_id is set but device type is ZBD; "
+      "SPDK is not supported for zoned (ZNS) devices");
+  }
 #ifdef HAVE_SPDK
   return std::make_unique<SPDKBlockIODriver>(trid);
 #else
