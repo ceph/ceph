@@ -26,7 +26,7 @@ def task(ctx,config):
     num_concurrent_io=config.get('num_concurrent_io',4)
     smp=config.get('smp',4)
     bench_cmd=' '.join([
-        os.path.join(testdir,'bin','crimson-store-bench'),
+        'crimson-store-bench',
         '--store-path',store_dir,
         '--work-load-type',work_load_type,
         '--duration',str(duration),
