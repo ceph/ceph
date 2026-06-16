@@ -69,11 +69,14 @@ if(WITH_ZNS)
     segment_manager/zbd.cc)
 endif()
 
-# Per-shard SPDK NVMe engine (spdk_nvme_io), shared by the SPDK I/O drivers.
-# Guarded by WITH_SPDK so the default io_uring build pulls in no SPDK code.
+# Per-shard SPDK NVMe engine and the SPDK block/RBM I/O drivers
+# (SPDKBlockIODriver / SPDKNVMeIODriver). Guarded by WITH_SPDK so the
+# default io_uring build pulls in no SPDK code.
 if(WITH_SPDK)
   list(APPEND crimson_seastore_srcs
-    spdk_nvme_io.cc)
+    spdk_nvme_io.cc
+    spdk_block_io_driver.cc
+    random_block_manager/spdk_nvme_io_driver.cc)
 endif()
 
 add_library(crimson-seastore STATIC
