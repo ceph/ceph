@@ -17,7 +17,7 @@ June 16, 2026
 Notable Changes
 ---------------
 
-* Rocky 10 is now supported starting with v20.2.2. Please see the `supported platforms <https://docs.ceph.com/en/latest/start/os-recommendations/#platforms>`_ for current and planned support in Ceph.
+* Rocky 10 package-based installs are now supported starting with v20.2.2. Please see the `supported platforms <https://docs.ceph.com/en/latest/start/os-recommendations/#platforms>`_ for current and planned support in Ceph.
 
 MDS (Metadata Server)
 ---------------------
