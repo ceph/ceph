@@ -72,6 +72,8 @@ ERR_CHOWN_NO_BUCKET="failure: (2) No such file or directory: failed to fetch buc
 ERR_REQUIRES_USER="failure: (22) Invalid argument: requires user or account id"
 ERR_EINVAL="failure: (22) Invalid argument"
 ERR_SUBCOMMAND="A subcommand is required"
+# logging list/flush on a bucket without logging: error message but exit 0 (legacy quirk)
+ERR_NO_LOGGING="does not have logging enabled"
 # legacy message spells the flag with an underscore (pre-migration typo, kept verbatim)
 ERR_INCONSISTENT="using --inconsistent_index can corrupt the bucket index"
 
@@ -419,6 +421,83 @@ check_cluster "limit check: --warnings-only" 0 "" -- \
   bucket limit check --warnings-only
 check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 "" -- \
   bucket limit check --uid cli11_no_such_user
+
+# ============================================================
+echo ""
+echo "=== bucket logging (info/list/flush) ==="
+# ============================================================
+
+# 'bucket logging' is an internal node (require_subcommand): both an incomplete
+# command and an unknown subcommand report "A subcommand is required", exit 106
+check "logging (incomplete command)" 106 "$ERR_SUBCOMMAND" \
+  bucket logging
+check "logging: unknown subcommand"  106 "$ERR_SUBCOMMAND" \
+  bucket logging banana
+
+# stray positional args
+check "logging info: stray after"   22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket logging info strayarg
+check "logging list: stray after"   22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket logging list strayarg
+check "logging flush: stray after"  22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket logging flush strayarg
+check "logging info: stray before"  22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket logging info
+
+# unrecognized flag
+check "logging info: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
+  bucket logging info --fakeflag
+check "logging list: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
+  bucket logging list --fakeflag
+check "logging flush: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket logging flush --fakeflag
+
+# missing option value (flush has no --format)
+check "logging info: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+  bucket logging info --bucket
+check "logging info: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+  bucket logging info --bucket-id
+check "logging info: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+  bucket logging info --tenant
+check "logging info: --format missing value"    114 "--format: 1 required TEXT missing" \
+  bucket logging info --format
+check "logging list: --format missing value"    114 "--format: 1 required TEXT missing" \
+  bucket logging list --format
+check "logging flush: --bucket missing value"   114 "--bucket: 1 required TEXT missing" \
+  bucket logging flush --bucket
+
+# handler-level (cluster): bucket_name.empty() is checked inside the action;
+# a nonexistent bucket fails init_bucket silently with exit 2
+check_cluster "logging info: missing --bucket"  22 "ERROR: bucket not specified" -- \
+  bucket logging info
+check_cluster "logging list: missing --bucket"  22 "ERROR: bucket not specified" -- \
+  bucket logging list
+check_cluster "logging flush: missing --bucket" 22 "ERROR: bucket not specified" -- \
+  bucket logging flush
+check_cluster "logging info: nonexistent bucket (silent exit 2)"  2 "" -- \
+  bucket logging info --bucket cli11-no-such-bucket
+check_cluster "logging list: nonexistent bucket (silent exit 2)"  2 "" -- \
+  bucket logging list --bucket cli11-no-such-bucket
+check_cluster "logging flush: nonexistent bucket (silent exit 2)" 2 "" -- \
+  bucket logging flush --bucket cli11-no-such-bucket
+
+# wrong-position warnings (flag before the leaf subcommand). --bucket/--bucket-id/
+# --format warn then fail on the nonexistent bucket (exit 2); --tenant trips the
+# global "no user ID" check (exit 22) before reaching the bucket.
+check_warns "logging info: --bucket before subcommand"    2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket logging info
+check_warns "logging info: --bucket-id before subcommand" 2 "" "$WARN_BUCKETID_POS" -- \
+  bucket --bucket-id x logging info --bucket cli11-no-such-bucket
+check_warns "logging list: --format before subcommand"    2 "" "$WARN_FORMAT_POS" -- \
+  bucket --format json logging list --bucket cli11-no-such-bucket
+check_warns "logging info: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t logging info --bucket cli11-no-such-bucket
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "logging info: duplicate --bucket" 2 "" "$WARN_BUCKET_DUP" -- \
+  bucket logging info --bucket a --bucket cli11-no-such-bucket
+check_warns "logging list: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
+  bucket logging list --tenant a --tenant b --bucket cli11-no-such-bucket
 
 # ============================================================
 echo ""
@@ -1094,6 +1173,17 @@ check_help "cli11-help buckets list"             buckets list --cli11-help
 check_help "cli11-help buckets rm"               buckets rm --cli11-help
 check_help "cli11-help buckets check"            buckets check --cli11-help
 
+# bucket logging (nested) — the logging node and each leaf, at several positions
+check_help "cli11-help bucket logging"             --cli11-help bucket logging
+check_help "cli11-help logging after bucket"       bucket --cli11-help logging
+check_help "cli11-help bucket logging info"        --cli11-help bucket logging info
+check_help "cli11-help logging info after bucket"  bucket logging --cli11-help info
+check_help "cli11-help after logging info"         bucket logging info --cli11-help
+check_help "cli11-help bucket logging list"        --cli11-help bucket logging list
+check_help "cli11-help after logging list"         bucket logging list --cli11-help
+check_help "cli11-help bucket logging flush"       --cli11-help bucket logging flush
+check_help "cli11-help after logging flush"        bucket logging flush --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1403,6 +1493,16 @@ if cluster_running; then
         bucket limit check --uid "$_test_uid"
       check_cluster "integration: limit check --uid --warnings-only" 0 "" -- \
         bucket limit check --uid "$_test_uid" --warnings-only
+
+      # bucket logging on a bucket WITHOUT logging configured: info is silent
+      # (exit 0, no output); list and flush print an error but still exit 0
+      # (legacy quirk, kept verbatim)
+      check_cluster "integration: logging info (no logging, silent)" 0 "" -- \
+        bucket logging info --bucket "$_test_bucket"
+      check_cluster "integration: logging list (no logging, msg + exit 0)" 0 "$ERR_NO_LOGGING" -- \
+        bucket logging list --bucket "$_test_bucket"
+      check_cluster "integration: logging flush (no logging, msg + exit 0)" 0 "$ERR_NO_LOGGING" -- \
+        bucket logging flush --bucket "$_test_bucket"
 
       # bucket unlink: unlink the bucket from the user
       check_cluster "integration: bucket unlink" 0 "" -- \

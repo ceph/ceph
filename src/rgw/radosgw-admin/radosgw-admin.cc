@@ -993,9 +993,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
-  { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
-  { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
-  { "bucket logging list", OPT::BUCKET_LOGGING_LIST },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -4066,10 +4063,10 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit"};
+        "limit", "logging"};
     static const std::set<std::string_view> legacy_bucket_words = {
         "sync", "rewrite", "reshard", "set-min-shards",
-        "radoslist", "rados", "shard", "object", "resync", "logging"};
+        "radoslist", "rados", "shard", "object", "resync"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4262,6 +4259,11 @@ int main(int argc, const char **argv)
       auto* bucket_limit       = bucket_cmd->add_subcommand("limit", "bucket limit commands");
       auto* bucket_limit_check = bucket_limit->add_subcommand("check", "show bucket sharding stats");
       bucket_limit->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_logging       = bucket_cmd->add_subcommand("logging", "manage bucket logging");
+      auto* bucket_logging_flush = bucket_logging->add_subcommand("flush", "flush pending log records object of source bucket to the log bucket");
+      auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
+      auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
+      bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -4355,6 +4357,23 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_limit_check, "--uid,-i", uid_str, uid_desc);
       add_multilevel_binary_flag(bucket_limit_check, "--warnings-only", warnings_only,
                                  "list only buckets nearing or over the current max objects per shard value")->ignore_underscore();
+
+      // bucket logging flush options
+      add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_flush, "--tenant",    tenant,      tenant_desc);
+
+      // bucket logging info options
+      add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_info, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
+
+      // bucket logging list options
+      add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_logging_list, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4705,6 +4724,154 @@ int main(int argc, const char **argv)
             driver->meta_list_keys_complete(handle);
           }
           return -ret;
+        };
+      });
+
+      bucket_logging_flush->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket] {
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          rgw::bucketlogging::configuration configuration;
+          std::unique_ptr<rgw::sal::Bucket> target_bucket;
+          ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+          if (ret < 0 && ret != -ENODATA) {
+            cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+              << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          } else if (ret == -ENODATA) {
+            cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
+            return 0;
+          }
+
+          // make sure that the logging source attribute is up-to-date
+          if (ret = rgw::bucketlogging::update_bucket_logging_sources(dpp(), target_bucket, bucket->get_key(), true, null_yield); ret < 0) {
+            cerr << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+              << "' in logging target '" << target_bucket->get_key() << "'. error: " << cpp_strerror(ret) << std::endl;
+          }
+
+          std::string obj_name;
+          RGWObjVersionTracker objv_tracker;
+          ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
+          if (ret < 0 && ret != -ENOENT) {
+            cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
+              "'. error: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          std::string old_obj;
+          const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+          ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, false, &old_obj);
+          if (ret < 0) {
+            cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
+              << "'. error: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          cout << "flushed pending logging object '" << old_obj
+            << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+          return 0;
+        };
+      });
+
+      bucket_logging_info->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          const auto& bucket_attrs = bucket->get_attrs();
+          auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+          if (iter != bucket_attrs.end()) {
+            rgw::bucketlogging::configuration configuration;
+            try {
+              configuration.enabled = true;
+              decode(configuration, iter->second);
+            } catch (buffer::error& err) {
+              cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+                << "'. error: " << err.what() << std::endl;
+              return  EINVAL;
+            }
+            encode_json("logging", configuration, formatter.get());
+            formatter->flush(cout);
+          }
+          iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
+          if (iter != bucket_attrs.end()) {
+            rgw::bucketlogging::source_buckets sources;
+            try {
+              decode(sources, iter->second);
+            } catch (buffer::error& err) {
+              cerr << "ERROR: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+                << "'. error: " << err.what() << std::endl;
+              return  EINVAL;
+            }
+            encode_json("logging_sources", sources, formatter.get());
+            formatter->flush(cout);
+          }
+
+          return 0;
+        };
+      });
+
+      bucket_logging_list->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          if (driver->get_name() != "rados") {
+            cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
+            return EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          rgw::bucketlogging::configuration configuration;
+          std::unique_ptr<rgw::sal::Bucket> target_bucket;
+          ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(),
+               driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+          if (ret < 0 && ret != -ENODATA) {
+            cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+              << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          } else if (ret == -ENODATA) {
+            cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
+            return 0;
+          }
+          std::string target_prefix = configuration.target_prefix;
+          std::set<std::string> entries;
+
+          ret = rgw::bucketlogging::list_pending_commit_objects(dpp(),
+              static_cast<rgw::sal::RadosStore*>(driver), target_bucket.get(),
+              target_prefix, entries, null_yield);
+
+          if (ret < 0) {
+            cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
+                 << "': " << cpp_strerror(-ret) << std::endl;
+            return ret;
+          }
+
+          formatter->open_array_section("pending_logs");
+          for (auto &entry: entries) {
+              formatter->dump_string("log", entry);
+          }
+          formatter->close_section(); // objs
+          formatter->flush(cout);
+          return 0;
         };
       });
     } // bucket command registrations
@@ -8559,145 +8726,6 @@ int main(int argc, const char **argv)
       return -ret;
     }
     formatter->close_section();
-    formatter->flush(cout);
-    return 0;
-  }
-
-  if (opt_cmd == OPT::BUCKET_LOGGING_FLUSH) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::bucketlogging::configuration configuration;
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
-    if (ret < 0 && ret != -ENODATA) {
-      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
-        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    } else if (ret == -ENODATA) {
-      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
-      return 0;
-    }
-
-    // make sure that the logging source attribute is up-to-date
-    if (ret = rgw::bucketlogging::update_bucket_logging_sources(dpp(), target_bucket, bucket->get_key(), true, null_yield); ret < 0) {
-      cerr << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
-        << "' in logging target '" << target_bucket->get_key() << "'. error: " << cpp_strerror(ret) << std::endl;
-    }
-
-    std::string obj_name;
-    RGWObjVersionTracker objv_tracker;
-    ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
-        "'. error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    std::string old_obj;
-    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, false, &old_obj);
-    if (ret < 0) {
-      cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
-        << "'. error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    cout << "flushed pending logging object '" << old_obj
-      << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
-    return 0;
-  }
-
-  if (opt_cmd == OPT::BUCKET_LOGGING_INFO) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    const auto& bucket_attrs = bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter != bucket_attrs.end()) {
-      rgw::bucketlogging::configuration configuration;
-      try {
-        configuration.enabled = true;
-        decode(configuration, iter->second);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-          << "'. error: " << err.what() << std::endl;
-        return  EINVAL;
-      }
-      encode_json("logging", configuration, formatter.get());
-      formatter->flush(cout);
-    }
-    iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
-    if (iter != bucket_attrs.end()) {
-      rgw::bucketlogging::source_buckets sources;
-      try {
-        decode(sources, iter->second);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
-          << "'. error: " << err.what() << std::endl;
-        return  EINVAL;
-      }
-      encode_json("logging_sources", sources, formatter.get());
-      formatter->flush(cout);
-    }
-
-    return 0;
-  }
-
-  if (opt_cmd == OPT::BUCKET_LOGGING_LIST) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    if (driver->get_name() != "rados") {
-      cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::bucketlogging::configuration configuration;
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(),
-         driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
-    if (ret < 0 && ret != -ENODATA) {
-      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
-        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    } else if (ret == -ENODATA) {
-      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
-      return 0;
-    }
-    std::string target_prefix = configuration.target_prefix;
-    std::set<std::string> entries;
-
-    ret = rgw::bucketlogging::list_pending_commit_objects(dpp(),
-        static_cast<rgw::sal::RadosStore*>(driver), target_bucket.get(),
-        target_prefix, entries, null_yield);
-
-    if (ret < 0) {
-      cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
-           << "': " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    formatter->open_array_section("pending_logs");
-    for (auto &entry: entries) {
-        formatter->dump_string("log", entry);
-    }
-    formatter->close_section(); // objs
     formatter->flush(cout);
     return 0;
   }
