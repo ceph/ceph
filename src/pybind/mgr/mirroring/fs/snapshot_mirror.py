@@ -20,10 +20,11 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem, sync_stat_omap_key
+    disconnect_from_filesystem
+from .metrics.cache import (
+    CACHE_TTL_SECS, COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
+    metrics_for_dir_and_peers, try_get_from_complete)
 from .metrics import load as metrics_load
-from .metrics.format import format_and_order_sync_stat_for_display, \
-    format_peer_status_metrics
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
@@ -759,8 +760,52 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
+        COMPLETE_CACHE_MAX)
+    def sync_stat_complete_cache(self, filesystem):
+        """Load all directories and all peers for a filesystem from omap.
+
+        Cache key: (time_token, filesystem). Each entry stores the full omap
+        snapshot for that filesystem (all dirs, all peers). A hit means every
+        directory is present, so full-scan queries can be served safely.
+        Used for 'status <fs>' and 'status <fs> --peer_uuid=<uuid>'; peer
+        filtering is applied when serving.
+        """
+        log.debug('sync stat metrics for filesystem %s loaded from omap (complete)',
+                  filesystem)
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        return metrics_load.load_sync_stat_metrics(ioctx, filesystem)
+
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
+        PARTIAL_CACHE_MAX)
+    def sync_stat_partial_cache(self, filesystem, dir_path, peer_ids):
+        """Load sync-stat omap keys for one directory and a peer set.
+
+        Cache key: (time_token, filesystem, dir_path, peer_ids). Used as a
+        fallback for 'status <fs> <dir>' when the complete cache is cold or
+        does not contain the requested directory.
+        """
+        peer_scope = (next(iter(peer_ids)) if len(peer_ids) == 1 else '*')
+        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                  'loaded from omap',
+                  filesystem, dir_path, peer_scope)
+        peers = {peer_id: None for peer_id in peer_ids}
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+            ioctx, filesystem, peers, dir_path, None)
+        return metrics
+
     def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
-        """Return persisted mirror directory snapshot metrics as JSON"""
+        """Return persisted mirror directory snapshot metrics as JSON.
+
+        Uses two caches (see metrics/cache.py): complete for full-scan queries
+        where a hit proves all dirs are present; partial for single-dir
+        queries when the complete cache is cold or lacks that directory.
+        """
         try:
             with self.lock:
                 if not self.filesystem_exist(filesystem):
@@ -775,35 +820,70 @@ class FSSnapshotMirror:
                     if not fspolicy.policy.lookup(dir_path):
                         raise MirrorException(-errno.ENOENT,
                                               f'directory {dir_path} is not mirrored')
-                peers = self.get_filesystem_peers(filesystem)
-                if not peers:
+                all_peers = self.get_filesystem_peers(filesystem)
+                if not all_peers:
                     return 0, json.dumps({'metrics': {}}, indent=4), ''
 
                 if peer_uuid:
-                    if peer_uuid not in peers:
+                    if peer_uuid not in all_peers:
                         raise MirrorException(-errno.ENOENT,
                                               f'peer {peer_uuid} not found for '
                                               f'filesystem {filesystem}')
-                    peers = {peer_uuid: peers[peer_uuid]}
+                    requested_peers = {peer_uuid: all_peers[peer_uuid]}
+                else:
+                    requested_peers = all_peers
 
-                ioctx = metrics_load.open_metadata_ioctx(
-                    self.rados, self.fs_map, filesystem)
                 if mirrored_dir_path:
                     dir_path = norm_path(mirrored_dir_path)
-                    keys = [sync_stat_omap_key(filesystem, peer, dir_path)
-                            for peer in peers]
-                    omap_stats = metrics_load.load_sync_stat_by_keys(ioctx, keys)
-                    metrics = {}
-                    for peer in peers:
-                        omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
-                        if omap_key in omap_stats:
-                            format_peer_status_metrics(
-                                metrics, dir_path, peer,
-                                format_and_order_sync_stat_for_display(
-                                    omap_stats[omap_key]))
+                    # Single-dir query: peek complete cache (key: filesystem
+                    # only); on miss fall back to partial cache (key:
+                    # filesystem, dir_path, peer_ids).
+                    complete_metrics = self.sync_stat_complete_cache.cache_peek(
+                        filesystem)
+                    if complete_metrics is not None:
+                        metrics = try_get_from_complete(
+                            complete_metrics, mirrored_dir_path, peer_uuid,
+                            requested_peers)
+                        if metrics is not None:
+                            log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                      'served from complete cache',
+                                      filesystem, dir_path, peer_uuid or '*')
+                            return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                    partial_info_before = self.sync_stat_partial_cache.cache_info()
+                    raw_metrics = self.sync_stat_partial_cache(
+                        filesystem, dir_path, frozenset(requested_peers))
+                    if (self.sync_stat_partial_cache.cache_info().hits >
+                            partial_info_before.hits):
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'served from partial cache',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    else:
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'loaded from omap',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    metrics = metrics_for_dir_and_peers(
+                        raw_metrics, dir_path, requested_peers)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                # Full-scan query: load complete cache on miss (key: filesystem
+                # only); peer filtering is applied when serving.
+                complete_info_before = self.sync_stat_complete_cache.cache_info()
+                complete_metrics = self.sync_stat_complete_cache(filesystem)
+                complete_hit = (self.sync_stat_complete_cache.cache_info().hits >
+                                complete_info_before.hits)
+                metrics = try_get_from_complete(
+                    complete_metrics, mirrored_dir_path, peer_uuid, requested_peers)
+                if complete_hit:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'served from complete cache',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
                 else:
-                    metrics = metrics_load.load_sync_stat_metrics(
-                        ioctx, filesystem, peer_uuid)
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'loaded from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
                 return 0, json.dumps({'metrics': metrics}, indent=4), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
