@@ -248,6 +248,11 @@ class CircularJournalSpace : public JournalAllocator {
     return !device->is_end_to_end_data_protection();
   }
 
+  RBMDevice& get_device() {
+    assert(device);
+    return *device;
+  }
+
  private:
   std::string print_name;
   cbj_header_t header;

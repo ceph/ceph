@@ -322,7 +322,11 @@ spdk_nvme_io::io_ertr::future<> spdk_nvme_io::do_io(
     return io_ertr::now();
   }
 
+  static thread_local uint64_t success_count = 0;
+  static thread_local uint64_t fallback_count = 0;
+
   if (spdk_vtophys(data, nullptr) != SPDK_VTOPHYS_ERROR) {
+    success_count++;
     // Already DMA-safe (e.g. allocated via raw_spdk_dma) — submit directly.
     return submit_io(is_write, offset, data, len, io_flags
     ).handle_exception([FNAME, offset, len](auto e) -> io_ertr::future<> {
@@ -331,6 +335,13 @@ spdk_nvme_io::io_ertr::future<> spdk_nvme_io::do_io(
     }).then([] () -> io_ertr::future<> {
       return io_ertr::now();
     });
+  }
+
+  fallback_count++;
+  if (fallback_count % 1000 == 1) {
+    WARN("do_io: non-DMA-safe buffer detected at offset 0x{:x}~0x{:x}; "
+         "falling back to bounce buffer (fallbacks: {}, successes: {})",
+         offset, len, fallback_count, success_count);
   }
 
   // Bounce through a hugepage buffer.
