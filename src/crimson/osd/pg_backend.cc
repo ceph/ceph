@@ -1451,7 +1451,7 @@ PGBackend::omap_get_keys(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1545,7 +1545,7 @@ PGBackend::omap_cmp(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
 
@@ -1581,7 +1581,7 @@ PGBackend::omap_get_vals(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1778,7 +1778,7 @@ PGBackend::omap_clear(
   object_stat_sum_t& delta_stats)
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
   if (!os.oi.is_omap()) {
