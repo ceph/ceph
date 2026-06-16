@@ -9,15 +9,151 @@
 #include <thread>
 
 #include <common/ceph_mutex.h>
+#include <include/ceph_assert.h>
 #include <include/Context.h>
 
 namespace ceph {
 
+// Shared ownership tracking for locks wrapping a native ceph::mutex.
+// Subclasses implement non-reentrant (TrackedLockImpl) or reentrant
+// (ReentrantLockImpl) acquire/release policy.
 template <class Mutex>
-class ReentrantLockImpl {
-  Mutex mtx;                    // The real mutex for waiting
+class LockOwnershipMixin {
+protected:
+  Mutex mtx;
   std::atomic<std::thread::id> owner{};
-  std::atomic<int> recursion_count{0};  // Or plain int + proper fencing
+
+  void _establish_ownership() noexcept
+  {
+    owner.store(std::this_thread::get_id(), std::memory_order_release);
+  }
+
+  void _relinquish_ownership() noexcept
+  {
+    owner.store(std::thread::id{}, std::memory_order_release);
+  }
+
+  bool _caller_owns_lock(std::memory_order order = std::memory_order_acquire) const
+  {
+    return owner.load(order) == std::this_thread::get_id();
+  }
+
+public:
+  LockOwnershipMixin() = default;
+
+#if defined(CEPH_DEBUG_MUTEX) && defined(CEPH_LOCKSTAT)
+  explicit LockOwnershipMixin(
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false) : mtx(traits, ld, bt) {}
+#elif defined(CEPH_LOCKSTAT)
+  explicit LockOwnershipMixin(
+      const lockstat_detail::LockStatTraits* traits)
+    : mtx(traits) {}
+#else
+  template <typename ...Args>
+  explicit LockOwnershipMixin(Args&& ...args)
+    : mtx(ceph::make_mutex(std::forward<Args>(args)...)) {}
+#endif
+
+  Mutex& native_mutex() { return mtx; }
+  const Mutex& native_mutex() const { return mtx; }
+};
+
+// Non-reentrant mutex with ownership queries (is_locked_by_me).  Use when
+// assertions or unique_unlock need to know the holder but recursion is not
+// required yet.
+template <class Mutex>
+class TrackedLockImpl : public LockOwnershipMixin<Mutex> {
+  std::atomic<int> held{0};
+
+public:
+  TrackedLockImpl() = default;
+
+#if defined(CEPH_DEBUG_MUTEX) && defined(CEPH_LOCKSTAT)
+  explicit TrackedLockImpl(
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false)
+    : LockOwnershipMixin<Mutex>(traits, ld, bt) {}
+#elif defined(CEPH_LOCKSTAT)
+  explicit TrackedLockImpl(
+      const lockstat_detail::LockStatTraits* traits)
+    : LockOwnershipMixin<Mutex>(traits) {}
+#else
+  template <typename ...Args>
+  explicit TrackedLockImpl(Args&& ...args)
+    : LockOwnershipMixin<Mutex>(std::forward<Args>(args)...) {}
+#endif
+
+  void lock()
+  {
+    if (held.load(std::memory_order_acquire) > 0 &&
+	this->_caller_owns_lock(std::memory_order_relaxed)) {
+      ceph_abort_msg("TrackedLock is not reentrant");
+    }
+    this->mtx.lock();
+    this->_establish_ownership();
+    held.store(1, std::memory_order_relaxed);
+  }
+
+  bool try_lock()
+  {
+    if (held.load(std::memory_order_acquire) > 0 &&
+	this->_caller_owns_lock(std::memory_order_relaxed)) {
+      return false;
+    }
+    if (!this->mtx.try_lock()) {
+      return false;
+    }
+    this->_establish_ownership();
+    held.store(1, std::memory_order_relaxed);
+    return true;
+  }
+
+  void unlock()
+  {
+    ceph_assert(is_locked_by_me());
+    held.store(0, std::memory_order_relaxed);
+    this->_relinquish_ownership();
+    this->mtx.unlock();
+  }
+
+  bool is_locked() const
+  {
+    return held.load(std::memory_order_acquire) > 0;
+  }
+
+  bool is_locked_by_me() const
+  {
+    return held.load(std::memory_order_acquire) > 0 &&
+      this->_caller_owns_lock(std::memory_order_relaxed);
+  }
+
+  operator bool() const
+  {
+    return is_locked_by_me();
+  }
+
+  int release_for_wait() noexcept
+  {
+    ceph_assert(is_locked_by_me());
+    held.store(0, std::memory_order_relaxed);
+    this->_relinquish_ownership();
+    return 1;
+  }
+
+  void restore_after_wait(int saved) noexcept
+  {
+    ceph_assert(saved == 1);
+    this->_establish_ownership();
+    held.store(1, std::memory_order_relaxed);
+  }
+};
+
+template <class Mutex>
+class ReentrantLockImpl : public LockOwnershipMixin<Mutex> {
+  std::atomic<int> recursion_count{0};
 
 public:
   ReentrantLockImpl() = default;
@@ -26,122 +162,125 @@ public:
   explicit ReentrantLockImpl(
       const lockstat_detail::LockStatTraits* traits,
       bool ld = true,
-      bool bt = false) : mtx(traits, ld, bt) {}
+      bool bt = false)
+    : LockOwnershipMixin<Mutex>(traits, ld, bt) {}
 #elif defined(CEPH_LOCKSTAT)
   explicit ReentrantLockImpl(
       const lockstat_detail::LockStatTraits* traits)
-    : mtx(traits) {}
+    : LockOwnershipMixin<Mutex>(traits) {}
 #else
   template <typename ...Args>
   explicit ReentrantLockImpl(Args&& ...args)
-    : mtx(ceph::make_mutex(std::forward<Args>(args)...)) {}
+    : LockOwnershipMixin<Mutex>(std::forward<Args>(args)...) {}
 #endif
 
-  void lock() {
-    auto tid = std::this_thread::get_id();
-
-    // Fast path: already owner
-    if (owner.load(std::memory_order_acquire) == tid) {
-      ++recursion_count;   // No atomic needed here (we own it)
+  void lock()
+  {
+    if (this->_caller_owns_lock(std::memory_order_acquire) &&
+	recursion_count.load(std::memory_order_relaxed) > 0) {
+      ++recursion_count;
       return;
     }
 
-    // Slow path
-    mtx.lock();              // Now we have exclusive access
-
-    owner.store(tid, std::memory_order_release);
+    this->mtx.lock();
+    this->_establish_ownership();
     recursion_count.store(1, std::memory_order_relaxed);
   }
 
-  bool try_lock() {
-    auto tid = std::this_thread::get_id();
-
-    if (owner.load(std::memory_order_acquire) == tid) {
+  bool try_lock()
+  {
+    if (this->_caller_owns_lock(std::memory_order_acquire) &&
+	recursion_count.load(std::memory_order_relaxed) > 0) {
       ++recursion_count;
       return true;
     }
 
-    if (!mtx.try_lock()) {
+    if (!this->mtx.try_lock()) {
       return false;
     }
 
-    owner.store(tid, std::memory_order_release);
+    this->_establish_ownership();
     recursion_count.store(1, std::memory_order_relaxed);
     return true;
   }
 
-  void unlock() {
-    ceph_assert(owner == std::this_thread::get_id());
-    // Assert or handle error in debug: owner == tid
+  void unlock()
+  {
+    ceph_assert(is_locked_by_me());
 
     if (--recursion_count == 0) {
-      owner.store({}, std::memory_order_release);
-      mtx.unlock();
+      this->_relinquish_ownership();
+      this->mtx.unlock();
     }
   }
 
-  Mutex& native_mutex() { return mtx; }  // For condition_variable
-
-  bool is_locked() const {
-    return (recursion_count > 0);
+  bool is_locked() const
+  {
+    return recursion_count.load(std::memory_order_acquire) > 0;
   }
-  bool is_locked_by_me() const {
+
+  bool is_locked_by_me() const
+  {
     if (recursion_count.load(std::memory_order_acquire) <= 0) {
       return false;
     }
-    return owner.load(std::memory_order_relaxed) == std::this_thread::get_id();
+    return this->_caller_owns_lock(std::memory_order_relaxed);
   }
 
-  operator bool() const {
+  operator bool() const
+  {
     return is_locked_by_me();
   }
 
-  // Called by reentrant_condition_variable before blocking: saves recursion
-  // depth and marks the lock as released so other threads can acquire it.
-  int release_for_wait() noexcept {
+  int release_for_wait() noexcept
+  {
     ceph_assert(is_locked_by_me());
     int saved = recursion_count.load(std::memory_order_relaxed);
-    owner.store({}, std::memory_order_release);
+    this->_relinquish_ownership();
     recursion_count.store(0, std::memory_order_relaxed);
     return saved;
   }
 
-  // Called by reentrant_condition_variable after waking: restores the saved
-  // recursion depth and re-establishes ownership for the current thread.
-  void restore_after_wait(int saved) noexcept {
-    owner.store(std::this_thread::get_id(), std::memory_order_release);
+  void restore_after_wait(int saved) noexcept
+  {
+    this->_establish_ownership();
     recursion_count.store(saved, std::memory_order_relaxed);
   }
 };
 
+using TrackedLock = TrackedLockImpl<ceph::mutex>;
 using ReentrantLock = ReentrantLockImpl<ceph::mutex>;
 
 #ifndef CEPH_LOCKSTAT
 template <typename ...Args>
-ReentrantLock make_reentrant(Args&& ...args) {
+TrackedLock make_tracked(Args&& ...args)
+{
+  return TrackedLock(std::forward<Args>(args)...);
+}
+
+template <typename ...Args>
+ReentrantLock make_reentrant(Args&& ...args)
+{
   return ReentrantLock(std::forward<Args>(args)...);
 }
 #endif
 
 } // namespace ceph
 
-// make_mutex is a macro when CEPH_LOCKSTAT is enabled; the lock name must be
-// expanded at the call site, so make_reentrant is a macro too.
 #if defined(CEPH_DEBUG_MUTEX) && defined(CEPH_LOCKSTAT)
+#define make_tracked(name, ...) \
+  TrackedLockImpl<ceph::mutex>(LOCKSTAT(name), ##__VA_ARGS__)
 #define make_reentrant(name, ...) \
   ReentrantLockImpl<ceph::mutex>(LOCKSTAT(name), ##__VA_ARGS__)
 #elif defined(CEPH_LOCKSTAT)
+#define make_tracked(name, ...) \
+  TrackedLockImpl<ceph::mutex>(LOCKSTAT(name))
 #define make_reentrant(name, ...) \
   ReentrantLockImpl<ceph::mutex>(LOCKSTAT(name))
 #endif
 
 namespace std {
 
-/**
- * One reentrant lock level per guard.  lock()/unlock() pair with
- * ReentrantLock::lock()/unlock(); a partner ceph::unique_unlock drops the
- * full recursion depth and restores it on scope exit.
- */
 template <>
 class unique_lock<ceph::ReentrantLock> {
 public:
@@ -240,20 +379,10 @@ private:
 
 namespace ceph {
 
-// condition_variable that accepts std::unique_lock<LockType> where LockType
-// provides a reentrant lock interface (lock/unlock/release_for_wait/restore_after_wait).
-//
-// On wait, the lock's full recursion depth is saved and the underlying native
-// mutex is handed to the real condition_variable.  On wakeup the recursion
-// depth is restored, so the caller re-emerges holding the lock with the same
-// count as before the wait.
 template <typename LockType = ReentrantLock>
 class reentrant_condition_variable_impl {
   ceph::condition_variable cv;
 
-  // RAII helper: releases all recursion levels before a wait and restores
-  // them afterwards.  Keeps a unique_lock on the native mutex so the
-  // real condition_variable can atomically unlock+sleep.
   struct Guard {
     LockType& rl;
     int saved;
@@ -264,26 +393,32 @@ class reentrant_condition_variable_impl {
         saved(rl.release_for_wait()),
         nl(rl.native_mutex(), std::adopt_lock) {}
 
-    ~Guard() {
-      nl.release();               // native mutex stays locked; rl takes it back
+    ~Guard()
+    {
+      nl.release();
       rl.restore_after_wait(saved);
     }
   };
 
 public:
-  void wait(std::unique_lock<LockType>& lock) {
+  void wait(std::unique_lock<LockType>& lock)
+  {
     Guard g(lock);
     cv.wait(g.nl);
   }
 
   template <class Predicate>
-  void wait(std::unique_lock<LockType>& lock, Predicate pred) {
-    while (!pred()) wait(lock);
+  void wait(std::unique_lock<LockType>& lock, Predicate pred)
+  {
+    while (!pred()) {
+      wait(lock);
+    }
   }
 
   template <class Rep, class Period>
   std::cv_status wait_for(std::unique_lock<LockType>& lock,
-                          const std::chrono::duration<Rep, Period>& rel_time) {
+                          const std::chrono::duration<Rep, Period>& rel_time)
+  {
     Guard g(lock);
     return cv.wait_for(g.nl, rel_time);
   }
@@ -291,7 +426,8 @@ public:
   template <class Rep, class Period, class Predicate>
   bool wait_for(std::unique_lock<LockType>& lock,
                 const std::chrono::duration<Rep, Period>& rel_time,
-                Predicate pred) {
+                Predicate pred)
+  {
     return wait_until(lock,
                       std::chrono::steady_clock::now() + rel_time,
                       std::move(pred));
@@ -299,7 +435,8 @@ public:
 
   template <class Clock, class Duration>
   std::cv_status wait_until(std::unique_lock<LockType>& lock,
-                            const std::chrono::time_point<Clock, Duration>& abs_time) {
+                            const std::chrono::time_point<Clock, Duration>& abs_time)
+  {
     Guard g(lock);
     return cv.wait_until(g.nl, abs_time);
   }
@@ -307,7 +444,8 @@ public:
   template <class Clock, class Duration, class Predicate>
   bool wait_until(std::unique_lock<LockType>& lock,
                   const std::chrono::time_point<Clock, Duration>& abs_time,
-                  Predicate pred) {
+                  Predicate pred)
+  {
     while (!pred()) {
       if (wait_until(lock, abs_time) == std::cv_status::timeout) {
         return pred();
@@ -318,10 +456,8 @@ public:
 
   void notify_one() noexcept { cv.notify_one(); }
   void notify_all() noexcept { cv.notify_all(); }
-  // Wake waiters without holding the associated lock (pthread-safe; skips
-  // lockdep's waiter_mutex check).  Use only when the signaller cannot take
-  // the waiter lock without risking deadlock.
-  void notify_all_sloppy() noexcept {
+  void notify_all_sloppy() noexcept
+  {
 #ifdef CEPH_DEBUG_MUTEX
     cv.notify_all(true);
 #else
@@ -332,8 +468,6 @@ public:
 
 using reentrant_condition_variable = reentrant_condition_variable_impl<ReentrantLock>;
 
-// finish() may call notify_all_sloppy() from another thread.  Wait until that
-// broadcast completes before destroying a stack-allocated cond.
 inline void wait_for_reentrant_cond_broadcast(std::atomic<bool>& wake_complete)
 {
   while (!wake_complete.load(std::memory_order_acquire)) {
@@ -345,10 +479,12 @@ struct C_ReentrantLock : public Context {
   ceph::ReentrantLock *lock;
   Context *fin;
   C_ReentrantLock(ceph::ReentrantLock *l, Context *c) : lock(l), fin(c) {}
-  ~C_ReentrantLock() override {
+  ~C_ReentrantLock() override
+  {
     delete fin;
   }
-  void finish(int r) override {
+  void finish(int r) override
+  {
     if (fin) {
       std::lock_guard l{*lock};
       fin->complete(r);
@@ -359,24 +495,24 @@ struct C_ReentrantLock : public Context {
 
 template <typename LockType = ReentrantLock>
 class C_ReentrantCond : public Context {
-  reentrant_condition_variable_impl<LockType>& cond;   ///< Cond to signal
-  std::atomic<bool> *done;   ///< true if finish() has been called
-  std::atomic<bool> *wake_complete;  ///< true after notify_all_sloppy()
-  int *rval;    ///< return value
+  reentrant_condition_variable_impl<LockType>& cond;
+  std::atomic<bool> *done;
+  std::atomic<bool> *wake_complete;
+  int *rval;
 public:
   C_ReentrantCond(reentrant_condition_variable_impl<LockType> &c,
                   std::atomic<bool> *d, int *r,
                   std::atomic<bool> *wc = nullptr)
-    : cond(c), done(d), wake_complete(wc), rval(r) {
+    : cond(c), done(d), wake_complete(wc), rval(r)
+  {
     done->store(false, std::memory_order_relaxed);
     if (wake_complete) {
       wake_complete->store(false, std::memory_order_relaxed);
     }
   }
-  void finish(int r) override {
+  void finish(int r) override
+  {
     *rval = r;
-    // finish() often runs from another thread that does not hold the
-    // waiter's lock (e.g. cap grant on ms_dispatch waking get_caps).
     done->store(true, std::memory_order_release);
     cond.notify_all_sloppy();
     if (wake_complete) {
@@ -385,12 +521,65 @@ public:
   }
 };
 
-// Specialization of unique_unlock for ReentrantLockImpl.
-//
-// Mirrors reentrant_condition_variable::Guard: saves the full recursion depth
-// before releasing the underlying mutex and restores it after reacquiring.
-// This ensures that code which temporarily drops the lock (e.g. to call
-// blocking I/O) re-emerges holding the lock with the same recursion count.
+template <class Mutex>
+class unique_unlock<TrackedLockImpl<Mutex>> {
+public:
+  explicit unique_unlock(TrackedLockImpl<Mutex>& tl)
+    : m_lock(tl), m_saved(0), m_released(false)
+  {
+    release();
+  }
+
+  unique_unlock(TrackedLockImpl<Mutex>& tl, std::defer_lock_t)
+    : m_lock(tl), m_saved(0), m_released(false)
+  {}
+
+  void release()
+  {
+    if (!m_released && m_lock.is_locked_by_me()) {
+      m_saved = m_lock.release_for_wait();
+      m_lock.native_mutex().unlock();
+      m_released = true;
+    }
+  }
+
+  bool released() const
+  {
+    return m_released;
+  }
+
+  void reacquire()
+  {
+    if (!m_released || m_saved <= 0) {
+      return;
+    }
+    ceph_assert(!m_lock.is_locked_by_me());
+    m_lock.native_mutex().lock();
+    m_lock.restore_after_wait(m_saved);
+    m_released = false;
+    m_saved = 0;
+  }
+
+  void _abandon() noexcept
+  {
+    m_released = false;
+    m_saved = 0;
+  }
+
+  ~unique_unlock() noexcept(false)
+  {
+    reacquire();
+  }
+
+  unique_unlock(const unique_unlock&) = delete;
+  unique_unlock& operator=(const unique_unlock&) = delete;
+
+private:
+  TrackedLockImpl<Mutex>& m_lock;
+  int m_saved;
+  bool m_released;
+};
+
 template <class Mutex>
 class unique_unlock<ReentrantLockImpl<Mutex>> {
 public:
@@ -418,7 +607,6 @@ public:
     return m_released;
   }
 
-  /** Restore recursion depth saved by release(); partner guards keep _owns. */
   void reacquire()
   {
     if (!m_released || m_saved <= 0) {
@@ -431,7 +619,6 @@ public:
     m_saved = 0;
   }
 
-  // Call when a partner guard already restored the lock (e.g. inode ordering).
   void _abandon() noexcept
   {
     m_released = false;

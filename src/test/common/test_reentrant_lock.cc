@@ -17,6 +17,11 @@ ReentrantLock make_test_reentrant(const char *name)
   return ceph::make_reentrant(name);
 }
 
+TrackedLock make_test_tracked(const char *name)
+{
+  return ceph::make_tracked(name);
+}
+
 // Join helper threads even when a gtest ASSERT fails mid-test.
 struct thread_joiner {
   std::thread& t;
@@ -36,6 +41,17 @@ struct unlock_reentrant_on_exit {
   ReentrantLock& lock;
   explicit unlock_reentrant_on_exit(ReentrantLock& l) : lock(l) {}
   ~unlock_reentrant_on_exit()
+  {
+    while (lock.is_locked_by_me()) {
+      lock.unlock();
+    }
+  }
+};
+
+struct unlock_tracked_on_exit {
+  TrackedLock& lock;
+  explicit unlock_tracked_on_exit(TrackedLock& l) : lock(l) {}
+  ~unlock_tracked_on_exit()
   {
     while (lock.is_locked_by_me()) {
       lock.unlock();
@@ -74,6 +90,45 @@ bool wait_for_future(std::future<bool>& fut,
 }
 
 } // namespace
+
+TEST(TrackedLock, BasicLockUnlock)
+{
+  auto lock = make_test_tracked("tracked_basic");
+  unlock_tracked_on_exit cleanup(lock);
+  ASSERT_FALSE(lock.is_locked());
+  ASSERT_FALSE(lock.is_locked_by_me());
+
+  lock.lock();
+  ASSERT_TRUE(lock.is_locked());
+  ASSERT_TRUE(lock.is_locked_by_me());
+  ASSERT_TRUE(static_cast<bool>(lock));
+
+  lock.unlock();
+  ASSERT_FALSE(lock.is_locked_by_me());
+}
+
+TEST(TrackedLock, NotReentrant)
+{
+  auto lock = make_test_tracked("tracked_non_reentrant");
+  unlock_tracked_on_exit cleanup(lock);
+  lock.lock();
+  ASSERT_FALSE(lock.try_lock());
+  lock.unlock();
+}
+
+TEST(TrackedLock, UniqueUnlock)
+{
+  auto lock = make_test_tracked("tracked_unique_unlock");
+  unlock_tracked_on_exit cleanup(lock);
+  lock.lock();
+  {
+    ceph::unique_unlock u(lock);
+    ASSERT_TRUE(u.released());
+    ASSERT_FALSE(lock.is_locked_by_me());
+  }
+  ASSERT_TRUE(lock.is_locked_by_me());
+  lock.unlock();
+}
 
 TEST(ReentrantLock, BasicLockUnlock)
 {
