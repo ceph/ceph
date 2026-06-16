@@ -2458,8 +2458,16 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
 {
   info.owner = params.owner;
 
-  info.bucket.marker = params.marker;
-  info.bucket.bucket_id = params.bucket_id;
+  if (params.marker.empty()) {
+    char buf[17];
+    gen_rand_alphanumeric(driver->ctx(), buf, sizeof(buf) - 1);
+    buf[16] = '\0';
+    info.bucket.marker = info.bucket.name + "." + buf;
+    info.bucket.bucket_id = info.bucket.marker;
+  } else {
+    info.bucket.marker = params.marker;
+    info.bucket.bucket_id = params.bucket_id;
+  }
 
   info.zonegroup = params.zonegroup_id;
   info.placement_rule = params.placement_rule;
