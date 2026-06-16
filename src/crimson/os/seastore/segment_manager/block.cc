@@ -148,7 +148,7 @@ write_superblock(
   assert(SUPERBLOCK_HEADER_PREFIX +
 	 ceph::encoded_sizeof<device_superblock_t>(sb) < sb.block_size);
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
+    bufferptr(driver.alloc_io_buffer(sb.block_size)),
     [=, &driver](auto &bp)
   {
     bp.zero();
@@ -172,7 +172,7 @@ read_superblock(BlockIODriver &driver, seastar::stat_data sd)
   LOG_PREFIX(block_read_superblock);
   DEBUG("reading superblock ...");
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
+    bufferptr(driver.alloc_io_buffer(sd.block_size)),
     [=, &driver](auto &bp)
   {
     return driver.read(
