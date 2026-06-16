@@ -10392,9 +10392,13 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 
 void Client::C_Read_Finisher::finish_io(int r)
 {
-  utime_t lat;
+  ClientLockIfNeeded lock(clnt);
+  if (iofinished) {
+    return;
+  }
+  iofinished = true;
 
-  // Caller holds client_lock so we don't need to take it.
+  utime_t lat;
 
   if (r >= 0) {
     if (is_read_async) {
@@ -10415,9 +10419,8 @@ void Client::C_Read_Finisher::finish_io(int r)
     clnt->update_io_stat_read(lat);
   }
 
-  iofinished = true;
-
-  if (have_caps) {
+  if ((have_caps & CEPH_CAP_FILE_RD) &&
+      in->cap_refs[CEPH_CAP_FILE_RD] > 0) {
     clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
   }
 
@@ -10778,8 +10781,15 @@ Client::C_Readahead::~C_Readahead() {
 }
 
 void Client::C_Readahead::finish(int r) {
+  ClientLockIfNeeded lock(client);
+  Inode *in = f->inode.get();
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
-  client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+  if (in->cap_refs[CEPH_CAP_FILE_RD] > 0) {
+    client->put_cap_ref(in, CEPH_CAP_FILE_RD);
+  }
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE] > 0) {
+    client->put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+  }
   if (r > 0) {
     client->update_read_io_size(r);
     client->subvolume_tracker->add_metric(f->inode->ino, SimpleIOMetric(false, mono_clock_now()-start_time, r));
@@ -10810,6 +10820,11 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 
 void Client::C_Read_Async_Finisher::finish(int r)
 {
+  if (finished) {
+    return;
+  }
+  finished = true;
+
 #if defined(__linux__)
   if (denc && r > 0) {
       std::vector<ObjectCacher::ObjHole> holes;
