@@ -1324,3 +1324,103 @@ def test_cluster_rm_wildcard_no_match(tmodule):
 
     with pytest.raises(smb.cli.NoMatchingValue):
         tmodule.cluster_rm('gonk', wildcard=True)
+
+
+def test_cluster_update_client_compat(tmodule):
+    """Test updating cluster client compatibility mode with shares."""
+    # Create a cluster with default client_compat
+    cluster = _cluster(
+        cluster_id='foo',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    rg = tmodule._handler.apply([cluster])
+    assert rg.success, rg.to_simplified()
+
+    # Create some shares
+    share1 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='share1',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share1',
+        ),
+    )
+    share2 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='share2',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share2',
+        ),
+    )
+    rg = tmodule._handler.apply([share1, share2])
+    assert rg.success, rg.to_simplified()
+
+    # Verify initial state (should be None/DEFAULT)
+    clusters = tmodule._handler.matching_resources(['ceph.smb.cluster.foo'])
+    assert len(clusters) == 1
+    initial_cluster = clusters[0]
+    assert initial_cluster.client_compat is None
+    assert (
+        initial_cluster.effective_client_compat
+        == smb.enums.ClientSupportMode.DEFAULT
+    )
+
+    # Update to MACOS compatibility mode
+    result = tmodule.cluster_update_client_compat(
+        smb.enums.ClientSupportMode.MACOS, 'foo'
+    )
+    assert isinstance(result, dict)
+    assert result['cluster_id'] == 'foo'
+    assert result['client_compat'] == 'macos'
+    assert result['cluster_updated'] is True
+    assert result['total_shares'] == 2
+    assert len(result['successful_share_updates']) == 2
+    assert 'share1' in result['successful_share_updates']
+    assert 'share2' in result['successful_share_updates']
+    assert len(result['failed_share_updates']) == 0
+
+    # Verify the update
+    clusters = tmodule._handler.matching_resources(['ceph.smb.cluster.foo'])
+    assert len(clusters) == 1
+    updated_cluster = clusters[0]
+    assert updated_cluster.client_compat == smb.enums.ClientSupportMode.MACOS
+    assert (
+        updated_cluster.effective_client_compat
+        == smb.enums.ClientSupportMode.MACOS
+    )
+    assert updated_cluster.is_macos_compatibility_enabled is True
+
+    # Update back to DEFAULT
+    result = tmodule.cluster_update_client_compat(
+        smb.enums.ClientSupportMode.DEFAULT, 'foo'
+    )
+    assert isinstance(result, dict)
+    assert result['cluster_id'] == 'foo'
+    assert result['client_compat'] == 'default'
+    assert result['cluster_updated'] is True
+    assert result['total_shares'] == 2
+
+    # Verify the update back to DEFAULT
+    clusters = tmodule._handler.matching_resources(['ceph.smb.cluster.foo'])
+    assert len(clusters) == 1
+    final_cluster = clusters[0]
+    assert final_cluster.client_compat == smb.enums.ClientSupportMode.DEFAULT
+    assert (
+        final_cluster.effective_client_compat
+        == smb.enums.ClientSupportMode.DEFAULT
+    )
+    assert final_cluster.is_macos_compatibility_enabled is False
+
+
+def test_cluster_update_client_compat_nonexistent(tmodule):
+    """Test updating client_compat for a non-existent cluster."""
+    with pytest.raises(ValueError, match="Cluster nonexistent not found"):
+        tmodule.cluster_update_client_compat(
+            smb.enums.ClientSupportMode.MACOS, 'nonexistent'
+        )
