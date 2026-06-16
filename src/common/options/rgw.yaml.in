@@ -429,7 +429,8 @@ options:
   level: advanced
   desc: Number of lifecycle data shards
   long_desc: Number of RADOS objects to use for storing lifecycle index. This affects
-    concurrency of lifecycle maintenance, as shards can be processed in parallel.
+    concurrency of lifecycle maintenance, as shards can be processed in parallel. Do not
+    change this value after deployment unless `radosgw-admin lc list` is empty.
   default: 32
   services:
   - rgw
