@@ -113,6 +113,7 @@ set(librgw_common_srcs
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
+  rgw_mime.cc
   rgw_tools.cc
   rgw_user.cc
   rgw_website.cc
@@ -151,7 +152,8 @@ set(librgw_common_srcs
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
-  driver/json_config/store.cc)
+  driver/json_config/store.cc
+  rgw_rest_user.cc)
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
@@ -195,14 +197,13 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_obj_manifest.cc
           driver/rados/rgw_object_expirer_core.cc
           driver/rados/rgw_otp.cc
-          driver/rados/rgw_pubsub_push.cc
+          rgw_pubsub_push.cc
           driver/rados/rgw_putobj_processor.cc
           driver/rados/rgw_rados.cc
           driver/rados/rgw_reshard.cc
           driver/rados/rgw_rest_bucket.cc
           driver/rados/rgw_rest_log.cc
           driver/rados/rgw_rest_realm.cc
-          driver/rados/rgw_rest_user.cc
           driver/rados/rgw_sal_rados.cc
           driver/rados/rgw_service.cc
           driver/rados/rgw_sync.cc
@@ -269,6 +270,17 @@ if(WITH_RADOSGW_POSIX)
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
 	      driver/posix/posixDB.cc
+	      driver/posix/posix_system_user.cc
+	      driver/posix/notify.cpp)
+endif()
+if(WITH_RADOSGW_NSFS)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_common_srcs
+	      driver/nsfs/rgw_sal_nsfs.cc
+	      driver/posix/posixDB.cc
+	      driver/nsfs/fs_strategy.cc
+	      driver/posix/lmdb-safe.cc
 	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
@@ -392,6 +404,10 @@ if(WITH_RADOSGW_DBSTORE)
 endif()
 
 if(WITH_RADOSGW_POSIX)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
+endif()
+
+if(WITH_RADOSGW_NSFS)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 

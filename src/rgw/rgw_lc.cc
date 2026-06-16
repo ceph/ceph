@@ -3067,6 +3067,10 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
+  if (!sal_lc) {
+    return -EINVAL;
+  }
+
   CephContext *cct = driver->ctx();
 
   auto bucket_lc_key = get_bucket_lc_key(bucket);
