@@ -231,7 +231,23 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
   assert(!needs_update_all);
   assert(version.layout == current_version.layout);
   if (version.state == current_version.state) {
-    // cache is already latest.
+    // Normally the cache is already latest
+    // On FLTreeOnode cursor reuse reset the state changes from MUTATION_PENDING to
+    // READ_ONLY back to MUTATION_PENDING, making the before/after states identical
+    // even though the buffer was changed. Instead detect this by comparing buffer pointers.
+    if (p_node_base != nullptr) {
+      auto current_p_node_base = ref_leaf_node->read();
+      if (current_p_node_base != p_node_base) {
+        assert(key_view.has_value());
+        assert(p_value_header != nullptr);
+        auto node_size = ref_leaf_node->get_node_size();
+        reset_ptr(p_value_header, p_node_base, current_p_node_base, node_size);
+        key_view->reset_to(p_node_base, current_p_node_base, node_size);
+        value_payload_mut.reset();
+        p_value_recorder = nullptr;
+        p_node_base = current_p_node_base;
+      }
+    }
   } else if (version.state < current_version.state) {
     // the extent has been copied but the layout has not been changed.
     assert(p_node_base != nullptr);
