@@ -310,6 +310,12 @@ int PeerReplayer::init() {
     data_replayer->create(name.c_str());
     m_data_replayers.push_back(std::move(data_replayer));
   }
+
+  m_tick_thread.reset(new TickThread(this));
+  m_tick_thread->create("tick");
+
+  set_changed_mirroring_configurations();
+
   return 0;
 }
 
@@ -348,6 +354,11 @@ void PeerReplayer::shutdown() {
     replayer->join();
   }
   m_replayers.clear();
+
+  if (m_tick_thread) {
+    m_tick_thread->join();
+    m_tick_thread.reset();
+  }
 
   ceph_unmount(m_remote_mount);
   ceph_release(m_remote_mount);
@@ -2334,6 +2345,21 @@ int PeerReplayer::sync_snaps(const std::string &dir_root,
     _reset_failed_count(dir_root);
   }
   return r;
+}
+
+void PeerReplayer::run_tick() {
+  dout(10) << ": started" << dendl;
+
+  std::unique_lock locker(m_lock);
+  while (true) {
+    auto interval = g_ceph_context->_conf.get_val<std::chrono::seconds>(
+      "cephfs_mirror_tick_interval");
+    m_cond.wait_for(locker, interval, [this]{return is_stopping();});
+    if (is_stopping()) {
+      dout(5) << ": shutting down exiting" << dendl;
+      break;
+    }
+  }
 }
 
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {

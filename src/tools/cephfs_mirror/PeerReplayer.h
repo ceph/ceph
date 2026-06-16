@@ -129,6 +129,21 @@ private:
     PeerReplayer *m_peer_replayer;
   };
 
+  class TickThread : public Thread {
+  public:
+    explicit TickThread(PeerReplayer *peer_replayer)
+      : m_peer_replayer(peer_replayer) {
+    }
+
+    void *entry() override {
+      m_peer_replayer->run_tick();
+      return 0;
+    }
+
+  private:
+    PeerReplayer *m_peer_replayer;
+  };
+
   struct DirRegistry {
     int fd;
     bool canceled = false;
@@ -636,6 +651,7 @@ private:
   SnapshotReplayers m_replayers;
 
   SnapshotDataReplayers m_data_replayers;
+  std::unique_ptr<TickThread> m_tick_thread;
   std::atomic<int> m_active_datasync_threads{0};
 
   ceph::mutex smq_lock;
@@ -652,6 +668,7 @@ private:
 
   void run(SnapshotReplayerThread *replayer);
   void run_datasync(SnapshotDataSyncThread *data_replayer);
+  void run_tick();
   void remove_syncm(const std::shared_ptr<SyncMechanism>& syncm_obj);
   bool is_syncm_active(const std::shared_ptr<SyncMechanism>& syncm_obj);
   std::shared_ptr<SyncMechanism> pick_next_syncm_and_mark();
