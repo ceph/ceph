@@ -1,6 +1,6 @@
 #!/bin/sh
 # vim: set noet ts=8:
-# postinst script for ceph-mgr-diskprediction-local
+# postinst script for ceph-mgr-rook
 #
 # see: dh_installdeb(1)
 

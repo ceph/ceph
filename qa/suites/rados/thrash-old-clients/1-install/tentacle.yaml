@@ -9,7 +9,6 @@ tasks:
     branch: tentacle
     exclude_packages:
       - ceph-mgr-dashboard
-      - ceph-mgr-diskprediction-local
       - ceph-mgr-rook
       - ceph-mgr-cephadm
       - ceph-osd-classic
