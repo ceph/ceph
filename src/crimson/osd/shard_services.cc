@@ -933,7 +933,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	  const spg_t &pgid = info->pgid;
 	  if (!get_map()->is_up_acting_osd_shard(pgid, local_state.whoami)
 	      || !startmap->is_up_acting_osd_shard(pgid, local_state.whoami)) {
-	    DEBUG("ignore pgid {}, doesn't exist anymore, discarding");
+	    DEBUG("ignore pgid {}, doesn't exist anymore, discarding", pgid);
 	    local_state.pg_map.pg_creation_canceled(pgid);
 	    return seastar::make_ready_future<
 	      std::tuple<Ref<PG>, OSDMapService::cached_map_t>
