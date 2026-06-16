@@ -496,6 +496,14 @@ ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums
 
 ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
 {
+  LOG_PREFIX(ZBDSegmentManager::mount);
+  if (!crimson::common::local_conf().get_val<std::string>(
+        "seastore_spdk_transport_id").empty()) {
+    ERROR("seastore_spdk_transport_id is set but device type is ZBD; "
+          "SPDK is not supported for zoned (ZNS) devices. Unset it or use a "
+          "non-zoned device.");
+    return crimson::ct_error::input_output_error::make();
+  }
   return shard_devices.invoke_on_all([](auto &local_device) {
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->shard_mount(
@@ -534,6 +542,14 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
 ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
   device_config_t config)
 {
+  LOG_PREFIX(ZBDSegmentManager::mkfs);
+  if (!crimson::common::local_conf().get_val<std::string>(
+        "seastore_spdk_transport_id").empty()) {
+    ERROR("seastore_spdk_transport_id is set but device type is ZBD; "
+          "SPDK is not supported for zoned (ZNS) devices. Unset it or use a "
+          "non-zoned device.");
+    return crimson::ct_error::input_output_error::make();
+  }
   return shard_devices.local().mshard_devices[0]->primary_mkfs(config
     ).safe_then([this] {
     return shard_devices.invoke_on_all([](auto &local_device) {
