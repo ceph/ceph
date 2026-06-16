@@ -21,6 +21,9 @@ target_link_libraries(neoradostest-support
 add_executable(ceph_test_neorados_completions completions.cc)
 target_link_libraries(ceph_test_neorados_completions
   libneorados neoradostest-support GTest::Main)
+install(TARGETS
+  ceph_test_neorados_completions
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool
