@@ -243,7 +243,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (vallen == 0) {
-      /* No attribute value for this name */
+      attrs.emplace(std::move(key), bufferlist{});
       buflen -= keylen;
       keyptr += keylen;
       continue;
