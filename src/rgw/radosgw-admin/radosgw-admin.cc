@@ -3624,27 +3624,6 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
   return cmd->add_option(name, var, std::string(desc))->take_last();
 }
 
-// Registers a boolean flag at every level of the command tree: hidden on all
-// ancestor commands for backward compatibility, visible on cmd. Returns the
-// visible Option* so callers can chain modifiers like ->ignore_underscore().
-// Uses add_flag (not add_option) so the flag takes no value — it sets the
-// variable to 1 when present (e.g. --purge-objects alone, no argument after it).
-// Same primary-name lookup logic as add_multilevel_option.
-// force_callback(false) undoes CLI11's forced callback on int-bound flags
-// (CLI11 adds it for counting flags): with the same variable bound at every
-// level, unmatched registrations would otherwise overwrite the parsed value
-// with the default 0. The variables are pre-initialized, so the forced reset
-// is not needed.
-template <typename T>
-CLI::Option* add_multilevel_flag(CLI::App* cmd, const std::string& name, T& var,
-                              std::string_view desc = {}) {
-  const std::string primary = name.substr(0, name.find(','));
-  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
-    if (!p->get_option_no_throw(primary))
-      p->add_flag(name, var)->group("")->force_callback(false);
-  return cmd->add_flag(name, var, std::string(desc))->force_callback(false);
-}
-
 // Maps a captured binary-flag value to its legacy int var. "false"/"0" -> 0,
 // anything else -> 1 (invalid values warn but set, like legacy's truthy -EINVAL).
 static void parse_binary_flag(const std::string& flag,
@@ -3656,8 +3635,8 @@ static void parse_binary_flag(const std::string& flag,
   out = 1;
 }
 
-// Binary-flag sibling of add_multilevel_flag: a string option with expected(0,1)
-// at each level, so "--fix false" is consumed (not left as a stray) and parse()
+// Multilevel binary flag (sibling of add_multilevel_option): a string option with
+// expected(0,1) at each level, so "--fix false" is consumed (not left as a stray) and parse()
 // stays parse-safe for unmigrated commands. The bound setter converts straight
 // into the command's int var, so no separate capture variable is needed; absent
 // leaves it untouched (add_option_function skips run_callback_for_default()).
@@ -3944,8 +3923,9 @@ int main(int argc, const char **argv)
 
   int max_concurrent_ios = 32;
   ceph::timespan min_age = std::chrono::hours(1);
-  bool hide_progress = false;
-  bool dump_keys = false;
+  // int, not bool: bound by add_multilevel_binary_flag and ceph_argparse_binary_flag
+  int hide_progress = false;
+  int dump_keys = false;
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
 
@@ -4335,16 +4315,16 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_check_olh, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
-      add_multilevel_flag  (bucket_check_olh, "--dump-keys",         dump_keys,          "output all checked keys")->ignore_underscore();
-      add_multilevel_flag  (bucket_check_olh, "--hide-progress",     hide_progress,      "suppress per-shard progress output")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
       // bucket check unlinked options
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_option(bucket_check_unlinked, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
-      add_multilevel_flag  (bucket_check_unlinked, "--dump-keys",         dump_keys,          "output all checked keys")->ignore_underscore();
-      add_multilevel_flag  (bucket_check_unlinked, "--hide-progress",     hide_progress,      "suppress per-shard progress output")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
+      add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
       // bucket rm options
       add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
@@ -4987,10 +4967,10 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
-    } else if (ceph_argparse_flag(args, i, "--hide-progress", (char*)NULL)) {
-      hide_progress = true;
-    } else if (ceph_argparse_flag(args, i, "--dump-keys", (char*)NULL)) {
-      dump_keys = true;
+    } else if (ceph_argparse_binary_flag(args, i, &hide_progress, NULL, "--hide-progress", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &dump_keys, NULL, "--dump-keys", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
       placement_inline_data_specified = true;
      // do nothing
