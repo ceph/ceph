@@ -62,6 +62,10 @@ class SeastoreNodeExtent final: public NodeExtent {
     prior.recorder = std::move(recorder);
   }
 
+  void clear_delta() override {
+    recorder.reset();
+  }
+
   DeltaRecorder* get_recorder() const override {
     return recorder.get();
   }
