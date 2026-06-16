@@ -256,6 +256,10 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
       "Invalid error in RBMDevice::get_shard_nums")
   );
 
+  // The root device is only opened for this probe; the sharded devices open
+  // their own. Close it so the SPDK qpair and controller reference are
+  // released.
+  co_await close();
   co_return sb.shard_num;
 }
 
