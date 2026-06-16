@@ -132,8 +132,8 @@ namespace rgw::s3vector {
       return nullptr;
     }
     if (fk) {
-      if (!fk->allow_null) {
-        // if column does not allow null, we can create a const boolean expression
+      if (fk->must_exist) {
+        // if column must exist, we can create a const boolean expression
         return lancedb_expr_literal_bool(exists);
       }
       auto* col = lancedb_expr_column(fk->name.c_str());

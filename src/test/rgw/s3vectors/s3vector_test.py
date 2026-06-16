@@ -1908,8 +1908,8 @@ def test_put_vectors_invalid_filterable_types():
 
 
 @pytest.mark.vector_test
-def test_put_vectors_allow_null():
-    """Test the allowNull flag on filterable metadata keys."""
+def test_put_vectors_must_exist():
+    """Test the mustExist flag on filterable metadata keys."""
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
@@ -1918,8 +1918,8 @@ def test_put_vectors_allow_null():
 
     index_name = 'test-index'
     filterable_keys = [
-        {'name': 'genre', 'allowNull': False},
-        {'name': 'year', 'type': 'Number', 'allowNull': False},
+        {'name': 'genre', 'mustExist': True},
+        {'name': 'year', 'type': 'Number', 'mustExist': True},
         {'name': 'popular', 'type': 'Boolean'},
     ]
     result = conn.create_index(
@@ -1966,12 +1966,12 @@ def test_put_vectors_allow_null():
     assert_put_vectors_validation_error(conn, 'vectors[2].metadata.genre',
         vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_with_missing)
 
-    # same scenario but with allowNull explicitly true - should succeed
+    # same scenario but with mustExist=false - should succeed
     _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
 
     filterable_keys_nullable = [
-        {'name': 'genre', 'allowNull': True},
-        {'name': 'year', 'type': 'Number', 'allowNull': True},
+        {'name': 'genre', 'mustExist': False},
+        {'name': 'year', 'type': 'Number', 'mustExist': False},
         {'name': 'popular', 'type': 'Boolean'},
     ]
     result = conn.create_index(
@@ -1988,11 +1988,11 @@ def test_put_vectors_allow_null():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result['vectors']) == 3
 
-    # vector without metadata and allowNull=false - should fail
+    # vector without metadata and mustExist=true - should fail
     _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
 
     filterable_keys_not_null = [
-        {'name': 'genre', 'allowNull': False},
+        {'name': 'genre', 'mustExist': True},
         {'name': 'popular', 'type': 'Boolean'},
     ]
     result = conn.create_index(
@@ -2015,11 +2015,11 @@ def test_put_vectors_allow_null():
     assert_put_vectors_validation_error(conn, 'vectors[1].metadata.genre',
         vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_no_metadata)
 
-    # same but with allowNull=true - should succeed
+    # same but with mustExist=false - should succeed
     _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
 
     filterable_keys_all_null = [
-        {'name': 'genre', 'allowNull': True},
+        {'name': 'genre', 'mustExist': False},
         {'name': 'popular', 'type': 'Boolean'},
     ]
     result = conn.create_index(

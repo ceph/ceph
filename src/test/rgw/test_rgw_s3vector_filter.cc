@@ -39,7 +39,7 @@ protected:
 // ---- implicit $eq ----
 
 TEST_F(S3VectorFilterTest, ImplicitEqOnColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": "rock"})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -58,7 +58,7 @@ TEST_F(S3VectorFilterTest, ImplicitEqOnJson) {
 // ---- explicit operators on columns ----
 
 TEST_F(S3VectorFilterTest, ExplicitEqOnColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": {"$eq": "rock"}})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -76,7 +76,7 @@ TEST_F(S3VectorFilterTest, NumericRangeOnColumn) {
 }
 
 TEST_F(S3VectorFilterTest, BooleanEqOnColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, false}};
   auto result = build(R"({"active": {"$eq": true}})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -113,7 +113,7 @@ TEST_F(S3VectorFilterTest, NotEqOnJson) {
 // ---- $exists ----
 
 TEST_F(S3VectorFilterTest, ExistsOnNullableColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": {"$exists": true}})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -178,7 +178,7 @@ TEST_F(S3VectorFilterTest, ExistsWithEmptyValueRejected) {
 // ---- $in / $nin ----
 
 TEST_F(S3VectorFilterTest, InOnColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": {"$in": ["rock", "jazz"]}})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -187,7 +187,7 @@ TEST_F(S3VectorFilterTest, InOnColumn) {
 }
 
 TEST_F(S3VectorFilterTest, NinOnColumn) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": {"$nin": ["pop"]}})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -215,7 +215,7 @@ TEST_F(S3VectorFilterTest, InNumericOnJson) {
 
 TEST_F(S3VectorFilterTest, AndColumnsOnly) {
   std::vector<filterable_metadata_key_t> keys = {
-    {"genre", FilterableMetadataType::STRING, true},
+    {"genre", FilterableMetadataType::STRING, false},
     {"year", FilterableMetadataType::NUMBER, false},
   };
   auto result = build(R"({"$and": [{"genre": "rock"}, {"year": {"$gt": 2020}}]})", keys);
@@ -234,7 +234,7 @@ TEST_F(S3VectorFilterTest, AndJsonOnly) {
 }
 
 TEST_F(S3VectorFilterTest, AndMixedColumnAndJson) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"$and": [{"genre": "rock"}, {"color": "red"}]})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -245,7 +245,7 @@ TEST_F(S3VectorFilterTest, AndMixedColumnAndJson) {
 // ---- implicit AND (top-level fields) ----
 
 TEST_F(S3VectorFilterTest, ImplicitAndMixedColumnAndJson) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"genre": "rock", "color": "red"})", keys);
   ASSERT_TRUE(result.has_value());
   EXPECT_NE(result->column_expr, nullptr);
@@ -257,7 +257,7 @@ TEST_F(S3VectorFilterTest, ImplicitAndMixedColumnAndJson) {
 
 TEST_F(S3VectorFilterTest, OrColumnsOnly) {
   std::vector<filterable_metadata_key_t> keys = {
-    {"genre", FilterableMetadataType::STRING, true},
+    {"genre", FilterableMetadataType::STRING, false},
     {"year", FilterableMetadataType::NUMBER, false},
   };
   auto result = build(R"({"$or": [{"genre": "rock"}, {"year": {"$gt": 2020}}]})", keys);
@@ -278,7 +278,7 @@ TEST_F(S3VectorFilterTest, OrJsonOnly) {
 TEST_F(S3VectorFilterTest, OrColumnsNestedInAndWithJson) {
   // $or is column-only, combined via top-level $and with a JSON field — valid
   std::vector<filterable_metadata_key_t> keys = {
-    {"genre", FilterableMetadataType::STRING, true},
+    {"genre", FilterableMetadataType::STRING, false},
     {"year", FilterableMetadataType::NUMBER, false},
   };
   auto result = build(
@@ -292,7 +292,7 @@ TEST_F(S3VectorFilterTest, OrColumnsNestedInAndWithJson) {
 
 TEST_F(S3VectorFilterTest, OrJsonNestedInAndWithColumn) {
   // $or is JSON-only, combined via top-level $and with a column field — valid
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(
       R"({"$and": [{"$or": [{"color": "red"}, {"size": {"$gt": 10}}]}, {"genre": "rock"}]})",
       keys);
@@ -305,9 +305,9 @@ TEST_F(S3VectorFilterTest, OrJsonNestedInAndWithColumn) {
 TEST_F(S3VectorFilterTest, OrInsideOrAllColumns) {
   // nested $or within $or, all column fields — valid
   std::vector<filterable_metadata_key_t> keys = {
-    {"genre", FilterableMetadataType::STRING, true},
+    {"genre", FilterableMetadataType::STRING, false},
     {"year", FilterableMetadataType::NUMBER, false},
-    {"active", FilterableMetadataType::BOOLEAN, true},
+    {"active", FilterableMetadataType::BOOLEAN, false},
   };
   auto result = build(
       R"({"$or": [{"genre": "rock"}, {"$or": [{"year": {"$gt": 2020}}, {"active": true}]}]})",
@@ -343,7 +343,7 @@ TEST_F(S3VectorFilterTest, DeeplyNested) {
   // $and [ $or [ $and [ field, field ], field ], field ]
   // mixes column and JSON at different levels, all connected by $and at the top
   std::vector<filterable_metadata_key_t> keys = {
-    {"genre", FilterableMetadataType::STRING, true},
+    {"genre", FilterableMetadataType::STRING, false},
     {"year", FilterableMetadataType::NUMBER, false},
   };
   auto result = build(
@@ -389,7 +389,7 @@ TEST_F(S3VectorFilterTest, NonfilterableKeyRejected) {
 }
 
 TEST_F(S3VectorFilterTest, MixedOrRejected) {
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(R"({"$or": [{"genre": "rock"}, {"color": "red"}]})", keys);
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
@@ -397,7 +397,7 @@ TEST_F(S3VectorFilterTest, MixedOrRejected) {
 
 TEST_F(S3VectorFilterTest, MixedOrNestedViaAndRejected) {
   // $or child is a $and that returns both column_expr and json_expr — makes $or mixed
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(
       R"({"$or": [{"genre": "rock"}, {"$and": [{"genre": "jazz"}, {"color": "blue"}]}]})",
       keys);
@@ -407,7 +407,7 @@ TEST_F(S3VectorFilterTest, MixedOrNestedViaAndRejected) {
 
 TEST_F(S3VectorFilterTest, MixedOrNestedViaOrRejected) {
   // outer $or has one column child and one nested $or with JSON — mix detected across children
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(
       R"({"$or": [{"genre": "rock"}, {"$or": [{"color": "red"}, {"color": "blue"}]}]})",
       keys);
@@ -417,7 +417,7 @@ TEST_F(S3VectorFilterTest, MixedOrNestedViaOrRejected) {
 
 TEST_F(S3VectorFilterTest, MixedOrDeeplyNestedRejected) {
   // mix appears 3 levels deep: $and -> $or -> $and produces mixed FilterExprs for the $or
-  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
   auto result = build(
       R"({"$and": [{"$or": [{"genre": "rock"}, {"$and": [{"color": "red"}, {"genre": "jazz"}]}]}]})",
       keys);
@@ -444,7 +444,7 @@ TEST_F(S3VectorFilterTest, EmptyAndArrayRejected) {
 }
 
 TEST_F(S3VectorFilterTest, InvalidBooleanValueRejected) {
-  std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, false}};
   auto result = build(R"({"active": {"$eq": "yes"}})", keys);
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
@@ -548,7 +548,7 @@ TEST_F(S3VectorFilterTest, NullGtRejected) {
 }
 
 TEST_F(S3VectorFilterTest, ListTypeFilteringRejected) {
-  std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, true}};
+  std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, false}};
   auto result = build(R"({"tags": {"$eq": "foo"}})", keys);
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
