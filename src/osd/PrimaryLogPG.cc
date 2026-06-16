@@ -15055,6 +15055,10 @@ void PrimaryLogPG::update_range(
   } else if (*watermark >= pmi->end || pmi->empty()) {
     dout(10) << func_name << ": no migration targets in pmi, rescanning" << dendl;
     pmi->version = info.last_update;
+    // pmi->end might already be at MAX if we previously called
+    // scan_range_migration in degraded state and objects were missing.
+    // Reset to the watermark.
+    pmi->end = *watermark;
     scan_range_migration(local_min, local_max, pmi, handle);
   }
 
