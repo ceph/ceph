@@ -1,7 +1,6 @@
 #!/bin/bash
-# CLI11 migration tests, batch 2: bucket limit check,
-# bucket logging info/list/flush
-# (bucket layout and chown were migrated; their tests moved to test_cli11_bucket.sh)
+# CLI11 migration tests, batch 2: bucket logging info/list/flush
+# (bucket layout, chown, and limit check were migrated; their tests moved to test_cli11_bucket.sh)
 #
 # Usage:
 #   ./test_cli11_bucket_batch2.sh
@@ -21,9 +20,6 @@
 # The CLI11 'bucket' subcommand (require_subcommand) currently swallows all
 # UNMIGRATED bucket subcommands:
 #   bucket logging ...                   -> "A subcommand is required", exit 106
-#   bucket limit check                   -> mis-parses as 'bucket check' with a
-#                                           stray 'limit': "ERROR: unexpected
-#                                           argument: 'limit'", exit 22
 # So most parse-level tests below FAIL on the branch today. They pass against
 # a main build, and define the target behavior for the migration.
 #
@@ -122,23 +118,6 @@ check_cluster() {
 }
 
 # ============================================================
-echo "=== bucket limit check (parse level, no cluster) ==="
-# ============================================================
-
-# 'bucket limit' is an internal node in the legacy command tree
-check "limit (incomplete command)" 1 "$ERR_UNKNOWN_CMD" \
-  bucket limit
-check "limit check: stray after" 1 "Command not found: bucket limit check strayarg" \
-  bucket limit check strayarg
-
-check "limit check: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
-  bucket limit check --fakeflag
-
-check "limit check: --uid missing value" 1 "Option --uid requires an argument." \
-  bucket limit check --uid
-
-# ============================================================
-echo ""
 echo "=== bucket logging (parse level, no cluster) ==="
 # ============================================================
 
@@ -176,14 +155,6 @@ echo "=== handler-level errors (cluster) ==="
 # These run after driver init, so they need a cluster. The validation and
 # messages live in the command handlers and are unchanged by the migration.
 
-# bucket limit check — iterates all users when no --uid given
-check_cluster "limit check: no args (all users)" 0 "" -- \
-  bucket limit check
-check_cluster "limit check: --warnings-only" 0 "" -- \
-  bucket limit check --warnings-only
-check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 "" -- \
-  bucket limit check --uid cli11_no_such_user
-
 # bucket logging info/list/flush
 check_cluster "logging info: missing --bucket"  22 "$ERR_BUCKET_NOT_SPECIFIED" -- \
   bucket logging info
@@ -210,7 +181,7 @@ echo "=== integration: real bucket (cluster) ==="
 _test_uid="cli11_batch2_user"
 _test_bucket="cli11-batch2-bucket"
 _test_display="CLI11 Batch2 Test User"
-_n_integration=5
+_n_integration=3
 
 if cluster_running; then
   # Create a test user (legacy command, not yet CLI11-migrated)
@@ -231,12 +202,6 @@ if cluster_running; then
       AWS_SECRET_ACCESS_KEY="$_secret_key" \
       aws --endpoint-url "$_rgw_endpoint" \
         s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      # bucket limit check for the test user: JSON with user_id + buckets
-      check_cluster "integration: limit check --uid" 0 "user_id" -- \
-        bucket limit check --uid "$_test_uid"
-      check_cluster "integration: limit check --uid --warnings-only" 0 "" -- \
-        bucket limit check --uid "$_test_uid" --warnings-only
 
       # bucket logging on a bucket WITHOUT logging configured:
       # info is silent (exit 0, no output); list and flush print an error

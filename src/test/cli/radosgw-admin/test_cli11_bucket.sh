@@ -396,6 +396,32 @@ check_cluster "chown: nonexistent bucket (exit 2)" 2 "$ERR_CHOWN_NO_BUCKET" -- \
 
 # ============================================================
 echo ""
+echo "=== bucket limit check ==="
+# ============================================================
+
+# 'bucket limit' is an internal node: it requires the 'check' subcommand
+check "limit (incomplete command)" 106 "$ERR_SUBCOMMAND" \
+  bucket limit
+
+check "limit check: stray after" 22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket limit check strayarg
+
+check "limit check: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket limit check --fakeflag
+
+check "limit check: --uid missing value" 114 "--uid: 1 required TEXT missing" \
+  bucket limit check --uid
+
+# handler-level (cluster): no --uid iterates all users; all paths exit 0
+check_cluster "limit check: no args (all users)" 0 "" -- \
+  bucket limit check
+check_cluster "limit check: --warnings-only" 0 "" -- \
+  bucket limit check --warnings-only
+check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 "" -- \
+  bucket limit check --uid cli11_no_such_user
+
+# ============================================================
+echo ""
 echo "=== bucket link ==="
 # ============================================================
 
@@ -1371,6 +1397,12 @@ if cluster_running; then
       # change that still exercises the full chown path; exit 0, no output
       check_cluster "integration: bucket chown" 0 "" -- \
         bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
+
+      # bucket limit check for the test user: JSON with user_id + buckets
+      check_cluster "integration: limit check --uid" 0 "user_id" -- \
+        bucket limit check --uid "$_test_uid"
+      check_cluster "integration: limit check --uid --warnings-only" 0 "" -- \
+        bucket limit check --uid "$_test_uid" --warnings-only
 
       # bucket unlink: unlink the bucket from the user
       check_cluster "integration: bucket unlink" 0 "" -- \

@@ -1048,7 +1048,6 @@ static SimpleCmd::Commands all_cmds = {
   { "subuser rm", OPT::SUBUSER_RM },
   { "key create", OPT::KEY_CREATE },
   { "key rm", OPT::KEY_RM },
-  { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
   { "bucket suspend", OPT::BUCKET_SUSPEND },
   { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
 #ifdef WITH_RADOSGW_RADOS
@@ -4234,9 +4233,10 @@ int main(int argc, const char **argv)
     // TODO: remove this block and the !route_bucket_to_legacy guard below once
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
-        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown"};
+        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
+        "limit"};
     static const std::set<std::string_view> legacy_bucket_words = {
-        "limit", "sync", "rewrite", "reshard", "set-min-shards",
+        "sync", "rewrite", "reshard", "set-min-shards",
         "radoslist", "rados", "shard", "object", "resync", "logging"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
@@ -4427,6 +4427,9 @@ int main(int argc, const char **argv)
       bucket_rm->alias("remove");
       auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
       auto* bucket_chown  = bucket_cmd->add_subcommand("chown",  "change bucket ownership to the specified user");
+      auto* bucket_limit       = bucket_cmd->add_subcommand("limit", "bucket limit commands");
+      auto* bucket_limit_check = bucket_limit->add_subcommand("check", "show bucket sharding stats");
+      bucket_limit->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -4515,6 +4518,11 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
       add_multilevel_option(bucket_chown, "--tenant",          tenant,          tenant_desc);
       add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
+
+      // bucket limit check options
+      add_multilevel_option(bucket_limit_check, "--uid,-i", uid_str, uid_desc);
+      add_multilevel_binary_flag(bucket_limit_check, "--warnings-only", warnings_only,
+                                 "list only buckets nearing or over the current max objects per shard value")->ignore_underscore();
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4814,6 +4822,58 @@ int main(int argc, const char **argv)
             return -r;
           }
           return 0;
+        };
+      });
+
+      bucket_limit_check->callback(
+          [&uid_str, &user_id_arg, &cli11_readonly, &cli11_action,
+           &user, &bucket_op, &stream_flusher_ptr, &warnings_only, &metadata_key] {
+        user_id_arg.from_str(uid_str);
+        cli11_readonly = true;
+
+        cli11_action = [&user, &bucket_op, &stream_flusher_ptr, &warnings_only,
+                        &metadata_key]() -> int {
+          void *handle;
+          std::list<std::string> user_ids;
+          metadata_key = "user";
+          int max = 1000;
+          bool truncated;
+          int ret = 0;
+
+          if (!rgw::sal::User::empty(user)) {
+            user_ids.push_back(user->get_id().id);
+            ret = RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids,
+                                                *stream_flusher_ptr, null_yield, dpp(),
+                                                warnings_only);
+          } else {
+            /* list users in groups of max-keys, then perform user-bucket
+             * limit-check on each group */
+            ret = driver->meta_list_keys_init(dpp(), metadata_key, string(), &handle);
+            if (ret < 0) {
+              cerr << "ERROR: buckets limit check can't get user metadata_key: "
+                   << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+
+            do {
+              ret = driver->meta_list_keys_next(dpp(), handle, max, user_ids, &truncated);
+              if (ret < 0 && ret != -ENOENT) {
+                cerr << "ERROR: buckets limit check lists_keys_next(): "
+                     << cpp_strerror(-ret) << std::endl;
+                break;
+              } else {
+                /* ok, do the limit checks for this group */
+                ret = RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids,
+                                                    *stream_flusher_ptr, null_yield, dpp(),
+                                                    warnings_only);
+                if (ret < 0)
+                  break;
+              }
+              user_ids.clear();
+            } while (truncated);
+            driver->meta_list_keys_complete(handle);
+          }
+          return -ret;
         };
       });
     } // bucket command registrations
@@ -5614,7 +5674,6 @@ int main(int argc, const char **argv)
 			 OPT::ACCOUNT_GET,
 			 OPT::ACCOUNT_STATS,
 			 OPT::ACCOUNT_LIST,
-			 OPT::BUCKET_LIMIT_CHECK,
 #ifdef WITH_RADOSGW_RADOS
 			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
@@ -8820,51 +8879,6 @@ int main(int argc, const char **argv)
       }
     }
   }
-
-  if (opt_cmd == OPT::BUCKET_LIMIT_CHECK) {
-    void *handle;
-    std::list<std::string> user_ids;
-    metadata_key = "user";
-    int max = 1000;
-
-    bool truncated;
-
-    if (!rgw::sal::User::empty(user)) {
-      user_ids.push_back(user->get_id().id);
-      ret =
-	RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids, stream_flusher,
-				      null_yield, dpp(), warnings_only);
-    } else {
-      /* list users in groups of max-keys, then perform user-bucket
-       * limit-check on each group */
-     ret = driver->meta_list_keys_init(dpp(), metadata_key, string(), &handle);
-      if (ret < 0) {
-	cerr << "ERROR: buckets limit check can't get user metadata_key: "
-	     << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      do {
-	ret = driver->meta_list_keys_next(dpp(), handle, max, user_ids,
-					      &truncated);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: buckets limit check lists_keys_next(): "
-	       << cpp_strerror(-ret) << std::endl;
-	  break;
-	} else {
-	  /* ok, do the limit checks for this group */
-	  ret =
-	    RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids, stream_flusher,
-					  null_yield, dpp(), warnings_only);
-	  if (ret < 0)
-	    break;
-	}
-	user_ids.clear();
-      } while (truncated);
-      driver->meta_list_keys_complete(handle);
-    }
-    return -ret;
-  } /* OPT::BUCKET_LIMIT_CHECK */
 
 #ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
