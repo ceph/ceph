@@ -1,6 +1,7 @@
 #!/bin/bash
-# CLI11 migration tests, batch 2: bucket layout, bucket chown,
+# CLI11 migration tests, batch 2: bucket chown,
 # bucket limit check, bucket logging info/list/flush
+# (bucket layout was migrated; its tests moved to test_cli11_bucket.sh)
 #
 # Usage:
 #   ./test_cli11_bucket_batch2.sh
@@ -19,7 +20,7 @@
 # !!! KNOWN REGRESSION on the rgw-cli11-migration branch !!!
 # The CLI11 'bucket' subcommand (require_subcommand) currently swallows all
 # UNMIGRATED bucket subcommands:
-#   bucket layout / chown / logging ...  -> "A subcommand is required", exit 106
+#   bucket chown / logging ...           -> "A subcommand is required", exit 106
 #   bucket limit check                   -> mis-parses as 'bucket check' with a
 #                                           stray 'limit': "ERROR: unexpected
 #                                           argument: 'limit'", exit 22
@@ -48,7 +49,7 @@ SKIP=0
 
 # Error message constants (legacy)
 ERR_UNKNOWN_CMD="ERROR: Unknown command"
-ERR_BUCKET_NOT_SPECIFIED="ERROR: bucket not specified"          # layout, logging *
+ERR_BUCKET_NOT_SPECIFIED="ERROR: bucket not specified"          # logging *
 ERR_BUCKET_NAME_NOT_SPECIFIED="ERROR: bucket name not specified" # chown (different wording!)
 # chown on a nonexistent bucket: RGWBucket::init fails, main prints
 # "failure: <cpp_strerror>: <err_msg>"
@@ -125,35 +126,6 @@ check_cluster() {
 }
 
 # ============================================================
-echo "=== bucket layout (parse level, no cluster) ==="
-# ============================================================
-
-# stray positional args
-# post-migration: exit 22, "ERROR: unexpected argument: 'x'"
-check "layout: stray after"   1 "Command not found: bucket layout strayarg" \
-  bucket layout strayarg
-check "layout: stray before"  1 "ERROR: Unrecognized argument: 'foo'" \
-  foo bucket layout
-check "layout: stray between" 1 "ERROR: Unrecognized argument: 'extra'" \
-  bucket extra layout
-
-# unknown flag (same message and exit code post-migration)
-check "layout: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
-  bucket layout --fakeflag
-
-# missing option value
-# post-migration: exit 114, "--bucket: 1 required TEXT missing"
-check "layout: --bucket missing value"    1 "Option --bucket requires an argument." \
-  bucket layout --bucket
-check "layout: --bucket-id missing value" 1 "Option --bucket-id requires an argument." \
-  bucket layout --bucket-id
-check "layout: --tenant missing value"    1 "Option --tenant requires an argument." \
-  bucket layout --tenant
-check "layout: --format missing value"    1 "Option --format requires an argument." \
-  bucket layout --format
-
-# ============================================================
-echo ""
 echo "=== bucket chown (parse level, no cluster) ==="
 # ============================================================
 
@@ -228,14 +200,7 @@ echo "=== handler-level errors (cluster) ==="
 # These run after driver init, so they need a cluster. The validation and
 # messages live in the command handlers and are unchanged by the migration.
 
-# bucket layout
-check_cluster "layout: missing --bucket" 22 "$ERR_BUCKET_NOT_SPECIFIED" -- \
-  bucket layout
-# init_bucket failure is SILENT for layout: no message, exit ENOENT
-check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- \
-  bucket layout --bucket cli11-no-such-bucket
-
-# bucket chown — note the different message wording vs layout
+# bucket chown
 check_cluster "chown: missing --bucket" 22 "$ERR_BUCKET_NAME_NOT_SPECIFIED" -- \
   bucket chown
 check_cluster "chown: nonexistent bucket" 2 "$ERR_CHOWN_NO_BUCKET" -- \
@@ -278,7 +243,7 @@ echo "=== integration: real bucket (cluster) ==="
 _test_uid="cli11_batch2_user"
 _test_bucket="cli11-batch2-bucket"
 _test_display="CLI11 Batch2 Test User"
-_n_integration=9
+_n_integration=6
 
 if cluster_running; then
   # Create a test user (legacy command, not yet CLI11-migrated)
@@ -299,12 +264,6 @@ if cluster_running; then
       AWS_SECRET_ACCESS_KEY="$_secret_key" \
       aws --endpoint-url "$_rgw_endpoint" \
         s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      # bucket layout: dumps the bucket's index layout as JSON
-      check_cluster "integration: bucket layout" 0 "current_index" -- \
-        bucket layout --bucket "$_test_bucket"
-      check_cluster "integration: bucket layout --format json" 0 "current_index" -- \
-        bucket layout --bucket "$_test_bucket" --format json
 
       # bucket chown: chown to the (already-owning) test user. Progress goes
       # to stderr ("0 objects processed in ...") unless BucketOwnerEnforced
@@ -327,10 +286,6 @@ if cluster_running; then
         bucket logging list --bucket "$_test_bucket"
       check_cluster "integration: logging flush (no logging, msg + exit 0)" 0 "$ERR_NO_LOGGING" -- \
         bucket logging flush --bucket "$_test_bucket"
-
-      # tenant flag passthrough: empty tenant is the default, exit 0
-      check_cluster "integration: bucket layout --tenant ''" 0 "current_index" -- \
-        bucket layout --bucket "$_test_bucket" --tenant ""
     else
       echo "SKIP [integration]: could not get credentials for test user"
       SKIP=$((SKIP+_n_integration))
