@@ -369,6 +369,13 @@ class RequestStatus(NamedTuple):
     error_message: str
 
 
+class GwRefreshNetworkStatus(NamedTuple):
+    status: int
+    error_message: str
+    added: List[str]
+    removed: List[str]
+
+
 class ListenAdress(NamedTuple):
     trtype: str
     adrfam: str
