@@ -59,6 +59,8 @@ WARN_MAX_IOS_POS="Warning: --max-concurrent-ios should appear after the subcomma
 WARN_MAX_IOS_DUP="Warning: --max-concurrent-ios specified multiple times, using last value"
 WARN_DUMP_KEYS_POS="Warning: --dump-keys should appear after the subcommand"
 WARN_HIDE_PROGRESS_POS="Warning: --hide-progress should appear after the subcommand"
+WARN_DUMP_KEYS_DUP="Warning: --dump-keys specified multiple times, using last value"
+WARN_HIDE_PROGRESS_DUP="Warning: --hide-progress specified multiple times, using last value"
 
 # Error message constants
 # Legacy behavior: missing --bucket/--uid is not validated up front; the op
@@ -742,6 +744,9 @@ check_warns "check: --tenant before bucket"                 22 "ERROR: --tenant 
   --tenant foo bucket check
 check_warns "check: duplicate --fix"                        0 "" "$WARN_FIX_DUP" -- \
   bucket check --fix --fix
+# take_last: with explicit values the last one wins (and still warns)
+check_warns "check: duplicate --fix value (last value wins)" 0 "" "$WARN_FIX_DUP" -- \
+  bucket check --fix=true --fix=false
 
 # binary-flag backward-compat (--fix pilot, add_multilevel_binary_flag).
 # All forms resolve to a bool and exit 0; with no --bucket the check is a silent
@@ -846,6 +851,33 @@ check_warns "check olh: --max-concurrent-ios before bucket" 0 "" "$WARN_MAX_IOS_
 check_warns "check olh: --dump-keys + --hide-progress before (2 warns)" 0 "" \
   "$WARN_DUMP_KEYS_POS" "$WARN_HIDE_PROGRESS_POS" -- \
   --dump-keys --hide-progress bucket check olh
+
+# Multilevel registration: these flags are accepted at every level, not just at
+# root. Away from its canonical command a flag gets a position warning but still
+# works (exit 0). --fix is a "bucket check" flag, so "after check" is canonical
+# (no position warning); --dump-keys/--hide-progress belong to olh, so "after
+# check" still warns. --fix represents the 10 binary flags (same helper).
+check_warns "check olh: --fix after bucket"             0 "" "$WARN_FIX_POS" -- \
+  bucket --fix check olh
+check_cluster "check olh: --fix after check (canonical, accepted)" 0 "" -- \
+  bucket check --fix olh
+check_warns "check olh: --dump-keys after bucket"       0 "" "$WARN_DUMP_KEYS_POS" -- \
+  bucket --dump-keys check olh
+check_warns "check olh: --dump-keys after check"        0 "" "$WARN_DUMP_KEYS_POS" -- \
+  bucket check --dump-keys olh
+check_warns "check olh: --hide-progress after bucket"   0 "" "$WARN_HIDE_PROGRESS_POS" -- \
+  bucket --hide-progress check olh
+check_warns "check olh: --hide-progress after check"    0 "" "$WARN_HIDE_PROGRESS_POS" -- \
+  bucket check --hide-progress olh
+# duplicate -> take_last keeps the last value, with a dup warning
+check_warns "check olh: duplicate --dump-keys (last value wins)"     0 "" "$WARN_DUMP_KEYS_DUP" -- \
+  bucket check olh --dump-keys=true --dump-keys=false
+check_warns "check olh: duplicate --hide-progress (last value wins)" 0 "" "$WARN_HIDE_PROGRESS_DUP" -- \
+  bucket check olh --hide-progress=true --hide-progress=false
+# dup and position warnings are independent: --fix duplicated at its canonical
+# level warns about the duplicate but not about position
+check_warns "check olh: duplicate --fix at canonical level (dup only)" 0 "" "$WARN_FIX_DUP" -- \
+  bucket check --fix=true --fix=false olh
 
 check_warns "check unlinked: --bucket before bucket"             0 "" "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test bucket check unlinked
@@ -1104,6 +1136,42 @@ check_cluster "functional: bucket check unlinked --dump-keys"     0 "" -- \
   bucket check unlinked --dump-keys
 check_cluster "functional: bucket check unlinked --hide-progress" 0 "" -- \
   bucket check unlinked --hide-progress
+# --dump-keys/--hide-progress migrated to the binary-flag form, so a value
+# suffix now warn-and-accepts (=banana -> warn + set), like the other binary
+# flags above. olh/unlinked are cluster commands, hence check_warns (not the
+# no-cluster "check" =banana block).
+check_warns "check olh: --dump-keys=banana (warn-accept)"          0 "" \
+  "Warning: invalid value 'banana' for --dump-keys, treating as set" -- \
+  bucket check olh --dump-keys=banana
+check_warns "check olh: --hide-progress=banana (warn-accept)"      0 "" \
+  "Warning: invalid value 'banana' for --hide-progress, treating as set" -- \
+  bucket check olh --hide-progress=banana
+check_warns "check unlinked: --dump-keys=banana (warn-accept)"     0 "" \
+  "Warning: invalid value 'banana' for --dump-keys, treating as set" -- \
+  bucket check unlinked --dump-keys=banana
+check_warns "check unlinked: --hide-progress=banana (warn-accept)" 0 "" \
+  "Warning: invalid value 'banana' for --hide-progress, treating as set" -- \
+  bucket check unlinked --hide-progress=banana
+# Valid bool value forms (=true/=false and the space form) are consumed cleanly
+# (exit 0, no stray), like the other binary flags. olh is the representative:
+# --dump-keys/--hide-progress share one registration and var across olh and
+# unlinked, so value parsing is identical (per-subcommand execution covered above).
+check_cluster "check olh: --dump-keys=true"              0 "" -- \
+  bucket check olh --dump-keys=true
+check_cluster "check olh: --dump-keys true (space)"      0 "" -- \
+  bucket check olh --dump-keys true
+check_cluster "check olh: --dump-keys=false"             0 "" -- \
+  bucket check olh --dump-keys=false
+check_cluster "check olh: --dump-keys false (space)"     0 "" -- \
+  bucket check olh --dump-keys false
+check_cluster "check olh: --hide-progress=true"          0 "" -- \
+  bucket check olh --hide-progress=true
+check_cluster "check olh: --hide-progress true (space)"  0 "" -- \
+  bucket check olh --hide-progress true
+check_cluster "check olh: --hide-progress=false"         0 "" -- \
+  bucket check olh --hide-progress=false
+check_cluster "check olh: --hide-progress false (space)" 0 "" -- \
+  bucket check olh --hide-progress false
 check_cluster "functional: buckets check olh (alias, no --bucket)" 0 "" -- \
   buckets check olh
 check_cluster "functional: buckets check unlinked (alias)"         0 "" -- \
