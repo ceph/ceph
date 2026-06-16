@@ -683,7 +683,7 @@ EOF
 # Create (prepare) and run (activate) a crimson osd by the name osd.**id**
 # with data in **dir**/**id**.
 #
-# The remaining arguments are passed verbatim to crimson-osd.
+# The remaining arguments are passed verbatim to ceph-osd-crimson.
 #
 # Two mandatory arguments must be provided: --fsid and --mon-host
 # Instead of adding them to every call to run_crimson_osd, they can be
@@ -695,7 +695,7 @@ EOF
 #
 # @param dir path name of the environment
 # @param id osd identifier
-# @param ... can be any option valid for crimson-osd
+# @param ... can be any option valid for ceph-osd-crimson
 # @return 0 on success, 1 on error
 #
 function run_crimson_osd() {
@@ -726,14 +726,16 @@ function run_crimson_osd() {
     ceph_args+="$@"
     mkdir -p $osd_data
 
-    # Find crimson-osd binary
+    # Find ceph-osd-crimson binary
     local crimson_osd=""
     if [ -f "./bin/crimson-osd" ]; then
         crimson_osd="./bin/crimson-osd"
     elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
         crimson_osd="$CEPH_ROOT/build/bin/crimson-osd"
+    elif command -v ceph-osd-crimson &>/dev/null; then
+        crimson_osd="ceph-osd-crimson"
     else
-        echo "ERROR: crimson-osd binary not found"
+        echo "ERROR: ceph-osd-crimson binary not found"
         return 1
     fi
 
@@ -742,7 +744,7 @@ function run_crimson_osd() {
     ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
 
     # Standalone tests do not set crimson_cpu_set/crimson_cpu_num (vstart.sh does).
-    # Without this, crimson-osd aborts in get_early_config.
+    # Without this, ceph-osd-crimson aborts in get_early_config.
     ceph config set osd.$id crimson_cpu_num 1 || return 1
 
     local uuid=`uuidgen`
@@ -752,10 +754,10 @@ function run_crimson_osd() {
     ceph osd new $uuid -i $osd_data/new.json
     rm $osd_data/new.json
 
-    # Use crimson-osd for mkfs (not ceph-osd!)
-    echo "Running crimson-osd mkfs..."
+    # Use ceph-osd-crimson for mkfs (not ceph-osd!)
+    echo "Running ceph-osd-crimson mkfs..."
     if ! $crimson_osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid 2>&1; then
-        echo "ERROR: crimson-osd --mkfs failed"
+        echo "ERROR: ceph-osd-crimson --mkfs failed"
         return 1
     fi
 
