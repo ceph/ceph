@@ -107,6 +107,8 @@
      --show-mappings       show mappings
      --show-bad-mappings   show bad mappings
      --show-choose-tries   show choose tries histogram
+     --show-retry-exhaustion
+                           check for and report CRUSH retry exhaustion
      --output-name name
                            prepend the data file(s) generated during the
                            testing routine with name
