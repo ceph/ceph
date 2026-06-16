@@ -829,6 +829,9 @@ void PeeringState::start_peering_interval(
   state_clear(PG_STATE_RECOVERY_WAIT);
   state_clear(PG_STATE_RECOVERY_TOOFULL);
   state_clear(PG_STATE_RECOVERING);
+  state_clear(PG_STATE_MIGRATION_WAIT);
+  state_clear(PG_STATE_MIGRATION_TOOFULL);
+  state_clear(PG_STATE_MIGRATING);
 
   peer_purged.clear();
   acting_recovery_backfill.clear();
