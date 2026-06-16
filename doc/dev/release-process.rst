@@ -104,21 +104,17 @@ We'll use a stable/regular 19.2.2 release of Squid as an example throughout this
 
 NOTE: if for some reason the build has to be restarted (for example if one distro failed) then the ``TAG`` option has to be unchecked.
 
-4. Use https://docs.ceph.com/en/latest/start/os-recommendations/?highlight=debian#platforms to determine the ``DISTROS`` parameter.  For example,
+4. Use :ref:`start-platforms` to determine the ``DISTROS`` parameter.  For example,
 
-    +-------------------+--------------------------------------------------+
-    | Release           | Distro Codemap                                   |
-    +===================+==================================================+
-    | pacific (16.X.X)  | ``focal bionic buster bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | quincy (17.X.X)   | ``jammy focal centos9 bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | reef (18.X.X)     | ``jammy focal centos9 windows bookworm``         |
-    +-------------------+--------------------------------------------------+
-    | squid (19.X.X)    | ``jammy centos9 windows bookworm``               |
-    +-------------------+--------------------------------------------------+
-    | tentacle (20.X.X) | ``jammy centos9 noble windows bookworm rocky10`` |
-    +-------------------+--------------------------------------------------+
+    +-------------------+---------------------------------------------------------+
+    | Release           | Distro Codemap                                          |
+    +===================+=========================================================+
+    | squid (19.X.X)    | ``jammy centos9 windows bookworm``                      |
+    +-------------------+---------------------------------------------------------+
+    | tentacle (20.X.X) | ``jammy centos9 rocky10 windows bookworm``              |
+    +-------------------+---------------------------------------------------------+
+    | umbrella (21.X.X) | ``jammy noble centos9 rocky10 bookworm trixie windows`` |
+    +-------------------+---------------------------------------------------------+
 
 
 5. Click ``Build``.
