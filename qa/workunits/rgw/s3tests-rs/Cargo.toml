@@ -38,6 +38,7 @@ fails_on_nsfs = []
 fails_on_posix = []
 rgw_admin = []
 has_kafka = ["rdkafka"]
+has_vault = []
 
 [dev-dependencies]
 rstest = "0.24"

@@ -1,6 +1,7 @@
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{ServerSideEncryption, ServerSideEncryptionByDefault, ServerSideEncryptionConfiguration, ServerSideEncryptionRule};
 use s3_tests_rs::client::get_client;
+use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::get_new_bucket;
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 use s3_tests_rs::assert_s3_err;
@@ -60,7 +61,7 @@ async fn test_sse_s3_encrypted_upload(file_size: usize) {
     assert_eq!(body, data);
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_encrypted_upload_1b() {
@@ -68,7 +69,7 @@ async fn test_sse_s3_encrypted_upload_1b() {
     test_sse_s3_encrypted_upload(1).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_encrypted_upload_1kb() {
@@ -76,7 +77,7 @@ async fn test_sse_s3_encrypted_upload_1kb() {
     test_sse_s3_encrypted_upload(1024).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_encrypted_upload_1mb() {
@@ -84,7 +85,7 @@ async fn test_sse_s3_encrypted_upload_1mb() {
     test_sse_s3_encrypted_upload(1024 * 1024).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_encrypted_upload_8mb() {
@@ -119,7 +120,7 @@ async fn test_sse_s3_default_upload(file_size: usize) {
     assert_eq!(body, data);
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_default_upload_1b() {
@@ -127,7 +128,7 @@ async fn test_sse_s3_default_upload_1b() {
     test_sse_s3_default_upload(1).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_default_upload_1kb() {
@@ -135,7 +136,7 @@ async fn test_sse_s3_default_upload_1kb() {
     test_sse_s3_default_upload(1024).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_default_upload_1mb() {
@@ -143,12 +144,354 @@ async fn test_sse_s3_default_upload_1mb() {
     test_sse_s3_default_upload(1024 * 1024).await;
 }
 
-#[ignore = "requires SSE configuration"]
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_sse_s3_default_upload_8mb() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     test_sse_s3_default_upload(8 * 1024 * 1024).await;
+}
+
+// --- SSE-KMS helpers ---
+
+async fn put_bucket_encryption_kms(client: &aws_sdk_s3::Client, bucket_name: &str, key_id: &str) {
+    let rule = ServerSideEncryptionRule::builder()
+        .apply_server_side_encryption_by_default(
+            ServerSideEncryptionByDefault::builder()
+                .sse_algorithm(ServerSideEncryption::AwsKms)
+                .kms_master_key_id(key_id)
+                .build()
+                .unwrap(),
+        )
+        .build();
+    let conf = ServerSideEncryptionConfiguration::builder()
+        .rules(rule)
+        .build()
+        .unwrap();
+    client
+        .put_bucket_encryption()
+        .bucket(bucket_name)
+        .server_side_encryption_configuration(conf)
+        .send()
+        .await
+        .unwrap();
+}
+
+// --- SSE-KMS explicit upload tests ---
+
+async fn test_sse_kms_encrypted_upload(file_size: usize) {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    let data = "A".repeat(file_size);
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("testobj")
+        .body(ByteStream::from(data.as_bytes().to_vec()))
+        .server_side_encryption(ServerSideEncryption::AwsKms)
+        .ssekms_key_id(&config.main_kms_keyid)
+        .send()
+        .await
+        .unwrap();
+
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key("testobj")
+        .send()
+        .await
+        .unwrap();
+    let body = get_body(response).await;
+    assert_eq!(body, data);
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_encrypted_upload_1b() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_encrypted_upload(1).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_encrypted_upload_1kb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_encrypted_upload(1024).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_encrypted_upload_1mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_encrypted_upload(1024 * 1024).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_encrypted_upload_8mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_encrypted_upload(8 * 1024 * 1024).await;
+}
+
+// --- SSE-KMS bucket default upload tests ---
+
+async fn test_sse_kms_default_upload(file_size: usize) {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    put_bucket_encryption_kms(&client, &bucket_name, &config.main_kms_keyid).await;
+
+    let data = "A".repeat(file_size);
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("testobj")
+        .body(ByteStream::from(data.as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key("testobj")
+        .send()
+        .await
+        .unwrap();
+    let body = get_body(response).await;
+    assert_eq!(body, data);
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_default_upload_1b() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_default_upload(1).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_default_upload_1kb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_default_upload(1024).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_default_upload_1mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_default_upload(1024 * 1024).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_default_upload_8mb() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    test_sse_kms_default_upload(8 * 1024 * 1024).await;
+}
+
+// --- SSE-KMS bucket encryption config tests ---
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[tokio::test]
+async fn test_put_bucket_encryption_kms() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+    put_bucket_encryption_kms(&client, &bucket, &config.main_kms_keyid).await;
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[tokio::test]
+async fn test_get_bucket_encryption_kms() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let result = client.get_bucket_encryption().bucket(&bucket).send().await;
+    assert!(result.is_err());
+
+    put_bucket_encryption_kms(&client, &bucket, &config.main_kms_keyid).await;
+
+    let resp = client.get_bucket_encryption().bucket(&bucket).send().await.unwrap();
+    let rules = resp.server_side_encryption_configuration().unwrap().rules();
+    assert_eq!(rules.len(), 1);
+    let default = rules[0].apply_server_side_encryption_by_default().unwrap();
+    assert_eq!(*default.sse_algorithm(), ServerSideEncryption::AwsKms);
+    assert_eq!(default.kms_master_key_id().unwrap(), config.main_kms_keyid.as_str());
+}
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[tokio::test]
+async fn test_delete_bucket_encryption_kms() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    client.delete_bucket_encryption().bucket(&bucket).send().await.unwrap();
+
+    put_bucket_encryption_kms(&client, &bucket, &config.main_kms_keyid).await;
+
+    client.delete_bucket_encryption().bucket(&bucket).send().await.unwrap();
+
+    let result = client.get_bucket_encryption().bucket(&bucket).send().await;
+    assert!(result.is_err());
+}
+
+// --- SSE-KMS + SSE-C conflict ---
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[tokio::test]
+async fn test_put_obj_enc_conflict_c_kms() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let result = client
+        .put_object()
+        .bucket(&bucket)
+        .key("testobj")
+        .server_side_encryption(ServerSideEncryption::AwsKms)
+        .ssekms_key_id(&config.main_kms_keyid)
+        .sse_customer_algorithm("AES256")
+        .sse_customer_key("pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=")
+        .sse_customer_key_md5("DWygnHRtgiJ77HCm+1rvHw==")
+        .send()
+        .await;
+    assert_s3_err!(result, 400, "InvalidArgument");
+}
+
+// --- SSE-KMS with bucket policy ---
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_bucket_policy_put_obj_kms() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let resource = make_arn_resource(&format!("{}/*", bucket));
+    let deny_wrong_algo = json!({
+        "StringNotEquals": {
+            "s3:x-amz-server-side-encryption": "aws:kms"
+        }
+    });
+    let deny_no_enc = json!({
+        "Null": {
+            "s3:x-amz-server-side-encryption": "true"
+        }
+    });
+    let policy = json!({
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": "s3:PutObject",
+                "Resource": resource,
+                "Condition": deny_wrong_algo,
+            },
+            {
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": "s3:PutObject",
+                "Resource": resource,
+                "Condition": deny_no_enc,
+            }
+        ]
+    });
+    client
+        .put_bucket_policy()
+        .bucket(&bucket)
+        .policy(serde_json::to_string(&policy).unwrap())
+        .send()
+        .await
+        .unwrap();
+
+    // put without encryption → denied
+    let result = client
+        .put_object()
+        .bucket(&bucket)
+        .key("testobj")
+        .body(ByteStream::from_static(b"testobj"))
+        .send()
+        .await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    // put with SSE-KMS → allowed
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key("testobj")
+        .body(ByteStream::from_static(b"testobj"))
+        .server_side_encryption(ServerSideEncryption::AwsKms)
+        .ssekms_key_id(&config.main_kms_keyid)
+        .send()
+        .await
+        .unwrap();
+}
+
+// --- SSE-KMS key rotation ---
+
+#[cfg_attr(not(feature = "has_vault"), ignore = "requires Vault (--features has_vault)")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_sse_kms_key_rotation() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let config = get_config();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let data = "A".repeat(1024);
+
+    // upload with key 1
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key("obj1")
+        .body(ByteStream::from(data.as_bytes().to_vec()))
+        .server_side_encryption(ServerSideEncryption::AwsKms)
+        .ssekms_key_id(&config.main_kms_keyid)
+        .send()
+        .await
+        .unwrap();
+
+    // upload with key 2
+    client
+        .put_object()
+        .bucket(&bucket)
+        .key("obj2")
+        .body(ByteStream::from(data.as_bytes().to_vec()))
+        .server_side_encryption(ServerSideEncryption::AwsKms)
+        .ssekms_key_id(&config.main_kms_keyid2)
+        .send()
+        .await
+        .unwrap();
+
+    // both should be readable
+    let resp1 = client.get_object().bucket(&bucket).key("obj1").send().await.unwrap();
+    assert_eq!(get_body(resp1).await, data);
+
+    let resp2 = client.get_object().bucket(&bucket).key("obj2").send().await.unwrap();
+    assert_eq!(get_body(resp2).await, data);
 }
 
 // --- SSE-C encrypted transfer tests ---
