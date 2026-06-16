@@ -4356,7 +4356,15 @@ void Client::_flushed(Inode *in)
 {
   ldout(cct, 10) << "_flushed " << *in << dendl;
 
-  put_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
+  // finish_io may already have dropped FILE_BUFFER before this runs on the
+  // ObjectCacher finisher (PR3 no longer nests flush_set_callback under the
+  // write completion path).
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE] > 0) {
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+  }
+  if (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+    put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+  }
 }
 
 
