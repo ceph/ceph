@@ -67,6 +67,8 @@ WARN_HIDE_PROGRESS_DUP="Warning: --hide-progress specified multiple times, using
 # layer fails with raw EINVAL messages, and bucket rm ignores failures
 # entirely (see TODOs in radosgw-admin.cc). Tests for these need a cluster.
 ERR_FETCH_BUCKET="failure: (22) Invalid argument: failed to fetch bucket info for bucket="
+# chown on a nonexistent bucket: RGWBucket::init fails, main prints exit 2
+ERR_CHOWN_NO_BUCKET="failure: (2) No such file or directory: failed to fetch bucket info for bucket="
 ERR_REQUIRES_USER="failure: (22) Invalid argument: requires user or account id"
 ERR_EINVAL="failure: (22) Invalid argument"
 ERR_SUBCOMMAND="A subcommand is required"
@@ -353,6 +355,44 @@ check_cluster "layout: missing --bucket" 22 "ERROR: bucket not specified" -- \
   bucket layout
 check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- \
   bucket layout --bucket cli11-no-such-bucket
+
+# ============================================================
+echo ""
+echo "=== bucket chown ==="
+# ============================================================
+
+# stray positional args
+check "chown: stray after flags"               22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket chown strayarg
+check "chown: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket chown
+check "chown: stray between bucket and chown"  22 "ERROR: unexpected argument: 'extra'" \
+  bucket extra chown
+
+check "chown: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket chown --fakeflag
+
+# missing option value
+check "chown: --bucket missing value"          114 "--bucket: 1 required TEXT missing" \
+  bucket chown --bucket
+check "chown: --uid missing value"             114 "--uid: 1 required TEXT missing" \
+  bucket chown --uid
+check "chown: --bucket-id missing value"       114 "--bucket-id: 1 required TEXT missing" \
+  bucket chown --bucket-id
+check "chown: --marker missing value"          114 "--marker: 1 required TEXT missing" \
+  bucket chown --marker
+check "chown: --tenant missing value"          114 "--tenant: 1 required TEXT missing" \
+  bucket chown --tenant
+check "chown: --bucket-new-name missing value" 114 "--bucket-new-name: 1 required TEXT missing" \
+  bucket chown --bucket-new-name
+
+# handler-level (cluster): bucket_name.empty() is checked inside the action
+# (note the "bucket name not specified" wording differs from layout); a
+# nonexistent bucket fails RGWBucket::init with exit 2
+check_cluster "chown: missing --bucket" 22 "ERROR: bucket name not specified" -- \
+  bucket chown
+check_cluster "chown: nonexistent bucket (exit 2)" 2 "$ERR_CHOWN_NO_BUCKET" -- \
+  bucket chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
 
 # ============================================================
 echo ""
@@ -1326,6 +1366,11 @@ if cluster_running; then
         bucket layout --bucket "$_test_bucket" --format json
       check_cluster "integration: bucket layout --tenant ''" 0 "current_index" -- \
         bucket layout --bucket "$_test_bucket" --tenant ""
+
+      # bucket chown: chown to the (already-owning) test user — a no-op ownership
+      # change that still exercises the full chown path; exit 0, no output
+      check_cluster "integration: bucket chown" 0 "" -- \
+        bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
 
       # bucket unlink: unlink the bucket from the user
       check_cluster "integration: bucket unlink" 0 "" -- \
