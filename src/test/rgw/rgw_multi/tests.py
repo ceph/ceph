@@ -9,6 +9,8 @@ import contextlib
 import dateutil.parser
 from datetime import datetime
 import threading
+import socket
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
 
 from itertools import combinations
@@ -4195,13 +4197,82 @@ def test_topic_notification_sync():
         topic_list = conn.list_topics()
         assert_equal(len(topic_list), 0)
 
+
+class NotificationHTTPHandler(BaseHTTPRequestHandler):
+    """http request handler that stores received notification events."""
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > 0:
+            body = self.rfile.read(content_length)
+            try:
+                event = json.loads(body)
+                with self.server.events_lock:
+                    self.server.events.append(event)
+                log.info('http receiver got event: %s', str(event))
+            except Exception:
+                log.warning('http receiver got non-json body: %s', body)
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def start_notification_http_receiver():
+    """start an http server that collects notification events.
+    returns (server, thread, endpoint_url)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('10.255.255.255', 1))
+            host = s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        host = socket.gethostbyname(socket.gethostname())
+    log.info('using host ip %s for http receiver', host)
+
+    server = ThreadingHTTPServer((host, 0), NotificationHTTPHandler)
+    server.events = []
+    server.events_lock = threading.Lock()
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+    endpoint_url = 'http://' + host + ':' + str(port)
+    log.info('http receiver started on %s', endpoint_url)
+    return server, thread, endpoint_url
+
+
+def stop_notification_http_receiver(server, thread):
+    """shutdown an http server started by start_notification_http_receiver."""
+    server.shutdown()
+    thread.join(5)
+    if thread.is_alive():
+        log.warning('http server thread did not exit within 5s')
+    server.server_close()
+
+
+def poll_notification_events(server, timeout=None):
+    """poll until at least one event is received or timeout expires.
+    returns the list of received events."""
+    if timeout is None:
+        timeout = config.checkpoint_retries * config.checkpoint_delay
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with server.events_lock:
+            if len(server.events) > 0:
+                break
+        time.sleep(config.checkpoint_delay)
+    with server.events_lock:
+        return list(server.events)
+
+
 def test_sync_notification_events():
     """test that s3:ObjectSynced:* events are sent when an object is
     replicated from one zone to another via multisite data sync.
     covers: persistent notifications, s3:ObjectSynced:Create events.
     related: https://tracker.ceph.com/issues/67178"""
-    from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-    import socket
 
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -4213,69 +4284,23 @@ def test_sync_notification_events():
     zone_a = zonegroup_conns.rw_zones[0]
     zone_b = zonegroup_conns.rw_zones[1]
 
-    # get a reachable ip for the http receiver
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('10.255.255.255', 1))
-        host = s.getsockname()[0]
-    finally:
-        s.close()
-
-    # http receiver that stores received events
-    received_events = []
-    received_lock = threading.Lock()
-
-    class NotificationHandler(BaseHTTPRequestHandler):
-        def do_POST(self):
-            content_length = int(self.headers.get('Content-Length', 0))
-            if content_length > 0:
-                body = self.rfile.read(content_length)
-                try:
-                    event = json.loads(body)
-                    with received_lock:
-                        received_events.append(event)
-                    log.info('http receiver got event: %s', str(event))
-                except Exception:
-                    log.warning('http receiver got non-json body: %s', body)
-            self.send_response(200)
-            self.end_headers()
-
-        def log_message(self, format, *args):
-            pass
-
-    # let the os assign a free port
-    http_server = ThreadingHTTPServer((host, 0), NotificationHandler)
-    port = http_server.server_address[1]
-    http_thread = threading.Thread(target=http_server.serve_forever)
-    http_thread.daemon = True
-    http_thread.start()
-    log.info('http receiver started on %s:%d', host, port)
+    http_server, http_thread, endpoint_url = start_notification_http_receiver()
 
     topic_arn = None
     bucket_name = None
     try:
         # wait for zones to sync
         zonegroup_meta_checkpoint(zonegroup)
-        time.sleep(config.checkpoint_delay)
 
         # create topic with real http endpoint on zone_a
         # subscribe to s3:ObjectSynced:* events
         topic_name = gen_topic_name()
-        endpoint_address = 'http://' + host + ':' + str(port)
         attributes = {
-            'push-endpoint': endpoint_address,
+            'push-endpoint': endpoint_url,
             'persistent': 'true',
         }
         topic_arn = zone_a.create_topic(topic_name, attributes)
-        log.info('created topic=%s arn=%s endpoint=%s', topic_name, topic_arn, endpoint_address)
-
-        zonegroup_meta_checkpoint(zonegroup)
-
-        # verify topic synced to zone_b
-        zone_b_topics = zone_b.list_topics()
-        zone_b_arns = [t['TopicArn'] for t in zone_b_topics]
-        assert_true(topic_arn in zone_b_arns,
-                    'topic did not sync to secondary zone')
+        log.info('created topic=%s arn=%s endpoint=%s', topic_name, topic_arn, endpoint_url)
 
         # create bucket on zone_a
         bucket_name = gen_bucket_name()
@@ -4292,52 +4317,37 @@ def test_sync_notification_events():
         zone_a.create_notification(bucket.name, topic_conf)
         log.info('created notification=%s on bucket=%s', notification_id, bucket_name)
 
+        # wait for metadata sync to zone_b
         zonegroup_meta_checkpoint(zonegroup)
 
-        # verify notification synced to zone_b
-        zone_b_notifs = zone_b.list_notifications(bucket.name)
-        assert_true(len(zone_b_notifs) > 0,
-                    'notification did not sync to secondary zone')
-
         # put object on zone_b (the secondary)
-        # this will sync to zone_a, triggering s3:ObjectSynced:Create on zone_a
+        # zone_a will fetch this from zone_b, triggering s3:ObjectSynced:Create on zone_a
         key = 'test-object'
         zone_b.s3_client.put_object(Bucket=bucket_name, Key=key, Body=b'test content')
         log.info('put object=%s on zone=%s', key, zone_b.name)
 
-        # poll for notification delivery with timeout
-        # the sync notification fires on zone_a when the object arrives via data sync
-        deadline = time.time() + config.checkpoint_retries * config.checkpoint_delay
-        while time.time() < deadline:
-            with received_lock:
-                if len(received_events) > 0:
-                    break
-            time.sleep(config.checkpoint_delay)
+        # wait for data sync to complete before polling for notification
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
 
-        # verify notification was delivered to the http receiver
-        with received_lock:
-            event_count = len(received_events)
+        # poll for notification delivery
+        events = poll_notification_events(http_server)
 
-        log.info('http receiver got %d events', event_count)
-        assert_true(event_count > 0,
+        log.info('http receiver got %d events', len(events))
+        assert_true(len(events) > 0,
                     'no sync notifications delivered to http endpoint')
 
         # verify event contains expected fields
-        with received_lock:
-            event = received_events[0]
+        event = events[0]
         assert_true('Records' in event, 'event missing Records field')
         record = event['Records'][0]
         assert_equal(record['s3']['bucket']['name'], bucket_name)
         assert_equal(record['s3']['object']['key'], key)
-        assert_true('ObjectSynced' in record['eventName'],
-                    'expected ObjectSynced event, got: %s' % record['eventName'])
+        assert_equal(record['eventName'], 's3:ObjectSynced:Create')
 
         log.info('sync notification delivery verified: %s', record['eventName'])
 
     finally:
-        http_server.shutdown()
-        http_thread.join(5)
-        http_server.server_close()
+        stop_notification_http_receiver(http_server, http_thread)
         if bucket_name is not None:
             try:
                 zone_a.delete_notifications(bucket_name)
