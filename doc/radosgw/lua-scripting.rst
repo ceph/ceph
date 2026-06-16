@@ -22,6 +22,7 @@ All Lua language features can be used in all contexts.
 An execution of a script in a context can use up to 128K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
 To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
 By default, the execution of a Lua script is limited to a maximum runtime of 1000 milliseconds. This limit can be changed using the ``rgw_lua_max_runtime_per_state`` configuration parameter. If a Lua script exceeds this runtime, it will be terminated. To disable the runtime limit, use zero.
+In a multi-object delete request, Lua scripts apply per delete operation for the ``prerequest``, ``postauth``, and ``postrequest`` contexts. Returning `RGW_ABORT_REQUEST` in one delete operation will not abort remaining deletions in the same bulk request.
 
 .. warning:: Be cautious when modifying the memory limit. If the current memory usage exceeds the newly set limit, all previously stored data in the background state will be lost.
 

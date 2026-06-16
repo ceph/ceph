@@ -63,6 +63,7 @@
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_lua_request.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
@@ -8098,6 +8099,8 @@ void RGWGetHealthCheck::execute(optional_yield y)
   }
 }
 
+void RGWDeleteMultiObj_DeleteObj::send_response() {}
+
 int RGWDeleteMultiObj::init_processing(optional_yield y)
 {
   int ret = get_params(y);
@@ -8142,6 +8145,34 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.num_err = num_err;
   entry.delete_multi_obj_meta.num_ok = num_ok;
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
+}
+
+int RGWDeleteMultiObj::run_lua_script(RGWDeleteMultiObj_DeleteObj *op,
+                                      rgw::lua::context ctx,
+                                      rgw::sal::Object* multi_delete_obj)
+{
+  auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                  s->bucket_tenant, s->yield, ctx);
+  if (rc == -ENOENT) {
+    // no script, nothing to do
+  } else if (rc < 0) {
+    ldpp_dout(this, 5) <<
+      "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
+      "error: " << rc << dendl;
+  } else {
+    int script_return_code = 0;
+    // thread-safe override using multi_delete_obj to prevent concurrent race for s->object
+    rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op,
+                                    lua_script, script_return_code, multi_delete_obj);
+
+    if (rc < 0) {
+      ldpp_dout(this, 5) <<
+        "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
+        "error: " << rc << dendl;
+    }
+    return script_return_code;
+  }
+  return 0;
 }
 
 void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
@@ -8240,11 +8271,21 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  r = del_op->delete_obj(dpp, y,
-                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (r == -ENOENT) {
-    r = 0;
+  RGWDeleteMultiObj_DeleteObj delete_op;
+  delete_op.init(driver, s, dialect_handler);
+  int script_return_code = run_lua_script(&delete_op, rgw::lua::context::preRequest, obj.get());
+  if (script_return_code != -EPERM) {
+    script_return_code = run_lua_script(&delete_op, rgw::lua::context::postAuth, obj.get());
   }
+  // allow skipping deletion of the current object when the Lua prerequest/postauth script returns RGW_ABORT_REQUEST
+  if (script_return_code != -EPERM) {
+    r = del_op->delete_obj(dpp, y,
+                          rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+    if (r == -ENOENT) {
+      r = 0;
+    }
+  }
+  std::ignore = run_lua_script(&delete_op, rgw::lua::context::postRequest, obj.get());
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
