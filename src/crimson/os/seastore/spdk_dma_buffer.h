@@ -4,7 +4,6 @@
 #pragma once
 
 #include <array>
-#include <cassert>
 #include <new>
 #include <vector>
 
@@ -119,14 +118,17 @@ public:
     }
   }
   ~raw_spdk_dma() override {
-    // The recycling pool is per-shard (thread_local), so a buffer must be freed
-    // on the shard that allocated it. Crimson is shared-nothing, so this holds;
-    // the assert catches a stray cross-shard free in debug builds. (The memory
-    // is process-global DMA either way -- a wrong-shard free is not a
-    // use-after-free, it would only migrate pool accounting -- so we still
-    // return it to the local pool rather than touch another shard's vector.)
-    assert(m_capacity == 0 || m_pool == &detail::tls_dma_pool());
-    detail::tls_dma_pool().free(data, m_capacity);
+    // The recycling pool is per-shard (thread_local). A buffer can still be
+    // released on another shard: cached extents share their raw with read
+    // results, and when store shards do not match reactors the result is
+    // handed back to the caller's core. Return it to the pool only on the
+    // shard that allocated it; elsewhere free it straight to DPDK, whose heap
+    // is lock-protected, rather than touch another shard's free list.
+    if (m_pool == &detail::tls_dma_pool()) {
+      m_pool->free(data, m_capacity);
+    } else if (data) {
+      spdk_dma_free(data);
+    }
   }
 private:
   unsigned m_capacity = 0;
