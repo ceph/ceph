@@ -195,6 +195,11 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
   LOG_PREFIX(NVMeBlockDevice::try_enable_end_to_end_protection);
+  if (!driver->supports_end_to_end_protection()) {
+    INFO("the I/O transport does not support enabling end to end data "
+         "protection, mkfs() will be done without this functionality.");
+    co_return;
+  }
   auto id_ns_data = co_await driver->identify_namespace();
   if (!id_ns_data) {
     INFO("the device does not support end to end data protection,\
