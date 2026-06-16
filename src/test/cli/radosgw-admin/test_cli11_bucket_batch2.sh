@@ -1,7 +1,7 @@
 #!/bin/bash
-# CLI11 migration tests, batch 2: bucket chown,
-# bucket limit check, bucket logging info/list/flush
-# (bucket layout was migrated; its tests moved to test_cli11_bucket.sh)
+# CLI11 migration tests, batch 2: bucket limit check,
+# bucket logging info/list/flush
+# (bucket layout and chown were migrated; their tests moved to test_cli11_bucket.sh)
 #
 # Usage:
 #   ./test_cli11_bucket_batch2.sh
@@ -20,7 +20,7 @@
 # !!! KNOWN REGRESSION on the rgw-cli11-migration branch !!!
 # The CLI11 'bucket' subcommand (require_subcommand) currently swallows all
 # UNMIGRATED bucket subcommands:
-#   bucket chown / logging ...           -> "A subcommand is required", exit 106
+#   bucket logging ...                   -> "A subcommand is required", exit 106
 #   bucket limit check                   -> mis-parses as 'bucket check' with a
 #                                           stray 'limit': "ERROR: unexpected
 #                                           argument: 'limit'", exit 22
@@ -50,10 +50,6 @@ SKIP=0
 # Error message constants (legacy)
 ERR_UNKNOWN_CMD="ERROR: Unknown command"
 ERR_BUCKET_NOT_SPECIFIED="ERROR: bucket not specified"          # logging *
-ERR_BUCKET_NAME_NOT_SPECIFIED="ERROR: bucket name not specified" # chown (different wording!)
-# chown on a nonexistent bucket: RGWBucket::init fails, main prints
-# "failure: <cpp_strerror>: <err_msg>"
-ERR_CHOWN_NO_BUCKET="failure: (2) No such file or directory: failed to fetch bucket info for bucket="
 # logging list/flush on a bucket without logging: error message but exit 0 (!)
 ERR_NO_LOGGING="does not have logging enabled"
 
@@ -126,26 +122,6 @@ check_cluster() {
 }
 
 # ============================================================
-echo "=== bucket chown (parse level, no cluster) ==="
-# ============================================================
-
-check "chown: stray after"   1 "Command not found: bucket chown strayarg" \
-  bucket chown strayarg
-check "chown: stray between" 1 "ERROR: Unrecognized argument: 'extra'" \
-  bucket extra chown
-
-check "chown: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
-  bucket chown --fakeflag
-
-check "chown: --bucket missing value" 1 "Option --bucket requires an argument." \
-  bucket chown --bucket
-check "chown: --uid missing value"    1 "Option --uid requires an argument." \
-  bucket chown --uid
-check "chown: --marker missing value" 1 "Option --marker requires an argument." \
-  bucket chown --marker
-
-# ============================================================
-echo ""
 echo "=== bucket limit check (parse level, no cluster) ==="
 # ============================================================
 
@@ -200,15 +176,6 @@ echo "=== handler-level errors (cluster) ==="
 # These run after driver init, so they need a cluster. The validation and
 # messages live in the command handlers and are unchanged by the migration.
 
-# bucket chown
-check_cluster "chown: missing --bucket" 22 "$ERR_BUCKET_NAME_NOT_SPECIFIED" -- \
-  bucket chown
-check_cluster "chown: nonexistent bucket" 2 "$ERR_CHOWN_NO_BUCKET" -- \
-  bucket chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
-# NOTE (do not test, mutating): legacy 'bucket chown --bucket <real>' without
-# --uid performs the chown with an EMPTY owner — no up-front validation
-# (rgw_chown_bucket_and_objects). Worth raising with mentors during migration.
-
 # bucket limit check — iterates all users when no --uid given
 check_cluster "limit check: no args (all users)" 0 "" -- \
   bucket limit check
@@ -243,7 +210,7 @@ echo "=== integration: real bucket (cluster) ==="
 _test_uid="cli11_batch2_user"
 _test_bucket="cli11-batch2-bucket"
 _test_display="CLI11 Batch2 Test User"
-_n_integration=6
+_n_integration=5
 
 if cluster_running; then
   # Create a test user (legacy command, not yet CLI11-migrated)
@@ -264,12 +231,6 @@ if cluster_running; then
       AWS_SECRET_ACCESS_KEY="$_secret_key" \
       aws --endpoint-url "$_rgw_endpoint" \
         s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      # bucket chown: chown to the (already-owning) test user. Progress goes
-      # to stderr ("0 objects processed in ...") unless BucketOwnerEnforced
-      # short-circuits the object loop, so only the exit code is asserted.
-      check_cluster "integration: bucket chown" 0 "" -- \
-        bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
 
       # bucket limit check for the test user: JSON with user_id + buckets
       check_cluster "integration: limit check --uid" 0 "user_id" -- \

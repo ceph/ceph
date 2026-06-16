@@ -988,7 +988,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
-  { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
@@ -4067,10 +4066,10 @@ int main(int argc, const char **argv)
     // TODO: remove this block and the !route_bucket_to_legacy guard below once
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
-        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout"};
+        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown"};
     static const std::set<std::string_view> legacy_bucket_words = {
         "limit", "sync", "rewrite", "reshard", "set-min-shards",
-        "chown", "radoslist", "rados", "shard", "object", "resync", "logging"};
+        "radoslist", "rados", "shard", "object", "resync", "logging"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4259,6 +4258,7 @@ int main(int argc, const char **argv)
       auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "remove bucket");
       bucket_rm->alias("remove");
       auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
+      auto* bucket_chown  = bucket_cmd->add_subcommand("chown",  "change bucket ownership to the specified user");
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -4339,6 +4339,14 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_layout, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
+
+      // bucket chown options
+      add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_chown, "--uid,-i",          uid_str,         uid_desc);
+      add_multilevel_option(bucket_chown, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
+      add_multilevel_option(bucket_chown, "--tenant",          tenant,          tenant_desc);
+      add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4610,6 +4618,32 @@ int main(int argc, const char **argv)
           encode_json("layout", bucket_info.layout, formatter.get());
           formatter->close_section();
           formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      bucket_chown->callback(
+          [&uid_str, &user_id_arg,
+           &cli11_non_master_op, &cli11_action,
+           &bucket_name, &new_bucket_name, &marker, &bucket_op] {
+        user_id_arg.from_str(uid_str);
+        cli11_non_master_op = true;  // legacy: BUCKET_CHOWN is in non_master_ops_list
+
+        cli11_action = [&bucket_name, &new_bucket_name, &marker, &bucket_op]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket name not specified" << std::endl;
+            return EINVAL;
+          }
+
+          bucket_op.set_bucket_name(bucket_name);
+          bucket_op.set_new_bucket_name(new_bucket_name);
+          string err;
+
+          int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return -r;
+          }
           return 0;
         };
       });
@@ -8513,23 +8547,6 @@ int main(int argc, const char **argv)
     formatter->close_section();
     formatter->flush(cout);
     return 0;
-  }
-
-  if (opt_cmd == OPT::BUCKET_CHOWN) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name not specified" << std::endl;
-      return EINVAL;
-    }
-
-    bucket_op.set_bucket_name(bucket_name);
-    bucket_op.set_new_bucket_name(new_bucket_name);
-    string err;
-
-    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
-    if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
-      return -r;
-    }
   }
 
   if (opt_cmd == OPT::BUCKET_LOGGING_FLUSH) {
