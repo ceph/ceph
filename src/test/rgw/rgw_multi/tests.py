@@ -9,6 +9,8 @@ import contextlib
 import dateutil.parser
 from datetime import datetime
 import threading
+import socket
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
 
 from itertools import combinations
@@ -4200,8 +4202,6 @@ def test_notification_metadata_sync_and_delivery():
     notifications are delivered when an object is put on a secondary zone.
     uses an http endpoint to verify actual event delivery, not just metadata sync.
     covers: persistent notifications, s3:ObjectCreated:* events."""
-    from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-    import socket
 
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -4214,12 +4214,16 @@ def test_notification_metadata_sync_and_delivery():
     zone_b = zonegroup_conns.rw_zones[1]
 
     # get a reachable ip for the http receiver
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(('10.255.255.255', 1))
-        host = s.getsockname()[0]
-    finally:
-        s.close()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('10.255.255.255', 1))
+            host = s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        host = socket.gethostbyname(socket.gethostname())
+    log.info('using host ip %s for http receiver', host)
 
     # http receiver that stores received events
     received_events = []
@@ -4256,7 +4260,6 @@ def test_notification_metadata_sync_and_delivery():
     try:
         # wait for zones to sync
         zonegroup_meta_checkpoint(zonegroup)
-        time.sleep(config.checkpoint_delay)
 
         # create topic with real http endpoint on zone_a
         topic_name = gen_topic_name()
@@ -4326,13 +4329,15 @@ def test_notification_metadata_sync_and_delivery():
         record = event['Records'][0]
         assert_equal(record['s3']['bucket']['name'], bucket_name)
         assert_equal(record['s3']['object']['key'], key)
-        assert_true('ObjectCreated' in record['eventName'])
+        assert_equal(record['eventName'], 's3:ObjectCreated:Put')
 
         log.info('notification delivery verified: %s', record['eventName'])
 
     finally:
         http_server.shutdown()
         http_thread.join(5)
+        if http_thread.is_alive():
+            log.warning('http server thread did not exit within 5s')
         http_server.server_close()
         if bucket_name is not None:
             try:
