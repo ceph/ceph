@@ -3836,6 +3836,14 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
   }
 }
 
+Client::ClientLockIfNeeded::ClientLockIfNeeded(Client *clnt)
+  : lock(clnt->client_lock, std::defer_lock)
+{
+  if (!ceph_mutex_is_locked_by_me(clnt->client_lock)) {
+    lock.lock();
+  }
+}
+
 /**
  * For asynchronous flushes, check for errors from the IO and
  * update the inode if necessary
@@ -3847,7 +3855,7 @@ private:
 public:
   C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) { }
   void finish(int r) override {
-    ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
+    Client::ClientLockIfNeeded l(client);
     if (r != 0) {
       client_t const whoami = client->whoami;  // For the benefit of ldout prefix
       ldout(client->cct, 1) << "I/O error from flush on inode " << inode
@@ -11264,9 +11272,12 @@ void Client::C_Write_Finisher::finish_io(int r)
 {
   bool fini;
 
-  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+  ClientLockIfNeeded lock(clnt);
 
-  clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+  if (auto it = in->cap_refs.find(CEPH_CAP_FILE_BUFFER);
+      it != in->cap_refs.end() && it->second > 0) {
+    clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+  }
 
   if (r >= 0) {
     if (is_file_write) {
@@ -12203,6 +12214,12 @@ void Client::C_nonblocking_fsync_state::advance()
 
   // we're done
   delete this;
+}
+
+void Client::C_nonblocking_fsync_flush_finisher::finish(int r)
+{
+  ClientLockIfNeeded l(clnt);
+  state->complete_flush(r);
 }
 
 void Client::C_nonblocking_fsync_state::complete_flush(int r)

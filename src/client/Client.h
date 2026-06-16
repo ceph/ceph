@@ -1305,6 +1305,13 @@ protected:
   //  - protects Client and buffer cache both!
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
 
+  // Acquire client_lock when a callback may run without it (finisher thread).
+  // No-op when the caller already holds client_lock (e.g. synchronous _flush).
+  struct ClientLockIfNeeded {
+    std::unique_lock<ceph::mutex> lock;
+    explicit ClientLockIfNeeded(Client *clnt);
+  };
+
   std::map<snapid_t, int> ll_snap_ref;
 
   InodeRef               root = nullptr;
@@ -1987,10 +1994,7 @@ private:
       : clnt(clnt), state(state) {
     }
 
-    void finish(int r) override {
-      ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
-      state->complete_flush(r);
-    }
+    void finish(int r) override;
   };
 
   struct C_Readahead : public Context {
