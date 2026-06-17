@@ -12,10 +12,11 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
   NvmeofSubsystem,
   NvmeofSubsystemInitiator,
+  ALLOW_ALL_HOST,
+  NvmeofSubsystemAuthType,
   getSubsystemAuthStatus
 } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
-import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -35,6 +36,8 @@ export class NvmeofInitiatorsListComponent implements OnInit {
 
   @ViewChild('dhchapTpl', { static: true })
   dhchapTpl: TemplateRef<any>;
+  @ViewChild('hostNqnTpl', { static: true })
+  hostNqnTpl: TemplateRef<any>;
 
   initiatorColumns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -44,6 +47,9 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   subsystem: NvmeofSubsystem;
   authStatus: string;
   authType = NvmeofSubsystemAuthType;
+  allowAllHost = ALLOW_ALL_HOST;
+  yesLabel = $localize`Yes`;
+  noLabel = $localize`No`;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -78,7 +84,8 @@ export class NvmeofInitiatorsListComponent implements OnInit {
     this.initiatorColumns = [
       {
         name: $localize`Host NQN`,
-        prop: 'nqn'
+        prop: 'nqn',
+        cellTemplate: this.hostNqnTpl
       },
       {
         name: $localize`DHCHAP key`,
@@ -96,8 +103,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
             queryParams: { group: this.group },
             relativeTo: this.route.parent
           }),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
-        disable: () => this.hasAllHostsAllowed()
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: $localize`Edit host key`,
@@ -137,11 +143,11 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   }
 
   getAllowAllHostIndex() {
-    return this.selection.selected.findIndex((selected) => selected.nqn === '*');
+    return this.selection.selected.findIndex((selected) => selected.nqn === ALLOW_ALL_HOST);
   }
 
   hasAllHostsAllowed(): boolean {
-    return this.initiators.some((initiator) => initiator.nqn === '*');
+    return this.initiators.some((initiator) => initiator.nqn === ALLOW_ALL_HOST);
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -173,6 +179,10 @@ export class NvmeofInitiatorsListComponent implements OnInit {
 
   getSelectedNQNs() {
     return this.selection.selected.map((selected) => selected.nqn);
+  }
+
+  getDisplayedHostNqn(hostNqn: string): string {
+    return hostNqn === ALLOW_ALL_HOST ? $localize`Any` : hostNqn;
   }
 
   removeInitiatorModal() {
