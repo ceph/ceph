@@ -9,12 +9,13 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { ALLOW_ALL_HOST } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.component';
 
 const mockInitiators = [
   {
-    nqn: '*',
+    nqn: ALLOW_ALL_HOST,
     use_dhchap: false
   }
 ];
@@ -79,6 +80,8 @@ describe('NvmeofInitiatorsListComponent', () => {
     expect(component.initiators).toEqual(mockInitiators);
     expect(component.subsystem).toEqual(mockSubsystem);
     expect(component.authStatus).toBe('No authentication');
+    expect(component.initiatorColumns.length).toBe(2);
+    expect(component.getDisplayedHostNqn(ALLOW_ALL_HOST)).toBe('Any');
   }));
 
   it('should update authStatus when initiator has dhchap_key', fakeAsync(() => {
