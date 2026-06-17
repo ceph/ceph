@@ -61,7 +61,8 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 namespace po = boost::program_options;
 
-// --- Helper: Parse sizes like "4MB", "1G" ---
+// Parse human-readable sizes (e.g. "4MB", "1GiB"). Accepts both SI (1000-based)
+// and binary (1024-based) suffixes for use in CLI options and JSON output.
 uint64_t parse_size(const string& val) {
   if (val.empty()) {
     return 0;
@@ -170,23 +171,24 @@ struct BenchConfig {
   string subdir;
   int uid;
   int gid;
-  string json_path;
-  int duration;
-  string perf_dump_path;
-  string client_oc;
-  string client_oc_size;
-  int msgr_workers;
-  bool show_progress;
-  int progress_interval;
-  bool async_io;
-  int queue_depth;
+  string json_path;          // --json: write structured benchmark results to a file
+  int duration;              // --duration: cap each read/write phase at N seconds (0 = all files)
+  string perf_dump_path;     // --perf-dump: dump libcephfs perf counters after the benchmark
+  string client_oc;          // --client-oc: override object cacher enable (0|1)
+  string client_oc_size;     // --client-oc-size: override object cacher size limit
+  int msgr_workers;          // --msgr-workers: override ms_async_op_threads (0 = ceph.conf default)
+  bool show_progress;        // --progress: show live bandwidth, IOPS, and ETA during phases
+  int progress_interval;     // --progress-interval: minimum % between progress line updates
+  bool async_io;             // --async-io: use ceph_ll_nonblocking_readv_writev instead of sync I/O
+  int queue_depth;           // --queue-depth: max outstanding async I/Os per worker thread
 #ifdef CEPH_LOCKSTAT
-  string lockstat_dump_path;
-  uint64_t lockstat_threshold_ns;
+  string lockstat_dump_path; // --lockstat-dump: base path for per-phase lock contention dumps
+  uint64_t lockstat_threshold_ns; // --lockstat-threshold: only record lock holds >= N ns (0 = all)
 #endif
 };
 
 struct ThreadStats {
+  // Atomics so progress_reporter can aggregate while workers update concurrently.
   std::atomic<uint64_t> bytes_transferred{0};
   std::atomic<uint64_t> ops{0}; // read/write calls
   std::atomic<uint64_t> files{0}; // files successfully opened/closed
@@ -254,7 +256,7 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
     }
   }
 
-  // 1b. Apply client_oc override
+  // 1b. Apply client_oc override (must precede ceph_init to affect ObjectCacher)
   if (!config.client_oc.empty()) {
     if (int rc = ceph_conf_set(*cmount, "client_oc", config.client_oc.c_str()); rc < 0) {
       out_stream << "Failed to set client_oc option: " << strerror(-rc) << endl;
@@ -262,7 +264,7 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
     }
   }
 
-  // 1c. Apply ms_async_op_threads override
+  // 1c. Apply ms_async_op_threads override (messenger I/O threads, not bench workers)
   if (config.msgr_workers > 0) {
     string workers_str = std::to_string(config.msgr_workers);
     if (int rc = ceph_conf_set(*cmount, "ms_async_op_threads", workers_str.c_str()); rc < 0) {
@@ -331,6 +333,9 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
   return 0;
 }
 
+// Background reporter for --progress: aggregates per-thread stats and prints a
+// single updating line with bandwidth, IOPS, and ETA. Progress is measured by
+// elapsed time when --duration is set, otherwise by files completed.
 void
 progress_reporter(
     const string& phase,
@@ -423,10 +428,10 @@ bench_write_worker(
 {
 
   struct ceph_mount_info *cmount = shared_cmount;
+  // Name threads for top(1), perf, and lockstat attribution.
   ceph_pthread_setname(("wr-worker-" + std::to_string(thread_id)).c_str());
   auto duration_limit = std::chrono::seconds(config.duration);
 
-  ceph_pthread_setname(("wr-worker-" + std::to_string(thread_id)).c_str());
   if (config.per_thread_mount) {
     if (int rc = setup_mount(&cmount, config, ss); rc < 0) {
       ss << "Thread " << thread_id << " mount failed: " << strerror(-rc) << std::endl;
@@ -454,6 +459,7 @@ bench_write_worker(
       break;
     }
 
+    // In --duration mode, cycle through the per-thread file set until time expires.
     int file_idx = i % files_to_write;
     string fname = config.subdir + "/" + config.prefix +
                    std::to_string(thread_id) + "_" + std::to_string(file_idx);
@@ -513,6 +519,7 @@ bench_write_worker(
         stop_signal = true;
         break;
       }
+      // Count each unique file once even when duration mode reuses filenames.
       if (stats.files < (uint64_t)files_to_write) {
         stats.files++;
       }
@@ -532,7 +539,8 @@ bench_write_worker(
   }
 }
 
-// Async I/O write worker using ceph_ll_nonblocking_readv_writev
+// Async write worker: submits I/O via ceph_ll_nonblocking_readv_writev with up to
+// queue_depth outstanding operations per thread, bounded by a counting semaphore.
 void
 bench_async_write_worker(
     int thread_id,
@@ -763,7 +771,6 @@ bench_read_worker(
   struct ceph_mount_info *cmount = shared_cmount;
   ceph_pthread_setname(("rd-worker-" + std::to_string(thread_id)).c_str());
   auto duration_limit = std::chrono::seconds(config.duration);
-  ceph_pthread_setname(("rd-worker-" + std::to_string(thread_id)).c_str());
 
   if (config.per_thread_mount) {
     if (int rc = setup_mount(&cmount, config, ss); rc < 0) {
@@ -788,6 +795,7 @@ bench_read_worker(
       break;
     }
 
+    // In --duration mode, cycle through the per-thread file set until time expires.
     int file_idx = i % files_to_read;
     string fname = config.subdir + "/" + config.prefix +
                    std::to_string(thread_id) + "_" + std::to_string(file_idx);
@@ -854,7 +862,8 @@ bench_read_worker(
   }
 }
 
-// Async I/O read worker using ceph_ll_nonblocking_readv_writev
+// Async read worker: same queue-depth model as bench_async_write_worker. Inodes are
+// retained until all async ops (including readahead) complete to avoid use-after-free.
 void
 bench_async_read_worker(
     int thread_id,
@@ -1071,6 +1080,8 @@ bench_async_read_worker(
   }
 }
 
+// Dump libcephfs client perf counters (JSON) via ceph_get_perf_counters. Called
+// once at benchmark end while the mount is still active (--perf-dump).
 void
 execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
 {
@@ -1101,7 +1112,8 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
 }
 
 #ifdef CEPH_LOCKSTAT
-// Helper function to dump lockstat data to a file with iteration and phase suffix
+// Write accumulated lock contention data to a per-iteration, per-phase file
+// (e.g. base_iter1_write.json) when --lockstat-dump is enabled.
 void dump_lockstat_data(const string& base_path, int iteration, const string& phase) {
   if (base_path.empty()) {
     return;
@@ -1196,6 +1208,7 @@ print_statistics(
   cout << "  Min:     " << min_val << " " << unit << std::endl;
   cout << "  Max:     " << max_val << " " << unit << std::endl;
 
+  // Mirror summary stats into the --json output when a formatter is provided.
   if (f) {
     f->open_object_section(type);
     f->dump_int("runs", rates.size());
@@ -1263,6 +1276,7 @@ int do_bench(BenchConfig& config) {
   // Setup bench directory
   config.subdir = config.dir_prefix + RandomHelper::generate_hex_suffix();
 
+  // Build the structured result document when --json is set; flushed at the end.
   std::unique_ptr<ceph::JSONFormatter> json_formatter;
   if (!config.json_path.empty()) {
     json_formatter = std::make_unique<ceph::JSONFormatter>(true);
@@ -1402,6 +1416,7 @@ int do_bench(BenchConfig& config) {
       int f_count = files_per_thread + (i < remainder ? 1 : 0);
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
       if (config.async_io) {
+        // Async path uses the low-level ll API with a per-thread I/O queue.
         threads.emplace_back(
             bench_async_write_worker, i, f_count, config, worker_mount,
             std::ref(write_stats[i]), std::ref(stop_signal),
@@ -1441,6 +1456,7 @@ int do_bench(BenchConfig& config) {
       total_files += s.files;
     }
 
+    // Without --duration, require every file to be written before continuing.
     if (config.duration == 0 && total_files != (uint64_t)config.num_files) {
       cerr << "Write phase completed only " << total_files << " of "
            << config.num_files << " files" << endl;
@@ -1490,6 +1506,7 @@ int do_bench(BenchConfig& config) {
 #endif
 
     // --- REMOUNT / CACHE CLEAR ---
+    // Drop the client page cache so the read phase measures cold reads from OSDs.
     if (!config.per_thread_mount) {
       if (int rc = ceph_unmount(shared_cmount); rc < 0) {
         cerr << "Unmount failed during cache clear: " << strerror(-rc) << endl;
