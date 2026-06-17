@@ -9,20 +9,21 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { ALLOW_ALL_HOST } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.component';
 
 const mockInitiators = [
   {
-    nqn: '*',
-    dhchap_key: ''
+    nqn: ALLOW_ALL_HOST,
+    use_dhchap: false
   }
 ];
 
 const mockSubsystem = {
   nqn: 'nqn.2016-06.io.spdk:cnode1',
   serial_number: '12345',
-  psk: ''
+  has_dhchap_key: false
 };
 
 class MockNvmeOfService {
@@ -79,19 +80,23 @@ describe('NvmeofInitiatorsListComponent', () => {
     expect(component.initiators).toEqual(mockInitiators);
     expect(component.subsystem).toEqual(mockSubsystem);
     expect(component.authStatus).toBe('No authentication');
+    expect(component.initiatorColumns.length).toBe(2);
+    expect(component.getDisplayedHostNqn(ALLOW_ALL_HOST)).toBe('Any');
   }));
 
   it('should update authStatus when initiator has dhchap_key', fakeAsync(() => {
-    const initiatorsWithKey = [{ nqn: 'nqn1', dhchap_key: 'key1' }];
+    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: true }];
     spyOn(TestBed.inject(NvmeofService), 'getInitiators').and.returnValue(of(initiatorsWithKey));
     component.listInitiators();
     tick();
     expect(component.authStatus).toBe('Unidirectional');
   }));
 
-  it('should update authStatus when subsystem has psk', fakeAsync(() => {
-    const subsystemWithPsk = { ...mockSubsystem, psk: 'psk1' };
-    spyOn(TestBed.inject(NvmeofService), 'getSubsystem').and.returnValue(of(subsystemWithPsk));
+  it('should update authStatus when subsystem has dhchap_key', fakeAsync(() => {
+    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: true }];
+    component.initiators = initiatorsWithKey;
+    const subsystemWithKey = { ...mockSubsystem, has_dhchap_key: true };
+    spyOn(TestBed.inject(NvmeofService), 'getSubsystem').and.returnValue(of(subsystemWithKey));
     component.getSubsystem();
     tick();
     expect(component.authStatus).toBe('Bi-directional');

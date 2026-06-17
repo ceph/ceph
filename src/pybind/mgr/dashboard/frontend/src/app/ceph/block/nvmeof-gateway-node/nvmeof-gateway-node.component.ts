@@ -17,7 +17,6 @@ import _ from 'lodash';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -26,6 +25,7 @@ import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 
 import { Host } from '~/app/shared/models/host.interface';
+import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec, CephServiceSpecUpdate } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';

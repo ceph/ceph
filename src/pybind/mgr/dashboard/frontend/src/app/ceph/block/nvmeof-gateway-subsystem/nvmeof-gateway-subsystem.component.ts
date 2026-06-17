@@ -6,22 +6,14 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
   NvmeofSubsystem,
   NvmeofSubsystemData,
-<<<<<<< HEAD
   NvmeofSubsystemInitiator,
+  NvmeofSubsystemAuthType,
   getSubsystemAuthStatus
-=======
-  NvmeofSubsystemInitiator
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
 } from '~/app/shared/models/nvmeof';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
-<<<<<<< HEAD
 import { ICON_TYPE, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
-=======
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
-import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 
 @Component({
   selector: 'cd-nvmeof-gateway-subsystem',
@@ -42,17 +34,9 @@ export class NvmeofGatewaySubsystemComponent implements OnInit {
 
   iconType = ICON_TYPE;
   authType = NvmeofSubsystemAuthType;
-<<<<<<< HEAD
   emptyStateImage = EMPTY_STATE_IMAGE;
 
-  constructor(
-    private nvmeofService: NvmeofService,
-    private route: ActivatedRoute
-  ) {}
-=======
-
   constructor(private nvmeofService: NvmeofService, private route: ActivatedRoute) {}
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
 
   ngOnInit(): void {
     this.columns = [
@@ -104,39 +88,9 @@ export class NvmeofGatewaySubsystemComponent implements OnInit {
                       count = initiators.hosts.length;
                     }
 
-<<<<<<< HEAD
                     return {
                       ...sub,
                       auth: getSubsystemAuthStatus(sub, initiators),
-=======
-                    let authStatus = NvmeofSubsystemAuthType.NO_AUTH;
-                    if (sub.psk) {
-                      authStatus = NvmeofSubsystemAuthType.BIDIRECTIONAL;
-                    } else if (
-                      initiators &&
-                      'hosts' in initiators &&
-                      Array.isArray(initiators.hosts)
-                    ) {
-                      const hasDhchapKey = initiators.hosts.some(
-                        (host: NvmeofSubsystemInitiator) => !!host.dhchap_key
-                      );
-                      if (hasDhchapKey) {
-                        authStatus = NvmeofSubsystemAuthType.UNIDIRECTIONAL;
-                      }
-                    } else if (Array.isArray(initiators)) {
-                      // Fallback for unexpected structure, though getInitiators usually returns {hosts: []}
-                      const hasDhchapKey = (initiators as NvmeofSubsystemInitiator[]).some(
-                        (host: NvmeofSubsystemInitiator) => !!host.dhchap_key
-                      );
-                      if (hasDhchapKey) {
-                        authStatus = NvmeofSubsystemAuthType.UNIDIRECTIONAL;
-                      }
-                    }
-
-                    return {
-                      ...sub,
-                      auth: authStatus,
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
                       hosts: count
                     };
                   }
