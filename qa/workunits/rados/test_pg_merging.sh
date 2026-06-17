@@ -4,6 +4,13 @@
 
 set -x
 
+# Verify that CRIMSON_COMPAT is set when running on crimson OSDs.
+osd_type=$(ceph osd metadata 0 2>/dev/null | jq -r '.osd_type // empty')
+if [ "$osd_type" = "crimson" ] && [ "$CRIMSON_COMPAT" != "1" ]; then
+    echo "ERROR: OSD 0 is crimson but CRIMSON_COMPAT is not set"
+    exit 1
+fi
+
 function wait_for_merge_completion() {
     local pool=$1
     local target=$2
@@ -41,21 +48,44 @@ function wait_for_merge_completion() {
     done
 }
 
+function create_pool_for_merge() {
+    local pool=$1
+    local initial_pgs=$2
+    local target_pgs=$3
+
+    if [ "$CRIMSON_COMPAT" = "1" ]; then
+        # On crimson/seastore with multiple shards, PG merges require source
+        # and target PGs to be on the same shard. New-pool PGs are load-balanced
+        # across shards (unpredictable), but split children inherit the parent's
+        # shard. So: create with the target pg_num, then split up - merging
+        # back reverses the splits and stays same-shard.
+        create_pool $pool $target_pgs
+        wait_for_clean || return 1
+        ceph osd pool set $pool nopgchange 0
+        ceph osd pool set $pool pg_num $initial_pgs
+    else
+        create_pool $pool $initial_pgs
+        wait_for_clean || return 1
+        ceph osd pool set $pool nopgchange 0
+    fi
+    wait_for_clean || return 1
+}
+
 function test_pg_merging() {
     local pool="merge_pool"
     ceph osd pool delete $pool $pool --yes-i-really-really-mean-it || true
-    create_pool $pool 16
-    wait_for_clean || return 1
+    create_pool_for_merge $pool 16 4
 
-    ceph osd pool set $pool nopgchange 0
-    ceph osd pool set $pool crimson_allow_pg_merge true
+    if [ "$CRIMSON_COMPAT" = "1" ]; then
+        ceph osd pool set $pool crimson_allow_pg_merge true
+    fi
 
     # Induce merges
     ceph osd pool set $pool pg_num 4
     ceph osd pool set $pool pg_num_min 4
-    
+
     wait_for_merge_completion $pool 4 || return 1
-    
+
     ceph osd pool set $pool pgp_num 4
     wait_for_clean || return 1
 }
@@ -63,8 +93,7 @@ function test_pg_merging() {
 function test_pg_merging_with_radosbench() {
     local pool="merge_bench"
     ceph osd pool delete $pool $pool --yes-i-really-really-mean-it || true
-    create_pool $pool 16
-    wait_for_clean || return 1
+    create_pool_for_merge $pool 16 4
 
     # Start radosbench writes
     timeout 120 rados bench -p $pool 60 write -b 4096 --no-cleanup &
@@ -72,20 +101,21 @@ function test_pg_merging_with_radosbench() {
     sleep 5
 
     # merge
-    ceph osd pool set $pool nopgchange 0
-    ceph osd pool set $pool crimson_allow_pg_merge true
+    if [ "$CRIMSON_COMPAT" = "1" ]; then
+        ceph osd pool set $pool crimson_allow_pg_merge true
+    fi
     ceph osd pool set $pool pg_num 4
     ceph osd pool set $pool pg_num_min 4
-    
+
     # Use the loop to ensure we don't stop until all 12 PGs are merged away
     wait_for_merge_completion $pool 4 || return 1
-    
+
     ceph osd pool set $pool pgp_num 4
     wait_for_clean || return 1
 
     # Ensure the bench finished successfully
     wait $BENCH_PID
-    
+
     # Final check
     actual=$(ceph pg ls-by-pool $pool --format=json 2>/dev/null | jq -r ".pg_stats | length")
     test "$actual" -eq 4 || return 1
