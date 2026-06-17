@@ -32,6 +32,7 @@ class QuiesceAgent {
     QuiesceAgent(const ControlInterface& quiesce_control)
         : quiesce_control(quiesce_control)
         , stop_agent_thread(false)
+        , upkeep_needed(false)
         , agent_thread(this) {
       agent_thread.create("mds-q-agt");
     };
