@@ -1,0 +1,61 @@
+[package]
+name = "s3-tests-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aws-sdk-s3 = "1"
+aws-sdk-iam = "1"
+aws-sdk-sns = "1"
+aws-sdk-sts = "1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = { version = "1", features = ["hardcoded-credentials"] }
+aws-smithy-runtime-api = "1"
+aws-smithy-types = "1"
+aws-sigv4 = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+configparser = "3"
+once_cell = "1"
+rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+hmac = "0.12"
+regex = "1"
+sha1 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart"] }
+tempfile = "3"
+rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
+
+[features]
+default = ["fails_on_rgw"]
+fails_on_rgw = []
+fails_on_aws = []
+fails_on_dbstore = []
+fails_on_nsfs = []
+fails_on_posix = []
+rgw_admin = []
+has_kafka = ["rdkafka"]
+has_vault = []
+
+[dev-dependencies]
+rstest = "0.24"
+serial_test = "3"
+
+[[test]]
+name = "test_s3"
+path = "tests/test_s3/mod.rs"
+
+[[test]]
+name = "test_iam"
+path = "tests/test_iam/mod.rs"
+
+[[test]]
+name = "test_sns"
+path = "tests/test_sns.rs"
+
+[[test]]
+name = "test_rgw"
+path = "tests/test_rgw/mod.rs"
