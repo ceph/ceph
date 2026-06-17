@@ -27,6 +27,8 @@ public:
 class TestAllocatorLevel02 : public AllocatorLevel02<AllocatorLevel01Loose>
 {
 public:
+  TestAllocatorLevel02()
+    : AllocatorLevel02(g_ceph_context, "bitmap-test") {}
   void init(uint64_t capacity, uint64_t alloc_unit)
   {
     _init(capacity, alloc_unit);
