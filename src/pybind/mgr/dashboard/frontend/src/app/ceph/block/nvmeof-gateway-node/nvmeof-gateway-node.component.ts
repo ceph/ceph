@@ -17,7 +17,6 @@ import _ from 'lodash';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -26,7 +25,8 @@ import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 
 import { Host } from '~/app/shared/models/host.interface';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
+import { CephServiceSpec, CephServiceSpecUpdate } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
@@ -186,11 +186,13 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
       },
       submitActionObservable: () => {
-        const updatedSpec = _.cloneDeep(this.serviceSpec);
-        updatedSpec.placement.hosts = updatedSpec.placement.hosts.filter((h) => h !== hostname);
-        delete updatedSpec.status;
-        if (updatedSpec['events']) {
-          delete updatedSpec['events'];
+        const { status: _status, ...specWithoutStatus } = this.serviceSpec!;
+        const updatedSpec: CephServiceSpecUpdate = _.cloneDeep(specWithoutStatus);
+        updatedSpec.placement.hosts = (updatedSpec.placement.hosts ?? []).filter(
+          (h) => h !== hostname
+        );
+        if ((updatedSpec as any)['events']) {
+          delete (updatedSpec as any)['events'];
         }
         return this.taskWrapper
           .wrapTaskAroundCall({

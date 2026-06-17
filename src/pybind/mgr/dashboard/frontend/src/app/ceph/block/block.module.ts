@@ -95,7 +95,7 @@ import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvme
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
+import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-namespaces-list/nvmeof-subsystem-namespaces-list.component';
 import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview/nvmeof-subsystem-overview.component';

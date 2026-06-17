@@ -5,6 +5,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import {
   NvmeofSubsystem,
   NvmeofSubsystemInitiator,
+  NvmeofSubsystemAuthType,
   getSubsystemAuthStatus
 } from '~/app/shared/models/nvmeof';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -14,7 +15,6 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
