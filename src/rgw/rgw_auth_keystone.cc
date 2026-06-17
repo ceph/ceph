@@ -138,10 +138,6 @@ check_access_rules(
     const std::string_view method,
     const std::string_view raw_path)
 {
-  if (rules.empty()) {
-    return true;
-  }
-
   /* Access rules are defined against path only. */
   const std::string_view path = raw_path.substr(0, raw_path.find('?'));
 
@@ -508,9 +504,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (t) {
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
-    /* Skip access-rule enforcement for service-to-service requests, matching
-     * keystonemiddleware's validate_allowed_request short-circuit. */
-    if (!allow_expired && !enforce_access_rules(dpp, *t, s)) {
+    if (allow_expired) {
+      ldpp_dout(dpp, 10) << "skipping access-rule enforcement: valid service token present"
+                         << dendl;
+    } else if (!enforce_access_rules(dpp, *t, s)) {
       return result_t::deny(-EACCES);
     }
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
@@ -562,7 +559,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << " expires: " << t->get_expires() << dendl;
       /* Enforce access rules before caching so a denied request never
        * poisons the cache. Skip for service-to-service requests. */
-      if (!allow_expired && !enforce_access_rules(dpp, *t, s)) {
+      if (allow_expired) {
+        ldpp_dout(dpp, 10) << "skipping access-rule enforcement: valid service token present"
+                           << dendl;
+      } else if (!enforce_access_rules(dpp, *t, s)) {
         return result_t::deny(-EACCES);
       }
 
