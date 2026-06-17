@@ -2,7 +2,7 @@ roles:
 - - osd.0
 
 tasks:
--install:
+- install:
 - crimson_store_bench:
     work_load_type: random_write
     duration: 30
