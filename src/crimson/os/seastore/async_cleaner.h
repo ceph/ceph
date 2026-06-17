@@ -10,6 +10,7 @@
 
 #include "osd/osd_types.h"
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -1810,8 +1811,12 @@ public:
     if (st.total == 0) {
       return false;
     }
-    // 3% free, matching the default osd_failsafe_full_ratio (0.97)
-    return st.available < (st.total * 3 / 100);
+    // Failsafe limit: full once the used fraction reaches the same ratio
+    // classic uses for its failsafe check (osd_failsafe_full_ratio, default
+    // 0.97), i.e. free fraction drops below (1 - ratio).
+    const double failsafe_full_ratio =
+      crimson::common::get_conf<double>("osd_failsafe_full_ratio");
+    return st.available < st.total * (1.0 - failsafe_full_ratio);
   }
 
   bool can_clean_space() const final {
