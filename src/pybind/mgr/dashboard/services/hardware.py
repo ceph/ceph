@@ -53,7 +53,8 @@ class HardwareService(object):
                 output['host'].setdefault(host, {'flawed': False})
                 if not output['host'][host]['flawed']:
                     for system in systems.values():
-                        if any(dimm['status']['health'] != 'OK' for dimm in system.values()):
+                        if any(dimm.get('status', {}).get('health') != 'OK'
+                               for dimm in system.values()):
                             output['host'][host]['flawed'] = True
                             break
 
