@@ -215,9 +215,9 @@ public:
   virtual bool _is_mutable() const = 0;
   virtual bool _is_exist_clean() const = 0;
   virtual bool _is_exist_mutation_pending() const = 0;
+  virtual bool _is_valid() const = 0;
 protected:
   parent_tracker_ref<ParentT> parent_tracker;
-  virtual bool _is_valid() const = 0;
   virtual bool _is_stable() const = 0;
   template <typename, typename, typename>
   friend class ParentNode;
