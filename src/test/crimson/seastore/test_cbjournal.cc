@@ -594,6 +594,6 @@ TEST_F(cbjournal_test_t, multiple_submit_at_end)
       return Journal::replay_ertr::make_ready_future<
 	std::pair<bool, CachedExtentRef>>(true, nullptr);
     }).unsafe_get();
-    assert(get_written_to() == old_written_to);
+    ASSERT_EQ(get_written_to(), old_written_to);
   });
 }

@@ -163,7 +163,7 @@ std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
   assert(PyBytes_CheckExact(bytes));
   Py_ssize_t length;
   char *buf;
-  int r = PyBytes_AsStringAndSize(
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
     bytes, &buf, &length);
   assert(r == 0);
   return std::span<std::byte const>((const std::byte*)buf, size_t(length));
@@ -183,7 +183,7 @@ std::vector<std::byte> py_bytes_as_vec(PyObject *bytes)
   assert(PyBytes_CheckExact(bytes));
   Py_ssize_t length;
   char *buf;
-  int r = PyBytes_AsStringAndSize(
+  [[maybe_unused]] int r = PyBytes_AsStringAndSize(
     bytes, &buf, &length);
   assert(r == 0);
   return std::vector<std::byte>{

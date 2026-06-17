@@ -1075,7 +1075,7 @@ BtreeLBAManager::remap_mappings(
   assert(cursor->is_viewable());
   auto orig_indirect = cursor->is_indirect();
   auto orig_laddr = cursor->get_laddr();
-  auto orig_len = cursor->get_length();
+  [[maybe_unused]] auto orig_len = cursor->get_length();
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
   auto iter = btree.make_partial_iter(c, *cursor);

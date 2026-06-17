@@ -379,7 +379,7 @@ TransactionManager::resolve_cursor_to_mapping(
 
   ceph_assert(direct_cursors.size() == 1);
   auto& direct_cursor = direct_cursors.front();
-  auto intermediate_key = cursor->get_intermediate_key();
+  [[maybe_unused]] auto intermediate_key = cursor->get_intermediate_key();
   assert(!direct_cursor->is_indirect());
   assert(direct_cursor->get_laddr() <= intermediate_key);
   assert(direct_cursor->get_laddr() + direct_cursor->get_length()
