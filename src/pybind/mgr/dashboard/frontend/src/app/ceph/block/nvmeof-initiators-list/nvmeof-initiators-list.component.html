@@ -1,27 +1,21 @@
-<cd-alert-panel
-  *ngIf="hasAllHostsAllowed()"
-  type="info"
-  [showTitle]="false">
-  <div cdsStack="horizontal"
-       gap="2">
+@if (hasAllHostsAllowed()) {
+  <cd-alert-panel
+    class="cds-mb-4"
+    type="warning"
+    [showTitle]="false">
     <div cdsStack="vertical"
-         gap="2">
-      <strong i18n>Host access: All hosts allowed</strong>
-      <p
-        class="cds-mb-0 cds-mt-1"
-        i18n
-      >
+         gap="1">
+      <strong class="cds-mb-1"
+              i18n>All hosts allowed</strong>
+      <p class="cds-mb-0"
+         i18n>
         Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
       </p>
     </div>
-    <a cdsLink
-       class="text-nowrap cds-ml-3 text-muted"
-       (click)="editHostAccess()"
-       i18n>Edit host access</a>
-  </div>
-</cd-alert-panel>
+  </cd-alert-panel>
+}
 
-<cd-table [data]="hasAllHostsAllowed() ? [] : initiators"
+<cd-table [data]="initiators"
           columnMode="flex"
           (fetchData)="listInitiators()"
           [columns]="initiatorColumns"
@@ -35,9 +29,20 @@
     </cd-table-actions>
   </div>
 </cd-table>
-<ng-template #dhchapTpl>
+
+<ng-template #hostNqnTpl
+             let-row="data.row">
+  {{ getDisplayedHostNqn(row.nqn) }}
+</ng-template>
+
+<ng-template #dhchapTpl
+             let-row="data.row">
   <div cdsStack="horizontal"
        gap="4">
-    {{ authStatus !== authType.NO_AUTH ? 'Yes' : 'No' }}
+    @if (row.nqn === allowAllHost) {
+      {{ '-' }}
+    } @else {
+      {{ authStatus !== authType.NO_AUTH ? yesLabel : noLabel }}
+    }
   </div>
 </ng-template>
