@@ -20,6 +20,7 @@
 
 #include "common/dout.h"
 #include "rgw_common.h"     // rgw_bucket, ldpp_dout
+#include "rgw_bucket_layout.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -99,13 +100,14 @@ inline bool sc_enforcement_active(const RGWQuotaInfo& q) {
 } // anonymous namespace
 
 int rgw_check_storage_class_quota(const DoutPrefixProvider* dpp,
+                                  rgw::sal::Driver* driver, 
                                   const RGWQuota& quota,
                                   const rgw_bucket& bucket,
                                   const rgw_placement_rule& placement,
                                   uint64_t new_size,
                                   uint64_t new_objects,
                                   optional_yield y) {
-
+  
   const bool bucket_active = sc_enforcement_active(quota.bucket_quota);
   const bool user_active   = sc_enforcement_active(quota.user_quota);
   if (!bucket_active && !user_active) {
@@ -133,53 +135,84 @@ int rgw_check_storage_class_quota(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  // Get current usage 
+  ScUsageStats usage{0, 0};
+
   ScUsageStatsProvider* provider = get_sc_stats_provider();
-  if (!provider) {
-    ldpp_dout(dpp, 20)
-      << "sc-quota: no stats provider installed; failing open for sc_key="
-      << sc_key << dendl;
-    return 0;
+  if (provider) {
+    // Fast path: obs cache registered
+    auto cached = provider->lookup(bucket, sc_key);
+    if (!cached) {
+      ldpp_dout(dpp, 20) << "sc-quota: no cached stats for sc_key="
+                         << sc_key << " failing open" << dendl;
+      return 0;
+    }
+    usage = *cached;
+  } else {
+    // Fallback: read directly from Pedro's bucket index (PR #66501)
+    std::unique_ptr<rgw::sal::Bucket> bkt;
+    int r = driver->load_bucket(dpp, bucket, &bkt, y);
+    if (r < 0) {
+      return 0;
+    }
+
+    std::map<RGWObjCategory, RGWStorageStats> cat_stats;
+    std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
+    sc_stats.emplace(); // must pre-initialize for accumulate_raw_stats to populate it
+    std::string bver, mver;
+    const auto& idx_layout = bkt->get_info().layout.current_index;
+
+    r = bkt->read_stats(dpp, y, idx_layout, -1, &bver, &mver, cat_stats, sc_stats);
+    if (r < 0) {
+      return 0;
+    }
+    if (!sc_stats.has_value()) {
+      return 0;
+    }
+
+    // Log all keys Pedro's stats actually contain
+    for (const auto& [k, v] : *sc_stats) {
+    }
+
+    // read_stats keys stats by SC name only ("STANDARD"),
+    // not the composite quota key ("default-placement::STANDARD").
+    // Extract just the SC name for the lookup.
+    std::string sc_name_for_lookup = sc_key;
+    auto sep_pos = sc_key.rfind("::");
+    if (sep_pos != std::string::npos) {
+      sc_name_for_lookup = sc_key.substr(sep_pos + 2);
+    }
+    auto it = sc_stats->find(sc_name_for_lookup);
+    if (it != sc_stats->end()) {
+      usage.size        = it->second.size;
+      usage.num_objects = it->second.num_objects;
+    }
   }
 
-  const std::optional<ScUsageStats> usage = provider->lookup(bucket, sc_key);
-  if (!usage) {
-    ldpp_dout(dpp, 20)
-      << "sc-quota: no cached stats for sc_key=" << sc_key
-      << " bucket=" << bucket << "; failing open" << dendl;
-    return 0;
-  }
-
+  // Enforce 
   if (lim.have_size_limit &&
-      would_exceed(lim.max_size, usage->size, new_size)) {
-    ldpp_dout(dpp, 5)
-      << "sc-quota: size limit exceeded for sc_key=" << sc_key
-      << " bucket=" << bucket
-      << " current=" << usage->size
-      << " delta=" << new_size
-      << " limit=" << lim.max_size
-      << dendl;
+    would_exceed(lim.max_size, usage.size, new_size)) {
+    ldpp_dout(dpp, 5) << "sc-quota: size exceeded sc_key=" << sc_key
+                      << " current=" << usage.size
+                      << " delta=" << new_size
+                      << " limit=" << lim.max_size << dendl;
     return -EDQUOT;
   }
 
   if (lim.have_object_limit &&
-      would_exceed(lim.max_objects, usage->num_objects, new_objects)) {
-    ldpp_dout(dpp, 5)
-      << "sc-quota: object-count limit exceeded for sc_key=" << sc_key
-      << " bucket=" << bucket
-      << " current=" << usage->num_objects
-      << " delta=" << new_objects
-      << " limit=" << lim.max_objects
-      << dendl;
+    would_exceed(lim.max_objects, usage.num_objects, new_objects)) {
+    ldpp_dout(dpp, 5) << "sc-quota: object count exceeded sc_key=" << sc_key
+                      << " current=" << usage.num_objects
+                      << " delta=" << new_objects
+                      << " limit=" << lim.max_objects << dendl;
     return -EDQUOT;
   }
 
-  ldpp_dout(dpp, 25)
-    << "sc-quota: ok sc_key=" << sc_key
-    << " size " << usage->size << "+" << new_size
-    << "<=" << (lim.have_size_limit ? lim.max_size : -1)
-    << " objs " << usage->num_objects << "+" << new_objects
-    << "<=" << (lim.have_object_limit ? lim.max_objects : -1)
-    << dendl;
+  ldpp_dout(dpp, 25) << "sc-quota: ok sc_key=" << sc_key
+                     << " size=" << usage.size << "+" << new_size
+                     << "<=" << lim.max_size
+                     << " objs=" << usage.num_objects << "+" << new_objects
+                     << dendl;
   return 0;
 }
 

@@ -40,6 +40,7 @@
 #include "rgw_quota_types.h"      // RGWQuotaInfo, RGWQuota
 #include "rgw_sc_quota_types.h"   // RGWStorageClassQuota, rgw_sc_quota_key
 #include "rgw_placement_types.h"  // rgw_placement_rule
+#include "rgw_sal.h"
 
 struct rgw_bucket;
 
@@ -90,6 +91,7 @@ ScUsageStatsProvider* get_sc_stats_provider();
  *   new_objects : object count about to be added (almost always 1).           
  */
 int rgw_check_storage_class_quota(const DoutPrefixProvider* dpp,
+                                  rgw::sal::Driver* driver, 
                                   const RGWQuota& quota,
                                   const rgw_bucket& bucket,
                                   const rgw_placement_rule& placement,

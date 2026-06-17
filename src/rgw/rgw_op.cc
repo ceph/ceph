@@ -1843,16 +1843,19 @@ int RGWOp::init_quota()
 
   driver->get_quota(quota);
 
-  if (s->bucket->get_info().quota.enabled) {
-    quota.bucket_quota = s->bucket->get_info().quota;
-  } else if (user_quotas.bucket_quota.enabled) {
-    quota.bucket_quota = user_quotas.bucket_quota;
+  const auto& bucket_info_quota = s->bucket->get_info().quota;
+  if (bucket_info_quota.enabled || bucket_info_quota.has_any_sc_quota()) {
+      quota.bucket_quota = bucket_info_quota;
+  } else if (user_quotas.bucket_quota.enabled ||
+            user_quotas.bucket_quota.has_any_sc_quota()) {
+      quota.bucket_quota = user_quotas.bucket_quota;
   }
 
-  if (user_quotas.user_quota.enabled) {
-    quota.user_quota = user_quotas.user_quota;
+  if (user_quotas.user_quota.enabled ||
+      user_quotas.user_quota.has_any_sc_quota()) {
+      quota.user_quota = user_quotas.user_quota;
   }
-
+  
   return 0;
 }
 
@@ -4809,7 +4812,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     op_ret = rgw::quota::rgw_check_storage_class_quota(
-        this, quota, s->bucket->get_key(), s->dest_placement,
+        this, driver, quota, s->bucket->get_key(), s->dest_placement,
         s->content_length, /*new_objects=*/1, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "sc-quota pre-check returned ret=" << op_ret << dendl;
@@ -5100,7 +5103,7 @@ void RGWPutObj::execute(optional_yield y)
   }
   
   op_ret = rgw::quota::rgw_check_storage_class_quota(
-      this, quota, s->bucket->get_key(), s->dest_placement,
+      this, driver, quota, s->bucket->get_key(), s->dest_placement,
       s->obj_size, /*new_objects=*/1, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "sc-quota final check returned ret=" << op_ret << dendl;
@@ -5360,7 +5363,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
     op_ret = rgw::quota::rgw_check_storage_class_quota(
-        this, quota, s->bucket->get_key(), s->dest_placement,
+        this, driver, quota, s->bucket->get_key(), s->dest_placement,
         s->content_length, /*new_objects=*/1, y);
     if (op_ret < 0) {
       return;
@@ -5499,7 +5502,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
     op_ret = rgw::quota::rgw_check_storage_class_quota(
-        this, quota, s->bucket->get_key(), s->dest_placement,
+        this, driver, quota, s->bucket->get_key(), s->dest_placement,
         s->obj_size, /*new_objects=*/1, y);
     if (op_ret < 0) {
       return;
@@ -6652,7 +6655,7 @@ void RGWCopyObj::execute(optional_yield y)
         return;
       }
       op_ret = rgw::quota::rgw_check_storage_class_quota(
-          this, quota, s->bucket->get_key(), s->dest_placement,
+          this, driver, quota, s->bucket->get_key(), s->dest_placement,
           s->src_object->get_accounted_size(), /*new_objects=*/1, y);
       if (op_ret < 0) {
         return;
@@ -7886,7 +7889,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
         mp_total_size += mp_part->get_size();
       }
       int q_ret = rgw::quota::rgw_check_storage_class_quota(
-          this, quota, s->bucket->get_key(), *dest_placement,
+          this, driver, quota, s->bucket->get_key(), *dest_placement,
           mp_total_size, /*new_objects=*/1, y);
       if (q_ret < 0) {
         op_ret = q_ret;
@@ -8935,7 +8938,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   op_ret = rgw::quota::rgw_check_storage_class_quota(
-      this, quota, bucket->get_key(), dest_placement,
+      this, driver, quota, bucket->get_key(), dest_placement,
       size, /*new_objects=*/1, y);
   if (op_ret < 0) {
     return op_ret;
@@ -9013,7 +9016,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   }
   
   op_ret = rgw::quota::rgw_check_storage_class_quota(
-      this, quota, bucket->get_key(), dest_placement,
+      this, driver, quota, bucket->get_key(), dest_placement,
       size, /*new_objects=*/1, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "sc-quota exceeded for path=" << path << dendl;
