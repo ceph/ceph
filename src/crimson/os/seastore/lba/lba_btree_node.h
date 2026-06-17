@@ -357,7 +357,11 @@ struct LBALeafNode
           it++;
           continue;
         } else {
-          assert(child->_is_exist_clean() || child->_is_exist_mutation_pending());
+          assert(child->_is_exist_clean() ||
+                 child->_is_exist_mutation_pending() ||
+                 // a pending child might have been invalidated and
+                 // its corresponding mapping has not been removed
+                 !child->_is_valid());
         }
       }
       SUBTRACET(seastore_lba, "examing v2: {}~{}, v1: {}~{}",
