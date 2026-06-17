@@ -528,6 +528,77 @@ class TestMisc(CephFSTestCase):
         self.assertEqual(ce.exception.exitstatus, 1)
 
 
+    def test_write_overrides_futuristic_mtime(self):
+        """
+        Ensure a data write operation unconditionally overwrites a user-set
+        futuristic mtime/ctime with the current real clock, even in multi-client
+        environments where CEPH_CAP_FILE_EXCL is revoked.
+        """
+        test_dir = "test_futuristic_mtime_dir"
+        test_file = f"{test_dir}/target.bin"
+
+        # Use Client 1 (mount_a) to create the base directory and file
+        self.mount_a.run_shell(["mkdir", "-p", test_dir])
+        self.mount_a.touch(test_file)
+
+        # Explicitly push the file's mtime 25 hours into the future
+        log.info("Setting file mtime 25 hours into the future")
+        self.mount_a.run_shell(["touch", "-m", "-d", "+25 hours", test_file])
+
+        # Verify the file is actually set in the future before continuing
+        future_mtime = int(self.mount_a.run_shell(["stat", "-c", "%Y",
+                                                   test_file]).stdout.getvalue().strip())
+        current_time = int(self.mount_a.run_shell(["date",
+                                                   "+%s"]).stdout.getvalue().strip())
+        self.assertTrue(future_mtime > current_time,
+                        "Setup error: File mtime is not in the future.")
+
+        # Read the file from Client 2 (mount_b) to break Client 1's exclusive
+        # caps (EXCL)
+        log.info("Opening file on client_b to force cap downgrade"
+                 "(revoking EXCL) on client_a")
+        proc_b = self.mount_b.run_shell(["cat", test_file], wait=False)
+
+        # Wait briefly for cap transitions to settle across MDS/clients
+        time.sleep(2)
+
+        # Perform a data write operation via Client 1 (mount_a)
+        log.info("Executing write on client_a while working under"
+                 "shared capabilities")
+        self.mount_a.run_shell(["sh", "-c", f"echo 'payload' >> {test_file}"])
+
+        # Gather the post-write modification time metrics
+        log.info("Gathering post-write metadata metrics from client_a")
+        post_mtime = int(self.mount_a.run_shell(["stat", "-c", "%Y",
+                                                 test_file]).stdout.getvalue().strip())
+
+        # Refresh current time gauge
+        final_current_time = int(self.mount_a.run_shell(["date", "+%s"
+                                                         ]).stdout.getvalue().strip())
+
+        # Clean up background process contexts safely with a maximum 30-second timeout
+        try:
+            proc_b.wait(timeout=30)
+        except Exception as e:
+            log.warning(f"Background proc_b did not exit cleanly within timeout: {e}")
+        self.mount_a.run_shell(["rm", "-rf", test_dir])
+
+        # Final Assertion Checklist
+        log.info(f"Future mtime: {future_mtime} | Post-write mtime: {post_mtime}"
+                 f" | Current system time: {final_current_time}")
+
+        # The post-write mtime should no longer be stuck in the future.
+        # It must be within a safe delta (e.g., 10 seconds) of the current real
+        # system clock time.
+        # A strict match post_mtime == final_current_time would cause false failures.
+        self.assertLessEqual(
+            post_mtime,
+            final_current_time + 10,
+            "REGRESSION DETECTED: The futuristic mtime remained stuck after a "
+            "write operation because metadata caps were not dirtied or forced "
+            "backward to the real clock."
+        )
+
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
     CLIENTS_REQUIRED = 3
