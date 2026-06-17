@@ -1,3 +1,9 @@
+* CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
+  as not supporting runtime updates. Previously, the configuration schema indicated
+  this option could be changed at runtime, but changes had no effect on opened file
+  handlers in ceph-fuse or libcephfs clients because there is no logic to propagate
+  changes to open file handles.
+
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
