@@ -78,3 +78,5 @@ def task(ctx,config):
     finally:
         log.info("waiting for the process to finish")
         proc.wait()
+        log.info("cleaning up store_bench_dir")
+        remote.run(args=['rm', '-rf', store_dir])
