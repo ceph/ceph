@@ -51,7 +51,7 @@
       </cds-table-toolbar-search>
       <!-- end search -->
       <!-- column filters -->
-       @if (columnFilters.length !== 0) {
+       @if (columnFilters.length !== 0 || customFilter) {
         <div cdsPopover
              [isOpen]="openFilterPopover"
              [autoAlign]="true"
@@ -66,11 +66,20 @@
                  class="cds--toolbar-action__icon"></svg>
           </cds-icon-button>
           <cds-popover-content [cdsLayer]="0">
+            <div cdsStack="horizontal" class="filter--header">
+              <span class="cds--type-heading-03" i18n>Filters</span>
+              <cds-icon-button kind="ghost"
+                              size="sm"
+                              (click)="toggleFilterPopover()">
+                <cd-icon type="destroy"></cd-icon>
+              </cds-icon-button>
+            </div>
             <div
               cdsGrid
               [fullWidth]="true"
               [condensed]="true"
               [narrow]="true">
+            @if (columnFilters.length !== 0) {
             @for (filter of columnFilters; track filter.column.name; let i = $index) {
             <div
               cdsRow
@@ -84,7 +93,7 @@
                 <cds-text-label>Filter
                   <input cdsText
                          readonly
-                         size="sm"
+                         size="md"
                          [id]="'filter_key_' + i"
                          [name]="'filter_key_' + i"
                          [value]="filter.column.name">
@@ -98,7 +107,7 @@
                 <cds-select (valueChange)="onChangeFilter($event, filter)"
                             [id]="'filter_value_' + i"
                             label="Value"
-                            size="sm"
+                            size="md"
                             [attr.data-testid]="'filter-select-' + filter.column.name"
                             i18n-label>
                   <option i18n>Any</option>
@@ -112,17 +121,82 @@
                 </cds-select>
               </div>
             </div>
+          }}
+          @if (customFilter) {
+          @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
+            @if (typeof customFilter === 'string') {
+              <div cdsRow
+                   class="cds-mt-4 cds--type-body-02">
+                Filter {{ customFilter }}:
+              </div>
+            }
+            <div cdsRow
+                 [cdsLayer]="1"
+                 class="cds-mt-4">
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Key
+                  <input cdsText
+                         size="md"
+                         [id]="'filter_key_' + i"
+                         [value]="filter.key"
+                         (input)="filter.key = $any($event.target).value">
+                </cds-text-label>
+              </div>
+
+              <div cdsCol
+                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
+                <cds-text-label>Value
+                  <input cdsText
+                         size="md"
+                         [id]="'filter_value_' + i"
+                         [value]="filter.value"
+                         (input)="filter.value = $any($event.target).value">
+                </cds-text-label>
+            </div>
+
+            @if (i !== 0) {
+            <div cdsCol
+                 [columnNumbers]="{sm: 2, md: 2, lg: 2}"
+                class="cds-mt-6">
+              <cds-icon-button kind="ghost"
+                               size="sm"
+                               (click)="removeCustomFilter(filter.id)">
+                <cd-icon type="trash"></cd-icon>
+              </cds-icon-button>
+            </div>
+            }
+          </div>
           }
-          <div cdsRow
-               class="cds-mt-4 cds-mb-4">
+            @if (stagedCustomFilters.length < 5) {
+            <div cdsRow
+                class="cds-mt-4">
+              <div cdsCol>
+                <button
+                  cdsButton="tertiary"
+                  size="md"
+                  (click)="addCustomFilter()">Add new filter rule +</button>
+              </div>
+            </div>
+            }
+          }
+          </div>
+
+          <div class="filter--footer">
+            <button cdsButton="secondary"
+                    size="lg"
+                    data-testid="clear-filters"
+                    (click)="onClearFilters()">
+              <ng-container i18n>Clear all</ng-container>
+            </button>
 
             <button cdsButton="primary"
-                    size="sm"
+                    size="lg"
                     data-testid="apply-filters"
+                    [disabled]="isApplyFilterDisabled"
                     (click)="onSubmitFilter()">
-              <ng-container i18n>Apply filters</ng-container>
+              <ng-container i18n>Apply</ng-container>
             </button>
-          </div>
           </div>
           </cds-popover-content>
         </div>
@@ -183,13 +257,13 @@
         class="align-items-center"
         cdsStack="horizontal"
         [gap]="2">
-        @for (filter of activeFilters | slice:0:3; track filter.column.name) {
+        @for (filter of activeFilters | slice:0:3; track filter.id) {
           @if (filter.value) {
             <cds-tag-filter
               closeButtonLabel="Clear"
               i18n-closeButtonLabel
               (close)="onRemoveFilter(filter)">
-              {{ filter.column.name }}={{ filter.value.formatted }}
+              {{ filter.name }}={{ filter.value }}
             </cds-tag-filter>
           }
         }
@@ -203,12 +277,12 @@
               <div
                 cdsStack="vertical"
                 [gap]="2">
-              @for (filter of activeFilters | slice:3; track filter.column.name) {
+              @for (filter of activeFilters | slice:3; track filter.id) {
                 <cds-tag-filter
                   closeButtonLabel="Clear"
                   i18n-closeButtonLabel
                   (close)="onRemoveFilter(filter)">
-                  {{ filter.column.name }}={{ filter.value.formatted }}
+                  {{ filter.name }}={{ filter.value }}
                 </cds-tag-filter>
               }
               </div>
