@@ -50,6 +50,7 @@
 #include "include/CompatSet.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/mon_types.h" // for Metadata, PAXOS_*, ScrubResult
+#include "mon/MonitorBackup.h"
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
@@ -100,6 +101,25 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_running,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
+  l_mon_backup_last_success,
+  l_mon_backup_last_success_id,
+  l_mon_backup_last_failed,
+  l_mon_backup_last_size,
+  l_mon_backup_last_files,
+  l_mon_backup_cleanup_started,
+  l_mon_backup_cleanup_running,
+  l_mon_backup_cleanup_success,
+  l_mon_backup_cleanup_failed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
+  l_mon_backup_cleanup_duration,
+  l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_deleted,
   l_mon_last,
 };
 
@@ -1001,6 +1021,8 @@ private:
 
   OpTracker op_tracker;
 
+  std::unique_ptr<MonitorBackupManager> backup_manager;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1045,6 +1067,10 @@ private:
 		       ceph::Formatter *f,
 		       std::ostream& err,
 		       std::ostream& out);
+
+  // Execute mon database backup
+  int perform_backup();
+  int cleanup_backup();
 
 private:
   // don't allow copying
