@@ -40,6 +40,7 @@
 // Standard Public Ceph API
 #include <cephfs/libcephfs.h>
 #include <fcntl.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 // Boost Program Options
@@ -1221,6 +1222,54 @@ print_statistics(
   }
 }
 
+static void dump_statvfs_json(ceph::Formatter* f, const struct statvfs& st)
+{
+  f->dump_unsigned("block_size", st.f_bsize);
+  f->dump_unsigned("total_blocks", st.f_blocks);
+  f->dump_unsigned("free_blocks", st.f_bfree);
+  f->dump_unsigned("files", st.f_files);
+}
+
+static int fetch_statvfs(struct ceph_mount_info* cmount,
+                         const BenchConfig& config,
+                         struct statvfs* stbuf)
+{
+  if (config.async_io) {
+    Inode* root = nullptr;
+    int rc = ceph_ll_lookup_root(cmount, &root);
+    if (rc < 0) {
+      return rc;
+    }
+    return ceph_ll_statfs(cmount, root, stbuf);
+  }
+  return ceph_statfs(cmount, config.mount_root.c_str(), stbuf);
+}
+
+static void report_fs_stats(const char* phase,
+                            struct ceph_mount_info* cmount,
+                            const BenchConfig& config,
+                            ceph::Formatter* json_formatter)
+{
+  struct statvfs stbuf = {};
+  int rc = fetch_statvfs(cmount, config, &stbuf);
+  if (rc < 0) {
+    cerr << "Failed to get filesystem stats (" << phase << "): "
+         << strerror(-rc) << std::endl;
+    return;
+  }
+
+  cout << "\nFilesystem statistics (" << phase << " iterations):" << std::endl;
+  cout << "  Total blocks:      " << stbuf.f_blocks << std::endl;
+  cout << "  Free blocks:       " << stbuf.f_bfree << std::endl;
+  cout << "  Files:             " << stbuf.f_files << std::endl;
+
+  if (json_formatter) {
+    json_formatter->open_object_section(phase);
+    dump_statvfs_json(json_formatter, stbuf);
+    json_formatter->close_section();
+  }
+}
+
 // Helper to check for errors and print them
 bool check_and_report_errors(const std::atomic<bool>& stop_signal,
                              const std::vector<std::stringstream>& outputs) {
@@ -1365,6 +1414,11 @@ int do_bench(BenchConfig& config) {
 
   int files_per_thread = config.num_files / config.num_threads;
   int remainder = config.num_files % config.num_threads;
+
+  if (json_formatter) {
+    json_formatter->open_object_section("filesystem_stats");
+  }
+  report_fs_stats("before", shared_cmount, config, json_formatter.get());
 
   std::vector<double> write_mbps;
   std::vector<double> write_fps;
@@ -1639,6 +1693,11 @@ int do_bench(BenchConfig& config) {
           return 1;
       }
     }
+  }
+
+  report_fs_stats("after", shared_cmount, config, json_formatter.get());
+  if (json_formatter) {
+    json_formatter->close_section(); // filesystem_stats
   }
 
   cout << std::endl << std::endl << "*** Final Report ***" << std::endl;
