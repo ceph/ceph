@@ -197,9 +197,18 @@ public:
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";
     pool.stripe_width = stripe_width;
-    
-    // Set flags as specified by caller
-    pool.flags = flags;
+
+    // pg_num/pgp_num must be non-zero: raw_pg_to_pps() uses
+    // ceph_stable_mod(seed, pgp_num, pgp_num_mask), which collapses every
+    // PG seed to the same CRUSH hash when pgp_num == 0, making all PGs land
+    // on the same set of OSDs regardless of their seed.
+    pool.set_pg_num(32);
+    pool.set_pgp_num(32);
+
+    // Set flags as specified by caller, always including HASHPSPOOL so that
+    // pool_id is mixed into the placement hash (prevents pools from
+    // accidentally sharing placement seeds).
+    pool.flags = flags | pg_pool_t::FLAG_HASHPSPOOL;
     
     // Only set nonprimary_shards if OPTIMIZATIONS flag is set
     if (flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) {

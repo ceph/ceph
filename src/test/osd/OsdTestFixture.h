@@ -48,7 +48,13 @@ public:
   // PG identity
   spg_t spgid;
   pg_shard_t pg_whoami;
-  
+
+  // Per-PG ObjectStore collection.  A collection is keyed by spg_t (pgid +
+  // shard_id), so it belongs here rather than on OsdTestFixture which is
+  // keyed only by OSD number.
+  coll_t coll;
+  ObjectStore::CollectionHandle ch;
+
   // Peering-related components (optional)
   // IMPORTANT: Member destruction order matters!
   // Members are destroyed in REVERSE order of declaration.
@@ -59,7 +65,7 @@ public:
   std::unique_ptr<MockPeeringListener> peering_listener;
   std::unique_ptr<PeeringState> peering_state;
   std::unique_ptr<PeeringCtx> peering_ctx;
-  
+
   // Backend-related components (optional)
   std::unique_ptr<PGBackend> backend;
   std::unique_ptr<MockPGBackendListener> backend_listener;
@@ -147,18 +153,11 @@ public:
   // Map of PGs on this OSD
   std::map<spg_t, std::unique_ptr<TestPG>> pgs;
   
-  // ObjectStore collection for this OSD
-  coll_t coll;
-  ObjectStore::CollectionHandle ch;
-  
   explicit OsdTestFixture(int osd_id_) : osd_id(osd_id_) {}
   
   ~OsdTestFixture() {
     // Clean up in proper order: clear PGs first, then unmount store
     pgs.clear();
-    if (ch) {
-      ch.reset();
-    }
     if (store) {
       // Only unmount if this is the last reference to the store
       if (store.use_count() == 1) {
