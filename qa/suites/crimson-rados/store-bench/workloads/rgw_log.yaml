@@ -14,3 +14,4 @@ tasks:
     target_keys_per_bucket: 256
     tolerance_range: 10
     num_buckets_per_collection: 16
+    dump_metrics: true

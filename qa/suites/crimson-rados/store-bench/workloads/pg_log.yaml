@@ -11,3 +11,4 @@ tasks:
     num_logs: 4
     log_size: 1024
     log_length: 256
+    dump_metrics: true
