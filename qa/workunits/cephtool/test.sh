@@ -1583,6 +1583,19 @@ function test_mon_osd()
   done
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  # multiple flags can be set/unset in a single command
+  ceph osd set norecover nobackfill norebalance
+  ceph osd dump | grep flags | grep norecover
+  ceph osd dump | grep flags | grep nobackfill
+  ceph osd dump | grep flags | grep norebalance
+  ceph osd unset norecover nobackfill norebalance
+  ! ceph osd dump | grep flags | grep norecover || exit 1
+  ! ceph osd dump | grep flags | grep nobackfill || exit 1
+  ! ceph osd dump | grep flags | grep norebalance || exit 1
+  # a single invalid flag rejects the whole command without applying any
+  expect_false ceph osd set noout bogus
+  ! ceph osd dump | grep flags | grep noout || exit 1
+  expect_false ceph osd unset noout bogus
   for f in sortbitwise recover_deletes require_jewel_osds \
 	  require_kraken_osds
   do
