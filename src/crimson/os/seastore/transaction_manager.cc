@@ -331,6 +331,12 @@ TransactionManager::_remove(
     indirect_cursor = co_await lba_manager->update_mapping_refcount(
       t, mapping.indirect_cursor, -1);
     co_await mapping.direct_cursor->refresh();
+    if (unlikely(indirect_cursor->get_key() ==
+          mapping.direct_cursor->get_key())) {
+      // indirect_cursor points to the same mapping as direct_cursor,
+      // no need to keep it
+      indirect_cursor.reset();
+    }
   }
 
   DEBUGT("removing direct mapping {}~0x{:x} refcount={} -- offset={}",
@@ -344,6 +350,10 @@ TransactionManager::_remove(
 
   LBACursorRef direct_cursor = co_await lba_manager->update_mapping_refcount(
     t, mapping.direct_cursor, -1);
+
+  if (indirect_cursor) {
+    co_await indirect_cursor->refresh();
+  }
 
   auto ret = co_await resolve_cursor_to_mapping(
     t,
