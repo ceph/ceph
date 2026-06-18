@@ -6471,7 +6471,6 @@ PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeferPoolMigration(0.0)));
-  pl->pool_migration_request_target_reservation();
   pl->publish_stats_to_osd();
 }
 
