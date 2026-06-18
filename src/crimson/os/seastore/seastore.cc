@@ -123,6 +123,8 @@ SeaStore::Shard::Shard(
   :root(root),
    max_object_size(
      get_conf<uint64_t>("seastore_default_max_object_size")),
+   onode_cache_bypass(
+     get_conf<bool>("seastore_onode_cache_bypass")),
    is_test(is_test),
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
@@ -1927,7 +1929,7 @@ SeaStore::Shard::_do_transaction_step(
 
     // Fast path: cache hit — assign directly and skip the fltree lookup below.
     auto it = cache.find(oid);
-    if (it != cache.end()) {
+    if (it != cache.end() && onode_cache_bypass) {
       auto sp = std::static_pointer_cast<OnodeRef>(it->second);
       if ((*sp)->is_reusable()) {
         DEBUGT("[onode_cache] hit oid={}", *ctx.transaction, oid);

@@ -625,6 +625,7 @@ public:
     std::string root;
     Device* device;
     const uint32_t max_object_size;
+    const bool onode_cache_bypass;
     bool is_test;
 
     std::vector<Device*> secondaries;

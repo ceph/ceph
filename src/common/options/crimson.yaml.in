@@ -189,6 +189,11 @@ options:
   desc: default logical address space reservation for seastore objects' data
   default: 16777216
 # TODO: implement sub-extent checksum and deprecate this configuration.
+- name: seastore_onode_cache_bypass
+  type: bool
+  level: dev
+  desc: Enable OBC onode cache bypass in _do_transaction_step to skip fltree lookup on reuse
+  default: true
 - name: seastore_full_integrity_check
   type: bool
   level: dev
