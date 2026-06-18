@@ -2,17 +2,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ceph_node_proxy.atollon import AtollonSystem
+from ceph_node_proxy.atollon import AtollonRedfishProvider
 from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
 
 
 @pytest.fixture
-def atollon_system():
+def atollon_redfish():
     with (
         patch("ceph_node_proxy.baseredfishsystem.RedFishClient", return_value=MagicMock()),
         patch("ceph_node_proxy.baseredfishsystem.EndpointMgr", return_value=MagicMock()),
     ):
-        return AtollonSystem(
+        return AtollonRedfishProvider(
             host="testhost",
             port="443",
             username="user",
@@ -21,16 +21,16 @@ def atollon_system():
         )
 
 
-class TestAtollonSystemMemoryOverrides:
-    def test_get_specs_memory_uses_id_instead_of_description(self, atollon_system):
-        specs = atollon_system.get_specs("memory")
+class TestAtollonRedfishProviderMemoryOverrides:
+    def test_get_specs_memory_uses_id_instead_of_description(self, atollon_redfish):
+        specs = atollon_redfish.get_specs("memory")
         assert len(specs) == 1
         assert "Id" in specs[0].fields
         assert "Description" not in specs[0].fields
         assert "MemoryDeviceType" in specs[0].fields
 
-    def test_update_memory_maps_id_to_description(self, atollon_system):
-        atollon_system._sys["memory"] = {
+    def test_update_memory_maps_id_to_description(self, atollon_redfish):
+        atollon_redfish._sys["memory"] = {
             "1": {
                 "dimm0": {
                     "id": "dimm0",
@@ -43,14 +43,14 @@ class TestAtollonSystemMemoryOverrides:
 
         with patch.object(BaseRedfishSystem, "_update_memory") as mock_super:
             mock_super.side_effect = lambda: None
-            atollon_system._update_memory()
+            atollon_redfish._update_memory()
 
-        assert atollon_system._sys["memory"]["1"]["dimm0"]["description"] == "dimm0"
+        assert atollon_redfish._sys["memory"]["1"]["dimm0"]["description"] == "dimm0"
 
 
-class TestAtollonSystemStorageOverrides:
-    def test_update_storage_replaces_unknown_description(self, atollon_system):
-        atollon_system._sys["storage"] = {
+class TestAtollonRedfishProviderStorageOverrides:
+    def test_update_storage_replaces_unknown_description(self, atollon_redfish):
+        atollon_redfish._sys["storage"] = {
             "Self": {
                 "nvme_device0_nsid1": {
                     "description": "unknown",
@@ -70,13 +70,13 @@ class TestAtollonSystemStorageOverrides:
 
         with patch.object(BaseRedfishSystem, "_update_storage") as mock_super:
             mock_super.side_effect = lambda: None
-            atollon_system.fix_storage_descriptions()
+            atollon_redfish.fix_storage_descriptions()
 
-        drive = atollon_system._sys["storage"]["Self"]["nvme_device0_nsid1"]
+        drive = atollon_redfish._sys["storage"]["Self"]["nvme_device0_nsid1"]
         assert drive["description"] == "NVMe_Device0_NSID1"
 
-    def test_enrich_storage_from_controllers_by_serial(self, atollon_system):
-        atollon_system._sys["storage"] = {
+    def test_enrich_storage_from_controllers_by_serial(self, atollon_redfish):
+        atollon_redfish._sys["storage"] = {
             "Self": {
                 "nvme_device0_nsid1": {
                     "description": "NVMe_Device0_NSID1",
@@ -109,21 +109,21 @@ class TestAtollonSystemStorageOverrides:
         systems_endpoint.__getitem__ = MagicMock(
             side_effect=lambda key: member_endpoint if key == "Self" else MagicMock()
         )
-        atollon_system.endpoints = MagicMock()
-        atollon_system.endpoints.__getitem__ = MagicMock(
+        atollon_redfish.endpoints = MagicMock()
+        atollon_redfish.endpoints.__getitem__ = MagicMock(
             side_effect=lambda key: systems_endpoint if key == "systems" else MagicMock()
         )
 
-        atollon_system.enrich_storage_from_controllers()
+        atollon_redfish.enrich_storage_from_controllers()
 
-        drive = atollon_system._sys["storage"]["Self"]["nvme_device0_nsid1"]
+        drive = atollon_redfish._sys["storage"]["Self"]["nvme_device0_nsid1"]
         assert drive["firmware_version"] == "V6MA001"
         assert drive["slot"] == "0"
         assert drive["speed_gbps"] == 63.02
         assert drive["physical_location"]["partlocation"]["locationordinalvalue"] == 0
 
-    def test_enrich_storage_from_controllers_by_device_index(self, atollon_system):
-        atollon_system._sys["storage"] = {
+    def test_enrich_storage_from_controllers_by_device_index(self, atollon_redfish):
+        atollon_redfish._sys["storage"] = {
             "Self": {
                 "nvme_device2_nsid1": {
                     "description": "NVMe_Device2_NSID1",
@@ -153,13 +153,13 @@ class TestAtollonSystemStorageOverrides:
         systems_endpoint.__getitem__ = MagicMock(
             side_effect=lambda key: member_endpoint if key == "Self" else MagicMock()
         )
-        atollon_system.endpoints = MagicMock()
-        atollon_system.endpoints.__getitem__ = MagicMock(
+        atollon_redfish.endpoints = MagicMock()
+        atollon_redfish.endpoints.__getitem__ = MagicMock(
             side_effect=lambda key: systems_endpoint if key == "systems" else MagicMock()
         )
 
-        atollon_system.enrich_storage_from_controllers()
+        atollon_redfish.enrich_storage_from_controllers()
 
-        drive = atollon_system._sys["storage"]["Self"]["nvme_device2_nsid1"]
+        drive = atollon_redfish._sys["storage"]["Self"]["nvme_device2_nsid1"]
         assert drive["firmware_version"] == "000A5305"
         assert drive["slot"] == "2"
