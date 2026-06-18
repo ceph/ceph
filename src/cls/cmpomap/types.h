@@ -40,5 +40,7 @@ enum class Op : uint8_t {
 
 /// mapping of omap keys to value comparisons
 using ComparisonMap = boost::container::flat_map<std::string, ceph::bufferlist>;
+using ValueMap = std::map<std::string, bufferlist>; // Identical to what is used in cls_cxx_map_set_vals
+using KeySet = std::set<std::string>;
 
 } // namespace cls::cmpomap

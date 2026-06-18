@@ -42,6 +42,17 @@ static constexpr uint32_t max_keys = 1000;
                                Mode mode, Op comparison, ComparisonMap values,
                                std::optional<ceph::bufferlist> default_value);
 
+/// process all of the omap value comparisons according to the same rules as
+/// cmpxattr(). If all key/value pairs for comparison purpose compare successfully,
+/// the key/value pairs for overwritten are overwritten. For comparisons with
+/// Mode::U64, failure to decode an input value is reported as -EINVAL. An empty
+/// stored value is compared as 0, while decode failure of a stored value is treated
+/// as an unsuccessful comparison and is not reported as an error.
+[[nodiscard]] int cmp_set_vals2(librados::ObjectWriteOperation& writeop,
+                                Mode mode, Op comparison, ComparisonMap cmp_values,
+                                ValueMap set_values,
+                                std::optional<ceph::bufferlist> default_value);
+
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(). any key/value pairs that compare successfully are removed. for
 /// comparisons with Mode::U64, failure to decode an input value is reported as
@@ -51,6 +62,16 @@ static constexpr uint32_t max_keys = 1000;
 [[nodiscard]] int cmp_rm_keys(librados::ObjectWriteOperation& writeop,
                               Mode mode, Op comparison, ComparisonMap values);
 
+/// process all of the omap value comparisons according to the same rules as
+/// cmpxattr(). If all key/value pairs for comparison purpose compare successfully,
+/// the key set for deletion are deleted. For comparisons with
+/// Mode::U64, failure to decode an input value is reported as -EINVAL. An empty
+/// stored value is compared as 0, while decode failure of a stored value is treated
+/// as an unsuccessful comparison and is not reported as an error.
+[[nodiscard]] int cmp_rm_keys2(librados::ObjectWriteOperation& writeop,
+                               Mode mode, Op comparison, ComparisonMap cmp_values,
+                               KeySet rm_keys,
+                               std::optional<ceph::bufferlist> default_value);
 
 // bufferlist factories for comparison values
 inline ceph::bufferlist string_buffer(std::string_view value) {

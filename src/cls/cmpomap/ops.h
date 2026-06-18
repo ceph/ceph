@@ -74,6 +74,36 @@ inline void decode(cmp_set_vals_op& o, ceph::bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
+struct cmp_set_vals2_op {
+  Mode mode;
+  Op comparison;
+  ComparisonMap cmp_values;
+  std::optional<ceph::bufferlist> default_value;
+  ValueMap set_values;
+};
+
+inline void encode(const cmp_set_vals2_op& o, ceph::bufferlist& bl, uint64_t f=0)
+{
+  ENCODE_START(1, 1, bl);
+  encode(o.mode, bl);
+  encode(o.comparison, bl);
+  encode(o.cmp_values, bl);
+  encode(o.default_value, bl);
+  encode(o.set_values, bl);
+  ENCODE_FINISH(bl);
+}
+
+inline void decode(cmp_set_vals2_op& o, ceph::bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(o.mode, bl);
+  decode(o.comparison, bl);
+  decode(o.cmp_values, bl);
+  decode(o.default_value, bl);
+  decode(o.set_values, bl);
+  DECODE_FINISH(bl);
+}
+
 struct cmp_rm_keys_op {
   Mode mode;
   Op comparison;
@@ -98,13 +128,45 @@ inline void decode(cmp_rm_keys_op& o, ceph::bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
+struct cmp_rm_keys2_op {
+  Mode mode;
+  Op comparison;
+  ComparisonMap cmp_values;
+  std::optional<ceph::bufferlist> default_value;
+  KeySet rm_keys;
+};
+
+inline void encode(const cmp_rm_keys2_op& o, ceph::bufferlist& bl, uint64_t f=0)
+{
+  ENCODE_START(1, 1, bl);
+  encode(o.mode, bl);
+  encode(o.comparison, bl);
+  encode(o.cmp_values, bl);
+  encode(o.default_value, bl);
+  encode(o.rm_keys, bl);
+  ENCODE_FINISH(bl);
+}
+
+inline void decode(cmp_rm_keys2_op& o, ceph::bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(o.mode, bl);
+  decode(o.comparison, bl);
+  decode(o.cmp_values, bl);
+  decode(o.default_value, bl);
+  decode(o.rm_keys, bl);
+  DECODE_FINISH(bl);
+}
+
 struct ClassId {
   static constexpr auto name = "cmpomap";
 };
 namespace method {
 constexpr auto cmp_vals = ClsMethod<RdTag, ClassId>("cmp_vals");
 constexpr auto cmp_set_vals = ClsMethod<RdWrTag, ClassId>("cmp_set_vals");
+constexpr auto cmp_set_vals2 = ClsMethod<RdWrTag, ClassId>("cmp_set_vals2");
 constexpr auto cmp_rm_keys = ClsMethod<RdWrTag, ClassId>("cmp_rm_keys");
+constexpr auto cmp_rm_keys2 = ClsMethod<RdWrTag, ClassId>("cmp_rm_keys2");
 }
 
 } // namespace cls::cmpomap

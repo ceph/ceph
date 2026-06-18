@@ -13,6 +13,7 @@
  */
 
 #include "objclass/objclass.h"
+#include <inttypes.h>
 #include "ops.h"
 
 CLS_VER(1,0)
@@ -50,11 +51,12 @@ static int compare_values_u64(Op op, uint64_t lhs, const bufferlist& value)
       return -EIO;
     }
   }
+  CLS_LOG(20, "%s() compare %zu vs %zu", __func__, lhs, rhs);
   return compare_values(op, lhs, rhs);
 }
 
-static int compare_value(Mode mode, Op op, const bufferlist& input,
-                         const bufferlist& value)
+static int compare_values_by_mode(Mode mode, Op op, const bufferlist& input,
+                          const bufferlist& value)
 {
   switch (mode) {
   case Mode::String:
@@ -74,6 +76,41 @@ static int compare_value(Mode mode, Op op, const bufferlist& input,
   default:
     return -EINVAL;
   }
+}
+
+static int compare_all_values_by_mode(Mode mode, Op op,
+                                      const ComparisonMap& input_values,
+                                      ValueMap& values,
+                                      std::optional<ceph::bufferlist> default_value)
+{
+  auto v = values.cbegin();
+  for (const auto& [key, input] : input_values) {
+    bufferlist value;
+    if (v != values.end() && v->first == key) {
+      value = std::move(v->second);
+      CLS_LOG(20, "%s() comparing key=%s mode=%d op=%d", __func__,
+              key.c_str(), (int)mode, (int)op);
+      ++v;
+    } else if (!default_value) {
+      CLS_LOG(10, "%s() missing key=%s without default", __func__, key.c_str());
+      return -ECANCELED;
+    } else {
+      CLS_LOG(10, "%s() missing key=%s with default", __func__, key.c_str());
+      value = *default_value;
+    }
+
+    int r = compare_values_by_mode(mode, op, input, value);
+    if (r == -EIO) {
+      r = 0; // treat EIO as a failed comparison
+    }
+    if (r <= 0) {
+      // unsuccessful comparison
+      CLS_LOG(10, "%s() failed to compare key=%s r=%d", __func__,
+              key.c_str(), r);
+      return r;
+    }
+  }
+  return 1;
 }
 
 static int cmp_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -119,7 +156,7 @@ static int cmp_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
               key.c_str(), (int)op.mode, (int)op.comparison);
     }
 
-    r = compare_value(op.mode, op.comparison, input, value);
+    r = compare_values_by_mode(op.mode, op.comparison, input, value);
     if (r < 0) {
       CLS_LOG(10, "cmp_vals() failed to compare key=%s r=%d", key.c_str(), r);
       return r;
@@ -178,7 +215,7 @@ static int cmp_set_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *o
               key.c_str(), (int)op.mode, (int)op.comparison);
     }
 
-    r = compare_value(op.mode, op.comparison, input, value);
+    r = compare_values_by_mode(op.mode, op.comparison, input, value);
     if (r == -EIO) {
       r = 0; // treat EIO as a failed comparison
     }
@@ -218,6 +255,50 @@ static int cmp_set_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return cls_cxx_map_set_vals(hctx, &values);
 }
 
+static int cmp_set_vals2(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cmp_set_vals2_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const buffer::error&) {
+    CLS_LOG(1, "ERROR: %s(): failed to decode input", __func__);
+    return -EINVAL;
+  }
+
+  // collect the keys we need to read
+  std::set<std::string> keys;
+  for (const auto& kv : op.cmp_values) {
+    keys.insert(kv.first);
+  }
+
+  // read the values for each key to compare
+  std::map<std::string, bufferlist> values;
+  int r = cls_cxx_map_get_vals_by_keys(hctx, keys, &values);
+  if (r < 0) {
+    CLS_LOG(4, "ERROR: %s() failed to read values r=%d", __func__, r);
+    return r;
+  }
+
+  r = compare_all_values_by_mode(op.mode, op.comparison, op.cmp_values, values, op.default_value);
+  if (r <= 0) {
+    if (r == 0) {
+      return -ECANCELED;
+    }
+    return r;
+  }
+
+  // Successful comparison, update values
+  r = cls_cxx_map_set_vals(hctx, &op.set_values);
+  if (r < 0) {
+    CLS_LOG(10, "%s() failed to overwrite keys count=%zu r=%d", __func__,
+            op.set_values.size(), r);
+    return r;
+  }
+  CLS_LOG(20, "%s() overwriting count=%zu", __func__, op.set_values.size());
+  return 0;
+}
+
 static int cmp_rm_keys(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   cmp_rm_keys_op op;
@@ -255,7 +336,7 @@ static int cmp_rm_keys(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     const bufferlist& value = v->second;
     ++v;
 
-    r = compare_value(op.mode, op.comparison, input, value);
+    r = compare_values_by_mode(op.mode, op.comparison, input, value);
     if (r == -EIO) {
       r = 0; // treat EIO as a failed comparison
     }
@@ -282,6 +363,50 @@ static int cmp_rm_keys(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   return 0;
 }
 
+static int cmp_rm_keys2(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cmp_rm_keys2_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const buffer::error&) {
+    CLS_LOG(1, "ERROR: %s(): failed to decode input", __func__);
+    return -EINVAL;
+  }
+
+  // collect the keys we need to read
+  std::set<std::string> keys;
+  for (const auto& kv : op.cmp_values) {
+    keys.insert(kv.first);
+  }
+
+  // read the values for each key to compare
+  std::map<std::string, bufferlist> values;
+  int r = cls_cxx_map_get_vals_by_keys(hctx, keys, &values);
+  if (r < 0) {
+    CLS_LOG(4, "ERROR: %s() failed to read values r=%d", __func__, r);
+    return r;
+  }
+
+  r = compare_all_values_by_mode(op.mode, op.comparison, op.cmp_values, values, op.default_value);
+  if (r <= 0) {
+    if (r == 0) {
+      return -ECANCELED;
+    }
+    return r;
+  }
+
+  // Successful comparison, remove keys
+  r = cls_cxx_map_remove_keys(hctx, op.rm_keys);
+  if (r < 0) {
+    CLS_LOG(10, "%s() failed to remove keys count=%zu r=%d", __func__,
+            op.rm_keys.size(), r);
+    return r;
+  }
+  CLS_LOG(20, "%s() removed keys count=%zu", __func__, op.rm_keys.size());
+  return 0;
+}
+
 CLS_INIT(cmpomap)
 {
   CLS_LOG(1, "Loaded cmpomap class!");
@@ -289,13 +414,17 @@ CLS_INIT(cmpomap)
   cls_handle_t h_class;
   cls_method_handle_t h_cmp_vals;
   cls_method_handle_t h_cmp_set_vals;
+  cls_method_handle_t h_cmp_set_vals2;
   cls_method_handle_t h_cmp_rm_keys;
+  cls_method_handle_t h_cmp_rm_keys2;
 
   using namespace cls::cmpomap;
   cls_register(ClassId::name, &h_class);
   ClassRegistrar<ClassId> cls(h_class);
 
-  cls.register_cxx_method(method::cmp_vals,     cmp_vals,     &h_cmp_vals);
-  cls.register_cxx_method(method::cmp_set_vals, cmp_set_vals, &h_cmp_set_vals);
-  cls.register_cxx_method(method::cmp_rm_keys,  cmp_rm_keys,  &h_cmp_rm_keys);
+  cls.register_cxx_method(method::cmp_vals,      cmp_vals,      &h_cmp_vals);
+  cls.register_cxx_method(method::cmp_set_vals,  cmp_set_vals,  &h_cmp_set_vals);
+  cls.register_cxx_method(method::cmp_set_vals2, cmp_set_vals2, &h_cmp_set_vals2);
+  cls.register_cxx_method(method::cmp_rm_keys,   cmp_rm_keys,   &h_cmp_rm_keys);
+  cls.register_cxx_method(method::cmp_rm_keys2,  cmp_rm_keys2,  &h_cmp_rm_keys2);
 }

@@ -56,6 +56,28 @@ int cmp_set_vals(librados::ObjectWriteOperation& op,
   return 0;
 }
 
+int cmp_set_vals2(librados::ObjectWriteOperation& op,
+                 Mode mode, Op comparison, ComparisonMap cmp_values,
+                 ValueMap set_values,
+                 std::optional<ceph::bufferlist> default_value)
+{
+  if (cmp_values.size() > max_keys || set_values.size() > max_keys) {
+    return -E2BIG;
+  }
+  cmp_set_vals2_op call;
+  call.mode = mode;
+  call.comparison = comparison;
+  call.cmp_values = std::move(cmp_values);
+  call.set_values = std::move(set_values);
+  call.default_value = std::move(default_value);
+
+  bufferlist in;
+  encode(call, in);
+  op.exec(method::cmp_set_vals2, in);
+  return 0;
+}
+
+
 int cmp_rm_keys(librados::ObjectWriteOperation& op,
                 Mode mode, Op comparison, ComparisonMap values)
 {
@@ -70,6 +92,27 @@ int cmp_rm_keys(librados::ObjectWriteOperation& op,
   bufferlist in;
   encode(call, in);
   op.exec(method::cmp_rm_keys, in);
+  return 0;
+}
+
+int cmp_rm_keys2(librados::ObjectWriteOperation& op,
+                Mode mode, Op comparison, ComparisonMap cmp_values,
+                KeySet rm_keys,
+                std::optional<ceph::bufferlist> default_value)
+{
+  if (cmp_values.size() > max_keys || rm_keys.size() > max_keys) {
+    return -E2BIG;
+  }
+  cmp_rm_keys2_op call;
+  call.mode = mode;
+  call.comparison = comparison;
+  call.cmp_values = std::move(cmp_values);
+  call.rm_keys = std::move(rm_keys);
+  call.default_value = std::move(default_value);
+
+  bufferlist in;
+  encode(call, in);
+  op.exec(method::cmp_rm_keys2, in);
   return 0;
 }
 

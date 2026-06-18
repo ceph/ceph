@@ -442,6 +442,13 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
   return execute_osd_op(hctx, op);
 }
 
+int cls_cxx_map_remove_keys(cls_method_context_t hctx, const std::set<std::string> &keys)
+{
+  OSDOp op{CEPH_OSD_OP_OMAPRMKEYS};
+  encode(keys, op.indata);
+  return execute_osd_op(hctx, op);
+}
+
 int cls_cxx_list_watchers(cls_method_context_t hctx,
                           obj_list_watch_response_t *watchers)
 {
