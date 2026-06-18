@@ -1037,3 +1037,13 @@ can be configured using the `rgw` option `rgw_bucket_persistent_notif_num_shards
   https://docs.ceph.com/en/latest/radosgw/notifications/
 
 Relevant tracker: https://tracker.ceph.com/issues/71677
+
+* RGW: Multipart upload part heads are now tracked under a new
+  ``rgw.multipart`` category in bucket stats, separate from completed
+  objects (``rgw.main``). This makes ``radosgw-admin bucket stats``
+  and the ``X-RGW-Object-Count`` header on HEAD Bucket more accurate:
+  in-progress or abandoned multipart parts no longer inflate the
+  object count. Existing in-progress uploads retain the old category
+  until they complete or abort.
+
+  Relevant tracker: https://tracker.ceph.com/issues/77509
