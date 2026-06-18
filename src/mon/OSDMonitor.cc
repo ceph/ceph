@@ -8579,6 +8579,61 @@ int OSDMonitor::prepare_new_pool(string& name,
   return 0;
 }
 
+namespace {
+// Map a flag name accepted by both "osd set" and "osd unset" to its
+// OSDMap flag bit(s). Returns 0 for names that need special handling
+// (e.g. pglog_hardlimit) or are not recognized.
+int osdmap_flag_from_name(std::string_view name)
+{
+  if (name == "pause")        return CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR;
+  if (name == "noup")         return CEPH_OSDMAP_NOUP;
+  if (name == "nodown")       return CEPH_OSDMAP_NODOWN;
+  if (name == "noout")        return CEPH_OSDMAP_NOOUT;
+  if (name == "noin")         return CEPH_OSDMAP_NOIN;
+  if (name == "nobackfill")   return CEPH_OSDMAP_NOBACKFILL;
+  if (name == "norebalance")  return CEPH_OSDMAP_NOREBALANCE;
+  if (name == "norecover")    return CEPH_OSDMAP_NORECOVER;
+  if (name == "noscrub")      return CEPH_OSDMAP_NOSCRUB;
+  if (name == "nodeep-scrub") return CEPH_OSDMAP_NODEEP_SCRUB;
+  if (name == "notieragent")  return CEPH_OSDMAP_NOTIERAGENT;
+  if (name == "nosnaptrim")   return CEPH_OSDMAP_NOSNAPTRIM;
+  if (name == "noautoscale")  return CEPH_OSDMAP_NOAUTOSCALE;
+  return 0;
+}
+
+// Agree the verb in a completion message with the number of flag names
+// OSDMap::get_flag_string() will render, so that a single flag reads
+// "noout is set" and several read "nobackfill,noout are set". Note that
+// "pause" is itself two bits and so is plural.
+const char* flag_verb(int flags)
+{
+  return (flags & (flags - 1)) ? "are" : "is";
+}
+
+// Collect the flag names given to "osd set" or "osd unset".
+//
+// Now that "key" is declared n=N the CLI sends a list, but callers that build
+// the command themselves send a bare string, and they predate this: the
+// pg_autoscaler and dashboard mgr modules, and ceph_test_rados_io_sequence via
+// OSDSetRequest. cmd_getval() matches the variant's type exactly, so asking for
+// a vector<string> would fail all of those with "bad or missing field 'key'".
+// Accept either shape instead. An empty result is left for the caller to reject.
+std::vector<std::string> osdmap_flag_keys(const cmdmap_t& cmdmap)
+{
+  std::vector<std::string> keys;
+  auto i = cmdmap.find("key");
+  if (i == cmdmap.end()) {
+    return keys;
+  }
+  if (auto* list = boost::get<std::vector<std::string>>(&i->second); list) {
+    keys = *list;
+  } else if (auto* one = boost::get<std::string>(&i->second); one) {
+    keys.push_back(*one);
+  }
+  return keys;
+}
+} // anonymous namespace
+
 bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
 {
   op->mark_osdmon_event(__func__);
@@ -8586,7 +8641,7 @@ bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags |= flag;
-  ss << OSDMap::get_flag_string(flag) << " is set";
+  ss << OSDMap::get_flag_string(flag) << " " << flag_verb(flag) << " set";
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
@@ -8599,7 +8654,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags &= ~flag;
-  ss << OSDMap::get_flag_string(flag) << " is unset";
+  ss << OSDMap::get_flag_string(flag) << " " << flag_verb(flag) << " unset";
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
@@ -12369,90 +12424,70 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool sure = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
 
-    string key;
-    cmd_getval(cmdmap, "key", key);
-    if (key == "pause")
-      return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
-    else if (key == "noup")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOUP);
-    else if (key == "nodown")
-      return prepare_set_flag(op, CEPH_OSDMAP_NODOWN);
-    else if (key == "noout")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOOUT);
-    else if (key == "noin")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOIN);
-    else if (key == "nobackfill")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOBACKFILL);
-    else if (key == "norebalance")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOREBALANCE);
-    else if (key == "norecover")
-      return prepare_set_flag(op, CEPH_OSDMAP_NORECOVER);
-    else if (key == "noscrub")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOSCRUB);
-    else if (key == "nodeep-scrub")
-      return prepare_set_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
-    else if (key == "notieragent")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else if (key == "nosnaptrim")
-      return prepare_set_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
-    else if (key == "pglog_hardlimit") {
-      if (!osdmap.get_num_up_osds() && !sure) {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
+    vector<string> keys = osdmap_flag_keys(cmdmap);
+
+    // accumulate all requested flags so several can be set in a single
+    // command; validate every key before changing anything
+    int flags = 0;
+    for (const auto& key : keys) {
+      if (int flag = osdmap_flag_from_name(key); flag) {
+        flags |= flag;
+      } else if (key == "pglog_hardlimit") {
+        if (!osdmap.get_num_up_osds() && !sure) {
+          ss << "Not advisable to continue since no OSDs are up. Pass "
+             << "--yes-i-really-mean-it if you really wish to continue.";
+          err = -EPERM;
+          goto reply_no_propose;
+        }
+        // The release check here is required because for OSD_PGLOG_HARDLIMIT,
+        // we are reusing a jewel feature bit that was retired in luminous.
+        if (osdmap.require_osd_release >= ceph_release_t::luminous &&
+           (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_PGLOG_HARDLIMIT)
+            || sure)) {
+          flags |= CEPH_OSDMAP_PGLOG_HARDLIMIT;
+        } else {
+          ss << "not all up OSDs have OSD_PGLOG_HARDLIMIT feature";
+          err = -EPERM;
+          goto reply_no_propose;
+        }
+      } else {
+        ss << "unrecognized flag '" << key << "'";
+        err = -EINVAL;
         goto reply_no_propose;
       }
-      // The release check here is required because for OSD_PGLOG_HARDLIMIT,
-      // we are reusing a jewel feature bit that was retired in luminous.
-      if (osdmap.require_osd_release >= ceph_release_t::luminous &&
-         (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_PGLOG_HARDLIMIT)
-          || sure)) {
-	return prepare_set_flag(op, CEPH_OSDMAP_PGLOG_HARDLIMIT);
-      } else {
-	ss << "not all up OSDs have OSD_PGLOG_HARDLIMIT feature";
-	err = -EPERM;
-	goto reply_no_propose;
-      }
-    } else if (key == "noautoscale") {
-      return prepare_set_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
-    } else {
-      ss << "unrecognized flag '" << key << "'";
-      err = -EINVAL;
     }
+    // "key" is declared n=N, so a client using the CLI cannot get here with an
+    // empty list. The monitor does not validate arguments against the command
+    // descriptor though (Monitor::handle_command only resolves the prefix and
+    // checks caps), so a hand-crafted mon_command still can. Reject it instead
+    // of proposing an OSD map update that changes nothing.
+    if (!flags) {
+      ss << "no flags specified";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    return prepare_set_flag(op, flags);
 
   } else if (prefix == "osd unset") {
-    string key;
-    cmd_getval(cmdmap, "key", key);
-    if (key == "pause")
-      return prepare_unset_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
-    else if (key == "noup")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOUP);
-    else if (key == "nodown")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NODOWN);
-    else if (key == "noout")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOOUT);
-    else if (key == "noin")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOIN);
-    else if (key == "nobackfill")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOBACKFILL);
-    else if (key == "norebalance")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOREBALANCE);
-    else if (key == "norecover")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NORECOVER);
-    else if (key == "noscrub")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOSCRUB);
-    else if (key == "nodeep-scrub")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
-    else if (key == "notieragent")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else if (key == "nosnaptrim")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
-    else if (key == "noautoscale")
-      return prepare_unset_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
-    else {
-      ss << "unrecognized flag '" << key << "'";
-      err = -EINVAL;
+    vector<string> keys = osdmap_flag_keys(cmdmap);
+
+    int flags = 0;
+    for (const auto& key : keys) {
+      if (int flag = osdmap_flag_from_name(key); flag) {
+        flags |= flag;
+      } else {
+        ss << "unrecognized flag '" << key << "'";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
     }
+    // see the note on the "osd set" branch above
+    if (!flags) {
+      ss << "no flags specified";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    return prepare_unset_flag(op, flags);
 
   } else if (prefix == "osd require-osd-release") {
     string release;

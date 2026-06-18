@@ -1400,7 +1400,8 @@ Usage::
 
     ceph osd scrub <who>
 
-Subcommand ``set`` sets cluster-wide <flag> by updating OSD map.
+Subcommand ``set`` sets cluster-wide <flag> by updating the OSD map. More than
+one flag may be given in a single command, separated by spaces.
 The ``full`` flag is not honored anymore since the Mimic release, and
 ``ceph osd set full`` is not supported in the Octopus release.
 
@@ -1408,7 +1409,7 @@ Usage::
 
     ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|
     norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
-    pglog_hardlimit|noautoscale
+    pglog_hardlimit|noautoscale [<flag>...]
 
 Subcommand ``setcrushmap`` sets CRUSH map from input file.
 
@@ -1495,13 +1496,14 @@ Usage::
 
     ceph osd unpause
 
-Subcommand ``unset`` unsets cluster-wide <flag> by updating OSD map.
+Subcommand ``unset`` unsets cluster-wide <flag> by updating the OSD map. More
+than one flag may be given in a single command, separated by spaces.
 
 Usage::
 
     ceph osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|
     norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
-    noautoscale
+    noautoscale [<flag>...]
 
 
 pg

@@ -538,6 +538,18 @@ following commands:
    ceph osd set <flag>
    ceph osd unset <flag>
 
+More than one flag may be given in a single command, separated by spaces. This
+is useful when preparing for maintenance, because the flags then take effect
+together in one OSD map update rather than one per command:
+
+.. prompt:: bash #
+
+   ceph osd set noout nobackfill norebalance
+   ceph osd unset noout nobackfill norebalance
+
+If any of the named flags is not recognized, the command is rejected and none of
+them are applied.
+
 OSD_FLAGS
 _________
 
