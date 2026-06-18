@@ -53,7 +53,9 @@ export class AccountsPageHelper extends PageHelper {
 
     this.getFirstTableCell(account.name).should('have.text', account.name);
     this.getTableRow(account.name).within(() => {
-      cy.get('td').eq(this.columnIndex.tenant).should('have.text', account.tenant);
+      cy.get('td')
+        .eq(this.columnIndex.tenant)
+        .should('have.text', account.tenant || '');
       cy.get('td').eq(this.columnIndex.account_id).should('not.be.empty');
       cy.get('td').eq(this.columnIndex.email).should('have.text', account.email);
       cy.get('td').eq(this.columnIndex.max_users).should('have.text', 1000);

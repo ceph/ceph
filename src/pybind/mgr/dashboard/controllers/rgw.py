@@ -1230,48 +1230,51 @@ class RgwUser(RgwRESTController):
 
 class RGWRoleEndpoints:
     @staticmethod
-    def role_list(_):
+    def role_list(_, account_id: Optional[str] = None):
         rgw_client = RgwClient.admin_instance()
-        roles = rgw_client.list_roles()
+        roles = rgw_client.list_roles(account_id)
         return roles
 
     @staticmethod
-    def role_create(_, role_name: str = '', role_path: str = '', role_assume_policy_doc: str = ''):
+    def role_create(_, role_name: str = '', role_path: str = '', role_assume_policy_doc: str = '',
+                    account_id: Optional[str] = None):
         assert role_name
         assert role_path
         rgw_client = RgwClient.admin_instance()
-        rgw_client.create_role(role_name, role_path, role_assume_policy_doc)
+        rgw_client.create_role(role_name, role_path, role_assume_policy_doc, account_id)
         return f'Role {role_name} created successfully'
 
     @staticmethod
-    def role_update(_, role_name: str, max_session_duration: str):
+    def role_update(_, role_name: str, max_session_duration: str, account_id: Optional[str] = None):
         assert role_name
         assert max_session_duration
         # convert max_session_duration which is in hours to seconds
         max_session_duration = int(float(max_session_duration) * 3600)
         rgw_client = RgwClient.admin_instance()
-        rgw_client.update_role(role_name, str(max_session_duration))
+        rgw_client.update_role(role_name, str(max_session_duration), account_id)
         return f'Role {role_name} updated successfully'
 
     @staticmethod
-    def role_delete(_, role_name: str):
+    def role_delete(_, role_name: str, account_id: Optional[str] = None):
         assert role_name
         rgw_client = RgwClient.admin_instance()
-        rgw_client.delete_role(role_name)
+        rgw_client.delete_role(role_name, account_id)
         return f'Role {role_name} deleted successfully'
 
     @staticmethod
-    def model(role_name: str):
+    def get(_, role_name: str, account_id: Optional[str] = None):
         assert role_name
         rgw_client = RgwClient.admin_instance()
-        role = rgw_client.get_role(role_name)
-        model = {'role_name': '', 'max_session_duration': ''}
-        model['role_name'] = role['RoleName']
-
+        role = rgw_client.get_role(role_name, account_id)
+        model = {'role_name': role['RoleName'], 'max_session_duration': ''}
         # convert maxsessionduration which is in seconds to hours
         if role['MaxSessionDuration']:
             model['max_session_duration'] = role['MaxSessionDuration'] / 3600
         return model
+
+    @staticmethod
+    def model(role_name: str, account_id: Optional[str] = None):
+        return RGWRoleEndpoints.get(None, role_name, account_id)
 
 
 # pylint: disable=C0301
@@ -1317,7 +1320,7 @@ edit_role_form = Form(path='/edit',
 
 
 @CRUDEndpoint(
-    router=APIRouter('/rgw/roles', Scope.RGW),
+    router=APIRouter('/rgw/accounts/{account_id}/roles', Scope.RGW),
     doc=APIDoc("List of RGW roles", "RGW"),
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
@@ -1335,6 +1338,12 @@ edit_role_form = Form(path='/edit',
         func=RGWRoleEndpoints.role_list,
         doc=EndpointDoc("List RGW roles")
     ),
+    extra_endpoints=[
+        ('get', CRUDCollectionMethod(
+            func=RGWRoleEndpoints.get,
+            doc=EndpointDoc("Get RGW role")
+        ))
+    ],
     create=CRUDCollectionMethod(
         func=RGWRoleEndpoints.role_create,
         doc=EndpointDoc("Create RGW role")
