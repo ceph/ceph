@@ -220,6 +220,9 @@ class Value {
  protected:
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
+  bool is_cursor_tracked() const;
+  bool is_cursor_leaf_extent_valid() const;
+
   /// Extends the payload size.
   eagain_ifuture<> extend(Transaction&, value_size_t extend_size);
 

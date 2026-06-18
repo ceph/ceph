@@ -187,6 +187,11 @@ void tree_cursor_t::invalidate()
   // I must be removed from LeafNode
 }
 
+bool tree_cursor_t::is_leaf_extent_valid() const
+{
+  return is_tracked() && ref_leaf_node->is_node_extent_valid();
+}
+
 /*
  * tree_cursor_t::Cache
  */
@@ -293,6 +298,11 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(
  */
 
 Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
+
+bool Node::is_node_extent_valid() const
+{
+  return impl->is_node_extent_valid();
+}
 
 Node::~Node()
 {

@@ -100,6 +100,9 @@ class tree_cursor_t final
    */
   bool is_tracked() const { return !!ref_leaf_node && !position.is_end(); }
 
+  // Returns false if the leaf extent has been invalidated by GC or conflict.
+  bool is_leaf_extent_valid() const;
+
   /**
    * is_invalid
    *
@@ -392,6 +395,9 @@ class Node
   virtual bool is_tracking() const = 0;
 
   virtual void track_merge(Ref<Node>, match_stage_t, search_position_t&) = 0;
+
+public:
+  bool is_node_extent_valid() const;
 
  protected:
   Node(NodeImplURef&&);

@@ -351,6 +351,11 @@ class NodeExtentAccessorT {
     }
   }
 
+  // Returns false if the underlying extent has been invalidated by GC or conflict.
+  bool is_extent_valid() const {
+    return !is_retired() && extent->is_valid();
+  }
+
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
