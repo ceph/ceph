@@ -139,6 +139,16 @@ class BaseRedfishSystem(BaseSystem):
             "refresh_interval", DEFAULTS["system"]["refresh_interval"]
         )
 
+    def initialize_redfish_session(self) -> None:
+        self.client.login()
+        self.endpoints.init()
+
+    def run_update_cycle(self) -> None:
+        self._update_system()
+        self._update_sn()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(lambda f: f(), self.update_funcs)
+
     def update(
         self,
         collection: str,
@@ -160,8 +170,7 @@ class BaseRedfishSystem(BaseSystem):
 
     def main(self) -> None:
         self.stop = False
-        self.client.login()
-        self.endpoints.init()
+        self.initialize_redfish_session()
 
         while not self.stop:
             self.log.debug("waiting for a lock in the update loop.")
@@ -169,12 +178,7 @@ class BaseRedfishSystem(BaseSystem):
                 if not self.pending_shutdown:
                     self.log.debug("lock acquired in the update loop.")
                     try:
-                        self._update_system()
-                        self._update_sn()
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            executor.map(lambda f: f(), self.update_funcs)
-
+                        self.run_update_cycle()
                         self.data_ready = True
                     except RuntimeError as e:
                         self.stop = True

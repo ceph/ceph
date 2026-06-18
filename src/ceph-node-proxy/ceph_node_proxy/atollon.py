@@ -7,7 +7,9 @@ from ceph_node_proxy.util import get_logger
 INVALID_SERIALS = ("unknown", "not available", "n/a", "")
 
 
-class AtollonSystem(BaseRedfishSystem):
+class AtollonRedfishProvider(BaseRedfishSystem):
+    """Redfish provider for Atollon BMC quirks."""
+
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
         self.log = get_logger(__name__)
@@ -124,3 +126,7 @@ class AtollonSystem(BaseRedfishSystem):
         speed_gbps = controller.get("SpeedGbps")
         if speed_gbps is not None:
             drive_data["speed_gbps"] = speed_gbps
+
+
+# Backward-compatible alias for entry points and external imports.
+AtollonSystem = AtollonRedfishProvider

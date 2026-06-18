@@ -536,6 +536,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'power': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
             'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
             'temperatures': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'READING', 'UNITS', 'STATUS', 'STATE'],
+            'fcm': ['HOST', 'SOURCE', 'DEVICE', 'MODEL', 'SN', 'RATIO', 'SAVINGS',
+                    'PHYS USED', 'LOG USED', 'VALID', 'STATUS', 'STATE'],
         }
 
         if category == 'firmwares':
@@ -625,6 +627,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'power': ('name', 'model', 'manufacturer', 'health', 'state'),
             'fans': ('name', 'reading', 'reading_units', 'health', 'state'),
             'temperatures': ('name', 'reading', 'reading_units', 'health', 'state'),
+            'fcm': ('device', 'model', 'serial_number', 'compression_ratio_display',
+                    'savings_display', 'phy_usage_display', 'log_usage_display',
+                    'valid', 'health', 'state'),
         }
 
         fields = mapping.get(category, ())
