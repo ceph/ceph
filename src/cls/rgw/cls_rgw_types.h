@@ -194,6 +194,8 @@ enum class RGWObjCategory : uint8_t {
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs
 
   CloudTiered = 4, // b-i entries which are tiered to external cloud
+
+  MultiPart = 5,   // b-i entries for multipart upload part head objs
 };
 
 std::string_view to_string(RGWObjCategory c);

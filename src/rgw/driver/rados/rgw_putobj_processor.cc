@@ -557,6 +557,7 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
   obj_op.meta.bucket_owner = bucket_info.owner;
+  obj_op.meta.category = RGWObjCategory::MultiPart;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
