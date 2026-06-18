@@ -44,6 +44,7 @@
 
 #include "include/neorados/RADOS.hpp"
 
+#include "common/async/context_pool.h"
 #include "common/dout.h"
 
 #include "gtest/gtest.h"
@@ -161,8 +162,8 @@ class CoroTest : public testing::Test {
 private:
   std::exception_ptr eptr;
 protected:
-  boost::asio::io_context asio_context; ///< The context on which the
-					///  coroutine runs.
+  ceph::async::io_context_pool asio_pool{3};
+  boost::asio::io_context& asio_context = asio_pool.get_io_context();
 public:
   /// Final override that does nothing. Actual setup code should go in CoSetUp
   void SetUp() override final { };
@@ -208,22 +209,27 @@ public:
     boost::asio::co_spawn(
       asio_context,
       [](CoroTest* t) -> boost::asio::awaitable<void> {
-	co_await t->CoSetUp();
+	try {
+	  co_await t->CoSetUp();
+	} catch (...) {
+	  t->eptr = std::current_exception();
+	  co_return;
+	}
 	try {
 	  co_await t->CoTestBody();
 	} catch (...) {
 	  t->eptr = std::current_exception();
 	}
-	co_await t->CoTearDown();
-	if (t->eptr) {
-	  std::rethrow_exception(t->eptr);
+	try {
+	  co_await t->CoTearDown();
+	} catch (...) {
+	  if (!t->eptr) t->eptr = std::current_exception();
 	}
 	co_return;
       }(this),
-      [](std::exception_ptr e) {
-	if (e) std::rethrow_exception(e);
-      });
-    asio_context.run();
+      boost::asio::detached);
+    asio_pool.finish();
+    if (eptr) std::rethrow_exception(eptr);
   }
 };
 

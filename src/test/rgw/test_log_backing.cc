@@ -165,6 +165,7 @@ CORO_TEST_F(LogBacking, GenerationSingle, NeoRadosTest) {
       co_await lg->empty_to(dpp(), 0);
     }, sys::system_error);
 
+  lg->shutdown();
   lg.reset();
 
   lg = co_await logback_generations::init<generations>(
@@ -185,6 +186,7 @@ CORO_TEST_F(LogBacking, GenerationSingle, NeoRadosTest) {
   EXPECT_EQ(log_type::omap, lg->got_entries[1].type);
   EXPECT_FALSE(lg->got_entries[1].pruned);
 
+  lg->shutdown();
   lg.reset();
 
   lg = co_await logback_generations::init<generations>(
@@ -203,6 +205,7 @@ CORO_TEST_F(LogBacking, GenerationSingle, NeoRadosTest) {
 
   EXPECT_EQ(0, *lg->tail);
 
+  lg->shutdown();
   lg.reset();
 
   lg = co_await logback_generations::init<generations>(
