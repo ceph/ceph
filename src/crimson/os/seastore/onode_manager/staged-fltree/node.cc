@@ -1618,12 +1618,18 @@ eagain_ifuture<Ref<Node>> InternalNode::get_or_track_child(
       child->as_child(position, this);
       return child;
     });
-  }().si_then([this_ref, this, position, child_addr] (auto child) {
+  }().si_then([this_ref, this, position, child_addr, c, FNAME] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
     std::ignore = position;
     std::ignore = child_addr;
     validate_child_tracked(*child);
+    if (unlikely(!child->is_node_extent_valid())) {
+      DEBUGT("loaded child at pos({}) addr={} became invalid, conflicting",
+             c.t, position, child_addr);
+      child->deref_parent();
+      c.t.test_set_conflict();
+    }
     return child;
   });
 }
