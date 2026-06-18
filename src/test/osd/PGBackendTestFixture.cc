@@ -115,31 +115,14 @@ void PGBackendTestFixture::setup_ec_pool()
     }
   }
 
-  // Create per-OSD stores and fixtures
+  // Create per-OSD stores and fixtures (store + LRU only — no collection here,
+  // because collections are per-PG not per-OSD and belong in TestPG).
   for (int i = 0; i < num_osds; i++) {
-    // Create OsdTestFixture for this OSD
     auto osd_fixture = std::make_unique<OsdTestFixture>(i);
-    
-    // Create a new store for this OSD
     osd_fixture->store = MockStore::create(g_ceph_context, i);
     ASSERT_TRUE(osd_fixture->store);
     osd_fixture->data_dir = "";
-    
-    // Create collection for this shard
-    spg_t shard_spgid(pgid, shard_id_t(i));
-    coll_t shard_coll(shard_spgid);
-    auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
-    
-    ObjectStore::Transaction t;
-    t.create_collection(shard_coll, 0);
-    ASSERT_EQ(osd_fixture->store->queue_transaction(shard_ch, std::move(t)), 0);
-
-    osd_fixture->coll = shard_coll;
-    osd_fixture->ch = shard_ch;
-    
-    // Create extent cache LRU for this OSD
     osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
-    
     osd_fixtures[i] = std::move(osd_fixture);
   }
 
@@ -155,10 +138,17 @@ void PGBackendTestFixture::setup_ec_pool()
       auto* osd_fixture = osd_fixtures[i].get();
       spg_t shard_spgid(pgid, shard_id_t(i));
       pg_shard_t pg_whoami(i, shard_id_t(i));
-      
-      // Create TestPG for this OSD
+
+      // Create TestPG and its per-PG collection (spg_t = pgid + shard_id).
       TestPG* test_pg = osd_fixture->create_pg(shard_spgid, pg_whoami);
-      
+      coll_t shard_coll(shard_spgid);
+      auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
+      ObjectStore::Transaction ct;
+      ct.create_collection(shard_coll, 0);
+      ASSERT_EQ(osd_fixture->store->queue_transaction(shard_ch, std::move(ct)), 0);
+      test_pg->coll = shard_coll;
+      test_pg->ch = shard_ch;
+
       // Create backend listener
       auto shard_listener = std::make_unique<MockPGBackendListener>(
         osdmap, pool_id, dpp.get(), pg_whoami);
@@ -180,12 +170,12 @@ void PGBackendTestFixture::setup_ec_pool()
         shard_listener->shard_missing[pg_shard_t(j, shard_id_t(j))] = shard_missing;
       }
 
-      shard_listener->set_store(osd_fixture->store.get(), osd_fixture->ch);
+      shard_listener->set_store(osd_fixture->store.get(), test_pg->ch);
       shard_listener->set_event_loop(event_loop.get());
 
-      // Create EC backend
+      // Create EC backend using the TestPG's collection
       auto shard_ec_switch = std::make_unique<ECSwitch>(
-        shard_listener.get(), osd_fixture->coll, osd_fixture->ch, osd_fixture->store.get(),
+        shard_listener.get(), test_pg->coll, test_pg->ch, osd_fixture->store.get(),
         cct, ec_impl, stripe_unit * k, *osd_fixture->lru);
 
       // Store in TestPG
@@ -222,11 +212,14 @@ void PGBackendTestFixture::setup_ec_pool()
   // Store as member variable so it can be properly shut down in TearDown()
   op_tracker = std::make_shared<OpTracker>(cct, true, 1);
   
-  // Helper lambda to create a typed handler that wraps messages and routes to backends
+  // Helper lambda to create a typed handler that wraps messages and routes to
+  // the correct OSD's backend.  Uses to_osd (not get_test_pg() which always
+  // returns the primary) so that CRUSH-placed pools where shard N may live on
+  // any OSD are handled correctly.
   auto make_backend_handler = [this]<typename MsgType>(int msg_type) {
     messenger->register_typed_handler<MsgType>(msg_type,
       [this](int from_osd, int to_osd, boost::intrusive_ptr<MsgType> m) -> bool {
-        TestPG* test_pg = get_test_pg();
+        TestPG* test_pg = get_first_test_pg_for_osd(to_osd);
         ceph_assert(test_pg != nullptr && test_pg->has_backend());
         // OpRequest stores Message* and put()s in its destructor.  Use
         // m.detach() to transfer the +1 refcount to the raw pointer
@@ -291,39 +284,31 @@ void PGBackendTestFixture::setup_replicated_pool()
   OSDMapTestHelpers::set_pg_acting_primary(osdmap, pgid, 0);
 
   spg_t replica_spgid(pgid, shard_id_t::NO_SHARD);
-  
-  // Create per-OSD stores and fixtures
-  for (int i = 0; i < num_replicas; i++) {
-    auto osd_fixture = std::make_unique<OsdTestFixture>(i);
-    
-    // Create a new store for this OSD
-    osd_fixture->store = MockStore::create(g_ceph_context, i);
-    ASSERT_TRUE(osd_fixture->store);
-    osd_fixture->data_dir = "";
-    
-    // Create collection for this replica
-    coll_t replica_coll(replica_spgid);
-    auto replica_ch = osd_fixture->store->create_new_collection(replica_coll);
-    
-    ObjectStore::Transaction t;
-    t.create_collection(replica_coll, 0);
-    ASSERT_EQ(osd_fixture->store->queue_transaction(replica_ch, std::move(t)), 0);
-    
-    osd_fixture->coll = replica_coll;
-    osd_fixture->ch = replica_ch;
-    osd_fixtures[i] = std::move(osd_fixture);
-  }
 
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
 
+  // Create per-OSD stores, fixtures, collections, and backends in one pass.
   for (int i = 0; i < num_replicas; i++) {
-    auto* osd_fixture = osd_fixtures[i].get();
+    auto osd_fixture = std::make_unique<OsdTestFixture>(i);
+    osd_fixture->store = MockStore::create(g_ceph_context, i);
+    ASSERT_TRUE(osd_fixture->store);
+    osd_fixture->data_dir = "";
+    osd_fixtures[i] = std::move(osd_fixture);
+
+    auto* osd_fix = osd_fixtures[i].get();
     pg_shard_t pg_whoami(i, shard_id_t::NO_SHARD);
-    
-    // Create TestPG for this OSD
-    TestPG* test_pg = osd_fixture->create_pg(replica_spgid, pg_whoami);
-    
+
+    // Create TestPG and its per-PG collection.
+    TestPG* test_pg = osd_fix->create_pg(replica_spgid, pg_whoami);
+    coll_t replica_coll(replica_spgid);
+    auto replica_ch = osd_fix->store->create_new_collection(replica_coll);
+    ObjectStore::Transaction ct;
+    ct.create_collection(replica_coll, 0);
+    ASSERT_EQ(osd_fix->store->queue_transaction(replica_ch, std::move(ct)), 0);
+    test_pg->coll = replica_coll;
+    test_pg->ch = replica_ch;
+
     auto replica_listener = std::make_unique<MockPGBackendListener>(
       osdmap, pool_id, dpp.get(), pg_whoami);
 
@@ -344,11 +329,11 @@ void PGBackendTestFixture::setup_replicated_pool()
       replica_listener->shard_missing[pg_shard_t(j, shard_id_t::NO_SHARD)] = replica_missing;
     }
 
-    replica_listener->set_store(osd_fixture->store.get(), osd_fixture->ch);
+    replica_listener->set_store(osd_fix->store.get(), test_pg->ch);
     replica_listener->set_event_loop(event_loop.get());
 
     auto replica_backend = std::make_unique<ReplicatedBackend>(
-      replica_listener.get(), osd_fixture->coll, osd_fixture->ch, osd_fixture->store.get(), cct);
+      replica_listener.get(), test_pg->coll, test_pg->ch, osd_fix->store.get(), cct);
 
     test_pg->backend_listener = std::move(replica_listener);
     test_pg->backend = std::move(replica_backend);
@@ -1237,14 +1222,15 @@ object_info_t PGBackendTestFixture::read_shard_object_info(
   hobject_t hoid = make_test_object(obj_name);
   ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
   
-  OsdTestFixture* osd_fixture = get_osd_fixture(shard);
-  if (!osd_fixture || !osd_fixture->ch || !osd_fixture->store) {
+  TestPG* shard_pg = get_test_pg_by_shard(shard);
+  OsdTestFixture* osd_fixture = shard_pg ? get_osd_fixture(shard_pg->pg_whoami.osd) : nullptr;
+  if (!shard_pg || !osd_fixture || !shard_pg->ch || !osd_fixture->store) {
     std::cerr << "ERROR: No collection handle or store for shard " << shard << std::endl;
     return object_info_t(hoid);
   }
-  
+
   ceph::buffer::ptr value_ptr;
-  int r = osd_fixture->store->getattr(osd_fixture->ch, ghoid, OI_ATTR, value_ptr);
+  int r = osd_fixture->store->getattr(shard_pg->ch, ghoid, OI_ATTR, value_ptr);
   if (r < 0) {
     std::cerr << "ERROR: Failed to read OI_ATTR from shard " << shard
               << ": " << cpp_strerror(r) << std::endl;
@@ -1277,7 +1263,7 @@ void PGBackendTestFixture::scrub_all_objects()
   
   int primary_osd = primary_pg->pg_whoami.osd;
   OsdTestFixture* primary_fixture = get_osd_fixture(primary_osd);
-  if (!primary_fixture || !primary_fixture->ch) {
+  if (!primary_fixture || !primary_pg->ch) {
     std::cerr << "WARNING: No primary fixture or collection handle during teardown scrub" << std::endl;
     return;
   }
@@ -1287,7 +1273,7 @@ void PGBackendTestFixture::scrub_all_objects()
   while (true) {
     std::vector<ghobject_t> objects;
     int r = primary_fixture->store->collection_list(
-      primary_fixture->ch,
+      primary_pg->ch,
       next,
       ghobject_t::get_max(),
       primary_fixture->store->get_ideal_list_max(),
@@ -1474,7 +1460,8 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
   }
   
   auto& fixture = fixture_it->second;
-  if (!fixture->store || !fixture->ch) {
+  TestPG* shard_pg = get_test_pg(shard);
+  if (!fixture->store || !shard_pg || !shard_pg->ch) {
     std::cerr << "ERROR: No store or collection handle for shard " << shard.osd << std::endl;
     return;
   }
@@ -1482,7 +1469,7 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
   ghobject_t ghoid(obj, ghobject_t::NO_GEN, shard.shard);
 
   struct stat st;
-  int r = fixture->store->stat(fixture->ch, ghoid, &st);
+  int r = fixture->store->stat(shard_pg->ch, ghoid, &st);
   if (r < 0) {
     std::cerr << "ERROR: Failed to stat object on shard " << shard.osd
               << ": " << cpp_strerror(r) << std::endl;
@@ -1499,9 +1486,9 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
   zero_bl.append_zero(size);
 
   ObjectStore::Transaction t;
-  t.write(fixture->ch->cid, ghoid, 0, size, zero_bl);
+  t.write(shard_pg->ch->cid, ghoid, 0, size, zero_bl);
 
-  r = fixture->store->queue_transaction(fixture->ch, std::move(t));
+  r = fixture->store->queue_transaction(shard_pg->ch, std::move(t));
   if (r < 0) {
     std::cerr << "ERROR: Failed to corrupt object on shard " << shard.osd
               << ": " << cpp_strerror(r) << std::endl;

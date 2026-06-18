@@ -56,9 +56,10 @@ void ECPeeringTestFixture::SetUp() {
   
   PGBackendTestFixture::SetUp();
 
-  // The harness does not use CRUSH, so we must set an upmap.  Choose the upmap
-  // to have shard == osd.
-  {
+  // Install a pg_upmap so that shard N is always on OSD N.
+  // Skipped when use_upmap() returns false (e.g. ECCrushTestFixture), which
+  // lets CRUSH determine placement naturally.
+  if (use_upmap()) {
     std::vector<int> initial_acting;
     for (int i = 0; i < get_instance_count(); ++i) {
       initial_acting.push_back(i);
@@ -143,7 +144,11 @@ void ECPeeringTestFixture::SetUp() {
     }
     return found_messages;
   });
-  
+
+  // Allow derived fixtures to modify the OSDMap before the first peering
+  // cycle runs (e.g. ECCrushTestFixture installs a proper CRUSH map here).
+  pre_peering_hook();
+
   new_epoch_loop();
 }
 
@@ -165,65 +170,62 @@ void ECPeeringTestFixture::ensure_osd_fixture_exists(int osd) {
   if (osd_fixtures.find(osd) != osd_fixtures.end()) {
     return;
   }
-  
-  // Create OsdTestFixture for this OSD
+
+  // Create OsdTestFixture for this OSD (store + LRU only).
+  // Collections are per-PG and created in ensure_test_pg_exists().
   auto osd_fixture = std::make_unique<OsdTestFixture>(osd);
-  
-  // Create a new store for this OSD
   osd_fixture->store = MockStore::create(g_ceph_context, osd);
   ceph_assert(osd_fixture->store);
   osd_fixture->data_dir = "";
-  
-  // Create collection for this shard
-  spg_t shard_spgid(pgid, shard_id_t(osd));
-  coll_t shard_coll(shard_spgid);
-  auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
-  
-  ObjectStore::Transaction t;
-  t.create_collection(shard_coll, 0);
-  int r = osd_fixture->store->queue_transaction(shard_ch, std::move(t));
-  ceph_assert(r == 0);
-
-  osd_fixture->coll = shard_coll;
-  osd_fixture->ch = shard_ch;
-  
-  // Create extent cache LRU for this OSD
   osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
-  
+
   osd_fixtures[osd] = std::move(osd_fixture);
 }
 
 void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
   int osd = pg_whoami.osd;
   ceph_assert(osd_fixtures.find(osd) != osd_fixtures.end());
-  
+
   auto* osd_fixture = get_osd_fixture(osd);
   ceph_assert(osd_fixture != nullptr);
-  
+
   spg_t shard_spgid(pgid, pg_whoami.shard);
-  
+
   if (osd_fixture->has_pg(shard_spgid)) {
     return;
   }
-  
+
+  // Create the TestPG and its per-PG ObjectStore collection.
+  // The collection is keyed by spg_t (pgid + shard_id), so it belongs in
+  // TestPG, not in OsdTestFixture.  CRUSH may place shard N on any OSD, so
+  // shard_id != osd_id in general.
   TestPG* test_pg = osd_fixture->create_pg(shard_spgid, pg_whoami);
-  
+  {
+    coll_t shard_coll(shard_spgid);
+    auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
+    ObjectStore::Transaction ct;
+    ct.create_collection(shard_coll, 0);
+    int r = osd_fixture->store->queue_transaction(shard_ch, std::move(ct));
+    ceph_assert(r == 0);
+    test_pg->coll = shard_coll;
+    test_pg->ch = shard_ch;
+  }
+
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
-  
-  // Create backend listener
+
+  // Create backend listener using the TestPG's collection
   auto shard_listener = std::make_unique<MockPGBackendListener>(
     osdmap, pool_id, dpp.get(), pg_whoami);
 
-  // Initialize the listener's own info.pgid so OSDMap queries work
   shard_listener->info.pgid = shard_spgid;
-  shard_listener->set_store(osd_fixture->store.get(), osd_fixture->ch);
+  shard_listener->set_store(osd_fixture->store.get(), test_pg->ch);
   shard_listener->set_event_loop(event_loop.get());
   shard_listener->set_messenger(messenger.get());
 
-  // Create EC backend
+  // Create EC backend using the TestPG's collection
   auto shard_ec_switch = std::make_unique<ECSwitch>(
-    shard_listener.get(), osd_fixture->coll, osd_fixture->ch, osd_fixture->store.get(),
+    shard_listener.get(), test_pg->coll, test_pg->ch, osd_fixture->store.get(),
     g_ceph_context, ec_impl, stripe_unit * k, *osd_fixture->lru);
 
   // Store in TestPG
@@ -238,7 +240,7 @@ void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
   auto peering_listener = std::make_unique<MockPeeringListener>(
     osdmap, pool_id, test_pg->dpp.get(), pg_whoami,
     std::move(test_pg->backend_listener),
-    osd_fixture->store.get(), osd_fixture->coll, osd_fixture->ch);
+    osd_fixture->store.get(), test_pg->coll, test_pg->ch);
 
   peering_listener->current_epoch = osdmap->get_epoch();
   peering_listener->set_messenger(messenger.get());
@@ -248,8 +250,8 @@ void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
 
   peering_listener->queue_transaction_callback =
     [this, pg_whoami](ObjectStore::Transaction&& t) -> int {
-      return queue_transaction_helper((int)pg_whoami.shard, std::move(t));
-  };
+      return queue_transaction_helper(pg_whoami.osd, std::move(t));
+    };
 
   // Pass the PGPool from the backend_listener to PeeringState
   // The listener's pool.info will be updated in place when the OSDMap changes
@@ -612,17 +614,24 @@ bool ECPeeringTestFixture::new_epoch(bool if_required)
   return true;
 }
 
-int ECPeeringTestFixture::queue_transaction_helper(int shard, ObjectStore::Transaction&& t)
+int ECPeeringTestFixture::queue_transaction_helper(int osd, ObjectStore::Transaction&& t)
 {
   if (t.empty()) {
     return 0;
   }
 
-  // Note: Contexts are stolen by MockPGBackendListener::queue_transaction,
-  // so we don't need to call execute_finishers here
-  OsdTestFixture* osd_fixture = get_osd_fixture(shard);
+  OsdTestFixture* osd_fixture = get_osd_fixture(osd);
   ceph_assert(osd_fixture != nullptr && osd_fixture->store);
-  int result = osd_fixture->store->queue_transaction(osd_fixture->ch, std::move(t));
+
+  // The collection is in TestPG, not OsdTestFixture.  The ch passed to
+  // queue_transaction is used only as a sequencer key in MemStore; the actual
+  // collection for each op comes from the transaction data itself.  Use the
+  // first TestPG's ch as the sequencer; every TestPG on this OSD shares the
+  // same underlying MemStore so any valid ch works.
+  ceph_assert(!osd_fixture->pgs.empty());
+  auto& first_pg = osd_fixture->pgs.begin()->second;
+  ceph_assert(first_pg && first_pg->ch);
+  int result = osd_fixture->store->queue_transaction(first_pg->ch, std::move(t));
 
   return result;
 }

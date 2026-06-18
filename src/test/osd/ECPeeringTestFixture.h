@@ -123,6 +123,24 @@ protected:
    * TestPGs will be created lazily in event_advance_map() via ensure_test_pg_exists().
    */
   bool should_create_test_pgs_upfront() const override { return false; }
+
+  /**
+   * Whether to install a pg_upmap that forces shard N onto OSD N.
+   *
+   * The default is true, which preserves the shard == osd invariant relied on
+   * by all existing tests.  Override to return false (as ECCrushTestFixture
+   * does) to let CRUSH determine placement without any upmap override.
+   */
+  virtual bool use_upmap() const { return true; }
+
+  /**
+   * Called just before the first new_epoch_loop() in SetUp().
+   *
+   * Override in a derived fixture to modify the OSDMap (e.g. install a CRUSH
+   * map and remove pg_temp) before any peering events are processed.
+   * The default implementation is a no-op.
+   */
+  virtual void pre_peering_hook() {}
   
 private:
   /**
