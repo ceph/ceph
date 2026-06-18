@@ -616,6 +616,16 @@ class NodeProxyEndpoint:
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
+    def fcm(self, **kw: Any) -> Dict[str, Any]:
+        try:
+            results = self.mgr.node_proxy_cache.common('fcm', **kw)
+        except (KeyError, OrchestratorError):
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
     def firmwares(self, **kw: Any) -> Dict[str, Any]:
         return self.firmware(**kw)
 

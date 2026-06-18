@@ -321,6 +321,18 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         self.getPage("/host03/temperatures", method="GET")
         self.assertStatus('404 Not Found')
 
+    def test_fcm_with_valid_hostname(self):
+        self.getPage("/host02/fcm", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_fcm_no_hostname(self):
+        self.getPage("/fcm", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_fcm_with_invalid_hostname(self):
+        self.getPage("/host03/fcm", method="GET")
+        self.assertStatus('404 Not Found')
+
     def test_firmware_with_valid_hostname(self):
         self.getPage("/host02/firmware", method="GET")
         self.assertStatus('200 OK')

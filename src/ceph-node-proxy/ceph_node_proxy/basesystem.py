@@ -48,6 +48,9 @@ class BaseSystem(BaseThread):
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 
+    def get_fcm(self) -> Dict[str, Dict[str, Dict]]:
+        return {}
+
     def get_firmware(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 

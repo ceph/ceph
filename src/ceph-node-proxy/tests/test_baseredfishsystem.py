@@ -140,7 +140,11 @@ class TestBaseRedfishSystemGetSystem:
         assert result["status"]["power"] == {}
         assert result["status"]["fans"] == {}
         assert result["status"]["temperatures"] == {}
+        assert "fcm" not in result["status"]
         assert "firmware" in result
+
+    def test_get_fcm_empty(self, system):
+        assert system.get_fcm() == {}
 
 
 class TestBaseRedfishSystemGetSpecs:

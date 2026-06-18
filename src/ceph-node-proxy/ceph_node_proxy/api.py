@@ -101,6 +101,12 @@ class API(Server):
     @cherrypy.expose
     @cherrypy.tools.allow(methods=["GET"])
     @cherrypy.tools.json_out()
+    def fcm(self) -> Dict[str, Any]:
+        return {"fcm": self.backend.get_fcm()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=["GET"])
+    @cherrypy.tools.json_out()
     def power(self) -> Dict[str, Any]:
         return {"power": self.backend.get_power()}
 
