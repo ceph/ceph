@@ -457,6 +457,81 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
 }
 #endif
 
+// Tracker #77334: ZstdCompressor::decompress() used to ignore the
+// ZSTD_decompressStream() return value and the consumed-input count, so a
+// corrupt or truncated frame returned success with silently truncated/garbage
+// output. These cases must now fail with a negative error code.
+TEST(ZstdCompressor, decompress_rejects_corruption)
+{
+  CompressorRef zstd = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(zstd);
+
+  // compressible payload so the frame has several bytes to corrupt
+  bufferlist orig;
+  for (int i = 0; i < 256; ++i) {
+    orig.append("the quick brown fox jumps over the lazy dog\n");
+  }
+
+  std::optional<int32_t> compressor_message;
+  bufferlist compressed;
+  ASSERT_EQ(0, zstd->compress(orig, compressed, compressor_message));
+  // sanity: the happy path still round-trips
+  {
+    bufferlist after;
+    ASSERT_EQ(0, zstd->decompress(compressed, after, compressor_message));
+    ASSERT_TRUE(orig.contents_equal(after));
+  }
+
+  // the on-disk layout is a 4-byte little-endian decompressed-length prefix
+  // followed by the raw zstd frame
+  const std::string blob = compressed.to_str();
+  ASSERT_GT(blob.size(), 4u);
+  const std::string frame = blob.substr(4);
+
+  auto make_input = [](uint32_t dst_len, const std::string& body) {
+    bufferlist bl;
+    using ceph::encode;
+    encode(dst_len, bl);
+    bl.append(body.data(), body.size());
+    return bl;
+  };
+
+  // 1) truncated frame: the decoder must not report success with partial output
+  {
+    bufferlist bad = make_input(orig.length(), frame.substr(0, frame.size() - 4));
+    bufferlist after;
+    std::optional<int32_t> msg;
+    EXPECT_LT(zstd->decompress(bad, after, msg), 0);
+  }
+
+  // 2) length prefix smaller than the real output: zstd stops consuming input
+  //    once the undersized output buffer fills
+  {
+    bufferlist bad = make_input(orig.length() / 2, frame);
+    bufferlist after;
+    std::optional<int32_t> msg;
+    EXPECT_LT(zstd->decompress(bad, after, msg), 0);
+  }
+
+  // 3) length prefix larger than the real output: the frame ends before the
+  //    promised number of bytes is produced
+  {
+    bufferlist bad = make_input(orig.length() + 4096, frame);
+    bufferlist after;
+    std::optional<int32_t> msg;
+    EXPECT_LT(zstd->decompress(bad, after, msg), 0);
+  }
+
+  // 4) garbage body of a plausible length must not be accepted as a valid frame
+  {
+    std::string junk(frame.size(), '\xa5');
+    bufferlist bad = make_input(orig.length(), junk);
+    bufferlist after;
+    std::optional<int32_t> msg;
+    EXPECT_LT(zstd->decompress(bad, after, msg), 0);
+  }
+}
+
 TEST(CompressionPlugin, all)
 {
   CompressorRef compressor;

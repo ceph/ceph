@@ -19,6 +19,8 @@
 #define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 
+#include <limits>
+
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "compressor/Compressor.h"
@@ -28,6 +30,11 @@ class ZstdCompressor : public Compressor {
   ZstdCompressor(CephContext *cct) : Compressor(COMP_ALG_ZSTD, "zstd"), cct(cct) {}
 
   int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> &compressor_message) override {
+    // the decompressed length is stored as a uint32_t prefix, so a source
+    // larger than that cannot be round-tripped
+    if (src.length() > std::numeric_limits<uint32_t>::max()) {
+      return -EINVAL;
+    }
     ZSTD_CCtx *s = ZSTD_createCCtx();
     if (!s) {
       return -ENOMEM;
@@ -90,7 +97,7 @@ class ZstdCompressor : public Compressor {
 		 ceph::buffer::list &dst,
 		 std::optional<int32_t> compressor_message) override {
     if (compressed_len < 4) {
-      return -1;
+      return -EINVAL;
     }
     compressed_len -= 4;
     uint32_t dst_len;
@@ -102,19 +109,48 @@ class ZstdCompressor : public Compressor {
     outbuf.size = dstptr.length();
     outbuf.pos = 0;
     ZSTD_DStream *s = ZSTD_createDStream();
-    ZSTD_initDStream(s);
+    if (!s) {
+      return -ENOMEM;
+    }
+    size_t res = ZSTD_initDStream(s);
+    if (ZSTD_isError(res)) {
+      ZSTD_freeDStream(s);
+      return -EINVAL;
+    }
+    // tracks the return of the last ZSTD_decompressStream() call; a non-zero
+    // value after all input is consumed means the frame was truncated
+    size_t left_in_frame = 0;
     while (compressed_len > 0) {
       if (p.end()) {
-	return -1;
+	ZSTD_freeDStream(s);
+	return -EINVAL;
       }
       ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(compressed_len,
 					 (const char**)&inbuf.src);
-      ZSTD_decompressStream(s, &outbuf, &inbuf);
       compressed_len -= inbuf.size;
+      size_t r = ZSTD_decompressStream(s, &outbuf, &inbuf);
+      if (ZSTD_isError(r)) {
+	ZSTD_freeDStream(s);
+	return -EINVAL;
+      }
+      // zstd must consume the whole input chunk. If it stopped early the
+      // output buffer filled up, which means the decoded-length prefix
+      // understated the real size: a corrupt or inconsistent frame.
+      if (inbuf.pos != inbuf.size) {
+	ZSTD_freeDStream(s);
+	return -EINVAL;
+      }
+      left_in_frame = r;
     }
     ZSTD_freeDStream(s);
+
+    // the frame must have ended exactly when the input ran out, and must have
+    // produced exactly the number of bytes promised by the length prefix
+    if (left_in_frame != 0 || outbuf.pos != dst_len) {
+      return -EINVAL;
+    }
 
     dst.append(dstptr, 0, outbuf.pos);
     return 0;
