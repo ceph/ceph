@@ -218,7 +218,10 @@ class tree_cursor_t final
    public:
     Cache(Ref<LeafNode>&);
     void validate_is_latest(const search_position_t&) const;
-    void invalidate() { needs_update_all = true; }
+    void invalidate() {
+      needs_update_all = true;
+      value_payload_mut.reset();
+    }
     void update_all(const node_version_t&, const key_view_t&, const value_header_t*);
     const key_view_t& get_key_view(
         value_magic_t magic, const search_position_t& pos) {
@@ -249,7 +252,6 @@ class tree_cursor_t final
 
     // cached data-structures to update value payload
     std::optional<NodeExtentMutable> value_payload_mut;
-    ValueDeltaRecorder* p_value_recorder = nullptr;
   };
   mutable Cache cache;
 

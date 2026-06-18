@@ -223,7 +223,6 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
          (int)ref_leaf_node->get_node_size());
 
   value_payload_mut.reset();
-  p_value_recorder = nullptr;
 }
 
 void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version)
@@ -244,7 +243,6 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
         reset_ptr(p_value_header, p_node_base, current_p_node_base, node_size);
         key_view->reset_to(p_node_base, current_p_node_base, node_size);
         value_payload_mut.reset();
-        p_value_recorder = nullptr;
         p_node_base = current_p_node_base;
       }
     }
@@ -263,7 +261,6 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
               current_p_node_base, node_size);
     key_view->reset_to(p_node_base, current_p_node_base, node_size);
     value_payload_mut.reset();
-    p_value_recorder = nullptr;
 
     p_node_base = current_p_node_base;
   } else {
@@ -304,16 +301,12 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(
     context_t c, const search_position_t& pos)
 {
   make_latest(c.vb.get_header_magic(), pos);
-  if (!value_payload_mut.has_value()) {
-    assert(!p_value_recorder);
-    auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
-    auto current_version = ref_leaf_node->get_version();
-    maybe_duplicate(current_version);
-    value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
-    p_value_recorder = value_mutable.second;
-    validate_is_latest(pos);
-  }
-  return {*value_payload_mut, p_value_recorder};
+  auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
+  auto current_version = ref_leaf_node->get_version();
+  maybe_duplicate(current_version);
+  value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
+  validate_is_latest(pos);
+  return {*value_payload_mut, value_mutable.second};
 }
 
 /*
