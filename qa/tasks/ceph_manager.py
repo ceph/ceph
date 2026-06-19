@@ -210,7 +210,7 @@ class OSDThrasher(Thrasher):
 
         self.ceph_manager = manager
         self.cluster = manager.cluster
-        self.ceph_manager.wait_for_clean()
+        self.ceph_manager.wait_for_clean(wait_for_migration=False)
         osd_status = self.ceph_manager.get_osd_status()
         self.in_osds = osd_status['in']
         self.live_osds = osd_status['live']
@@ -1013,9 +1013,7 @@ class OSDThrasher(Thrasher):
             timeout=self.config.get('timeout')
             )
         self.log("doing min_size thrashing")
-        self.ceph_manager.wait_for_clean(timeout=180)
-        assert self.ceph_manager.is_clean(), \
-            'not clean before minsize thrashing starts'
+        self.ceph_manager.wait_for_clean(timeout=180, wait_for_migration=False)
         start = time.time()
         while time.time() - start < self.config.get("test_min_size_duration", 1800):
             # look up k and m from all the pools on each loop, in case it
@@ -1077,7 +1075,7 @@ class OSDThrasher(Thrasher):
         self.all_up_in() # revive all OSDs
 
         # Wait until all PGs are active+clean after we have revived all the OSDs
-        self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'))
+        self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'), wait_for_migration=False)
 
     def inject_pause(self, conf_key, duration, check_after, should_be_down):
         """
@@ -1270,7 +1268,8 @@ class OSDThrasher(Thrasher):
         # the test *should* fail!
         time.sleep(20)
         self.ceph_manager.wait_for_clean(
-            timeout=self.config.get('timeout')
+            timeout=self.config.get('timeout'),
+            wait_for_migration=False
             )
 
         # now we wait 20s for the backfill replicas to hear about the clean
@@ -1279,7 +1278,8 @@ class OSDThrasher(Thrasher):
         self.kill_osd(mark_down=True, mark_out=True)
         self.log("Waiting for clean again")
         self.ceph_manager.wait_for_clean(
-            timeout=self.config.get('timeout')
+            timeout=self.config.get('timeout'),
+            wait_for_migration=False
             )
         self.log("Waiting for trim")
         time.sleep(int(self.config.get("map_discontinuity_sleep_time", 40)))
@@ -2749,6 +2749,27 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_active_clean_or_migrating(self):
+        """
+        Get number of active+clean PGs plus any non-clean
+        PGs that are in a migration state.
+        """
+        pgs = self.get_pg_stats()
+        return self._get_num_active_clean_or_migrating(pgs)
+
+    def _get_num_active_clean_or_migrating(self, pgs):
+        num = 0
+        for pg in pgs:
+            if (pg['state'].count('active') and
+                pg['state'].count('clean') and
+                not pg['state'].count('stale')):
+                num += 1
+            elif (pg['state'].count('migrating') or
+                  pg['state'].count('migration_wait') or
+                  pg['state'].count('migration_toofull')):
+                num += 1
+        return num
+
     def get_is_making_recovery_progress(self):
         """
         Return whether there is recovery progress discernable in the
@@ -2769,6 +2790,18 @@ class CephManager:
         bps = status['pgmap'].get('migrating_bytes_per_sec', 0)
         ops = status['pgmap'].get('migrating_objects_per_sec', 0)
         return bps > 0 or ops > 0
+
+    def get_is_migration_paused(self):
+        """
+        Return whether there are migration PGs in migration_wait
+        or migration_toofull states
+        """
+        pgs = self.get_pg_stats()
+        for pg in pgs:
+            if (pg['state'].count('migration_wait') or
+                pg['state'].count('migration_toofull')):
+                return True
+        return False
 
     def get_num_active(self):
         """
@@ -2915,9 +2948,11 @@ class CephManager:
         """
         pgs = self.get_pg_stats()
         for pg in pgs:
-           if pg['state'] != 'active+clean':
-             self.log('PG %s is not active+clean' % pg['pgid'])
-             self.log(pg)
+            if not (pg['state'].count('active') and
+                    pg['state'].count('clean') and
+                    not pg['state'].count('stale')):
+                self.log('PG %s is not active+clean' % pg['pgid'])
+                self.log(pg)
 
     def dump_pgs_not_active_down(self):
         """
@@ -2925,9 +2960,9 @@ class CephManager:
         """
         pgs = self.get_pg_stats()
         for pg in pgs:
-           if 'active' not in pg['state'] and 'down' not in pg['state']:
-             self.log('PG %s is not active or down' % pg['pgid'])
-             self.log(pg)
+            if 'active' not in pg['state'] and 'down' not in pg['state']:
+                self.log('PG %s is not active or down' % pg['pgid'])
+                self.log(pg)
 
     def dump_pgs_not_active(self):
         """
@@ -2935,9 +2970,9 @@ class CephManager:
         """
         pgs = self.get_pg_stats()
         for pg in pgs:
-           if 'active' not in pg['state']:
-             self.log('PG %s is not active' % pg['pgid'])
-             self.log(pg)
+            if 'active' not in pg['state']:
+                self.log('PG %s is not active' % pg['pgid'])
+                self.log(pg)
 
     def dump_pgs_not_active_peered(self, pgs):
         for pg in pgs:
@@ -2951,14 +2986,22 @@ class CephManager:
         """
         self.log("waiting for clean")
         start = time.time()
-        num_active_clean = self.get_num_active_clean()
-        while not self.is_clean():
+        if wait_for_migration:
+            count_func = self._get_num_active_clean
+        else:
+            count_func = self._get_num_active_clean_or_migrating
+        pgs = self.get_pg_stats()
+        last_count = count_func(pgs)
+        while count_func(pgs) != len(pgs):
             if timeout is not None:
                 if self.get_is_making_recovery_progress():
                     self.log("making recovery progress, resetting timeout")
                     start = time.time()
                 elif wait_for_migration and self.get_is_making_migration_progress():
                     self.log("making migration progress, resetting timeout")
+                    start = time.time()
+                elif wait_for_migration and self.get_is_migration_paused():
+                    self.log("migration paused (waiting or toofull) resetting timeout")
                     start = time.time()
                 else:
                     self.log("no progress seen, keeping timeout for now")
@@ -2967,10 +3010,11 @@ class CephManager:
                         self.dump_pgs_not_active_clean()
                         assert time.time() - start < timeout, \
                             'wait_for_clean: failed before timeout expired'
-            cur_active_clean = self.get_num_active_clean()
-            if cur_active_clean != num_active_clean:
+            pgs = self.get_pg_stats()
+            current_count = count_func(pgs)
+            if current_count != last_count:
                 start = time.time()
-                num_active_clean = cur_active_clean
+                last_count = current_count
             time.sleep(3)
         self.log("clean!")
 
