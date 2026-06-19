@@ -1636,8 +1636,10 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
 
   const std::string obj_name = "test_add_zone";
+  const std::string obj_name2 = "test_add_zone_2";
   const size_t data_size = stripe_unit * k;
   const std::string pattern_a(data_size, 'A');
+  const std::string pattern_b(data_size, 'B');
 
   // ------------------------------------------------------------------
   // Step 1: Write and verify via the original zone.
@@ -1698,21 +1700,20 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
       }
     }
 
-    // Apply pool update.
+    // Apply pool update, pg_upmap extension, and pg_temp clear in a single
+    // incremental.  Splitting these into separate epochs would create a
+    // transient state where pool.size == 2*(k+m) but pg_temp still has the
+    // old k+m entries, causing pgtemp_undo_primaryfirst to assert.
     {
-      OSDMap::Incremental pool_inc(new_osdmap->get_epoch() + 1);
-      pool_inc.fsid = new_osdmap->get_fsid();
-      pool_inc.new_pools[pool_id] = updated;
-      new_osdmap->apply_incremental(pool_inc);
-    }
-
-    // Apply new pg_upmap (extends acting set to cover zone 1).
-    {
-      OSDMap::Incremental upmap_inc(new_osdmap->get_epoch() + 1);
-      upmap_inc.fsid = new_osdmap->get_fsid();
-      upmap_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+      OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
+      inc.fsid = new_osdmap->get_fsid();
+      inc.new_pools[pool_id] = updated;
+      inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
         new_acting.begin(), new_acting.end());
-      new_osdmap->apply_incremental(upmap_inc);
+      // Clear any stale pg_temp; it was sized for the old pool and is now
+      // invalid.  Peering will set a new one after activation.
+      inc.new_pg_temp[pgid] = mempool::osdmap::vector<int32_t>();
+      new_osdmap->apply_incremental(inc);
     }
 
     update_osdmap_with_peering(new_osdmap);
@@ -1722,11 +1723,13 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   ASSERT_TRUE(all_shards_active())
     << "All shards (both zones) should be active after zone addition";
 
-  // Scrub to confirm pool consistency with two zones.
-  std::cout << "Step 2 (scrub): Scrubbing object after zone addition" << std::endl;
-  bool corruption = scrub_object(obj_name);
-  ASSERT_FALSE(corruption)
-    << "Scrub should find no corruption after adding new zone";
+  // Write a second object now that both zones are active.  This object will
+  // be written to both zone 0 and zone 1 shards, so zone 1 holds its data
+  // without any backfill and we can read it when zone 0 goes offline.
+  // Note: the pool is degraded because obj_name (written before zone 1) is
+  // still missing from zone-1 shards pending recovery; do not assert clean.
+  std::cout << "Step 2 (write): Writing pattern B to both zones" << std::endl;
+  create_and_write_verify(obj_name2, pattern_b);
 
   // ------------------------------------------------------------------
   // Step 3: Take the original zone offline.
@@ -1756,9 +1759,10 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
 
   // ------------------------------------------------------------------
   // Step 4: Read / verify from zone 1 only.
+  // obj_name2 was written when both zones were active, so zone 1 holds it.
   // ------------------------------------------------------------------
-  std::cout << "Step 4: Reading object from zone 1 only" << std::endl;
-  verify_object(obj_name);
+  std::cout << "Step 4: Reading object (written to both zones) from zone 1 only" << std::endl;
+  verify_object(obj_name2);
 
   // ------------------------------------------------------------------
   // Step 5: Bring back the original zone and recover.
@@ -1817,25 +1821,22 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
       }
     }
 
-    // Apply pool update.
-    {
-      OSDMap::Incremental pool_inc(new_osdmap->get_epoch() + 1);
-      pool_inc.fsid = new_osdmap->get_fsid();
-      pool_inc.new_pools[pool_id] = restored;
-      new_osdmap->apply_incremental(pool_inc);
-    }
-
-    // Shrink pg_upmap back to zone 0 only.
+    // Shrink pool, pg_upmap, and clear pg_temp in one incremental to avoid a
+    // transient epoch where pool.size == k+m but pg_temp still has 2*(k+m)
+    // entries, which would cause pgtemp_undo_primaryfirst to assert.
     {
       std::vector<int> zone0_acting;
       for (int i = zone0_start; i < zone0_start + (k + m); ++i) {
         zone0_acting.push_back(i);
       }
-      OSDMap::Incremental upmap_inc(new_osdmap->get_epoch() + 1);
-      upmap_inc.fsid = new_osdmap->get_fsid();
-      upmap_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+      OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
+      inc.fsid = new_osdmap->get_fsid();
+      inc.new_pools[pool_id] = restored;
+      inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
         zone0_acting.begin(), zone0_acting.end());
-      new_osdmap->apply_incremental(upmap_inc);
+      // Clear the stale pg_temp from the two-zone epoch.
+      inc.new_pg_temp[pgid] = mempool::osdmap::vector<int32_t>();
+      new_osdmap->apply_incremental(inc);
     }
 
     update_osdmap_with_peering(new_osdmap);

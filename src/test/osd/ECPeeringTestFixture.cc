@@ -559,7 +559,13 @@ bool ECPeeringTestFixture::new_epoch(bool if_required)
       continue;
     }
     spg_t spg(pgid, shard_id_t(shard));
-    if (get_test_pg(osd, spg)->get_peering_state()->get_need_up_thru()) {
+    // TestPG may not exist yet for OSDs that were just added to the acting
+    // set but haven't been initialized by event_advance_map() yet.
+    TestPG* test_pg = get_test_pg(osd, spg);
+    if (!test_pg || !test_pg->has_peering_state()) {
+      continue;
+    }
+    if (test_pg->get_peering_state()->get_need_up_thru()) {
       pending_inc.new_up_thru[osd] = e;
       did_work = true;
     }
