@@ -4,55 +4,59 @@
 
 .. index:: bluestore; rocksdb; allocator
 
-Since Pacific release BlueStore has the option to select 5-10% latency reduction
-at a cost of significantly longer ``OSD`` recovery after crash.
+Beginning with the Pacific release, BlueStore has the option to configure a 5-10% latency reduction
+at a cost of significantly longer ``OSD`` recovery after a crash.
 
 .. confval:: bluestore_allocation_from_file
 
-During crash recovery BlueStore must reconstruct allocator state by scanning all stored objects.
-On systems with millions of objects this process can take several minutes.
-This page presents new multithreaded onode recovery that significantly reduces recovery time.
+During crash recovery BlueStore must reconstruct allocator state by scanning all stored RADOS objects.
+For OSDs storing millions of RADOS objects this process may take several minutes to several hours to complete.
+This page describes multithreaded onode recovery that significantly reduces recovery time.
 
 Allocator
 =========
 
-In BlueStore ``Allocator`` is responsible for tracking unused allocation units on the disk.
-Up to 3 allocators can be in use concurrently, one for Main, one for DB, and one for WAL.
-Only Main device can contain RADOS object, and only Main's allocator is relevant here.
-When BlueStore is running, allocator state is fully loaded to memory. That way
-allocator can quickly respond when there is a need to allocate disk space for object,
-or when object no longer exists on disk.
+In BlueStore, the configured ``Allocator`` is responsible for tracking unused allocation units on the underlying device.
+As many as three allocators may be in use concurrently: one for the main block device, one for the DB, and one for the WAL.
+Only the main device stores RADOS objects, and thus is the only allocator that is relevant here.
+When a BlueStore OSD is running, allocator state is fully loaded in memory. This ensures that the
+allocator can quickly respond when there is a need to allocate space for RADOS objects,
+or when RADOS objects no longer exist and their underlying space should be reclaimed.
 
-RocksDB persisted allocator
+RocksDB-persisted allocator
 ---------------------------
 
-Original design envisioned that allocator state updates are stored in RocksDB's ``b`` column.
-When RADOS object change allocates or releases allocation unit the relevant state update information
-is kept together with object-modifying RocksDB atomic transaction. The information transfer is unidirectional,
-BlueStore is updating allocator state in RocksDB, but never retrieving it.
-The exception is OSD bootup when BlueStore retrieves allocator state from RocksDB ``b`` column.
+The original design envisioned that allocator state updates are stored in RocksDB's ``b`` column.
+When RADOS objects are written or release allocation units, the relevant state information
+is updated with an object-modifying RocksDB atomic transaction. The information transfer is unidirectional:
+BlueStore updates allocator state in RocksDB, but never retrieves it.
+The exception is at OSD boot when BlueStore retrieves allocator state from the RocksDB ``b`` column.
 
-File persisted allocator
+File-persisted allocator
 ------------------------
 
-It was tested that keeping RocksDB busy updating ``b`` column with allocation data
-has observable cost on write latency and cpu burden on compaction.
-To get that extra performance back the new default mode is to update in-memory allocator state only.
-Instead, on shutdown state is saved to BlueFS file named ``ALLOCATOR_NCB_DIR/ALLOCATOR_NCB_FILE``.
+Tests showed that keeping RocksDB busy by updating ``b`` column with allocation data
+has observable cost in terms of write latency and CPU burden when compacting.
+To avoid this performance impact the new default mode is to update allocator state only in-memory.
+Only on shutdown is state saved to a BlueFS file named ``ALLOCATOR_NCB_DIR/ALLOCATOR_NCB_FILE``.
 
 Crash recovery
---------------
+==============
 
-If BlueStore was not shutdown orderly there is no file to read allocator state from.
-Since it is the objects that define what is in use, the recovery procedure iterates over all objects and extracts used allocations.
+If BlueStore was not shut down gracefully there will be no updated file from which to read allocator state.
+Since RADOS objects are then the only only source of truth regarding underlying device usage,
+the recovery procedure must iterate over all RADOS objects in order to determine used vs
+available device blocks.
 
-Multi-thread recovery
-=====================
+Multi-threaded recovery
+=======================
 
-Iterating over all onodes in the RocksDB can take several minutes.
-To help with that a multi-threaded recovery procedure is created.
-It is significantly different procedure than the original one.
-There is just one configurable that selects and controls recovery.
+Iterating over all onodes in the RocksDB can take several minutes on
+a relatively small SSD; for large and slow devices it may take several *hours*.
+To mitigate this significant impact on OSD boot time, a multi-threaded recovery procedure
+has been added for the Vampire release and may be backported to Umbrella and Tentacle.
+This is a significantly different procedure than the original.
+One config option selects and controls this new recovery strategy.
 
 .. confval:: bluestore_allocation_recovery_threads
 
@@ -60,32 +64,34 @@ There is just one configurable that selects and controls recovery.
 Performance
 -----------
 
-Example recovery timings.
-OSD with NVME SSD, hosting 7.5M RBD objects, 4.6TiB used.
+Below are example elapsed recovery timings for an
+OSD on an NVMe SSD hosting 7.5M RBD objects, with 4.6TiB used:
 
-+------------------------+------------+------------+
-| recovery mechanism     | threads    | time(s)    |
-+========================+============+============+
-| original               | 1          | 76.0       |
-+------------------------+------------+------------+
-| multithread            | 1          | 55.8       |
-+------------------------+------------+------------+
-| multithread            | 4          | 18.1       |
-+------------------------+------------+------------+
-| multithread            | 8          | 10.8       |
-+------------------------+------------+------------+
-| multithread            | 12         | 8.0        |
-+------------------------+------------+------------+
-| multithread            | 16         | 6.8        |
-+------------------------+------------+------------+
-| multithread            | 32         | 5.3        |
-+------------------------+------------+------------+
++---------------------+------------+-----------------+
+| Recovery Mechanism  | Threads    | Time in seconds |
++=====================+============+=================+
+| original            | 1          | 76.0            |
++---------------------+------------+-----------------+
+| multi-threaded      | 1          | 55.8            |
++---------------------+------------+-----------------+
+| multi-threaded      | 4          | 18.1            |
++---------------------+------------+-----------------+
+| multi-threaded      | 8          | 10.8            |
++---------------------+------------+-----------------+
+| multi-threaded      | 12         | 8.0             |
++---------------------+------------+-----------------+
+| multi-threaded      | 16         | 6.8             |
++---------------------+------------+-----------------+
+| multit-hreaded      | 32         | 5.3             |
++---------------------+------------+-----------------+
 
 Testing
 -------
 
-If long recovery time has been a deciding factor for staying with allocations in RocksDB,
-there is a procedure for measuring directly recovery time.
+Concern for long recovery time has led some Ceph operators to configure
+legacy synchronous persistance of allocator state in RocksDB.
+There is now a procedure for predicting the legacy recovery time for a given OSD,
+allowing an informed decision:
 
 .. prompt:: bash #
 
@@ -163,6 +169,6 @@ there is a procedure for measuring directly recovery time.
   Allocators the same.
   recovery-compare success
 
-One can see above discrepancy between legacy recovery times: 76.0s vs 62.2s.
-This is an effect of RocksDB having the data already cached by new recovery when legacy recovery is the second one.
+One can see in the above example the improvement in legacy recovery times: 76.0s vs 62.2s.
+The second run shows the effect of RocksDB having the data already cached by the new recovery strategy.
 
