@@ -15,6 +15,7 @@ import { HostDetailsSectionComponent } from './ceph/cluster/hosts/host-details/h
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
+import { LokiLogsComponent } from './ceph/cluster/loki-logs/loki-logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
@@ -338,6 +339,11 @@ const routes: Routes = [
         path: 'logs',
         component: LogsComponent,
         data: { breadcrumbs: 'Observability/Logs' }
+      },
+      {
+        path: 'loki-logs',
+        component: LokiLogsComponent,
+        data: { breadcrumbs: 'Observability/Centralized Logs' }
       },
       {
         path: 'telemetry',

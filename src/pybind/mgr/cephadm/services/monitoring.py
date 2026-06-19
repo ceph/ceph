@@ -934,6 +934,12 @@ class LokiService(CephadmService):
             'dashboard set-loki-api-host',
             service_url
         )
+        self._set_value_on_dashboard(
+            'Loki',
+            'dashboard get-loki-api-ssl-verify',
+            'dashboard set-loki-api-ssl-verify',
+            'false'
+        )
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         if daemon.hostname is None:
@@ -952,11 +958,11 @@ class LokiService(CephadmService):
                 ]
                 if remaining_daemons:
                     self.config_dashboard(remaining_daemons)
-                    logger.info("Updated dashboard Loki API settings to point to a remaining daemon")
+                    logger.info("Updated dashboard API settings to point to a remaining Loki daemon")
                 else:
                     self.mgr.check_mon_command({"prefix": "dashboard reset-loki-api-host"})
                     self.mgr.check_mon_command({"prefix": "dashboard reset-loki-api-ssl-verify"})
-                    logger.info("Reset dashboard Loki API settings as no Loki daemons are remaining")
+                    logger.info("Reset dashboard API settings as no Loki daemons are remaining")
             else:
                 logger.info(f"Loki {daemon.name()} removed; no changes to dashboard API settings")
         except Exception as e:

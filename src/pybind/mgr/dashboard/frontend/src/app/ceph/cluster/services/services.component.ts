@@ -224,6 +224,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       this.configureServiceUrl('api/grafana/url', 'grafana');
       this.configureServiceUrl('ui-api/prometheus/prometheus-api-host', 'prometheus');
       this.configureServiceUrl('ui-api/prometheus/alertmanager-api-host', 'alertmanager');
+      this.configureServiceUrl('ui-api/loki/loki-api-host', 'loki');
     }
   }
 

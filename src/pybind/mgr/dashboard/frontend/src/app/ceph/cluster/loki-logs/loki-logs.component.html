@@ -1,0 +1,98 @@
+<cd-help-text page="centralized-logs">
+  Query log files collected by Alloy and stored in Loki. Select a file, then run the query to
+  display recent log lines.
+</cd-help-text>
+
+<ng-container *ngIf="!loadingServices; else loadingTpl">
+  <cd-alert-panel type="info"
+                  title="Loki/Alloy service not running"
+                  i18n-title
+                  *ngIf="!lokiAvailable || !alloyAvailable">
+    <ng-container i18n>
+      Please start the loki and alloy services to see centralized logs.
+    </ng-container>
+  </cd-alert-panel>
+
+  <ng-container *ngIf="lokiAvailable && alloyAvailable">
+    <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
+
+    @if (hasRun) {
+    <div class="log-viewer"
+         [class.log-viewer--scrollable]="scrollable">
+      @if (logLines.length && showDownloadCopyButton) {
+      <div class="log-actions">
+        <cd-download-button [objectItem]="logLines"
+                            [textItem]="logText"
+                            [fileName]="downloadFileName">
+        </cd-download-button>
+        <cd-copy-2-clipboard-button [source]="logText"
+                                    [byId]="false">
+        </cd-copy-2-clipboard-button>
+      </div>
+      }
+
+      <div class="log-entries">
+        @for (line of logLines; track trackByLogEntry($index, line)) {
+        <div class="log-entry cds--type-code-01">
+          <span class="log-entry__timestamp">{{ line.stamp | cdDate }}</span>
+          <span class="log-entry__message">{{ line.message }}</span>
+        </div>
+        }
+
+        @if (logLines.length === 0 && !loadingLogs) {
+        <div class="log-viewer__empty">
+          <ng-container *ngTemplateOutlet="noEntriesTpl"></ng-container>
+        </div>
+        }
+      </div>
+    </div>
+    } @else {
+    <cd-alert-panel type="info"
+                    title="No logs loaded"
+                    i18n-title>
+      <ng-container i18n>Select a log file and click Run to load log lines from Loki.</ng-container>
+    </cd-alert-panel>
+    }
+
+    <cd-loading-panel *ngIf="loadingLogs"></cd-loading-panel>
+  </ng-container>
+</ng-container>
+
+<ng-template #logFiltersTpl>
+  <div class="loki-toolbar row mb-3">
+    <div class="col-lg-10 d-flex flex-wrap align-items-end">
+      <div class="col-md-5 me-3 mb-2">
+        <cds-combo-box type="single"
+                       label="Log file"
+                       i18n-label
+                       placeholder="Select log file"
+                       i18n-placeholder
+                       id="loki-log-file"
+                       [appendInline]="true"
+                       [disabled]="loadingFilenames || loadingLogs"
+                       [items]="filenameItems"
+                       (selected)="onFilenameSelected($event)">
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+      </div>
+
+      <div class="col-md-2 me-3 mb-2">
+        <button cdsButton="primary"
+                size="md"
+                [disabled]="!selectedFilename || loadingLogs || loadingFilenames"
+                (click)="runQuery()"
+                i18n>
+          Run
+        </button>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #loadingTpl>
+  <cd-loading-panel></cd-loading-panel>
+</ng-template>
+
+<ng-template #noEntriesTpl>
+  <span i18n>No log entries found.</span>
+</ng-template>
