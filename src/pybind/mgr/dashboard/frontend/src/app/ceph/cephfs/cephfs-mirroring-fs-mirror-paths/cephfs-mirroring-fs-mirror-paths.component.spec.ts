@@ -3,7 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
-import { CephfsService, SnapshotMirrorStatusResponse } from '~/app/shared/api/cephfs.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths.component';
 
@@ -13,7 +14,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   let cephfsService: any;
   let formatterService: any;
 
-  const mockSnapshotMirrorStatusResponse: SnapshotMirrorStatusResponse = {
+  const mockMirrorStatusResponse: MirrorStatusResponse = {
     metrics: {
       '/path1': {
         peer: {
@@ -89,7 +90,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
   beforeEach(async () => {
     const cephfsServiceMock = {
-      getSnapshotMirrorStatus: jest.fn()
+      getMirrorStatus: jest.fn()
     };
 
     const formatterServiceMock = {
@@ -148,7 +149,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   });
 
   it('should initialize columns and fetch fsName on init', () => {
-    cephfsService.getSnapshotMirrorStatus.mockReturnValue(of(mockSnapshotMirrorStatusResponse));
+    cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
 
     component.ngOnInit();
 
@@ -162,7 +163,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
     // Verify fsName is fetched and data is loaded
     expect(component.fsName).toBe('test-fs');
-    expect(cephfsService.getSnapshotMirrorStatus).toHaveBeenCalledWith('test-fs');
+    expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
   });
 
   describe('parseMirrorStatus', () => {
@@ -177,7 +178,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     it('should parse mirror status with current_syncing_snap structure', () => {
-      const result = component.parseMirrorStatus(mockSnapshotMirrorStatusResponse);
+      const result = component.parseMirrorStatus(mockMirrorStatusResponse);
 
       expect(result.length).toBe(2);
 
@@ -215,7 +216,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     it('should skip paths without peer data', () => {
-      const dataWithoutPeer: SnapshotMirrorStatusResponse = {
+      const dataWithoutPeer: MirrorStatusResponse = {
         metrics: {
           '/path1': {} as any
         }
@@ -226,7 +227,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     it('should use default values when optional fields are missing', () => {
-      const minimalData: SnapshotMirrorStatusResponse = {
+      const minimalData: MirrorStatusResponse = {
         metrics: {
           '/path1': {
             peer: {
@@ -361,19 +362,17 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
   describe('loadMirrorPaths', () => {
     it('should load mirror paths successfully', () => {
-      cephfsService.getSnapshotMirrorStatus.mockReturnValue(of(mockSnapshotMirrorStatusResponse));
+      cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
       component.fsName = 'test-fs';
 
       component.loadMirrorPaths();
 
-      expect(cephfsService.getSnapshotMirrorStatus).toHaveBeenCalledWith('test-fs');
+      expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
       expect(component.mirrorPaths.length).toBe(2);
     });
 
     it('should set empty array on error', () => {
-      cephfsService.getSnapshotMirrorStatus.mockReturnValue(
-        throwError(() => new Error('API Error'))
-      );
+      cephfsService.getMirrorStatus.mockReturnValue(throwError(() => new Error('API Error')));
       component.fsName = 'test-fs';
 
       component.loadMirrorPaths();
@@ -386,7 +385,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       component.loadMirrorPaths();
 
-      expect(cephfsService.getSnapshotMirrorStatus).not.toHaveBeenCalled();
+      expect(cephfsService.getMirrorStatus).not.toHaveBeenCalled();
     });
   });
 
