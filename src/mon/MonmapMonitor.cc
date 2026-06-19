@@ -1554,7 +1554,7 @@ void MonmapMonitor::clear_stretch_mode_state()
   pending_map.disallowed_leaders.clear();
   pending_map.stretch_marked_down_mons.clear();
   pending_map.last_changed = ceph_clock_now();
-
+  mon.stretch_mode_engaged = false;
   // Note: global_stretch_mode_enabled is already cleared here
   // since this is called in a per-pool stretch mode disable path,
   // so global_stretch_mode_enabled was never true.
