@@ -73,8 +73,11 @@ if(WITH_GTEST_PARALLEL)
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
+    # CACHE INTERNAL: the set() runs only in the first directory to create the
+    # target, so a plain variable would be invisible to PARALLEL tests elsewhere.
     set(GTEST_PARALLEL_COMMAND
-      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel
+      CACHE INTERNAL "command to run a gtest binary through gtest-parallel")
   endif()
 endif()
 
