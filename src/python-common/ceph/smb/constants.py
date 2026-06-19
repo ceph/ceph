@@ -17,7 +17,6 @@ REMOTE_CONTROL = 'remote-control'
 REMOTE_CONTROL_LOCAL = 'remote-control-local'
 SMBMETRICS = 'smbmetrics'
 
-
 # Features are optional components that can be deployed in a suite of smb
 # related containers. It may run as a separate sidecar or side-effect the
 # configuration of another component.
@@ -39,6 +38,15 @@ SERVICES = {
     SMBMETRICS,
 }
 
+FEATURE_FILE_NAMES = {
+    KEYBRIDGE: KEYBRIDGE,
+    REMOTE_CONTROL: "remote_control",
+}
+SMB_FEATURE_SUPPORTS_SSL = {
+    "remote_control",
+    KEYBRIDGE,
+}
+CA_CERT_REQUIRED_FEATURES = {'keybridge'}
 
 # Default port values
 SMB_PORT = 445
