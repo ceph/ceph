@@ -8,11 +8,12 @@ import {
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { CephfsService, SnapshotMirrorStatusResponse } from '~/app/shared/api/cephfs.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 
 interface MirrorPath {
   path: string;
@@ -184,8 +185,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       return;
     }
 
-    this.cephfsService.getSnapshotMirrorStatus(this.fsName).subscribe(
-      (data: SnapshotMirrorStatusResponse) => {
+    this.cephfsService.getMirrorStatus(this.fsName).subscribe(
+      (data: MirrorStatusResponse) => {
         this.mirrorPaths = this.parseMirrorStatus(data);
         if (this.selectedPath) {
           this.selectedPath =
@@ -202,7 +203,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     );
   }
 
-  parseMirrorStatus(data: SnapshotMirrorStatusResponse): MirrorPath[] {
+  parseMirrorStatus(data: MirrorStatusResponse): MirrorPath[] {
     if (!data?.metrics) {
       return [];
     }

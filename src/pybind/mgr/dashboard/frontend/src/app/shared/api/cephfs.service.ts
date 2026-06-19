@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { CephfsDir, CephfsDirStatfs, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
-import { Daemon } from '../models/cephfs.model';
+import { Daemon, MirrorPeerList, MirrorStatusResponse } from '../models/cephfs.model';
 
 export interface SnapshotMirrorStatusResponse {
   metrics: {
@@ -219,22 +219,25 @@ export class CephfsService {
     });
   }
 
-  getSnapshotMirrorStatus(
+  listMirrorPeers(fsName: string): Observable<MirrorPeerList> {
+    return this.http.get<MirrorPeerList>(`${this.baseURL}/mirror/${fsName}`);
+  }
+
+  getMirrorStatus(
     fsName: string,
-    mirroredDirPath?: string,
-    peerUuid?: string
-  ): Observable<SnapshotMirrorStatusResponse> {
+    path?: string,
+    peerId?: string
+  ): Observable<MirrorStatusResponse> {
     let params = new HttpParams();
-    if (mirroredDirPath) {
-      params = params.append('mirrored_dir_path', mirroredDirPath);
+    if (path) {
+      params = params.set('path', path);
     }
-    if (peerUuid) {
-      params = params.append('peer_uuid', peerUuid);
+    if (peerId) {
+      params = params.set('peer_id', peerId);
     }
-    return this.http.get<SnapshotMirrorStatusResponse>(
-      `${this.baseURL}/mirror/snapshot-mirror-status/${fsName}`,
-      { params }
-    );
+    return this.http.get<MirrorStatusResponse>(`${this.baseURL}/mirror/${fsName}/status`, {
+      params
+    });
   }
 
   addMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {

@@ -301,6 +301,47 @@ class CephFSMirrorTest(ControllerTestCase):
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_ls', fs_name)
 
+    def test_mirror_status_success(self):
+        fs_name = 'test_fs'
+        peer_uuid = 'peer-uuid-123'
+        expected_status = {
+            'metrics': {
+                '/dir1': {
+                    'peer': {
+                        peer_uuid: {
+                            'state': 'idle',
+                            'last_synced_snap': {
+                                'name': 'snap1',
+                                'sync_bytes': '1.00 KiB',
+                                'sync_time_stamp': '1704189600.000000s'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        mock_output = json.dumps(expected_status)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._get(f'/api/cephfs/mirror/{fs_name}/status?peer_id={peer_uuid}')
+        self.assertStatus(200)
+        self.assertJsonBody(expected_status)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_status', fs_name, None, peer_uuid)
+
+    def test_mirror_status_error(self):
+        fs_name = 'test_fs'
+        error_message = 'no cephfs-mirror daemon available'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._get(f'/api/cephfs/mirror/{fs_name}/status')
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to get Cephfs mirror status', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_status', fs_name, None, None)
+
 
 class CephFSMirrorStatusTest(ControllerTestCase):
 
