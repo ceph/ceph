@@ -14093,7 +14093,7 @@ bool PrimaryLogPG::start_recovery_ops(
     }
   }
 
-  if (state_test(PG_STATE_MIGRATING)) {
+  if (state_test(PG_STATE_MIGRATING) && pool.info.is_migration_src()) {
     started += recover_pool_migration(max - started, handle, &work_in_progress);
   }
 
