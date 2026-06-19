@@ -134,15 +134,8 @@ void MonmapMonitor::create_pending()
   pending_map.epoch++;
   pending_map.last_changed = ceph_clock_now();
   pending_map.removed_ranks.clear();
-
-  // Upgrade path: if both monmap and osdmap have stretch_mode_enabled,
-  // ensure global_stretch_mode_enabled is set
-  if (pending_map.stretch_mode_enabled &&
-      !pending_map.global_stretch_mode_enabled &&
-      mon.osdmon()->osdmap.stretch_mode_enabled) {
-    dout(10) << __func__ << " enabling global_stretch_mode_enabled" << dendl;
-    pending_map.global_stretch_mode_enabled = true;
-  }
+  dout(20) << __func__ << " epoch " << pending_map.epoch
+     << dendl;
 }
 
 void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
