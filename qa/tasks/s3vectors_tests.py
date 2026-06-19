@@ -166,6 +166,40 @@ def toxvenv_sh(ctx, remote, args, **kwargs):
 
 
 @contextlib.contextmanager
+def install_sdk_extras(ctx, config):
+    """
+    Copy the SDK extras file to ~/.aws/models so boto3 picks up
+    non-standard API extensions (e.g. filterableMetadataKeys, postFiltering).
+    """
+    assert isinstance(config, dict)
+    log.info('Installing s3vectors SDK extras model...')
+    testdir = teuthology.get_testdir(ctx)
+    model_dir = '/home/ubuntu/.aws/models/s3vectors/2025-07-15'
+    for client in config:
+        ctx.cluster.only(client).run(
+            args=['mkdir', '-p', model_dir],
+        )
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote.run(args=[
+            'cp',
+            '{tdir}/ceph/examples/rgw/boto3/s3vectors-service-2.sdk-extras.json'.format(tdir=testdir),
+            '{model_dir}/service-2.sdk-extras.json'.format(model_dir=model_dir),
+        ])
+    try:
+        yield
+    finally:
+        log.info('Removing s3vectors SDK extras model...')
+        for client in config:
+            ctx.cluster.only(client).run(
+                args=['rm', '-rf', '{model_dir}/service-2.sdk-extras.json'.format(model_dir=model_dir)],
+            )
+            ctx.cluster.only(client).run(
+                args=['cd', '/home/ubuntu/', run.Raw('&&'),
+                      'rmdir', '-p', '.aws/models/s3vectors/2025-07-15'],
+            )
+
+
+@contextlib.contextmanager
 def run_tests(ctx, config):
     """
     Run the s3vectors tests after everything is set up.
@@ -246,6 +280,7 @@ def task(ctx,config):
                 clients=config,
                 s3vtests_conf=s3vtests_conf,
                 )),
+        lambda: install_sdk_extras(ctx=ctx, config=config),
         lambda: run_tests(ctx=ctx, config=config),
         ):
         pass
