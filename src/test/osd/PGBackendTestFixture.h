@@ -684,7 +684,7 @@ public:
    * @param obj_name Name of the object to scrub
    * @return true if corruption detected, false if object is consistent
    */
-  bool scrub_object(const std::string& obj_name);
+  bool scrub_object(const std::string& obj_name, bool skip_verify = false);
 
   /**
    * Corrupt the data for a specific shard of an object.

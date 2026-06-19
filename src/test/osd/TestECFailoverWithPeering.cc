@@ -1430,7 +1430,10 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
       std::cout << "Scrubbing object " << obj_name
                 << " to verify corruption detection for zone iteration " << zone
                 << ", shard offset " << shard_offset << std::endl;
-      bool corruption_detected = scrub_object(obj_name);
+      // skip_verify=true: verify_object() would read through the corrupted shard
+      // and produce wrong data, causing ASSERT_EQ to fire.  We skip it here
+      // because the point of this test is scrub-based detection, not read-back.
+      bool corruption_detected = scrub_object(obj_name, /*skip_verify=*/true);
 
       std::cout << "Zone iteration " << zone
                 << " corruption result for shard offset " << shard_offset
@@ -1537,20 +1540,33 @@ TEST_P(TestECFailoverWithPeering, ObjectTrackerDetectsCorruption) {
   // Corrupt the data
   corrupt_shard_data(hoid, primary_shard);
   
-  // Now scrub should detect the corruption via ObjectTracker verification
+  // Now scrub should detect the corruption via ObjectTracker verification.
+  // Pass skip_verify=true so that scrub_object() does not internally call
+  // verify_object() on the intentionally-corrupted data — we verify that
+  // explicitly with EXPECT_FATAL_FAILURE below.
   std::cout << "Scrubbing corrupted object - should detect corruption" << std::endl;
-  bool corruption_after = scrub_object(obj_name);
-  
-  EXPECT_TRUE(corruption_after)
-    << "Scrub should detect corruption after we corrupted the object. "
-    << "ObjectTracker verification should catch the mismatch between "
-    << "expected data and actual corrupted data.";
-  
-  std::cout << "Test completed: ObjectTracker " 
+  bool corruption_after = scrub_object(obj_name, /*skip_verify=*/true);
+
+  // Only ISA stores per-shard CRCs that allow the scrub backend to detect
+  // corruption via digest comparison.  Jerasure does not, so corruption is
+  // not detectable by scrub alone for that plugin.
+  const bool supports_crc = (ec_plugin == "isa");
+  if (supports_crc) {
+    EXPECT_TRUE(corruption_after)
+      << "Scrub should detect corruption after we corrupted the object";
+  } else {
+    EXPECT_FALSE(corruption_after)
+      << "Scrub should not report corruption for jerasure (no per-shard CRCs)";
+  }
+
+  std::cout << "Test completed: ObjectTracker "
             << (corruption_after ? "successfully detected" : "FAILED to detect")
             << " corruption during scrub" << std::endl;
-  
-  // Mark the corrupted shard as down to prevent teardown scrub from failing
+
+  // Mark the corrupted shard's OSD as down so that TearDown's
+  // scrub_all_objects() skips the degraded (corrupted) object rather than
+  // attempting to read through the corrupted shard and reporting a spurious
+  // consistency failure.
   std::cout << "Marking corrupted shard " << primary_shard.osd << " as down" << std::endl;
   mark_osd_down(primary_shard.osd);
 }

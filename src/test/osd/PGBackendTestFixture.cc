@@ -1323,7 +1323,7 @@ void PGBackendTestFixture::scrub_all_objects()
 
 }
 
-bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
+bool PGBackendTestFixture::scrub_object(const std::string& obj_name, bool skip_verify)
 {
   hobject_t hoid = make_test_object(obj_name);
 
@@ -1435,7 +1435,9 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
   auto result = scrub_backend.scrub_compare_maps(false, *snap_reader);
 
   bool scrub_found_corruption = !result.inconsistent_objs.empty();
-  verify_object(obj_name);
+  if (!skip_verify) {
+    verify_object(obj_name);
+  }
   
   return scrub_found_corruption;
 }
