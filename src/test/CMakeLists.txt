@@ -659,14 +659,16 @@ if(WITH_FIO)
 endif()
 
 if(WITH_RBD)
-  # Run rbd-unit-tests separate so they an run in parallel
+  # Run rbd-unit-tests separate so they can run in parallel.
   # For values see: src/include/rbd/features.h
-  add_ceph_test(run-rbd-unit-tests-N.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh N)
-  add_ceph_test(run-rbd-unit-tests-0.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 0)
-  add_ceph_test(run-rbd-unit-tests-1.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 1)
-  add_ceph_test(run-rbd-unit-tests-61.sh  ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 61)
-  add_ceph_test(run-rbd-unit-tests-109.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 109)
-  add_ceph_test(run-rbd-unit-tests-127.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 127)
+  # Each feature is split into parallel ctest jobs; the encryption flatten
+  # cases dominate, so they get their own job per feature and the rest another.
+  foreach(features N 0 1 61 109 127)
+    add_ceph_test(run-rbd-unit-tests-${features}.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh ${features} "*-EncryptedFlattenTest*")
+    add_ceph_test(run-rbd-unit-tests-${features}-encryption.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh ${features} "EncryptedFlattenTest*")
+  endforeach()
   if(FREEBSD)
     add_ceph_test(rbd-ggate.sh ${CMAKE_CURRENT_SOURCE_DIR}/rbd-ggate.sh)
   endif(FREEBSD)
