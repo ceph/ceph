@@ -8216,9 +8216,9 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
-                                                 optional_yield y,
-                                                 const bool skip_olh_obj_update)
+RGWDeleteMultiObj::DeleteResult RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
+                                            optional_yield y,
+                                            const bool skip_olh_obj_update)
 {
   const string& key = object.get_key();
   const string& instance = object.get_version_id();
@@ -8236,8 +8236,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
-    send_partial_response(o, false, "", -EINVAL);
-    return;
+    return {o, false, "", -EINVAL};
   }
 
   // verify object delete permission
@@ -8248,8 +8247,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
                                 s->bucket_acl, s->iam_policy,
                                 s->iam_identity_policies,
                                 s->session_policies, action)) {
-    send_partial_response(o, false, "", -EACCES);
-    return;
+    return {o, false, "", -EACCES};
   }
 
   uint64_t obj_size = 0;
@@ -8265,9 +8263,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
         // object maybe delete_marker, skip check_obj_lock
         check_obj_lock = false;
       } else {
-        // Something went wrong.
-        send_partial_response(o, false, "", ret);
-        return;
+        return {o, false, "", ret};
       }
     } else {
       obj_size = obj->get_size();
@@ -8278,8 +8274,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
       ceph_assert(state_loaded == 0);
       int object_lock_response = verify_object_lock(dpp, obj->get_attrs(), bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
-        send_partial_response(o, false, "", object_lock_response);
-        return;
+        return {o, false, "", object_lock_response};
       }
     }
   }
@@ -8291,10 +8286,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(dpp);
-  if (op_ret < 0) {
-    send_partial_response(o, false, "", op_ret);
-    return;
+  int r = res->publish_reserve(dpp);
+  if (r < 0) {
+    return {o, false, "", r};
   }
 
   obj->set_atomic(true);
@@ -8309,10 +8303,10 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y,
-                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (op_ret == -ENOENT) {
-    op_ret = 0;
+  r = del_op->delete_obj(dpp, y,
+                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+  if (r == -ENOENT) {
+    r = 0;
   }
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
@@ -8320,16 +8314,15 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
   }
 
-  if (op_ret == 0) {
+  if (r == 0) {
     // send request to notification manager
     int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
-      // too late to rollback operation, hence op_ret is not set here
     }
   }
   
-  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+  return {o, del_op->result.delete_marker, del_op->result.version_id, r};
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -8346,19 +8339,25 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
     });
   }
 
+  std::vector<DeleteResult> results(objects.size());
+
   rgw::multi_delete::dispatch(
       items,
       bucket->versioned(),
       max_aio,
       yield,
-      [this, &objects] (const rgw::multi_delete::Item& item,
-                        bool skip_update_olh,
-                        boost::asio::yield_context y) {
-        handle_individual_object(objects[item.index], y, skip_update_olh);
+      [this, &objects, &results] (const rgw::multi_delete::Item& item,
+                                  bool skip_update_olh,
+                                  boost::asio::yield_context y) {
+        results[item.index] =
+            handle_individual_object(objects[item.index], y, skip_update_olh);
       },
-      [this] {
-        rgw_flush_formatter(s, s->formatter);
-      });
+      nullptr);
+
+  for (const auto& r : results) {
+    send_partial_response(r.key, r.delete_marker, r.marker_version_id, r.ret);
+    rgw_flush_formatter(s, s->formatter);
+  }
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)

@@ -2271,9 +2271,15 @@ class RGWDeleteMultiObj : public RGWOp {
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome.
    */
-  void handle_individual_object(const RGWMultiDelObject& object,
-                                optional_yield y,
-                                const bool skip_olh_obj_update = false);
+  struct DeleteResult {
+    rgw_obj_key key;
+    bool delete_marker = false;
+    std::string marker_version_id;
+    int ret = 0;
+  };
+  DeleteResult handle_individual_object(const RGWMultiDelObject& object,
+                                        optional_yield y,
+                                        const bool skip_olh_obj_update = false);
 
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
