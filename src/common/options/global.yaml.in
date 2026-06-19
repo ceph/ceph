@@ -4691,6 +4691,25 @@ options:
   enum_values:
   - 2q
   - lru
+  - s3fifo
+  with_legacy: true
+- name: bluestore_cache_s3fifo_small_ratio
+  type: float
+  level: advanced
+  desc: Ratio of total onode cache entries allocated to the Small FIFO in S3FIFO
+  default: 0.10
+  with_legacy: true
+- name: bluestore_cache_s3fifo_ghost_ratio
+  type: float
+  level: advanced
+  desc: Ratio of ghost queue capacity to total onode cache entries in S3FIFO
+  default: 0.90
+  with_legacy: true
+- name: bluestore_cache_s3fifo_promotion_threshold
+  type: uint
+  level: advanced
+  desc: Frequency threshold for promoting an onode from Small to Main FIFO in S3FIFO
+  default: 2
   with_legacy: true
 - name: bluestore_2q_cache_kin_ratio
   type: float

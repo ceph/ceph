@@ -1183,6 +1183,15 @@ public:
 
     boost::intrusive::list_member_hook<> lru_item;
 
+    // S3FIFO cache algorithm fields
+    uint8_t s3fifo_freq = 0;   ///< S3FIFO frequency counter (0-3 for 2-bit Clock)
+    enum {
+      Q_NONE = 0,              ///< not in any S3FIFO queue
+      Q_SMALL = 1,             ///< in small FIFO
+      Q_MAIN = 2,              ///< in main FIFO
+    };
+    uint8_t s3fifo_queue = Q_NONE; ///< which S3FIFO queue this Onode resides in
+
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
     bool cached;              ///< Onode is logically in the cache
@@ -1466,6 +1475,7 @@ private:
     friend struct Collection; // for split_cache()
     friend struct Onode; // for put()
     friend struct LruOnodeCacheShard;
+    friend struct S3FIFOOnodeCacheShard;
     void _remove(const ghobject_t& oid);
   public:
     OnodeSpace(OnodeCacheShard *c) : cache(c) {}
