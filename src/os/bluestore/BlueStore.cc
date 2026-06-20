@@ -5575,17 +5575,17 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_buffer_bytes, "buffer_bytes",
 	    "Number of buffer bytes in cache",
 	     NULL,
-	     PerfCountersBuilder::PRIO_DEBUGONLY,
+	     PerfCountersBuilder::PRIO_USEFUL,
 	     unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_buffer_hit_bytes, "buffer_hit_bytes",
 	    "Sum for bytes of read hit in the cache",
 	    NULL,
-	    PerfCountersBuilder::PRIO_DEBUGONLY,
+	    PerfCountersBuilder::PRIO_USEFUL,
 	    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_buffer_miss_bytes, "buffer_miss_bytes",
 	    "Sum for bytes of read missed in the cache",
 	    NULL,
-	    PerfCountersBuilder::PRIO_DEBUGONLY,
+	    PerfCountersBuilder::PRIO_USEFUL,
 	    unit_t(UNIT_BYTES));
   //****************************************
 
