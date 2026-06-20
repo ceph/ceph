@@ -83,9 +83,15 @@ void TestFixture::TearDown() {
 int TestFixture::open_image(const std::string &image_name,
 			    librbd::ImageCtx **ictx) {
   *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
-  m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open(0);
+  int r = (*ictx)->state->open(0);
+  if (r != 0) {
+    *ictx = nullptr;
+    return r;
+  }
+
+  m_ictxs.insert(*ictx);
+  return 0;
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
