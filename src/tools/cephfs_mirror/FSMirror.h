@@ -117,8 +117,8 @@ private:
       fs_mirror->handle_acquire_directory(dir_path);
     }
 
-    void release_directory(std::string_view dir_path) override {
-      fs_mirror->handle_release_directory(dir_path);
+    void release_directory(std::string_view dir_path, bool purging) override {
+      fs_mirror->handle_release_directory(dir_path, purging);
     }
 
   };
@@ -189,7 +189,7 @@ private:
   void handle_shutdown_instance_watcher(int r);
 
   void handle_acquire_directory(std::string_view dir_path);
-  void handle_release_directory(std::string_view dir_path);
+  void handle_release_directory(std::string_view dir_path, bool purging);
 };
 
 } // namespace mirror

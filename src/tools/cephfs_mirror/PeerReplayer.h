@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "json_spirit/json_spirit.h"
 
+#include <set>
 #include <stack>
 #include <boost/optional.hpp>
 
@@ -38,7 +39,7 @@ public:
   void add_directory(std::string_view dir_root);
 
   // remove a directory from queue
-  void remove_directory(std::string_view dir_root);
+  void remove_directory(std::string_view dir_root, bool purging = false);
 
   // admin socket helpers
   void peer_status(Formatter *f);
@@ -683,6 +684,7 @@ private:
   std::map<std::string, DirRegistry> m_registered;
   std::vector<std::string> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
+  std::set<std::string> m_purging_directories;
   MountRef m_local_mount;
   ServiceDaemon *m_service_daemon;
   PeerReplayerAdminSocketHook *m_asok_hook = nullptr;
@@ -737,7 +739,8 @@ private:
 
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
-  void unregister_directory(const std::string &dir_root);
+  void unregister_directory(const std::string &dir_root,
+                            std::unique_lock<ceph::mutex> &locker);
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
@@ -745,6 +748,7 @@ private:
   void load_persisted_dir_sync_stats();
   void load_persisted_dir_sync_stat(const std::string &dir_root);
   void apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat, const bufferlist &bl);
+  void remove_persisted_dir_sync_stat(const std::string &dir_root);
   void persist_dir_sync_stat(const std::string &dir_root);
   void add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
                                         SnapSyncStat &sync_stat);
