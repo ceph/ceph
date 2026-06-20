@@ -71,13 +71,25 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   rdma_get_cm_event(cm_channel, &cm_event);
   ldout(cct, 20) << __func__ << " event name: " << rdma_event_str(cm_event->event) << dendl;
 
+  // rdma_get_cm_event() handed us a new cm id for the incoming connection; on any
+  // error path before it is adopted into a socket (whose destructor would free it)
+  // we must rdma_destroy_id() it ourselves -- acking the event does not.  The event
+  // must be acked *before* destroying the id: rdma_destroy_id() blocks until the
+  // connect-request event for that id has been acknowledged.
   struct rdma_cm_id *event_cm_id = cm_event->id;
   struct rdma_event_channel *event_channel = rdma_create_event_channel();
+  if (!event_channel) {
+    lderr(cct) << __func__ << " failed to create event channel: " << cpp_strerror(errno) << dendl;
+    rdma_ack_cm_event(cm_event);
+    rdma_destroy_id(event_cm_id);
+    return -EMFILE;
+  }
 
   if (net.set_nonblock(event_channel->fd) < 0) {
       lderr(cct) << __func__ << " failed to switch event channel to non-block, close event channel " << dendl;
       rdma_destroy_event_channel(event_channel);
       rdma_ack_cm_event(cm_event);
+      rdma_destroy_id(event_cm_id);
       return -errno;
   }
 
@@ -86,15 +98,32 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   struct rdma_conn_param *remote_conn_param = &cm_event->param.conn;
   struct rdma_conn_param local_conn_param;
 
+  RDMAWorker *rw = dynamic_cast<RDMAWorker*>(w);
   RDMACMInfo info(event_cm_id, event_channel, remote_conn_param->qp_num);
   RDMAIWARPConnectedSocketImpl* server =
-    new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
+    new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, rw, &info);
+
+  // Construction can fail under fd pressure (eventfd) or on queue pair creation;
+  // such a socket must not reach the messenger (its fd() is -1).  Free it on its
+  // owning worker thread (close() marks it closed so ~IWARP won't block and frees
+  // the adopted cm id/channel) and return an honest errno (fd-first).
+  if (server->fd() < 0 || !server->get_qp()) {
+    int err = server->fd() < 0 ? -EMFILE : -EIO;
+    lderr(cct) << __func__ << " failed to create connected socket: "
+               << cpp_strerror(err) << dendl;
+    rdma_ack_cm_event(cm_event);
+    rw->center.submit_to(rw->center.get_id(), [server]() { server->close(); delete server; }, false);
+    return err;
+  }
 
   // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();
 
   if (rdma_accept(event_cm_id, &local_conn_param)) {
+    lderr(cct) << __func__ << " rdma_accept failed: " << cpp_strerror(errno) << dendl;
+    rdma_ack_cm_event(cm_event);
+    rw->center.submit_to(rw->center.get_id(), [server]() { server->close(); delete server; }, false);
     return -EAGAIN;
   }
   server->activate();
