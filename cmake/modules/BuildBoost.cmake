@@ -144,15 +144,23 @@ function(do_build_boost root_dir version)
   if(WITH_BOOST_VALGRIND)
     list(APPEND b2 valgrind=on)
   endif()
+  set(b2_targets headers stage)
+  set(b2_install_targets install)
   if(WITH_ASAN)
     list(APPEND b2 context-impl=ucontext)
+    # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
+    # and install targets never load it, so b2 aborts with `unknown feature
+    # "<context-impl>"`. Name the context project as a target so its Jamfile loads
+    # the feature first.
+    list(PREPEND b2_targets libs/context/build)
+    list(PREPEND b2_install_targets libs/context/build)
   endif()
   set(build_command
-    ${b2} headers stage
+    ${b2} ${b2_targets}
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
   set(install_command
-    ${b2} install)
+    ${b2} ${b2_install_targets})
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
