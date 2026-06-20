@@ -457,6 +457,7 @@ ECBackend::handle_rep_write_op(
   return handle_sub_write(
     m->op.from, std::move(m->op), pg
   ).si_then([&pg] {
+    std::ignore = pg;
     assert(!pg.pgb_is_primary());
     return write_iertr::now();
   }, crimson::ct_error::assert_all("unexpected error"));

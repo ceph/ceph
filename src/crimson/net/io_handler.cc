@@ -1266,6 +1266,7 @@ IOHandler::close_io(
   } else {
     return shard_states->close(
     ).then([this] {
+      std::ignore = this; // as we are 'assert'ing, not ceph_assert'ing
       assert(shard_states->assert_closed_and_exit());
     });
   }
