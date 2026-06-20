@@ -107,12 +107,12 @@ int TestFixture::snap_protect(librbd::ImageCtx &ictx,
                                        snap_name.c_str());
 }
 
-int TestFixture::flatten(librbd::ImageCtx &ictx,
-                         librbd::ProgressContext &prog_ctx) {
-  return ictx.operations->flatten(prog_ctx);
+int TestFixture::flatten(librbd::ImageCtx *ictx) {
+  librbd::NoOpProgressContext prog_ctx;
+  return ictx->operations->flatten(prog_ctx);
 }
 
-int TestFixture::resize(librbd::ImageCtx *ictx, uint64_t size){
+int TestFixture::resize(librbd::ImageCtx *ictx, uint64_t size) {
   librbd::NoOpProgressContext prog_ctx;
   return ictx->operations->resize(size, true, prog_ctx);
 }
