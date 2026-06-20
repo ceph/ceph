@@ -390,8 +390,8 @@ void FSMirror::handle_acquire_directory(string_view dir_path) {
   }
 }
 
-void FSMirror::handle_release_directory(string_view dir_path) {
-  dout(5) << ": dir_path=" << dir_path << dendl;
+void FSMirror::handle_release_directory(string_view dir_path, bool purging) {
+  dout(5) << ": dir_path=" << dir_path << ", purging=" << purging << dendl;
 
   {
     std::scoped_lock locker(m_lock);
@@ -402,7 +402,7 @@ void FSMirror::handle_release_directory(string_view dir_path) {
                                                    m_directories.size());
       for (auto &[peer, peer_replayer] : m_peer_replayers) {
         dout(10) << ": peer=" << peer << dendl;
-        peer_replayer->remove_directory(dir_path);
+        peer_replayer->remove_directory(dir_path, purging);
       }
     }
     if (m_perf_counters) {

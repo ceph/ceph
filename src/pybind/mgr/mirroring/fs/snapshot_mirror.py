@@ -181,10 +181,12 @@ class FSPolicy:
             return json.dumps({'dir_path': dir_path,
                                'mode': 'acquire'
                                })
-        def release_message(dir_path):
-            return json.dumps({'dir_path': dir_path,
-                               'mode': 'release'
-                               })
+        def release_message(dir_path, purging=False):
+            msg = {'dir_path': dir_path,
+                   'mode': 'release'}
+            if purging:
+                msg['purging'] = True
+            return json.dumps(msg)
         with self.lock:
             if not self.dir_paths or self.stopping.is_set():
                 return
@@ -211,7 +213,9 @@ class FSPolicy:
                 elif action_type == ActionType.ACQUIRE:
                     notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
                 elif action_type == ActionType.RELEASE:
-                    notifies[dir_path] = (lookup_info['instance_id'], release_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          release_message(dir_path,
+                                                          lookup_info['purging']))
             if update_map or removals:
                 self.update_mapping(update_map, removals, callback=self.continue_action)
             for dir_path, message in notifies.items():
