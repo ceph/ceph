@@ -472,7 +472,35 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  find_package(RDKafka 1.1.0 REQUIRED)
+  set(rdkafka_min_version 2.11)
+  if(WITH_SYSTEM_RDKAFKA)
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  elseif(EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    message(STATUS "Building librdkafka as submodule")
+    set(WITH_SSL ON)
+    set(WITH_SASL ON)
+    set(RDKAFKA_BUILD_EXAMPLES OFF)
+    set(RDKAFKA_BUILD_TESTS OFF)
+    set(RDKAFKA_BUILD_STATIC ON)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/src/librdkafka
+                     ${CMAKE_BINARY_DIR}/src/librdkafka
+                     EXCLUDE_FROM_ALL)
+    target_compile_options(rdkafka PRIVATE -w)
+    if(NOT TARGET RDKafka::RDKafka)
+      add_library(RDKafka::RDKafka ALIAS rdkafka)
+    endif()
+    # create a compatibility symlink, so that rgw_a can include <librdkafka/rdkafka.h>
+    # both for the submodule and system librdkafka
+    set(rdkafka_compat_dir "${CMAKE_BINARY_DIR}/src/librdkafka-compat")
+    file(MAKE_DIRECTORY "${rdkafka_compat_dir}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "${CMAKE_SOURCE_DIR}/src/librdkafka/src"
+      "${rdkafka_compat_dir}/librdkafka")
+    target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${rdkafka_compat_dir}>")
+  else()
+    message(STATUS "src/librdkafka submodule not present; falling back to system librdkafka")
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  endif()
 endif()
 
 target_link_libraries(rgw_a

@@ -125,6 +125,7 @@
 # not x86_64
 %bcond_with system_qat
 %endif
+%bcond_with system_rdkafka
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -338,7 +339,11 @@ BuildRequires:  pkgconfig(yaml-cpp) >= 0.6
 BuildRequires:  pkgconfig(librabbitmq)
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  pkgconfig(rdkafka) >= 1.1.0
+%if 0%{with system_rdkafka}
+BuildRequires:  librdkafka-devel >= 2.11
+%else
+BuildRequires:  cyrus-sasl-devel
+%endif
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
@@ -1163,6 +1168,9 @@ Requires:	mailcap
 %if 0%{?weak_deps}
 Recommends:	gawk
 %endif
+%if 0%{with kafka_endpoint} && !0%{with system_rdkafka}
+Provides:	bundled(librdkafka) = 2.12.1
+%endif
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
 storage system.  This package provides a REST gateway to the
@@ -1821,6 +1829,9 @@ cmake .. \
 %endif
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
+%endif
+%if 0%{with system_rdkafka}
+    -DWITH_SYSTEM_RDKAFKA:BOOL=ON \
 %endif
 %if 0%{without jaeger}
     -DWITH_JAEGER:BOOL=OFF \

@@ -12,10 +12,21 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+# This task currently supports Kafka 3.x (Zookeeper) only. KRaft (4.x)
+# requires a different multi-controller bootstrap for the two-broker HA
+# topology this task spins up. The suite yaml at
+# qa/suites/rgw/notifications/tasks/kafka_failover/test_kafka.yaml pins
+# kafka_version: 3.9.2; the runtime check below fails fast if anyone
+# changes that to a 4.x version without updating the task.
 def get_kafka_version(config):
     for client, client_config in config.items():
         if 'kafka_version' in client_config:
             kafka_version = client_config.get('kafka_version')
+    if int(kafka_version.split('.')[0]) >= 4:
+        raise RuntimeError(
+            "kafka_failover task does not yet support Kafka 4.x (KRaft); "
+            "pin kafka_version to a 3.x release or extend this task."
+        )
     return kafka_version
 
 kafka_prefix = 'kafka_2.13-'
