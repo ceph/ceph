@@ -268,9 +268,10 @@ int ReplicatedBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
-  bufferlist *bl)
+  bufferlist *bl,
+  object_read_cache_stats_t* cache_stats)
 {
-  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
+  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags, cache_stats);
 }
 
 int ReplicatedBackend::objects_readv_sync(

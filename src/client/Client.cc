@@ -231,7 +231,11 @@ int Client::CommandHook::call(
       m_client->_kick_stale_sessions();
     else if (command == "status")
       m_client->dump_status(f);
-    else
+    else if (command == "cache_stats") {
+      int64_t ino_filter = 0;
+      cmd_getval(cmdmap, "inode", ino_filter);
+      m_client->dump_cache_stats(f, (inodeno_t)ino_filter);
+    } else
       ceph_abort_msg("bad command registered");
   }
   f->close_section();
@@ -580,12 +584,80 @@ void Client::dump_status(Formatter *f)
   }
 }
 
+void Client::record_cache_stats(inodeno_t ino, int64_t pool_id,
+                                bool onode_hit, uint64_t hit_bytes, uint64_t miss_bytes)
+{
+  std::scoped_lock l(client_lock);
+  auto& st = inode_cache_stats[ino];
+  st.record(onode_hit, hit_bytes, miss_bytes);
+  auto& pst = pool_cache_stats[pool_id];
+  pst.total_reads++;
+  if (onode_hit) pst.onode_cache_hits++;
+  pst.buffer_hit_bytes += hit_bytes;
+  pst.buffer_miss_bytes += miss_bytes;
+}
+
+void Client::dump_cache_stats(Formatter *f, inodeno_t ino_filter)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  f->open_object_section("cache_stats");
+  if (ino_filter != 0) {
+    auto it = inode_cache_stats.find(ino_filter);
+    if (it != inode_cache_stats.end()) {
+      auto& st = it->second;
+      f->dump_int("inode", ino_filter);
+      f->dump_int("total_reads", st.total_reads);
+      f->dump_int("onode_cache_hits", st.onode_cache_hits);
+      f->dump_float("onode_hit_rate", st.onode_hit_rate());
+      f->dump_int("buffer_hit_bytes", st.buffer_hit_bytes);
+      f->dump_int("buffer_miss_bytes", st.buffer_miss_bytes);
+      f->dump_float("buffer_hit_rate", st.buffer_hit_rate());
+    } else {
+      f->dump_string("error", "no stats for this inode");
+    }
+  } else {
+    f->open_array_section("inodes");
+    for (auto& kv : inode_cache_stats) {
+      f->open_object_section("inode");
+      auto& st = kv.second;
+      f->dump_int("ino", kv.first);
+      f->dump_int("total_reads", st.total_reads);
+      f->dump_int("onode_cache_hits", st.onode_cache_hits);
+      f->dump_float("onode_hit_rate", st.onode_hit_rate());
+      f->dump_int("buffer_hit_bytes", st.buffer_hit_bytes);
+      f->dump_int("buffer_miss_bytes", st.buffer_miss_bytes);
+      f->dump_float("buffer_hit_rate", st.buffer_hit_rate());
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->open_array_section("pools");
+  for (auto& kv : pool_cache_stats) {
+    f->open_object_section("pool");
+    auto& pst = kv.second;
+    f->dump_int("pool_id", kv.first);
+    f->dump_int("total_reads", pst.total_reads);
+    f->dump_int("onode_cache_hits", pst.onode_cache_hits);
+    f->dump_int("buffer_hit_bytes", pst.buffer_hit_bytes);
+    f->dump_int("buffer_miss_bytes", pst.buffer_miss_bytes);
+    f->close_section();
+  }
+  f->close_section();
+  f->close_section();
+}
+
 void Client::_pre_init()
 {
   timer.init();
 
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
+
+  // register cache stats callback to aggregate per-inode OSD cache hit rates
+  objecter->cache_stats_cb = [this](const object_t& oid, uint32_t hit_bytes,
+                                     uint32_t miss_bytes, bool onode_hit) {
+    _consume_pending_cache_stats(onode_hit, hit_bytes, miss_bytes);
+  };
 
   objectcacher->start();
 }
@@ -665,6 +737,13 @@ void Client::_finish_init()
   ret = admin_socket->register_command("status",
 				       &m_command_hook,
 				       "show overall client status");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("cache_stats name=inode,type=CephInt,req=false",
+                                       &m_command_hook,
+                                       "show per-inode OSD cache hit stats");
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
@@ -10531,6 +10610,8 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     bufferlist tbl;
 
     int wanted = left;
+    _pending_cache_inode.store(in->ino, std::memory_order_relaxed);
+    _pending_cache_pool.store(in->layout.pool_id, std::memory_order_relaxed);
     filer->read_trunc(in->ino, &in->layout, in->snapid,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
@@ -10538,6 +10619,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     client_lock.unlock();
     int r = wait_and_copy(onfinish, tbl, wanted);
     client_lock.lock();
+    _pending_cache_inode.store(0, std::memory_order_relaxed);
     if (!r)
       return read;
     if (r < 0)

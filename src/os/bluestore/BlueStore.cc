@@ -4404,7 +4404,8 @@ uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create,
-  bool is_createop)
+  bool is_createop,
+  bool* onode_cache_hit)
 {
   ceph_assert(create ? ceph_mutex_is_wlocked(lock) : ceph_mutex_is_locked(lock));
 
@@ -4418,8 +4419,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
 
   OnodeRef o = onode_space.lookup(oid);
-  if (o)
+  if (o) {
+    if (onode_cache_hit) *onode_cache_hit = true;
     return o;
+  }
+  if (onode_cache_hit) *onode_cache_hit = false;
 
   string key;
   get_object_key(store->cct, oid, &key);
@@ -11106,7 +11110,8 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  object_read_cache_stats_t* cache_stats)
 {
   auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
@@ -11122,7 +11127,9 @@ int BlueStore::read(
   {
     std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
-    OnodeRef o = c->get_onode(oid, false);
+    bool onode_hit = false;
+    OnodeRef o = c->get_onode(oid, false, false, &onode_hit);
+    if (cache_stats) cache_stats->onode_cache_hit = onode_hit;
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
@@ -11135,7 +11142,7 @@ int BlueStore::read(
     if (offset == length && offset == 0)
       length = o->onode.size;
 
-    r = _do_read(c, o, offset, length, bl, op_flags);
+    r = _do_read(c, o, offset, length, bl, op_flags, 0, cache_stats);
     if (r == -EIO) {
       logger->inc(l_bluestore_read_eio);
     }
@@ -11428,7 +11435,8 @@ int BlueStore::_do_read(
   size_t length,
   bufferlist& bl,
   uint32_t op_flags,
-  uint64_t retry_count)
+  uint64_t retry_count,
+  object_read_cache_stats_t* cache_stats)
 {
   FUNCTRACE(cct);
   int r = 0;
@@ -11479,6 +11487,16 @@ int BlueStore::_do_read(
   ready_regions_t ready_regions;
   blobs2read_t blobs2read;
   _read_cache(o, offset, length, read_cache_policy, ready_regions, blobs2read);
+
+  // compute buffer cache hit/miss bytes for per-object stats
+  if (cache_stats) {
+    uint64_t hit = 0;
+    for (auto& [off, bl] : ready_regions) {
+      hit += bl.length();
+    }
+    cache_stats->buffer_hit_bytes = hit;
+    cache_stats->buffer_miss_bytes = length - hit;
+  }
 
 
   // read raw blob data.

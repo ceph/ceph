@@ -3532,6 +3532,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   auto ph = op->out_handler.begin();
   ceph_assert(op->out_bl.size() == op->out_rval.size());
   ceph_assert(op->out_bl.size() == op->out_handler.size());
+  op->op_cache_stats.resize(out_ops.size());
   auto p = out_ops.begin();
   for (unsigned i = 0;
        p != out_ops.end() && pb != op->out_bl.end();
@@ -3552,6 +3553,19 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		       bs::error_code(-p->rval, osd_category()) :
 		       bs::error_code(),
 		       p->rval, p->outdata);
+    }
+    if (i < op->op_cache_stats.size()) {
+      op->op_cache_stats[i].cache_hit_bytes = p->cache_hit_bytes;
+      op->op_cache_stats[i].cache_miss_bytes = p->cache_miss_bytes;
+      op->op_cache_stats[i].cache_onode_hit = p->cache_onode_hit;
+    }
+  }
+
+  // invoke cache stats callback if registered
+  if (cache_stats_cb) {
+    for (auto& o : out_ops) {
+      cache_stats_cb(m->get_oid(), o.cache_hit_bytes,
+                     o.cache_miss_bytes, o.cache_onode_hit);
     }
   }
 

@@ -42,6 +42,7 @@
 #include "MetaSession.h"
 #include "UserPerm.h"
 
+#include <atomic>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -1065,6 +1066,9 @@ protected:
   void force_session_readonly(MetaSession *s);
 
   void dump_status(Formatter *f);  // debug
+  void dump_cache_stats(Formatter *f, inodeno_t ino_filter = 0);
+  void record_cache_stats(inodeno_t ino, int64_t pool_id,
+                          bool onode_hit, uint64_t hit_bytes, uint64_t miss_bytes);
 
   bool ms_dispatch2(const MessageRef& m) override;
 
@@ -1591,6 +1595,51 @@ private:
 
   uint64_t total_write_ops = 0;
   uint64_t total_write_size = 0;
+
+  // ---------- per-inode OSD cache stats ----------
+  struct InodeCacheStats {
+    uint64_t total_reads = 0;         // total read ops to this inode's objects
+    uint64_t onode_cache_hits = 0;    // reads where Onode was in OnodeCache
+    uint64_t buffer_hit_bytes = 0;    // bytes served from OSD Buffer Cache
+    uint64_t buffer_miss_bytes = 0;   // bytes requiring OSD disk I/O
+    void record(bool onode_hit, uint64_t hit_bytes, uint64_t miss_bytes) {
+      total_reads++;
+      if (onode_hit) onode_cache_hits++;
+      buffer_hit_bytes += hit_bytes;
+      buffer_miss_bytes += miss_bytes;
+    }
+    double onode_hit_rate() const {
+      return total_reads ? (double)onode_cache_hits / total_reads : 0.0;
+    }
+    double buffer_hit_rate() const {
+      uint64_t total = buffer_hit_bytes + buffer_miss_bytes;
+      return total ? (double)buffer_hit_bytes / total : 0.0;
+    }
+  };
+  std::map<inodeno_t, InodeCacheStats> inode_cache_stats;
+
+  // pool-level aggregate cache stats (for Prometheus)
+  struct PoolCacheStats {
+    uint64_t total_reads = 0;
+    uint64_t onode_cache_hits = 0;
+    uint64_t buffer_hit_bytes = 0;
+    uint64_t buffer_miss_bytes = 0;
+  };
+  std::map<int64_t, PoolCacheStats> pool_cache_stats;
+
+  // side channel: set before a synchronous read to collect cache stats
+  std::atomic<inodeno_t> _pending_cache_inode{0};
+  std::atomic<int64_t>  _pending_cache_pool{0};
+
+  void _consume_pending_cache_stats(bool onode_hit,
+                                    uint64_t hit_bytes, uint64_t miss_bytes) {
+    inodeno_t ino = _pending_cache_inode.load(std::memory_order_relaxed);
+    int64_t pool = _pending_cache_pool.load(std::memory_order_relaxed);
+    if (ino != 0) {
+      record_cache_stats(ino, pool, onode_hit, hit_bytes, miss_bytes);
+    }
+  }
+  // -------------------------------------------------
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;

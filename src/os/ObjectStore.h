@@ -60,6 +60,14 @@ typedef uint32_t osflagbits_t;
 const int SKIP_JOURNAL_REPLAY = 1 << 0;
 const int SKIP_MOUNT_OMAP = 1 << 1;
 
+/// Per-object cache statistics collected during a read operation.
+/// Carries OnodeCache hit/miss and Buffer Cache hit/miss bytes.
+struct object_read_cache_stats_t {
+  bool onode_cache_hit = false;    ///< Onode was found in OnodeCache (no RocksDB lookup)
+  uint32_t buffer_hit_bytes = 0;   ///< Bytes served from Buffer Cache
+  uint32_t buffer_miss_bytes = 0;  ///< Bytes NOT in Buffer Cache (required disk I/O)
+};
+
 class ObjectStore {
 protected:
   std::string path;
@@ -476,7 +484,8 @@ public:
      uint64_t offset,
      size_t len,
      ceph::buffer::list& bl,
-     uint32_t op_flags = 0) = 0;
+     uint32_t op_flags = 0,
+     object_read_cache_stats_t* cache_stats = nullptr) = 0;
 
   /**
    * fiemap -- get extent std::map of data of an object

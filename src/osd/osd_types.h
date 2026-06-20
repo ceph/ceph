@@ -4127,6 +4127,11 @@ struct OSDOp {
   ceph::buffer::list indata, outdata;
   errorcode32_t rval = 0;
 
+  // per-op cache statistics (filled by PrimaryLogPG::do_read)
+  uint32_t cache_hit_bytes = 0;
+  uint32_t cache_miss_bytes = 0;
+  bool cache_onode_hit = false;
+
   OSDOp() {
     // FIPS zeroization audit 20191115: this memset clean for security
     memset(&op, 0, sizeof(ceph_osd_op));

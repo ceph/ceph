@@ -31,7 +31,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -100,6 +100,9 @@ public:
     ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
       ops[i].outdata = std::move(o[i].outdata);
+      ops[i].cache_hit_bytes = o[i].cache_hit_bytes;
+      ops[i].cache_miss_bytes = o[i].cache_miss_bytes;
+      ops[i].cache_onode_hit = o[i].cache_onode_hit;
     }
   }
   void claim_ops(std::vector<OSDOp>& o) {
@@ -223,6 +226,13 @@ public:
         }
       }
       encode_trace(payload, features);
+      if (header.version >= 9) {
+        for (unsigned i = 0; i < num_ops; i++) {
+          encode(ops[i].cache_hit_bytes, payload);
+          encode(ops[i].cache_miss_bytes, payload);
+          encode(ops[i].cache_onode_hit, payload);
+        }
+      }
     }
   }
   void decode_payload() override {
@@ -256,6 +266,11 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      for (unsigned i = 0; i < num_ops; ++i) {
+        decode(ops[i].cache_hit_bytes, p);
+        decode(ops[i].cache_miss_bytes, p);
+        decode(ops[i].cache_onode_hit, p);
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);
@@ -317,6 +332,13 @@ public:
       }
       if (header.version >= 8) {
         decode_trace(p);
+      }
+      if (header.version >= 9) {
+        for (unsigned i = 0; i < num_ops; ++i) {
+          decode(ops[i].cache_hit_bytes, p);
+          decode(ops[i].cache_miss_bytes, p);
+          decode(ops[i].cache_onode_hit, p);
+        }
       }
     }
   }

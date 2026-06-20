@@ -1524,7 +1524,8 @@ private:
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
     }
-    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
+    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false,
+                       bool* onode_cache_hit=nullptr);
 
     // the terminology is confusing here, sorry!
     //
@@ -3007,7 +3008,8 @@ public:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags = 0) override;
+    uint32_t op_flags = 0,
+    object_read_cache_stats_t* cache_stats = nullptr) override;
 
 private:
 
@@ -3090,7 +3092,8 @@ private:
     size_t len,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
-    uint64_t retry_count = 0);
+    uint64_t retry_count = 0,
+    object_read_cache_stats_t* cache_stats = nullptr);
 
   int _do_readv(
     Collection *c,

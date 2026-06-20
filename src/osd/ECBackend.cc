@@ -2228,7 +2228,8 @@ int ECBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
-  bufferlist *bl)
+  bufferlist *bl,
+  object_read_cache_stats_t* cache_stats)
 {
   return -EOPNOTSUPP;
 }
