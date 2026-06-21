@@ -4,47 +4,85 @@
 #include "common/async/blocked_completion.h"
 #include "rgw_perf_counters.h"
 
-namespace rgw { namespace d4n {
+namespace rgw::d4n {
 
-// initiate a call to async_exec() on the connection's executor
-struct initiate_exec {
-  std::shared_ptr<boost::redis::connection> conn;
+int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
+  std::string raw;
+  int ret = dir->get_kv(dpp, y, "lfuda", "age", raw);
+  if (ret < 0) return ret;
 
-  using executor_type = boost::redis::connection::executor_type;
-  executor_type get_executor() const noexcept { return conn->get_executor(); }
+  int stored_age = raw.empty() ? 0 : std::stoi(raw);
 
-  template <typename Handler, typename Response>
-  void operator()(Handler handler, const boost::redis::request& req, Response& resp)
-  {
-    auto h = asio::consign(std::move(handler), conn);
-    return asio::dispatch(get_executor(),
-        [c=conn, &req, &resp, h=std::move(h)] () mutable {
-          c->async_exec(req, resp, std::move(h));
-        });
+  if (age > stored_age) {
+    ret = dir->set_kv(dpp, y, "lfuda", "age", std::to_string(age));
+    if (ret < 0) return ret;
+  } else {
+    age = stored_age;
   }
-};
-
-template <typename Response, typename CompletionToken>
-auto async_exec(std::shared_ptr<connection> conn,
-                const boost::redis::request& req,
-                Response& resp, CompletionToken&& token)
-{
-  return asio::async_initiate<CompletionToken,
-         void(boost::system::error_code, std::size_t)>(
-      initiate_exec{std::move(conn)}, token, req, resp);
+  return 0;
 }
 
-template <typename... Types>
-static inline void redis_exec(std::shared_ptr<connection> conn,
-                boost::system::error_code& ec,
-                const boost::redis::request& req,
-                boost::redis::response<Types...>& resp, optional_yield y)
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    async_exec(std::move(conn), req, resp, yield[ec]);
-  } else {
-    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y) {
+  if (fabs(weightSum - postedSum) > (postedSum * 0.1)) {
+    std::map<std::string, std::string> fetched;
+    int ret = dir->get_kv_multi(dpp, y, "lfuda",
+                                {"minLocalWeights_sum", "minLocalWeights_size"},
+                                fetched);
+    if (ret < 0) return ret;
+
+    float minAvgWeight = std::stof(fetched.at("minLocalWeights_sum"))
+                        / std::stof(fetched.at("minLocalWeights_size"));
+    float localAvgWeight = entries_map.size()
+        ? static_cast<float>(weightSum) / static_cast<float>(entries_map.size())
+        : 0.0f;
+
+    if (localAvgWeight < minAvgWeight) {
+        ret = dir->set_kv_multi(dpp, y, "lfuda", {
+            {"minLocalWeights_sum",     std::to_string(weightSum)},
+            {"minLocalWeights_size",    std::to_string(entries_map.size())},
+            {"minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
+        });
+        if (ret < 0) return ret;
+    } else {
+        weightSum = std::stoi(fetched.at("minLocalWeights_sum"));
+        postedSum = std::stoi(fetched.at("minLocalWeights_sum")); // preserved from original
+    }
+  }
+
+  return dir->set_kv_multi(dpp, y,
+                          dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, {
+                              {"avgLocalWeight_sum",  std::to_string(weightSum)},
+                              {"avgLocalWeight_size", std::to_string(entries_map.size())}
+                          });
+}
+
+asio::awaitable<void> LFUDAPolicy::directory_sync(const DoutPrefixProvider* dpp, optional_yield y) {
+  rthread_timer.emplace(co_await asio::this_coro::executor);
+  co_await asio::this_coro::throw_if_cancelled(true);
+  co_await asio::this_coro::reset_cancellation_state(
+    asio::enable_terminal_cancellation());
+
+  for (;;) try {
+    /* Update age */
+    if (int ret = age_sync(dpp, y) < 0) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ret << dendl;
+    }
+    
+    /* Update minimum local weight sum */
+    if (int ret = local_weight_sync(dpp, y) < 0) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ret << dendl;
+    }
+
+    int interval = dpp->get_cct()->_conf->rgw_lfuda_sync_frequency;
+    rthread_timer->expires_after(std::chrono::seconds(interval));
+    co_await rthread_timer->async_wait(asio::use_awaitable);
+  } catch (sys::system_error& e) {
+    if (e.code() == asio::error::operation_aborted) {
+      break;
+    } else {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << e.what() << dendl;
+      continue;
+    }
   }
 }
 
@@ -194,35 +232,17 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
   lwthread = std::thread(&LFUDAPolicy::localweight_writer, this, dpp);
   lw_quit = false;
 
-  try {
-    boost::system::error_code ec;
-    response<
-      ignore_t,
-      ignore_t,
-      ignore_t,
-      response<std::optional<int>, std::optional<int>>
-    > resp;
-    request req;
-    req.push("MULTI");
-    req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), /* New cache node will always have the minimum average weight */
-              "minLocalWeights_size", std::to_string(entries_map.size()), 
-              "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
-    req.push("HSETNX", "lfuda", "age", age); /* Only set maximum age if it doesn't exist */
-    req.push("EXEC");
-  
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
-    }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
-  }
+  dir->set_kv_multi(dpp, y,
+      "lfuda",
+      {
+          {"minLocalWeights_sum",     std::to_string(weightSum)},
+          {"minLocalWeights_size",    std::to_string(entries_map.size())},
+          {"minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
+      });
+  dir->set_kv_if_not_exists(dpp, y, "lfuda", "age", std::to_string(age));
 
   asio::co_spawn(io_context.get_executor(),
-		   redis_sync(dpp, y), asio::detached);
+        directory_sync(dpp, y), asio::detached);
 
   if (cleaning_coroutine_pool) {
     int num_cleaning_threads = dpp->get_cct()->_conf->rgw_d4n_cleaning_threads;
@@ -253,180 +273,18 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
 }
 
 int LFUDAPolicy::getMinAvgWeight(const DoutPrefixProvider* dpp, int *minAvgWeight, std::string *cache_address, optional_yield y) {
-  response<std::string, std::string, std::string> resp;
+  std::map<std::string, std::string> fetched;
+  int ret = dir->get_kv_multi(dpp, y, "lfuda",
+                                {"minLocalWeights_sum", "minLocalWeights_size", "minLocalWeights_address"},
+                                fetched);
+  if (ret < 0) return ret;
 
-  try { 
-    boost::system::error_code ec;
-    request req;
-    req.push("HGET", "lfuda", "minLocalWeights_sum");
-    req.push("HGET", "lfuda", "minLocalWeights_size");
-    req.push("HGET", "lfuda", "minLocalWeights_address");
-      
-    redis_exec(conn, ec, req, resp, y);
+  *minAvgWeight = std::stof(fetched.at("minLocalWeights_sum"))
+                        / std::stof(fetched.at("minLocalWeights_size"));
 
-    if (ec) {
-      ldpp_dout(dpp, 10) << __func__ << "(): Error: " << ec.value() << dendl;
-      return -ec.value();
-    }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 10) << __func__ << "(): Error: " << "EINVAL" << dendl;
-    return -EINVAL;
-  }
-
-  *minAvgWeight = 0; 
-  if (std::get<0>(resp).has_value() && std::get<1>(resp).has_value()) {
-	try {
-	  int lw_size = std::stoi(std::get<1>(resp).value());
-      if (lw_size > 0) {
-		*minAvgWeight =  std::stoi(std::get<0>(resp).value()) / lw_size;
-      }
-	} catch (std::exception &e) {
-	  return -EINVAL;
-	}
-  }
-
-  *cache_address =  std::get<2>(resp).value();
+  *cache_address =  fetched.at("minLocalWeights_address");
   ldpp_dout(dpp, 20) << __func__ << "(): Cache address with minimum local weight is " << *cache_address << dendl;
   return 0;
-}
-
-int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
-  response< std::optional<std::string> > resp;
-
-  try { 
-    boost::system::error_code ec;
-    request req;
-    req.push("HGET", "lfuda", "age");
-      
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
-    }
-  } catch (std::exception &e) {
-    return -EINVAL;
-  }
-
-  if (std::get<0>(resp).value().value().empty() || age > std::stoi(std::get<0>(resp).value().value())) { /* Set new maximum age */
-    try { 
-      boost::system::error_code ec;
-      response<ignore_t> ret;
-      request req;
-      req.push("HSET", "lfuda", "age", age);
-
-      redis_exec(conn, ec, req, ret, y);
-
-      if (ec) {
-	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-	return -ec.value();
-      }
-    } catch (std::exception &e) {
-      return -EINVAL;
-    }
-  } else {
-    age = std::stoi(std::get<0>(resp).value().value());
-  }
-
-  return 0;
-}
-
-int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y) {
-  if (fabs(weightSum - postedSum) > (postedSum * 0.1)) {
-    response<std::vector<std::string>> resp;
-
-    try { 
-      boost::system::error_code ec;
-      request req;
-      req.push("HMGET", "lfuda", "minLocalWeights_sum", "minLocalWeights_size");
-	
-      redis_exec(conn, ec, req, resp, y);
-
-      if (ec) {
-		ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-		return -ec.value();
-      }
-    } catch (std::exception &e) {
-      return -EINVAL;
-    }
-  
-    float minAvgWeight = std::stof(std::get<0>(resp).value()[0]) / std::stof(std::get<0>(resp).value()[1]);
-    float localAvgWeight = 0;
-    if (entries_map.size())
-      localAvgWeight = static_cast<float>(weightSum) / static_cast<float>(entries_map.size());
-
-    if (localAvgWeight < minAvgWeight) { /* Set new minimum weight */
-      try { 
-		boost::system::error_code ec;
-		response<ignore_t> resp;
-		request req;
-		req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
-					  "minLocalWeights_size", std::to_string(entries_map.size()), 
-					  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
-
-		redis_exec(conn, ec, req, resp, y);
-
-		if (ec) {
-		  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-		  return -ec.value();
-		}
-      } catch (std::exception &e) {
-		return -EINVAL;
-      }
-    } else {
-      weightSum = std::stoi(std::get<0>(resp).value()[0]);
-      postedSum = std::stoi(std::get<0>(resp).value()[0]);
-    }
-  }
-
-  try { /* Post update for local cache */
-    boost::system::error_code ec;
-    response<ignore_t> resp;
-    request req;
-    req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, "avgLocalWeight_sum", std::to_string(weightSum), 
-              "avgLocalWeight_size", std::to_string(entries_map.size()));
-
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
-    }
-
-    return 0;
-  } catch (std::exception &e) {
-    return -EINVAL;
-  }
-}
-
-asio::awaitable<void> LFUDAPolicy::redis_sync(const DoutPrefixProvider* dpp, optional_yield y) {
-  rthread_timer.emplace(co_await asio::this_coro::executor);
-  co_await asio::this_coro::throw_if_cancelled(true);
-  co_await asio::this_coro::reset_cancellation_state(
-    asio::enable_terminal_cancellation());
-
-  for (;;) try {
-    /* Update age */
-    if (int ret = age_sync(dpp, y) < 0) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ret << dendl;
-    }
-    
-    /* Update minimum local weight sum */
-    if (int ret = local_weight_sync(dpp, y) < 0) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ret << dendl;
-    }
-
-    int interval = dpp->get_cct()->_conf->rgw_lfuda_sync_frequency;
-    rthread_timer->expires_after(std::chrono::seconds(interval));
-    co_await rthread_timer->async_wait(asio::use_awaitable);
-  } catch (sys::system_error& e) {
-    if (e.code() == asio::error::operation_aborted) {
-      break;
-    } else {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << e.what() << dendl;
-      continue;
-    }
-  }
 }
 
 /* Changes state to INVALID for dirty objects. An INVALID state indicates that a delete request has been
@@ -1291,7 +1149,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     };
     /* remove the entry from the ordered set using its score, as the object is already cleaned
         need not be part of a transaction as it is being removed based on its score which is its creation time. */
-    ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y);
+    ret = objDir->remove_version_by_creation_time(dpp, dir_obj.bucketName, dir_obj.objName, e->creationTime, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
       return ret;
@@ -1333,9 +1191,9 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
           }
         }
         //delete entry from ordered set of objects, as older versions would have been written to the backend store
-        ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y);
+        ret = bucketDir->remove_object(dpp, e->bucket_id, c_obj->get_name(), y);
         if (ret < 0) {
-          ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue zrem for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
+          ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue remove_object for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
           return ret;
         }
       }
@@ -1344,7 +1202,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
         .objName = c_obj->get_name(),
         .bucketName = c_obj->get_bucket()->get_bucket_id(),
       };
-      ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y);
+      ret = objDir->remove_version_by_creation_time(dpp, dir_obj.bucketName, dir_obj.objName, e->creationTime, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
         return ret;
@@ -1633,4 +1491,5 @@ bool LRUPolicy::_erase(const DoutPrefixProvider* dpp, const std::string& key, op
   return true;
 }
 
-} } // namespace rgw::d4n
+
+} // namespace rgw::d4n

@@ -157,7 +157,7 @@ inline void set(database_handle dbh,
           });
 }
 
-template <template <typename ...> typename AssocT = flat_map,
+template <template <typename ...> typename AssocT = fdb_flat_map,
           concepts::key_value_iterator IteratorT>
 inline void set(transaction_handle txn,
                 IteratorT b, IteratorT e,
@@ -176,7 +176,7 @@ inline void set(transaction_handle txn,
           });
 }
 
-template <template <typename ...> typename AssocT = flat_map,
+template <template <typename ...> typename AssocT = fdb_flat_map,
           concepts::key_value_iterator IteratorT>
 inline void set(database_handle dbh, IteratorT b, IteratorT e)
 {

@@ -10,12 +10,32 @@
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
+#include "d4n_directory_redis.h"
+#include "d4n_directory_fdb.h"
 
-namespace rgw { namespace sal {
+namespace rgw::sal {
   class CoroutinePool;
-}}
+}
 
-namespace rgw { namespace d4n {
+namespace rgw::d4n {
+class DirectoryConnection;
+class Directory;
+class BucketDirectory;
+class ObjectDirectory;
+class BlockDirectory;
+class CacheBlock;
+
+class DirectoryConnection;
+class BucketDirectory;
+class ObjectDirectory;
+class BlockDirectory;
+class CacheBlock;
+
+class DirectoryConnection;
+class BucketDirectory;
+class ObjectDirectory;
+class BlockDirectory;
+class CacheBlock;
 
 namespace asio = boost::asio;
 namespace sys = boost::system;
@@ -178,12 +198,17 @@ class LFUDAPolicy : public CachePolicy {
 
     int age = 1, weightSum = 0, postedSum = 0;
     optional_yield y = null_yield;
-    std::shared_ptr<connection> conn;
+
+    std::shared_ptr<DirectoryConnection> conn;
+
+    std::unique_ptr<Directory> dir;
     std::unique_ptr<BlockDirectory> blockDir;
     std::unique_ptr<ObjectDirectory> objDir;
     std::unique_ptr<BucketDirectory> bucketDir;
-    std::optional<asio::steady_timer> rthread_timer;
+
     rgw::sal::Driver* driver;
+	
+    std::optional<asio::steady_timer> rthread_timer;
     std::thread tc;
     std::thread lwthread;
     //data structure for accumulating updated blocks
@@ -207,7 +232,8 @@ class LFUDAPolicy : public CachePolicy {
     int get_victim_block(const DoutPrefixProvider* dpp, CacheBlock* victim, optional_yield y);
     int age_sync(const DoutPrefixProvider* dpp, optional_yield y); 
     int local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y); 
-    asio::awaitable<void> redis_sync(const DoutPrefixProvider* dpp, optional_yield y);
+    //asio::awaitable<void> redis_sync(const DoutPrefixProvider* dpp, optional_yield y);
+
     void rthread_stop() {
       std::lock_guard l{lfuda_lock};
 
@@ -233,19 +259,33 @@ class LFUDAPolicy : public CachePolicy {
                                               const std::string& bucket_name, const std::string& bucket_id,
                                               const rgw_obj_key& obj_key, State state);
 
+  protected:
+    asio::awaitable<void> directory_sync(const DoutPrefixProvider* dpp, optional_yield y);
+
   public:
-    LFUDAPolicy(const DoutPrefixProvider* dpp, std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(cacheDriver), 
-																																			y(y),
-																																		    conn(conn)
+    LFUDAPolicy(std::shared_ptr<DirectoryConnection>& conn, std::string_view dir_type, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(cacheDriver), 
+                                                                                                             y(y),
+													     conn(conn) 
     {
-      blockDir = std::make_unique<BlockDirectory>(conn);
-      objDir = std::make_unique<ObjectDirectory>(conn);
-      bucketDir = std::make_unique<BucketDirectory>(conn);
+      if (dir_type == "redis") {
+        auto redis_conn = std::dynamic_pointer_cast<RedisConnection>(this->conn);
+        dir       = std::make_unique<RedisDirectory>(redis_conn);
+        blockDir  = std::make_unique<RedisBlockDirectory>(redis_conn);
+        objDir    = std::make_unique<RedisObjectDirectory>(redis_conn);
+        bucketDir = std::make_unique<RedisBucketDirectory>(redis_conn);
+      } else if (dir_type == "fdb") {
+        auto fdb_conn = std::dynamic_pointer_cast<FDBConnection>(this->conn);
+
+        dir       = std::make_unique<FDBDirectory>(fdb_conn);
+        blockDir  = std::make_unique<FDBBlockDirectory>(fdb_conn);
+        objDir    = std::make_unique<FDBObjectDirectory>(fdb_conn);
+        bucketDir = std::make_unique<FDBBucketDirectory>(fdb_conn);
+      }
     }
 
-    virtual ~LFUDAPolicy();
+    ~LFUDAPolicy() override;
 
-    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver);
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver) override;
     virtual int exist_key(const std::string& key) override;
     int getMinAvgWeight(const DoutPrefixProvider* dpp, int* minAvgWeight, std::string* cache_address, optional_yield y);
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
@@ -302,23 +342,22 @@ class LRUPolicy : public CachePolicy {
 class PolicyDriver {
   private:
     std::string policyName;
-    CachePolicy* cachePolicy;
+    std::unique_ptr<CachePolicy> cachePolicy;
 
   public:
-    PolicyDriver(const DoutPrefixProvider* dpp, std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName) 
+    PolicyDriver(std::shared_ptr<DirectoryConnection>& conn, std::string directory_type,  rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName)
     {
       if (policyName == "lfuda") {
-		cachePolicy = new LFUDAPolicy(dpp, conn, cacheDriver, y);
+	cachePolicy = std::make_unique<LFUDAPolicy>(conn, directory_type, cacheDriver, y);
       } else if (policyName == "lru") {
-		cachePolicy = new LRUPolicy(cacheDriver);
+	cachePolicy = std::make_unique<LRUPolicy>(cacheDriver);
       }
     }
-    ~PolicyDriver() {
-      delete cachePolicy;
-    }
 
-    CachePolicy* get_cache_policy() { return cachePolicy; }
+    ~PolicyDriver() = default;
+
+    CachePolicy* get_cache_policy() { return cachePolicy.get(); }
     std::string get_policy_name() { return policyName; }
 };
 
-} } // namespace rgw::d4n
+} // namespace rgw::d4n

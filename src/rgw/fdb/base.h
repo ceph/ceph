@@ -48,11 +48,11 @@
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
  template <typename ...Args>
- using flat_map = std::flat_map<Args...>;
+ using fdb_flat_map = std::flat_map<Args...>;
 #else
  #include <boost/container/flat_map.hpp>
  template <typename ...Args>
- using flat_map = boost::container::flat_map<Args...>;
+ using fdb_flat_map = boost::container::flat_map<Args...>;
 #endif
 
 // Wrangle some forward declarations:
@@ -339,7 +339,7 @@ using option_value = std::variant<option_flag_t, std::int64_t, std::string, std:
 
 // i.e. option /code/ to the value of the option itself (e.g. FDB_FOO, 42):
 template <typename OptionCodeT>
-using option_map = flat_map<OptionCodeT, option_value>; 
+using option_map = fdb_flat_map<OptionCodeT, option_value>; 
 
 using network_options = option_map<FDBNetworkOption>;
 using database_options = option_map<FDBDatabaseOption>;
