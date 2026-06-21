@@ -10,6 +10,13 @@ class Module(MgrModule):
     CLICommand = MirroringCLICommand
     MODULE_OPTIONS: List[Option] = [
         Option(
+            'snapshot_mirror_metrics_cache_enabled',
+            type='bool',
+            default=True,
+            desc='Cache fs snapshot mirror status omap metrics',
+            runtime=True,
+        ),
+        Option(
             'snapshot_mirror_metrics_cache_ttl',
             type='secs',
             default=15,
