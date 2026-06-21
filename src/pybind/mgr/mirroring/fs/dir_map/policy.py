@@ -105,6 +105,12 @@ class Policy:
                         'purging': dir_state.purging}
             return None
 
+    def get_tracked_instance_id(self, dir_path):
+        lookup = self.lookup(dir_path)
+        if not lookup:
+            return None
+        return lookup.get('instance_id')
+
     def map(self, dir_path, dir_state):
         log.debug(f'mapping {dir_path}')
         min_instance_id = None
