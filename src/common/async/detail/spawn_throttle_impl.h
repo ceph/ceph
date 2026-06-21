@@ -195,7 +195,8 @@ class spawn_throttle_impl :
   size_t wait_for_count = 0;
 
   struct op_cancellation {
-    spawn_throttle_impl* self;
+    // hold a ref: a cancellation can fire after the throttle is destroyed
+    boost::intrusive_ptr<spawn_throttle_impl> self;
     explicit op_cancellation(spawn_throttle_impl* self) noexcept
       : self(self) {}
     void operator()(boost::asio::cancellation_type type) {
