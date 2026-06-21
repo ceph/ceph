@@ -57,7 +57,8 @@ def open_metadata_ioctx(rados_inst, fs_map, filesystem):
                               f'failed to open metadata pool for {filesystem}')
 
 
-def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None):
+def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None, policy=None,
+                           live_instance_ids=None):
     metrics: Dict[str, Any] = {}
     prefix = f'{SYNC_STAT_KEY_PREFIX}/{filesystem}/'
     if peer_uuid:
@@ -89,7 +90,8 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None):
                         continue
                     format_peer_status_metrics(
                         metrics, dir_path, peer,
-                        format_and_order_sync_stat_for_display(stat))
+                        format_and_order_sync_stat_for_display(
+                            stat, policy, dir_path, live_instance_ids))
                 start = omap_vals.popitem()[0]
     except rados.Error as e:
         log.error(f'failed to read sync stat omap: {e}')
@@ -97,7 +99,8 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None):
     return metrics
 
 
-def fetch_sync_stat_metrics(ioctx, filesystem, peers, mirrored_dir_path, peer_uuid):
+def fetch_sync_stat_metrics(ioctx, filesystem, peers, mirrored_dir_path,
+                            peer_uuid, policy=None, live_instance_ids=None):
     if mirrored_dir_path:
         dir_path = norm_path(mirrored_dir_path)
         keys = [sync_stat_omap_key(filesystem, peer, dir_path) for peer in peers]
@@ -109,8 +112,10 @@ def fetch_sync_stat_metrics(ioctx, filesystem, peers, mirrored_dir_path, peer_uu
             if stat is not None:
                 format_peer_status_metrics(
                     metrics, dir_path, peer,
-                    format_and_order_sync_stat_for_display(stat))
+                    format_and_order_sync_stat_for_display(
+                        stat, policy, dir_path, live_instance_ids))
         return metrics, False, dir_path
 
-    metrics = load_sync_stat_metrics(ioctx, filesystem, peer_uuid)
+    metrics = load_sync_stat_metrics(
+        ioctx, filesystem, peer_uuid, policy, live_instance_ids)
     return metrics, True, None

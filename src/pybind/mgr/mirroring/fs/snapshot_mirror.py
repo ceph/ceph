@@ -66,6 +66,13 @@ class FSPolicy:
     def schedule_action(self, dir_paths):
         self.dir_paths.extend(dir_paths)
 
+    def get_live_instance_ids(self):
+        watcher = self.instance_watcher
+        if watcher is None:
+            return None
+        with watcher.lock:
+            return frozenset(str(instance_id) for instance_id in watcher.instances)
+
     def init(self, dir_mapping, instances):
         with self.lock:
             self.policy.init(dir_mapping)
@@ -774,9 +781,12 @@ class FSSnapshotMirror:
         """
         log.debug('sync stat metrics for filesystem %s loaded from omap (complete)',
                   filesystem)
+        fspolicy = self.pool_policy[filesystem]
         ioctx = metrics_load.open_metadata_ioctx(
             self.rados, self.fs_map, filesystem)
-        return metrics_load.load_sync_stat_metrics(ioctx, filesystem)
+        return metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids())
 
     @lru_cache_timeout(
         lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
@@ -793,10 +803,12 @@ class FSSnapshotMirror:
                   'loaded from omap',
                   filesystem, dir_path, peer_scope)
         peers = {peer_id: None for peer_id in peer_ids}
+        fspolicy = self.pool_policy[filesystem]
         ioctx = metrics_load.open_metadata_ioctx(
             self.rados, self.fs_map, filesystem)
         metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
-            ioctx, filesystem, peers, dir_path, None)
+            ioctx, filesystem, peers, dir_path, None,
+            fspolicy.policy, fspolicy.get_live_instance_ids())
         return metrics
 
     def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
