@@ -24,6 +24,20 @@ from .format import (
 
 log = logging.getLogger(__name__)
 
+MIRROR_OBJECT_NOT_FOUND_MSG = (
+    'cephfs_mirror object not found; enable snapshot mirroring with '
+    '"ceph fs snapshot mirror enable <fs_name>"')
+
+
+def _raise_on_sync_stat_read_error(err):
+    if isinstance(err, rados.Error) and err.errno == errno.ENOENT:
+        raise MirrorException(-errno.ENOENT, MIRROR_OBJECT_NOT_FOUND_MSG)
+    if isinstance(err, rados.Error):
+        log.error(f'failed to read sync stat omap: {err}')
+        err_no = err.errno if err.errno is not None else errno.EINVAL
+        raise MirrorException(-err_no, 'failed to read sync stat omap')
+    raise err
+
 
 def load_sync_stat_by_keys(ioctx, keys):
     stats: Dict[str, Any] = {}
@@ -43,8 +57,7 @@ def load_sync_stat_by_keys(ioctx, keys):
                 except (json.JSONDecodeError, UnicodeDecodeError) as e:
                     log.warning(f'failed to decode sync stat for key {key}: {e}')
     except rados.Error as e:
-        log.error(f'failed to read sync stat omap keys: {e}')
-        raise MirrorException(-e.errno, 'failed to read sync stat omap keys')
+        _raise_on_sync_stat_read_error(e)
     return stats
 
 
@@ -113,8 +126,7 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None, policy=None,
                             stat, policy, dir_path, live_instance_ids))
                 start = omap_vals.popitem()[0]
     except rados.Error as e:
-        log.error(f'failed to read sync stat omap: {e}')
-        raise MirrorException(-e.errno, 'failed to read sync stat omap')
+        _raise_on_sync_stat_read_error(e)
     if policy is not None and peers:
         with policy.lock:
             dir_paths = list(policy.dir_states.keys())
