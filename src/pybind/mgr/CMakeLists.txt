@@ -4,7 +4,8 @@ set(mgr_module_install_excludes
   PATTERN "tox.ini" EXCLUDE
   PATTERN "requirements*.txt" EXCLUDE
   PATTERN "constraints*.txt" EXCLUDE
-  PATTERN "tests/*" EXCLUDE)
+  PATTERN "tests" EXCLUDE
+  PATTERN "ci" EXCLUDE)
 
 add_subdirectory(dashboard)
 

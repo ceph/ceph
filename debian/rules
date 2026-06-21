@@ -158,10 +158,7 @@ override_dh_python3:
 	dh_python3 -p ceph-fuse --shebang=/usr/bin/python3
 	dh_python3 -p ceph-volume --shebang=/usr/bin/python3
 
-override_dh_install:
-	dh_install --exclude=mgr/cephadm/tests --exclude=mgr/dashboard/ci --exclude=mgr/rook/ci
-
 # do not run tests
 override_dh_auto_test:
 
-.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_install override_dh_strip override_dh_auto_test
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_auto_test
