@@ -75,12 +75,44 @@ def format_peer_status_metrics(metrics, dir_path, peer_uuid, stat):
     metrics.setdefault(dir_path, {}).setdefault('peer', {})[peer_uuid] = stat
 
 
+def _mark_sync_stat_stale(stat):
+    out = dict(stat)
+    out.pop('current_syncing_snap', None)
+    out['state'] = 'stale'
+    return out
+
+
+def _apply_stale_sync_metrics(stat, policy=None, dir_path=None,
+                              live_instance_ids=None):
+    if not isinstance(stat, dict) or policy is None or dir_path is None:
+        return stat
+
+    persisted_instance_id = stat.get('_instance_id')
+    if persisted_instance_id is None:
+        return stat
+
+    persisted_id = str(persisted_instance_id)
+    if (live_instance_ids is not None and
+            persisted_id not in live_instance_ids):
+        return _mark_sync_stat_stale(stat)
+
+    tracked_id = policy.get_tracked_instance_id(dir_path)
+    if tracked_id is not None:
+        tracked_id = str(tracked_id)
+    if (tracked_id != persisted_id and
+            stat.get('state') != 'idle'):
+        return _mark_sync_stat_stale(stat)
+    return stat
+
+
 # to match the output of peer_status
-def format_and_order_sync_stat_for_display(stat):
+def format_and_order_sync_stat_for_display(stat, policy=None, dir_path=None,
+                                           live_instance_ids=None):
     if not isinstance(stat, dict):
         return stat
 
-    out = dict(stat)
+    out = dict(_apply_stale_sync_metrics(
+        stat, policy, dir_path, live_instance_ids))
     last_synced_snap = out.get('last_synced_snap')
     if isinstance(last_synced_snap, dict):
         snap = dict(last_synced_snap)
