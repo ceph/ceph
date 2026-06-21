@@ -318,7 +318,7 @@ namespace rgw::dedup {
     d_num_completed_md5 = 0;
 
     memset(d_completed_workers, TOKEN_STATE_PENDING, sizeof(d_completed_workers));
-    memset(d_completed_md5, TOKEN_STATE_PENDING, sizeof(d_completed_md5));
+    std::fill(d_completed_md5.begin(), d_completed_md5.end(), TOKEN_STATE_PENDING);
   }
 
 
@@ -339,7 +339,8 @@ namespace rgw::dedup {
   int cluster::reset(rgw::sal::RadosStore *store,
                      dedup_epoch_t *p_epoch,
                      work_shard_t num_work_shards,
-                     md5_shard_t num_md5_shards)
+                     md5_shard_t num_md5_shards,
+                     uint32_t num_group_tokens)
   {
     ldpp_dout(dpp, 10) << __func__ << "::REQ num_work_shards=" << num_work_shards
                        << "::num_md5_shards=" << num_md5_shards << dendl;
@@ -367,6 +368,8 @@ namespace rgw::dedup {
     }
 
     d_epoch_time = p_epoch->time;
+    d_completed_md5.resize(p_epoch->num_md5_shards, TOKEN_STATE_PENDING);
+
     // retry cleanup 3 times before declaring failure
     const unsigned RETRY_LIMIT = 3;
     int ret = 1;
@@ -379,6 +382,9 @@ namespace rgw::dedup {
 
     create_shard_tokens(store, p_epoch->num_work_shards, WORKER_SHARD_PREFIX);
     create_shard_tokens(store, p_epoch->num_md5_shards, MD5_SHARD_PREFIX);
+    if (num_group_tokens > 0) {
+      create_shard_tokens(store, num_group_tokens, GRP_SHARD_PREFIX);
+    }
 
     ret = verify_all_shard_tokens(store, p_epoch->num_work_shards,
                                   WORKER_SHARD_PREFIX);
@@ -601,8 +607,8 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int32_t cluster::get_next_shard_token(rgw::sal::RadosStore *store,
-                                        uint16_t start_shard,
-                                        uint16_t max_shard,
+                                        uint32_t start_shard,
+                                        uint32_t max_shard,
                                         const char *prefix)
   {
     librados::IoCtx ctl_ioctx;
@@ -662,8 +668,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  work_shard_t cluster::get_next_work_shard_token(rgw::sal::RadosStore *store,
-                                                  work_shard_t num_work_shards)
+  shard_t cluster::get_next_work_shard_token(rgw::sal::RadosStore *store,
+                                             work_shard_t num_work_shards)
   {
     int32_t shard = get_next_shard_token(store, d_curr_worker_shard,
                                          num_work_shards, WORKER_SHARD_PREFIX);
@@ -672,22 +678,22 @@ namespace rgw::dedup {
       return shard;
     }
     else {
-      return NULL_WORK_SHARD;
+      return NULL_SHARD;
     }
   }
 
   //---------------------------------------------------------------------------
-  md5_shard_t cluster::get_next_md5_shard_token(rgw::sal::RadosStore *store,
-                                                md5_shard_t num_md5_shards)
+  shard_t cluster::get_next_md5_shard_token(rgw::sal::RadosStore *store,
+                                            md5_shard_t num_md5_shards)
   {
     int32_t shard = get_next_shard_token(store, d_curr_md5_shard, num_md5_shards,
                                          MD5_SHARD_PREFIX);
-    if (shard >= 0 && shard < num_md5_shards) {
+    if (shard >= 0 && (uint32_t)shard < num_md5_shards) {
       d_curr_md5_shard = shard + 1;
       return shard;
     }
     else {
-      return NULL_MD5_SHARD;
+      return NULL_SHARD;
     }
   }
 
@@ -695,7 +701,7 @@ namespace rgw::dedup {
   int cluster::all_shard_tokens_completed(rgw::sal::RadosStore *store,
                                           unsigned shards_count,
                                           const char *prefix,
-                                          uint16_t *p_num_completed,
+                                          uint32_t *p_num_completed,
                                           uint8_t completed_arr[])
   {
     librados::IoCtx ctl_ioctx;
@@ -1069,7 +1075,7 @@ namespace rgw::dedup {
       std::vector<shard_progress_t> sp_arr(num_md5_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_md5_shards,
                                     MD5_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
-      if (cnt != num_md5_shards && 0) {
+      if (cnt != (int)num_md5_shards && 0) {
         std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
                   << num_md5_shards << "\n" << std::endl;
       }

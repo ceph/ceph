@@ -173,8 +173,7 @@ namespace rgw::dedup {
 
     int add_record_to_dedup_table(dedup_table_t *p_table,
                                   const struct disk_record_t *p_rec,
-                                  disk_block_id_t block_id,
-                                  record_id_t rec_id,
+                                  disk_rec_id_t rec_addr,
                                   md5_stats_t *p_stats,
                                   remapper_t *remapper);
 
@@ -203,8 +202,7 @@ namespace rgw::dedup {
 
     int read_object_attribute(dedup_table_t    *p_table,
                               disk_record_t    *p_rec,
-                              disk_block_id_t   block_id,
-                              record_id_t       rec_id,
+                              disk_rec_id_t     rec_addr,
                               md5_shard_t       md5_shard,
                               md5_stats_t      *p_stats /* IN-OUT */,
                               disk_block_seq_t *p_disk,
@@ -217,8 +215,7 @@ namespace rgw::dedup {
                                    md5_stats_t *p_stats /* IN-OUT */);
     int try_deduping_record(dedup_table_t   *p_table,
                             disk_record_t   *p_rec,
-                            disk_block_id_t  block_id,
-                            record_id_t      rec_id,
+                            disk_rec_id_t    rec_addr,
                             md5_shard_t      md5_shard,
                             md5_stats_t     *p_stats, /* IN-OUT */
                             remapper_t      *remapper);

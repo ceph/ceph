@@ -29,8 +29,8 @@
 namespace rgw::dedup {
   using namespace std::chrono;
   using work_shard_t   = uint16_t;
-  using md5_shard_t    = uint16_t;
-
+  using md5_shard_t    = uint32_t;
+  using shard_t        = uint32_t;
   const uint64_t MICROSECONDS_PER_SECOND = 1000000;
   // settings to help debug small systems
   const work_shard_t MIN_WORK_SHARD = 2;
@@ -38,17 +38,16 @@ namespace rgw::dedup {
 
   // Those are the correct values for production system
   const work_shard_t MAX_WORK_SHARD = 255;
-  const md5_shard_t  MAX_MD5_SHARD  = 2048;
+  const md5_shard_t  MAX_MD5_SHARD  = 8192;
 
   const work_shard_t NULL_WORK_SHARD = 0xFFFF;
-  const md5_shard_t  NULL_MD5_SHARD  = 0xFFFF;
-  const unsigned     NULL_SHARD      = 0xFFFF;
+  const md5_shard_t  NULL_MD5_SHARD  = 0xFFFFFFFF;
+  const unsigned     NULL_SHARD      = 0xFFFFFFFF;
 
-  // work_shard  is an 8 bits int with 255 legal values for the first iteration
-  // and one value (0xFF) reserved for second iteration
+  // work_shard is an 8 bits int with 255 legal values
   const unsigned     WORK_SHARD_HARD_LIMIT = 0x0FF;
-  // md5_shard_t is a 12 bits int with 4096 possible values
-  const unsigned     MD5_SHARD_HARD_LIMIT  = 0xFFF;
+  // md5_shard_t is a 20 bits int with up to ~1M possible values (%05X OID format)
+  const unsigned     MD5_SHARD_HARD_LIMIT  = 0xFFFFF;
 
   static_assert(MAX_WORK_SHARD < NULL_WORK_SHARD);
   static_assert(MAX_WORK_SHARD < NULL_SHARD);
