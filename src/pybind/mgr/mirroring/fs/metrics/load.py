@@ -16,7 +16,11 @@ from ..utils import (
     parse_sync_stat_omap_key,
     sync_stat_omap_key,
 )
-from .format import format_and_order_sync_stat_for_display, format_peer_status_metrics
+from .format import (
+    default_sync_stat_metrics,
+    format_and_order_sync_stat_for_display,
+    format_peer_status_metrics,
+)
 
 log = logging.getLogger(__name__)
 
@@ -57,8 +61,23 @@ def open_metadata_ioctx(rados_inst, fs_map, filesystem):
                               f'failed to open metadata pool for {filesystem}')
 
 
+def _fill_missing_sync_stat_defaults(metrics, dir_paths, peers, policy,
+                                     live_instance_ids, peer_uuid=None):
+    default_stat = default_sync_stat_metrics()
+    for dir_path in dir_paths:
+        for peer in peers:
+            if peer_uuid is not None and peer != peer_uuid:
+                continue
+            if metrics.get(dir_path, {}).get('peer', {}).get(peer) is not None:
+                continue
+            format_peer_status_metrics(
+                metrics, dir_path, peer,
+                format_and_order_sync_stat_for_display(
+                    default_stat, policy, dir_path, live_instance_ids))
+
+
 def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None, policy=None,
-                           live_instance_ids=None):
+                           live_instance_ids=None, peers=None):
     metrics: Dict[str, Any] = {}
     prefix = f'{SYNC_STAT_KEY_PREFIX}/{filesystem}/'
     if peer_uuid:
@@ -96,6 +115,11 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None, policy=None,
     except rados.Error as e:
         log.error(f'failed to read sync stat omap: {e}')
         raise MirrorException(-e.errno, 'failed to read sync stat omap')
+    if policy is not None and peers:
+        with policy.lock:
+            dir_paths = list(policy.dir_states.keys())
+        _fill_missing_sync_stat_defaults(
+            metrics, dir_paths, peers, policy, live_instance_ids, peer_uuid)
     return metrics
 
 
@@ -106,14 +130,14 @@ def fetch_sync_stat_metrics(ioctx, filesystem, peers, mirrored_dir_path,
         keys = [sync_stat_omap_key(filesystem, peer, dir_path) for peer in peers]
         omap_stats = load_sync_stat_by_keys(ioctx, keys)
         metrics: Dict[str, Any] = {}
+        default_stat = default_sync_stat_metrics()
         for peer in peers:
             omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
-            stat = omap_stats.get(omap_key)
-            if stat is not None:
-                format_peer_status_metrics(
-                    metrics, dir_path, peer,
-                    format_and_order_sync_stat_for_display(
-                        stat, policy, dir_path, live_instance_ids))
+            stat = omap_stats.get(omap_key, default_stat)
+            format_peer_status_metrics(
+                metrics, dir_path, peer,
+                format_and_order_sync_stat_for_display(
+                    stat, policy, dir_path, live_instance_ids))
         return metrics, False, dir_path
 
     metrics = load_sync_stat_metrics(

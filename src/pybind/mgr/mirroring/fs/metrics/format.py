@@ -1,3 +1,12 @@
+def default_sync_stat_metrics():
+    return {
+        'state': 'idle',
+        'snaps_synced': 0,
+        'snaps_deleted': 0,
+        'snaps_renamed': 0,
+    }
+
+
 # Matches the format_time function used in peer_status
 def _format_time(total_seconds_d):
     total_seconds = int(round(total_seconds_d))
