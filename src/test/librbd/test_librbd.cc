@@ -42,6 +42,7 @@
 #include <iostream>
 #include <sstream>
 #include <list>
+#include <map>
 #include <set>
 #include <thread>
 #include <vector>
@@ -7194,6 +7195,27 @@ int vector_iterate_cb(uint64_t off, size_t len, int exists, void *arg)
   return 0;
 }
 
+static int get_image_object_name(librbd::Image& image, uint64_t object_no,
+                                 std::string* object_name) {
+  uint8_t old_format;
+  int r = image.old_format(&old_format);
+  if (r < 0) {
+    return r;
+  }
+
+  char buf[RBD_MAX_OBJ_NAME_SIZE];
+  size_t length = snprintf(
+    buf, sizeof(buf), old_format ? "%s.%012llx" : "%s.%016llx",
+    image.get_block_name_prefix().c_str(),
+    static_cast<unsigned long long>(object_no));
+  if (length >= sizeof(buf)) {
+    return -ERANGE;
+  }
+
+  object_name->assign(buf, length);
+  return 0;
+}
+
 static int iterate_error_cb(uint64_t off, size_t len, int exists, void *arg)
 {
   return -EINVAL;
@@ -7756,6 +7778,91 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
     ASSERT_TRUE(two.subset_of(diff));
   }
   ioctx.close();
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateSparseObject)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 22;
+  uint64_t object_size = 1ULL << order;
+  uint64_t size = object_size;
+  std::string name = this->get_temp_image_name();
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  const uint64_t first_offset = 64 << 10;
+  const uint64_t second_offset = 2 << 20;
+  const uint64_t write_length = 4 << 10;
+
+  ceph::bufferlist bl;
+  bl.append(std::string(write_length, '1'));
+  ASSERT_EQ(static_cast<int>(write_length),
+            image.write(first_offset, write_length, bl));
+  ASSERT_EQ(static_cast<int>(write_length),
+            image.write(second_offset, write_length, bl));
+  ASSERT_EQ(0, image.flush());
+
+  std::string object_name;
+  ASSERT_EQ(0, get_image_object_name(image, 0, &object_name));
+
+  int64_t data_pool_id = image.get_data_pool_id();
+  ASSERT_LE(0, data_pool_id);
+
+  librados::IoCtx data_ioctx;
+  if (data_pool_id == ioctx.get_id()) {
+    data_ioctx.dup(ioctx);
+  } else {
+    librados::Rados rados(ioctx);
+    ASSERT_EQ(0, rados.ioctx_create2(data_pool_id, data_ioctx));
+    data_ioctx.set_namespace(ioctx.get_namespace());
+  }
+
+  std::map<uint64_t, uint64_t> mapped_extents;
+  int r = data_ioctx.mapext(object_name, 0, object_size, mapped_extents);
+  if (r == -EOPNOTSUPP) {
+    GTEST_SKIP() << "mapext is not supported by this pool";
+  }
+  ASSERT_EQ(static_cast<int>(mapped_extents.size()), r);
+
+  interval_set<uint64_t> expected_mapped;
+  expected_mapped.insert(first_offset, write_length);
+  expected_mapped.insert(second_offset, write_length);
+
+  interval_set<uint64_t> actual_mapped;
+  for (auto [offset, length] : mapped_extents) {
+    actual_mapped.insert(offset, length);
+  }
+  if (!(expected_mapped == actual_mapped)) {
+    GTEST_SKIP() << "mapext does not report sparse object extents precisely";
+  }
+
+  std::vector<diff_extent> expected_extents;
+  if (this->whole_object) {
+    expected_extents.push_back(diff_extent(0, object_size, true, object_size));
+  } else {
+    expected_extents.push_back(diff_extent(first_offset, write_length, true, 0));
+    expected_extents.push_back(diff_extent(second_offset, write_length, true, 0));
+  }
+
+  std::vector<diff_extent> extents;
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, false, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(expected_extents, extents);
+  extents.clear();
+
+  ASSERT_EQ(0, image.snap_create("snap1"));
+  ASSERT_EQ(0, image.snap_set("snap1"));
+
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, false, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(expected_extents, extents);
 }
 
 TYPED_TEST(DiffIterateTest, DiffIterateDeterministic)
