@@ -1375,6 +1375,16 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key) {
   return ctx->io_ctx_impl->omap_rm_keys(ctx->oid, keys);
 }
 
+int cls_cxx_map_remove_range(cls_method_context_t,
+                             const std::string&,
+                             const std::string&) {
+  return -ENOTSUP;
+}
+
+int cls_cxx_map_clear(cls_method_context_t) {
+  return -ENOTSUP;
+}
+
 int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
                         bufferlist *inbl) {
   std::map<std::string, bufferlist> m;
@@ -1413,6 +1423,16 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->stat(ctx->oid, size, mtime);
+}
+
+int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size,
+                  ceph::real_time *mtime) {
+  time_t legacy_mtime;
+  int r = cls_cxx_stat(hctx, size, &legacy_mtime);
+  if (r >= 0) {
+    *mtime = ceph::real_clock::from_time_t(legacy_mtime);
+  }
+  return r;
 }
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,
@@ -1555,14 +1575,53 @@ int cls_gen_rand_base64(char *, int) {
   return -ENOTSUP;
 }
 
+int cls_gen_random_bytes(char *, int) {
+  return -ENOTSUP;
+}
+
 int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 				int, bufferlist *,
 				uint32_t, bufferlist *, int) {
   return -ENOTSUP;
 }
 
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t,
+                                 const std::set<std::string>&,
+                                 std::map<std::string, bufferlist> *) {
+  return -ENOTSUP;
+}
+
 int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
   return -ENOTSUP;
+}
+
+int cls_cxx_map_write_header(cls_method_context_t, bufferlist *) {
+  return -ENOTSUP;
+}
+
+const ConfigProxy& cls_get_config(cls_method_context_t) {
+  return g_ceph_context->_conf;
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t) {
+  static object_info_t object_info;
+  return object_info;
+}
+
+int cls_get_manifest_ref_count(cls_method_context_t, std::string) {
+  return -ENOTSUP;
+}
+
+uint64_t cls_current_version(cls_method_context_t) {
+  return 0;
+}
+
+int cls_current_subop_num(cls_method_context_t) {
+  return 0;
+}
+
+void cls_cxx_subop_version(cls_method_context_t, std::string *version) {
+  version->clear();
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
