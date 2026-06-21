@@ -786,7 +786,8 @@ class FSSnapshotMirror:
             self.rados, self.fs_map, filesystem)
         return metrics_load.load_sync_stat_metrics(
             ioctx, filesystem, None, fspolicy.policy,
-            fspolicy.get_live_instance_ids())
+            fspolicy.get_live_instance_ids(),
+            self.get_filesystem_peers(filesystem))
 
     @lru_cache_timeout(
         lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
