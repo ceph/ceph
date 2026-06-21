@@ -161,6 +161,13 @@
   ``fs mirror peer status`` fields (directory state, current sync, last sync, and
   snap summary) and are labeled by peer UUID and mirrored directory path. See
   https://tracker.ceph.com/issues/73457
+* CephFS Mirroring: The mirroring module provides ``ceph fs snapshot mirror status``,
+  a Ceph CLI command similar to the ``fs mirror peer status`` admin socket interface
+  for viewing per-directory snapshot sync metrics. The output layout matches
+  ``fs mirror peer status`` for core sync fields and additionally includes
+  ``metrics_updated_at`` (time of the last omap write). Optional filters by
+  mirrored directory path and peer UUID are supported. For more information,
+  see https://tracker.ceph.com/issues/76686
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
