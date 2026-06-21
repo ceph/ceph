@@ -22,7 +22,7 @@ from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
     disconnect_from_filesystem
 from .metrics.cache import (
-    CACHE_TTL_SECS, COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
+    COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
 from .metrics import load as metrics_load
 from .exception import MirrorException
@@ -768,7 +768,8 @@ class FSSnapshotMirror:
             return me.args[0], '', me.args[1]
 
     @lru_cache_timeout(
-        lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
         COMPLETE_CACHE_MAX)
     def sync_stat_complete_cache(self, filesystem):
         """Load all directories and all peers for a filesystem from omap.
@@ -790,7 +791,8 @@ class FSSnapshotMirror:
             self.get_filesystem_peers(filesystem))
 
     @lru_cache_timeout(
-        lambda self, *_args, **_kwargs: CACHE_TTL_SECS,
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
         PARTIAL_CACHE_MAX)
     def sync_stat_partial_cache(self, filesystem, dir_path, peer_ids):
         """Load sync-stat omap keys for one directory and a peer set.
