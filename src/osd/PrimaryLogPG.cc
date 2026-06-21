@@ -15667,8 +15667,12 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
     }
   }
 
-  bool is_retryable = (r == -EBUSY);
-  bool is_fatal = (r == -ENOENT || r == -EIO || r == -EPERM);
+  // If already quiescing, treat -EIO as retryable since it's expected
+  // when C_Migrate::finish converts completions to -EIO during quiesce
+  bool is_retryable = (r == -EBUSY) ||
+    (r == -EIO && pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE);
+  bool is_fatal = (r == -ENOENT || r == -EPERM) ||
+    (r == -EIO && pool_migration_quiesce_reason == PoolMigrationQuiesceReason::NONE);
 
   if (!is_retryable && !is_fatal) {
     // Unknown error - treat as fatal
