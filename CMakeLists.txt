@@ -460,6 +460,10 @@ if(ALLOCATOR)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
+elseif(WITH_ASAN)
+  # Force libc: tcmalloc/jemalloc still export operator new/delete even when the
+  # sanitizer shadows malloc, so sanitizer-allocated memory is freed via tcmalloc and SIGSEGVs.
+  set(ALLOCATOR "libc")
 else(ALLOCATOR)
   find_package(gperftools 2.6.2)
   set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
