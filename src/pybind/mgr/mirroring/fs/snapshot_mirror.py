@@ -767,6 +767,9 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
+    def _metrics_cache_enabled(self):
+        return self.mgr.get_module_option('snapshot_mirror_metrics_cache_enabled')
+
     @lru_cache_timeout(
         lambda self, *_args, **_kwargs: self.mgr.get_module_option(
             'snapshot_mirror_metrics_cache_ttl'),
@@ -814,6 +817,22 @@ class FSSnapshotMirror:
             fspolicy.policy, fspolicy.get_live_instance_ids())
         return metrics
 
+    def _load_sync_stat_metrics_from_omap(self, filesystem, mirrored_dir_path,
+                                          peer_uuid, peers, fspolicy):
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        if mirrored_dir_path:
+            dir_path = norm_path(mirrored_dir_path)
+            metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+                ioctx, filesystem, peers, mirrored_dir_path, peer_uuid,
+                fspolicy.policy, fspolicy.get_live_instance_ids())
+            return metrics_for_dir_and_peers(metrics, dir_path, peers)
+        complete_metrics = metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids(), peers)
+        return try_get_from_complete(
+            complete_metrics, mirrored_dir_path, peer_uuid, peers)
+
     def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
         """Return persisted mirror directory snapshot metrics as JSON.
 
@@ -847,6 +866,16 @@ class FSSnapshotMirror:
                     requested_peers = {peer_uuid: all_peers[peer_uuid]}
                 else:
                     requested_peers = all_peers
+
+                if not self._metrics_cache_enabled():
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'cache disabled; loading from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                    metrics = self._load_sync_stat_metrics_from_omap(
+                        filesystem, mirrored_dir_path, peer_uuid,
+                        requested_peers, fspolicy)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
 
                 if mirrored_dir_path:
                     dir_path = norm_path(mirrored_dir_path)
