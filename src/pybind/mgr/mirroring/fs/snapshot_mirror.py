@@ -808,8 +808,8 @@ class FSSnapshotMirror:
         log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
                   'loaded from omap',
                   filesystem, dir_path, peer_scope)
-        peers = {peer_id: None for peer_id in peer_ids}
         fspolicy = self.pool_policy[filesystem]
+        peers = {peer_id: None for peer_id in peer_ids}
         ioctx = metrics_load.open_metadata_ioctx(
             self.rados, self.fs_map, filesystem)
         metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
