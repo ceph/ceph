@@ -1149,82 +1149,106 @@ class CephadmServe:
                 # in this iteration to avoid looking up stale daemon entries.
                 continue
 
+            # For unmanaged services: skip automatic reconciliation entirely.
+            # However, if a manual action (restart/redeploy) was explicitly scheduled
+            # by the user, honour it and fall through to the shared execution block below.
             if spec and spec.unmanaged:
-                continue
-
-            if dd.daemon_type == 'agent':
-                try:
-                    self.mgr.agent_helpers._check_agent(dd.hostname)
-                except Exception as e:
-                    self.log.debug(
-                        f'Agent {dd.name()} could not be checked in _check_daemons: {e}')
-                continue
-
-            # These daemon types require additional configs after creation
-            if dd.daemon_type in REQUIRES_POST_ACTIONS:
-                daemons_post[dd.daemon_type].append(dd)
-
-            svc_type = daemon_type_to_service(dd.daemon_type)
-            svc_obj = service_registry.get_service(svc_type)
-            if svc_obj.get_active_daemon(
-               self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
-                dd.is_active = True
-            else:
-                dd.is_active = False
-
-            deps = svc_obj.sorted_dependencies(self.mgr, spec, dd.daemon_type)
-            last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
-                dd.hostname, dd.name())
-            if last_deps is None:
-                last_deps = []
-            action = scheduled_action = (
-                self.mgr.cache.get_scheduled_daemon_action(
+                action = scheduled_action = self.mgr.cache.get_scheduled_daemon_action(
                     dd.hostname, dd.name()
                 )
-            )
-            if not last_config:
-                self.log.info('Reconfiguring %s (unknown last config time)...' % (
-                    dd.name()))
-                action = 'reconfig'
-            elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
-                self.log.debug(
-                    f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
-                self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
-                dd.extra_container_args = spec.extra_container_args
-                action = 'redeploy'
-            elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
-                self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
-                self.log.debug(
-                    f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
-                dd.extra_entrypoint_args = spec.extra_entrypoint_args
-                action = 'redeploy'
-            else:
-                # method uses new action enum type
-                _scheduled_action = utils.Action.create(scheduled_action)
-                _action = svc_obj.choose_next_action(
-                    _scheduled_action,
-                    dd.daemon_type,
-                    spec,
-                    curr_deps=deps,
-                    last_deps=last_deps,
+                if not action:
+                    continue
+                # Sync container-level args from the spec only for redeploy.
+                # restart and reconfig do not rewrite unit.run, so syncing here
+                # for those actions would make the daemon cache lie about what
+                # the running container actually has.  Only redeploy rewrites
+                # unit.run and can therefore honour the updated args.
+                if action == 'redeploy':
+                    if hasattr(spec, 'extra_container_args'):
+                        dd.extra_container_args = spec.extra_container_args
+                    if hasattr(spec, 'extra_entrypoint_args'):
+                        dd.extra_entrypoint_args = spec.extra_entrypoint_args
+                self.log.info(
+                    f'Executing scheduled action {action} for unmanaged daemon {dd.name()}'
                 )
-                if _action is not _scheduled_action:
-                    self.log.info(
-                        (
-                            'Daemon %s chose new action %s (was %s)'
-                            ' (deps: %r, last_deps: %r)'
-                        ),
-                        dd.name(),
-                        _action,
-                        _scheduled_action,
-                        deps,
-                        last_deps,
+            else:
+                # ignore daemons for deleted services
+                if dd.service_name() in self.mgr.spec_store.spec_deleted:
+                    continue
+
+                if dd.daemon_type == 'agent':
+                    try:
+                        self.mgr.agent_helpers._check_agent(dd.hostname)
+                    except Exception as e:
+                        self.log.debug(
+                            f'Agent {dd.name()} could not be checked in _check_daemons: {e}')
+                    continue
+
+                # These daemon types require additional configs after creation
+                if dd.daemon_type in REQUIRES_POST_ACTIONS:
+                    daemons_post[dd.daemon_type].append(dd)
+
+                svc_type = daemon_type_to_service(dd.daemon_type)
+                svc_obj = service_registry.get_service(svc_type)
+                if svc_obj.get_active_daemon(
+                   self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
+                    dd.is_active = True
+                else:
+                    dd.is_active = False
+
+                deps = svc_obj.sorted_dependencies(self.mgr, spec, dd.daemon_type)
+                last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
+                    dd.hostname, dd.name())
+                if last_deps is None:
+                    last_deps = []
+                action = scheduled_action = (
+                    self.mgr.cache.get_scheduled_daemon_action(
+                        dd.hostname, dd.name()
                     )
-                    # convert back to legacy str type
-                    action = str(_action)
-            action = _ceph_service_next_action(
-                action, dd.daemon_type, dd.name(), self.mgr, last_config
-            )
+                )
+                if not last_config:
+                    self.log.info('Reconfiguring %s (unknown last config time)...' % (
+                        dd.name()))
+                    action = 'reconfig'
+                elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
+                    self.log.debug(
+                        f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
+                    self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
+                    dd.extra_container_args = spec.extra_container_args
+                    action = 'redeploy'
+                elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
+                    self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
+                    self.log.debug(
+                        f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
+                    dd.extra_entrypoint_args = spec.extra_entrypoint_args
+                    action = 'redeploy'
+                else:
+                    # method uses new action enum type
+                    _scheduled_action = utils.Action.create(scheduled_action)
+                    _action = svc_obj.choose_next_action(
+                        _scheduled_action,
+                        dd.daemon_type,
+                        spec,
+                        curr_deps=deps,
+                        last_deps=last_deps,
+                    )
+                    if _action is not _scheduled_action:
+                        self.log.info(
+                            (
+                                'Daemon %s chose new action %s (was %s)'
+                                ' (deps: %r, last_deps: %r)'
+                            ),
+                            dd.name(),
+                            _action,
+                            _scheduled_action,
+                            deps,
+                            last_deps,
+                        )
+                        # convert back to legacy str type
+                        action = str(_action)
+                action = _ceph_service_next_action(
+                    action, dd.daemon_type, dd.name(), self.mgr, last_config
+                )
 
             if action:
                 if scheduled_action == 'redeploy' and action == 'reconfig':

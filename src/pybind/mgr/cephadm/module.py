@@ -3108,7 +3108,86 @@ Then run the following:
         self._daemon_action_set_image(action, image, d.daemon_type, d.daemon_id)
 
         self.log.info(f'Schedule {action} daemon {daemon_name}')
-        return self._schedule_daemon_action(daemon_name, action)
+        msg = self._schedule_daemon_action(daemon_name, action)
+        svc_name = d.service_name()
+        if (svc_name in self.spec_store
+                and self.spec_store[svc_name].spec
+                and self.spec_store[svc_name].spec.unmanaged):
+            msg += self._unmanaged_daemon_action_warning(action, d)
+        return msg
+
+    def _unmanaged_daemon_action_warning(self, action: str, d: 'DaemonDescription') -> str:
+        """Return a warning string when an action is run on an unmanaged daemon.
+
+        Unmanaged services skip _apply_service() entirely, so some spec changes
+        cannot be applied by per-daemon actions.  This method detects those gaps
+        and tells the user exactly what will not be applied and how to fix it.
+
+        Only called when the service is already known to be unmanaged.
+        """
+        if action not in ('restart', 'reconfig', 'redeploy'):
+            return ''
+        svc_name = d.service_name()
+        if svc_name not in self.spec_store:
+            return ''
+        spec = self.spec_store[svc_name].spec
+        if not spec:
+            return ''
+
+        set_managed_workaround = (
+            f'\n    To apply: ceph orch set-managed {svc_name}'
+            f'\n              ceph orch redeploy {svc_name}'
+            f'\n              ceph orch set-unmanaged {svc_name}'
+        )
+
+        # restart: nothing from the spec is applied — always warn
+        if action == 'restart':
+            return (
+                f'\nNOTE: {svc_name} is unmanaged. restart only restarts the'
+                f' process with its current configuration — no spec changes are'
+                f' applied. To apply spec changes run:'
+                f'\n  ceph orch daemon redeploy {d.name()}'
+            )
+
+        # reconfig and redeploy: report specific gaps
+        gaps = []
+
+        # reconfig does not rewrite unit.run — container args are not applied
+        if action == 'reconfig':
+            if (d.extra_container_args or []) != (spec.extra_container_args or []):
+                gaps.append(
+                    f'  - extra_container_args changed'
+                    f'\n    To apply: ceph orch daemon redeploy {d.name()}'
+                )
+            if (d.extra_entrypoint_args or []) != (spec.extra_entrypoint_args or []):
+                gaps.append(
+                    f'  - extra_entrypoint_args changed'
+                    f'\n    To apply: ceph orch daemon redeploy {d.name()}'
+                )
+
+        # port changes require _apply_service() slot logic — not possible per-daemon
+        new_ports = spec.get_port_start()
+        if new_ports and new_ports != (d.ports or []):
+            gaps.append(
+                f'  - port: spec={new_ports}, running={d.ports}'
+                + set_managed_workaround
+            )
+
+        # spec.config dict is written by _apply_service_config() inside
+        # _apply_service() — skipped entirely for unmanaged services
+        if spec.config:
+            gaps.append(
+                f'  - config entries: {", ".join(spec.config.keys())}'
+                + set_managed_workaround
+            )
+
+        if not gaps:
+            return ''
+        return (
+            f'\nNOTE: {svc_name} is unmanaged. The following spec changes'
+            f' will NOT be applied by {action}:\n'
+            + '\n'.join(gaps)
+        )
 
     def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
         return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
