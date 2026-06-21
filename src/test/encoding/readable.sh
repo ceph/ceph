@@ -24,9 +24,16 @@ fi
 
 # ASAN builds need setarch -R to disable ASLR so each process can find a
 # contiguous 16+ TB shadow memory region. See https://clang.llvm.org/docs/AddressSanitizer.html
+# Use bare `setarch -R` (no arch): the arch-qualified form also sets the
+# personality, which fails where setarch can't (e.g. riscv64). Check it works
+# before wrapping, and just run ceph-dencoder unwrapped if it doesn't.
 if ldd $(command -v $CEPH_DENCODER) 2>/dev/null | grep -q libasan; then
-  echo "ASAN build detected: wrapping ceph-dencoder with 'setarch \$(uname -m) -R'"
-  CEPH_DENCODER="setarch $(uname -m) -R $CEPH_DENCODER"
+  if setarch -R true >/dev/null 2>&1; then
+    echo "ASAN build detected: wrapping ceph-dencoder with 'setarch -R'"
+    CEPH_DENCODER="setarch -R $CEPH_DENCODER"
+  else
+    echo "ASAN build detected but 'setarch -R' is unavailable; running ceph-dencoder without ASLR disable"
+  fi
 fi
 
 myversion=$($CEPH_DENCODER version)
