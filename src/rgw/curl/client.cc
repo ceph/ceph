@@ -10,6 +10,7 @@
 #include <boost/asio/generic/datagram_protocol.hpp>
 #include <boost/asio/generic/stream_protocol.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -258,6 +259,9 @@ class Client::Impl :
   using client_socket_map = std::unordered_map<curl_socket_t, client_socket>;
   client_socket_map sockets;
 
+  // libcurl-internal fds we wait on but never close
+  std::unordered_map<curl_socket_t, boost::asio::posix::stream_descriptor> ext_sockets;
+
   using handler_map = std::unordered_map<CURL*, handler_type>;
   handler_map handlers;
 
@@ -348,6 +352,36 @@ class Client::Impl :
     }
   }
 
+  int ext_socket_action(curl_socket_t fd, int what)
+  {
+    if (what == CURL_POLL_REMOVE) {
+      if (auto e = ext_sockets.find(fd); e != ext_sockets.end()) {
+        e->second.release();   // libcurl owns this fd; don't close it
+        ext_sockets.erase(e);
+      }
+      return 0;
+    }
+    auto e = ext_sockets.find(fd);
+    if (e == ext_sockets.end()) {
+      boost::system::error_code ec;
+      boost::asio::posix::stream_descriptor desc{get_executor()};
+      desc.assign(fd, ec);
+      if (ec) {
+        return -1;
+      }
+      e = ext_sockets.emplace(fd, std::move(desc)).first;
+    }
+    if (what & CURL_POLL_IN) {
+      e->second.async_wait(boost::asio::posix::stream_descriptor::wait_read,
+                           socket_wait_handler{this, fd, CURL_CSELECT_IN});
+    }
+    if (what & CURL_POLL_OUT) {
+      e->second.async_wait(boost::asio::posix::stream_descriptor::wait_write,
+                           socket_wait_handler{this, fd, CURL_CSELECT_OUT});
+    }
+    return 0;
+  }
+
   // construct and open a tcp or udp socket
   template <typename Protocol>
   curl_socket_t open_socket(const Protocol& proto)
@@ -369,12 +403,21 @@ class Client::Impl :
   {
     auto impl = static_cast<Impl*>(user);
 
-    if (address->socktype == SOCK_STREAM) {
+    // libcurl may OR SOCK_CLOEXEC/SOCK_NONBLOCK into socktype
+    int socktype = address->socktype;
+#ifdef SOCK_CLOEXEC
+    socktype &= ~SOCK_CLOEXEC;
+#endif
+#ifdef SOCK_NONBLOCK
+    socktype &= ~SOCK_NONBLOCK;
+#endif
+
+    if (socktype == SOCK_STREAM) {
       using protocol_type = boost::asio::generic::stream_protocol;
       return impl->open_socket(protocol_type{address->family,
                                              address->protocol});
     }
-    if (address->socktype == SOCK_DGRAM) {
+    if (socktype == SOCK_DGRAM) {
       using protocol_type = boost::asio::generic::datagram_protocol;
       return impl->open_socket(protocol_type{address->family,
                                              address->protocol});
@@ -422,13 +465,13 @@ class Client::Impl :
   {
     auto impl = static_cast<Impl*>(user);
 
-    if (what == CURL_POLL_REMOVE) {
-      return 0;
-    }
-
     auto i = impl->sockets.find(fd);
     if (i == impl->sockets.end()) {
-      return -1;
+      // libcurl opened this fd itself (e.g. resolver socketpair); wait, don't own
+      return impl->ext_socket_action(fd, what);
+    }
+    if (what == CURL_POLL_REMOVE) {
+      return 0;
     }
 
     if (what & CURL_POLL_IN) {
