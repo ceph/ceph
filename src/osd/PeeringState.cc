@@ -6275,6 +6275,8 @@ PeeringState::MigratingSource::MigratingSource(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
+  ps->state_clear(PG_STATE_MIGRATION_ERROR);
   pl->on_pool_migration_source_reserved();
   pl->publish_stats_to_osd();
 }
@@ -6386,6 +6388,8 @@ PeeringState::MigratingTarget::MigratingTarget(my_context ctx)
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_MIGRATION_TOOFULL);
   ps->state_clear(PG_STATE_MIGRATION_WAIT);
+  ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
+  ps->state_clear(PG_STATE_MIGRATION_ERROR);
   ps->state_set(PG_STATE_MIGRATING);
   pl->on_pool_migration_target_reserved();
   pl->publish_stats_to_osd();
@@ -6481,6 +6485,8 @@ PeeringState::WaitRemotePoolMigrationReserved::WaitRemotePoolMigrationReserved(m
   if (!ps->state_test(PG_STATE_MIGRATION_TOOFULL)) {
     ps->state_set(PG_STATE_MIGRATION_WAIT);
   }
+  ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
+  ps->state_clear(PG_STATE_MIGRATION_ERROR);
   pl->publish_stats_to_osd();
   post_event(RemotePoolMigrationReserved());
 }
@@ -6654,6 +6660,8 @@ PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_
   if (!ps->state_test(PG_STATE_MIGRATION_TOOFULL)) {
     ps->state_set(PG_STATE_MIGRATION_WAIT);
   }
+  ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
+  ps->state_clear(PG_STATE_MIGRATION_ERROR);
   pl->request_local_background_io_reservation(
     ps->get_pool_migration_priority(),
     std::make_unique<PGPeeringEvent>(
