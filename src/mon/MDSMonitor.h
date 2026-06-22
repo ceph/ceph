@@ -165,6 +165,8 @@ protected:
 private:
   time last_fsmap_struct_flush = clock::zero();
   bool check_fsmap_struct_version = true;
+  boost::optional<const entity_addrvec_t&> get_rank_addrs(const Filesystem& fs,
+                                                          mds_rank_t rank) const;
 };
 
 #endif
