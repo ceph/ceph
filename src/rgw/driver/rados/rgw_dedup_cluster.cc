@@ -339,8 +339,7 @@ namespace rgw::dedup {
   int cluster::reset(rgw::sal::RadosStore *store,
                      dedup_epoch_t *p_epoch,
                      work_shard_t num_work_shards,
-                     md5_shard_t num_md5_shards,
-                     uint32_t num_group_tokens)
+                     md5_shard_t num_md5_shards)
   {
     ldpp_dout(dpp, 10) << __func__ << "::REQ num_work_shards=" << num_work_shards
                        << "::num_md5_shards=" << num_md5_shards << dendl;
@@ -382,9 +381,6 @@ namespace rgw::dedup {
 
     create_shard_tokens(store, p_epoch->num_work_shards, WORKER_SHARD_PREFIX);
     create_shard_tokens(store, p_epoch->num_md5_shards, MD5_SHARD_PREFIX);
-    if (num_group_tokens > 0) {
-      create_shard_tokens(store, num_group_tokens, GRP_SHARD_PREFIX);
-    }
 
     ret = verify_all_shard_tokens(store, p_epoch->num_work_shards,
                                   WORKER_SHARD_PREFIX);

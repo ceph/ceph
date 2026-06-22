@@ -41,6 +41,7 @@
 #include "cls/version/cls_version_client.h"
 #include "fmt/ranges.h"
 #include "osd/osd_types.h"
+#include "include/int_types.h"
 #include "common/ceph_crypto.h"
 
 #include <filesystem>
@@ -80,6 +81,7 @@ using namespace rgw::dedup;
 static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 
 namespace rgw::dedup {
+  static constexpr uint64_t MAX_DEDUP_MEM_ALLOCATION_MB = 2048;
   static inline constexpr unsigned MAX_STORAGE_CLASS_IDX = 128;
   using storage_class_idx_t = uint8_t;
 
@@ -414,10 +416,13 @@ namespace rgw::dedup {
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
     d_split_head = cct->_conf->rgw_dedup_split_obj_head;
+    d_min_mem_allocation_mb = cct->_conf->rgw_dedup_min_mem_allocation_mb;
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
                        << "::d_split_head=" << d_split_head
+                       << "::d_min_mem_allocation_mb=" << d_min_mem_allocation_mb
                        << dendl;
+    ceph_assert(d_min_mem_allocation_mb <= MAX_DEDUP_MEM_ALLOCATION_MB);
 
     int ret = init_rados_access_handles(false);
     if (ret != 0) {
@@ -2927,78 +2932,87 @@ namespace rgw::dedup {
 
   //-------------------------------------------------------------------------------
   //  32B per object-entry in the hashtable
-  //  2MB per shard-buffer
-  //=============||==============||=========||===================================||
-  // Obj Count   || shard count  || memory  ||         calculation               ||
-  // ------------||--------------||---------||---------------------------------- ||
-  //     1M      ||      4       ||     8MB ||    8MB/32 =  0.25M *   4 =     1M ||
-  //     4M      ||      8       ||    16MB ||   16MB/32 =  0.50M *   8 =     4M ||
-  //-------------------------------------------------------------------------------
-  //    16M      ||     16       ||    32MB ||   32MB/32 =  1.00M *  16 =    16M ||
-  //-------------------------------------------------------------------------------
-  //    64M      ||     32       ||    64MB ||   64MB/32 =  2.00M *  32 =    64M ||
-  //   256M      ||     64       ||   128MB ||  128MB/32 =  4.00M *  64 =   256M ||
-  //  1024M(  1G)||    128       ||   256MB ||  256MB/32 =  8.00M * 128 =  1024M ||
-  //  4096M(  4G)||    256       ||   512MB ||  512MB/32 = 16M.00 * 256 =  4096M ||
-  //-------------------------------------------------------------------------------
-  // 16384M( 16G)||    512       ||  1024MB || 1024MB/32 = 32M.00 * 512 = 16384M ||
-  // 65536M( 64G)||   1024       ||  2048MB || 2048MB/32 = 64M.00 *1024 = 65536M ||
-  //262144M(256G)||   2048       ||  4096MB || 4096MB/32 =128M.00 *2048 =262144M ||
-  //-------------||--------------||---------||-----------------------------------||
-  //   > 256G    ||  REJECTED    ||   N/A   || Pool exceeds max supported size   ||
-  //=============||==============||=========||===================================||
+  //  2MB per shard-buffer (PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT * sizeof(disk_block_t))
+  //
+  // Scaling Table (power-of-2 units: Slots=MB/32, B=MB/2)
+  //       |        |      | single-pass |         | two-pass
+  //  MB   | Slots  |  B   | obj-raw     |  B²     | obj-raw
+  // ------|------- |------|-------------|---------|-----------
+  //    8  |   256K |    4 |     1M      |      16 |        4M
+  //   16  |   512K |    8 |     4M      |      64 |       32M
+  //   32  |  1M    |   16 |    16M      |     256 |      256M
+  //   64  |  2M    |   32 |    64M      |    1K   |     2G
+  //  128  |  4M    |   64 |   256M      |    4K   |    16G
+  //  256  |  8M    |  128 |  1G         |   16K   |   128G
+  //  512  | 16M    |  256 |  4G         |   64K   |  1T
+  // 1024  | 32M    |  512 | 16G         |  256K   |  8T
+  // 2048  | 64M    | 1024 | 64G         | 1M      | 64T
 
-  static md5_shard_t calc_num_md5_shards(uint64_t obj_count)
+  struct fan_out_params_t {
+    uint64_t alloc_bytes;
+    uint32_t num_md5_shards;
+    uint32_t fan_out_B;
+    uint32_t num_groups;       // 0 = single-pass
+  };
+
+  //---------------------------------------------------------------------------
+  // Unified computation: walks the scaling table (8..2048 MB) to find the
+  // smallest allocation whose B² can handle obj_count. Then takes the max
+  // of that and the configured minimum. Derives shards, B, and pass mode.
+  // Returns -EOVERFLOW if even 2048 MB is insufficient.
+  static int calc_fan_out_params(uint64_t obj_count,
+                                 uint64_t min_alloc_mb,
+                                 fan_out_params_t *out)
   {
-    // create headroom by allocating space for a 25% bigger system
+    static constexpr uint64_t Mi = 1024ULL * 1024;
+    static constexpr uint64_t PER_SHARD_BUFF = DISK_BLOCK_COUNT * DISK_BLOCK_SIZE;
+
+    // 1.25x headroom
     obj_count = obj_count + (obj_count / 4);
 
-    uint64_t M = 1024 * 1024;
-    if (obj_count < 1*M) {
-      // less than 1M objects -> use 4 shards (8MB)
-      return 4;
+    // Walk scaling table rows: 8, 16, 32, ..., 2048 MB
+    // Two conditions must hold:
+    //   1. per-shard load fits in hash table: DIV_ROUND_UP(obj_count, md5_shards) <= num_slots
+    //   2. shard count fits in B² model:      md5_shards <= B * B
+    uint64_t needed_alloc = 0;
+    for (uint64_t mb = 8; mb <= MAX_DEDUP_MEM_ALLOCATION_MB; mb *= 2) {
+      uint64_t alloc = mb * Mi;
+      uint64_t num_slots = alloc / HASH_ENTRY_SIZE;
+      uint64_t md5_shards = DIV_ROUND_UP(obj_count, num_slots);
+      if (md5_shards < MIN_MD5_SHARD) md5_shards = MIN_MD5_SHARD;
+      if (md5_shards > MAX_MD5_SHARD) md5_shards = MAX_MD5_SHARD;
+      uint64_t per_shard_load = DIV_ROUND_UP(obj_count, md5_shards);
+      uint64_t B = alloc / PER_SHARD_BUFF;
+      if (per_shard_load <= num_slots && md5_shards <= B * B) {
+        needed_alloc = alloc;
+        break;
+      }
     }
-    else if (obj_count < 4*M) {
-      // less than 4M objects -> use 8 shards (16MB)
-      return 8;
+
+    if (needed_alloc == 0) {
+      // we can't allocate more than 2GB of DRAM
+      return -EOVERFLOW;
     }
-    else if (obj_count < 16*M) {
-      // less than 16M objects -> use 16 shards (32MB)
-      return 16;
-    }
-    else if (obj_count < 64*M) {
-      // less than 64M objects -> use 32 shards (64MB)
-      return 32;
-    }
-    else if (obj_count < 256*M) {
-      // less than 256M objects -> use 64 shards (128MB)
-      return 64;
-    }
-    else if (obj_count < 1024*M) {
-      // less than 1B objects -> use 128 shards (256MB)
-      return 128;
-    }
-    else if (obj_count < 4*1024*M) {
-      // less than 4B objects -> use 256 shards (512MB)
-      return 256;
-    }
-    else if (obj_count < 16ULL*1024*M) {
-      // less than 16B objects -> use 512 shards (1024MB)
-      return 512;
-    }
-    else if (obj_count < 64ULL*1024*M) {
-      // less than 64B objects -> use 1024 shards (2048MB)
-      return 1024;
-    }
-    else if (obj_count < 256ULL*1024*M) {
-      return 2048;
-    }
-    else if (obj_count < 1024ULL*1024*M) {
-      return 4096;
-    }
-    else {
-      return 8192;
-    }
+
+    // Use at least the configured minimum
+    uint64_t actual_alloc = std::max(needed_alloc, min_alloc_mb * Mi);
+    ceph_assert(actual_alloc <= MAX_DEDUP_MEM_ALLOCATION_MB * Mi);
+
+    // Recompute with actual allocation
+    uint64_t num_slots = actual_alloc / HASH_ENTRY_SIZE;
+    uint64_t md5_shards = DIV_ROUND_UP(obj_count, num_slots);
+    if (md5_shards < MIN_MD5_SHARD) md5_shards = MIN_MD5_SHARD;
+
+    ceph_assert(md5_shards <= MAX_MD5_SHARD);
+    ceph_assert(md5_shards <= MD5_SHARD_HARD_LIMIT);
+
+    uint32_t B = static_cast<uint32_t>(actual_alloc / PER_SHARD_BUFF);
+
+    out->alloc_bytes    = actual_alloc;
+    out->num_md5_shards = static_cast<uint32_t>(md5_shards);
+    out->fan_out_B      = B;
+    out->num_groups     = (md5_shards <= B) ? 0 : DIV_ROUND_UP(md5_shards, B);
+    return 0;
   }
 
   //---------------------------------------------------------------------------
@@ -3009,22 +3023,30 @@ namespace rgw::dedup {
       return ret;
     }
 
-    md5_shard_t num_md5_shards = calc_num_md5_shards(d_all_buckets_obj_count);
-    if (num_md5_shards > MD5_SHARD_HARD_LIMIT) {
-      derr << __func__ << "::Pool has too many objects: ("
-           << d_all_buckets_obj_count << ") Max supported is 213 billion" << dendl;
-      return -EOVERFLOW;
+    // Unified computation: allocation, shards, B, and pass mode
+    fan_out_params_t fp;
+    ret = calc_fan_out_params(d_all_buckets_obj_count, d_min_mem_allocation_mb, &fp);
+    if (ret != 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: system too large for dedup. "
+                        << "obj_count=" << d_all_buckets_obj_count
+                        << " exceeds capacity at max allocation ("
+                        << MAX_DEDUP_MEM_ALLOCATION_MB << " MB)" << dendl;
+      return ret;
     }
+    d_raw_mem_size = fp.alloc_bytes;
+    d_fan_out_B    = fp.fan_out_B;
+    d_num_groups   = fp.num_groups;
 
-    num_md5_shards = std::min(num_md5_shards, MAX_MD5_SHARD);
-    num_md5_shards = std::max(num_md5_shards, MIN_MD5_SHARD);
-    work_shard_t num_work_shards = num_md5_shards;
-    num_work_shards = std::min(num_work_shards, MAX_WORK_SHARD);
-    num_work_shards = std::max(num_work_shards, MIN_WORK_SHARD);
+    md5_shard_t  num_md5_shards  = fp.num_md5_shards;
+    work_shard_t num_work_shards = std::min(static_cast<work_shard_t>(num_md5_shards),
+                                            MAX_WORK_SHARD);
 
-    ldpp_dout(dpp, 5) << __func__ << "::obj_count=" <<d_all_buckets_obj_count
+    ldpp_dout(dpp, 5) << __func__ << "::obj_count=" << d_all_buckets_obj_count
                       << "::num_md5_shards=" << num_md5_shards
-                      << "::num_work_shards=" << num_work_shards << dendl;
+                      << "::num_work_shards=" << num_work_shards
+                      << "::raw_mem_size=" << d_raw_mem_size
+                      << "::fan_out_B=" << d_fan_out_B
+                      << "::num_groups=" << d_num_groups << dendl;
     // init handles and create the dedup_pool
     ret = init_rados_access_handles(true);
     if (ret != 0) {
@@ -3034,7 +3056,7 @@ namespace rgw::dedup {
     }
     display_ioctx_state(dpp, d_dedup_cluster_ioctx, __func__);
 
-    ret = d_cluster.reset(store, p_epoch, num_work_shards, num_md5_shards, 0);
+    ret = d_cluster.reset(store, p_epoch, num_work_shards, num_md5_shards);
     if (ret != 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed cluster.init()" << dendl;
       return ret;
@@ -3464,8 +3486,6 @@ namespace rgw::dedup {
     const auto rc = ceph_pthread_setname("dedup_bg");
     ldpp_dout(dpp, 5) << __func__ << "ceph_pthread_setname() ret=" << rc << dendl;
 
-    // 256x8KB=2MB
-    const uint64_t PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
 
     while (!d_ctl.shutdown_req) {
@@ -3491,35 +3511,41 @@ namespace rgw::dedup {
         }
         work_shard_t num_work_shards = epoch.num_work_shards;
         md5_shard_t  num_md5_shards  = epoch.num_md5_shards;
-        const uint64_t RAW_MEM_SIZE = PER_SHARD_BUFFER_SIZE * num_md5_shards;
-        ldpp_dout(dpp, 5) <<__func__ << "::RAW_MEM_SIZE=" << RAW_MEM_SIZE
+        // d_raw_mem_size was computed in setup() via calc_mem_allocation()
+        ldpp_dout(dpp, 5) <<__func__ << "::raw_mem_size=" << d_raw_mem_size
                           << "::num_work_shards=" << num_work_shards
-                          << "::num_md5_shards=" << num_md5_shards << dendl;
+                          << "::num_md5_shards=" << num_md5_shards
+                          << "::fan_out_B=" << d_fan_out_B
+                          << "::num_groups=" << d_num_groups << dendl;
         // DEDUP_DYN_ALLOC
-        auto raw_mem = std::make_unique<uint8_t[]>(RAW_MEM_SIZE);
+        auto raw_mem = std::make_unique<uint8_t[]>(d_raw_mem_size);
         if (raw_mem == nullptr) {
-          ldpp_dout(dpp, 1) << "failed slab memory allocation - size=" << RAW_MEM_SIZE << dendl;
+          ldpp_dout(dpp, 1) << "failed slab memory allocation - size=" << d_raw_mem_size << dendl;
           return;
         }
 
+        // Both single-pass and two-pass use the same entry point.
+        // When d_num_groups > 0, each worker internally does:
+        //   phase 1: BI -> CS slabs (coarse ranges), then
+        //   phase 2: CS slabs -> S slabs (final per-shard slabs)
+        // When d_num_groups == 0, each worker does single-pass: BI -> S slabs directly.
         process_all_shards(true, &Background::f_ingress_work_shard, raw_mem.get(),
-                           RAW_MEM_SIZE, num_work_shards, num_md5_shards);
+                           d_raw_mem_size, num_work_shards, num_md5_shards);
         if (!d_ctl.should_stop()) {
           // Wait for all other workers to finish ingress step
           work_shards_barrier(num_work_shards);
-          if (!d_ctl.should_stop()) {
-            process_all_shards(false, &Background::f_dedup_md5_shard, raw_mem.get(),
-                               RAW_MEM_SIZE, num_work_shards, num_md5_shards);
-            // Wait for all other md5 shards to finish
-            md5_shards_barrier(num_md5_shards);
-            safe_pool_delete(store, dpp, pool_id);
-          }
-          else {
-            ldpp_dout(dpp, 5) <<__func__ << "::stop req from barrier" << dendl;
-          }
         }
         else {
           ldpp_dout(dpp, 5) <<__func__ << "::stop req from ingress_work_shard" << dendl;
+        }
+
+        if (!d_ctl.should_stop()) {
+          // Dedup phase (same for both single-pass and two-pass paths)
+          process_all_shards(false, &Background::f_dedup_md5_shard, raw_mem.get(),
+                             d_raw_mem_size, num_work_shards, num_md5_shards);
+          // Wait for all other md5 shards to finish
+          md5_shards_barrier(num_md5_shards);
+          safe_pool_delete(store, dpp, pool_id);
         }
       } // dedup_exec
 

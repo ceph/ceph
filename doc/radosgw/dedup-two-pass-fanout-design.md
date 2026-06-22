@@ -30,22 +30,52 @@ hash table, repurposed between phases.
 
 ## Memory Allocation
 
-A single buffer (`raw_mem`) is allocated once per dedup cycle. Its size is
-determined by the per-shard hash table requirement:
+A single buffer (`raw_mem`) is allocated once per dedup cycle. During
+ingress, the buffer is partitioned into `B = allocation / 2 Mi` output
+stream buffers. Afterwards the same buffer is repurposed as the per-shard
+hash table.
+
+The allocation size is **configuration-driven** via the YAML option
+`rgw_dedup_min_mem_allocation_mb`. This sets the *minimum* allocation;
+if the object count requires more shards than the minimum can support
+(in the B² model), the system doubles the allocation until B² is sufficient,
+up to the hard cap of 2048 MB.
+
+### YAML Configuration
+
+```yaml
+rgw_dedup_min_mem_allocation_mb:
+  type: uint
+  default: 64        # 64 MB
+  min: 8             # 8 MB
+  max: 2048          # 2 Gi
+  desc: >
+    Minimum memory allocation (in MB) for dedup ingress buffers and hash table.
+    The actual allocation may be higher if the object count requires more
+    shards than B² can provide at this size. The system doubles the allocation
+    until B² suffices or the 2048 MB cap is reached. Systems exceeding
+    the cap are rejected.
+```
+
+### Allocation Logic
 
 ```
-hash_table_entries_per_shard = (obj_count_with_headroom / num_md5_shards)
-raw_mem_size = hash_table_entries_per_shard * 32   (bytes per hash entry)
+B = allocation / PER_SHARD_BUFFER_SIZE       (PER_SHARD_BUFFER_SIZE = 2 Mi)
+Single-pass:  num_md5_shards <= B            (one buffer per shard)
+Two-pass:     num_md5_shards <= B²           (B groups of B shards)
 ```
 
-During ingress, the same buffer is partitioned into `B = raw_mem_size / 2MB`
-output stream buffers.
+Starting from `rgw_dedup_min_mem_allocation_mb`:
+1. Compute `B = alloc / 2 Mi`.
+2. If `num_md5_shards <= B²` → use this allocation.
+3. Otherwise, double the allocation and repeat.
+4. If allocation exceeds 2048 MB → reject (system too large).
 
 ### Headroom
 
-Object count headroom is increased from 1.2x to **1.25x** (25%). Because
-memory is no longer proportional to shard count, the system can afford more
-generous headroom without a proportional memory penalty.
+Object count headroom is **1.25x** (25%). Because memory is no longer
+proportional to shard count, the system can afford more generous headroom
+without a proportional memory penalty.
 
 ```cpp
 obj_count = obj_count + (obj_count / 4);  // 1.25x headroom
@@ -53,26 +83,31 @@ obj_count = obj_count + (obj_count / 4);  // 1.25x headroom
 
 ### Scaling Table
 
-Below: memory is the single allocation size, used for ingress buffers (pass 1
-and pass 2) and then repurposed for the per-shard hash table. See the
-`disk_rec_id_t` section for both 2 MB and 4 MB slab options.
+Memory is the single allocation size. Table-Slots = allocation / 32
+(hash table entries). `B` = allocation / 2 Mi (concurrent ingress
+output buffers). All units use strict power-of-2 math
+(K = 1024, M = 1 Mi, G = 1 Gi, T = 1 Ti).
 
-| Allocation | Ingress Buffers (B) | Max Shards (B²) | Slots/Shard | Max Raw Objects (÷1.25) |
-|------------|---------------------|------------------|-------------|-------------------------|
-| 128 MB     | 64                  | 4,096            | 4M          | 13.7G                   |
-| 256 MB     | 128                 | 16,384           | 8M          | 110G                    |
-| 512 MB     | 256                 | 65,536           | 16M         | 880G                    |
-| 1,024 MB   | 512                 | 262,144          | 33M         | 7.04T                   |
-| 2,048 MB   | 1,024               | 1,048,575        | 65M         | 56T                     |
+| MB   | Slots | B    | obj-raw | B²   | obj-raw |
+|------|-------|------|---------|------|---------|
+| 8    | 256K  | 4    | 1M      | 16   | 4M      |
+| 16   | 512K  | 8    | 4M      | 64   | 32M     |
+| 32   | 1M    | 16   | 16M     | 256  | 256M    |
+| 64   | 2M    | 32   | 64M     | 1K   | 2G      |
+| 128  | 4M    | 64   | 256M    | 4K   | 16G     |
+| 256  | 8M    | 128  | 1G      | 16K  | 128G    |
+| 512  | 16M   | 256  | 4G      | 64K  | 1T      |
+| 1024 | 32M   | 512  | 16G     | 256K | 8T      |
+| 2048 | 64M   | 1024 | 64G     | 1M   | 64T     |
 
-*Max Shards (B²) is capped at 1,048,575 (1M) — the maximum MD5 shard ID
+*Max Shards (B²) is capped at 1,048,575 (1M − 1) — the maximum MD5 shard ID
 supported by the `%05X` OID format (`0xFFFFF`). The last row hits this
-ceiling (1,024² = 1,048,576, clamped to 1,048,575). Table uses 2 MB slabs
+ceiling (1024² = 1M, clamped to 1M − 1). Table uses 2 Mi slabs
 (`DISK_BLOCK_COUNT = 256`).
 
 Below the shard ceiling, doubling memory yields **8x** object capacity (B
-doubles → B² quadruples shards, and slots/shard doubles → 4x × 2x = 8x).
-Above the ceiling, doubling memory yields only **2x** (slots/shard doubles).
+doubles → B² quadruples shards, and slots/shard doubles → 4× × 2× = 8×).
+Above the ceiling, doubling memory yields only **2×** (slots/shard doubles).
 
 ### Hash Table Density
 
@@ -84,7 +119,7 @@ load = raw_objects_per_shard / slots_per_shard
      = (raw_obj_count / num_md5_shards) / (raw_mem_size / 32)
 ```
 
-With 1.25x headroom the worst-case load factor is **~80%**, yielding ~5 average
+With 1.25x headroom the worst-case load factor is ~80%, yielding ~5 average
 probes per lookup with linear probing.
 
 ## Phases
@@ -453,46 +488,51 @@ COARSE_SLAB_NAME_FORMAT: (new) "CS%03X.%02X.%06X"
 
 ```
 MD5_SHARD_PREFIX:    "MD5.SHRD.TK." → "MD5.TK."
-WORKER_SHARD_PREFIX: "WRK.SHRD.TK." → "WRK.TK."  (used by pass 2 fan-out)
-GRP_SHARD_PREFIX:    (new) "GRP.TK."               (used by pass 1 coarse ingress)
+WORKER_SHARD_PREFIX: "WRK.SHRD.TK." → "WRK.TK."
 shard_token_oid::set_shard:
   parameter: uint16_t → uint32_t
   format:    "%03x"   → "%05x"
 
-cluster::reset():
-  - New argument: num_group_tokens
-  - Creates GRP.TK. tokens (alongside WRK.TK. and MD5.TK.) at startup
-  - When num_md5_shards <= B (single-pass): num_group_tokens = 0,
-    no GRP.TK. tokens are created
-
 d_completed_md5[MAX_MD5_SHARD] → dynamically allocated (vector)
 d_completed_workers[MAX_WORK_SHARD] → d_completed_workers[256] (unchanged)
-d_completed_groups[] → dynamically allocated (vector, sized to num_group_tokens)
 d_num_completed_md5:  uint16_t → uint32_t
+
+get_next_work_shard_token() / get_next_md5_shard_token():
+  return type: work_shard_t / md5_shard_t → shard_t (uint32_t)
+  sentinel:    NULL_WORK_SHARD / NULL_MD5_SHARD → NULL_SHARD (0xFFFFFFFF)
 ```
 
 `all_shard_tokens_completed()` is already prefix-parameterized — it works
-for `WRK.TK.`, `MD5.TK.`, and the new `GRP.TK.` without code changes.
+for `WRK.TK.` and `MD5.TK.` without code changes.
 
 ### `rgw_dedup.cc`
 
 ```
-calc_num_md5_shards():
-  - Headroom: obj_count + obj_count/4  (1.25x)
-  - Extended tiers up to new MAX_MD5_SHARD
+YAML config: rgw_dedup_min_mem_allocation_mb (min 8, default 64, max 2048)
+
+calc_fan_out_params(obj_count, min_alloc_mb, &out):
+  Unified function replaces calc_num_md5_shards() and calc_mem_allocation().
+  1. Apply 1.25x headroom: obj_count += obj_count / 4
+  2. Walk scaling table rows (8, 16, 32, ..., 2048 MB):
+     - num_slots = alloc / 32, shards = ceil(obj_count / num_slots)
+     - B = alloc / 2Mi
+     - First row where shards <= B² → needed_alloc
+  3. actual_alloc = max(needed_alloc, min_alloc_mb)
+  4. Recompute shards, B with actual_alloc
+  5. num_groups = 0 if shards <= B (single-pass), else ceil(shards / B)
+  Returns -EOVERFLOW if no row fits (system too large).
+
+Background::setup():
+  - Reads d_min_mem_allocation_mb from config
+  - Calls calc_fan_out_params() → d_raw_mem_size, d_fan_out_B, d_num_groups,
+    num_md5_shards, num_work_shards
 
 Background::run():
-  - Single raw_mem allocation sized for hash table
-  - B = raw_mem_size / PER_SHARD_BUFFER_SIZE
-  - If num_md5_shards <= B: skip pass 1, single-pass ingress
-    (current path, uses WRK.TK., num_group_tokens = 0)
-  - If num_md5_shards > B: two-pass fan-out
-    (pass 1 uses GRP.TK., pass 2 uses WRK.TK.)
-
-New functions:
-  - pass1_coarse_ingress(): fan out into ceil(N/B) groups
-  - pass2_fine_fan_out(): for each group, read + re-fan-out
-  - calc_fan_out_params(): compute B, G, passes from allocation
+  - Allocates d_raw_mem_size bytes (computed in setup)
+  - If num_md5_shards <= B: single-pass ingress (BI → S slabs)
+  - If num_md5_shards > B: per-worker two-phase ingress
+    phase 1: BI → CS slabs (coarse), phase 2: CS → S slabs (final)
+  - Both paths use WRK.TK. tokens + work_shards_barrier
 ```
 
 ### `rgw_dedup_epoch.h`
@@ -503,16 +543,17 @@ in `dedup_epoch_t`.
 ## Example: 1 Trillion Objects
 
 ```
-Raw objects:           1T
-Headroom (1.25x):      1.25T
-MD5 shards:            8192
-Work shards:           min(8192, 255) = 255
-Hash table/shard:      1.25T / 8192 = 152M entries × 32B = 4.88 GB
-Ingress buffers:       4.88 GB / 2MB = 2440 buffers
-Pass 1 groups:         ceil(8192 / 2440) = 4 groups
-Pass 2:                4 iterations, each fans ≤ 2440 streams
-Slab count per pair:   1.25T / (8192 × 255) = 598,572 records → 2,339 slabs
-Peak memory:           4.88 GB (single allocation, repurposed)
+Raw objects:            1T
+Headroom (1.25x):       1.25T
+MD5 shards:             8192
+Work shards:            min(8192, 255) = 255
+Config min alloc:       64 MB (default)
+Doubling: 64→128→256→512→1024 MB (B=512, B²=256K > 8192) → alloc = 1024 MB
+B (output streams):     512
+num_groups:             ceil(8192 / 512) = 16
+Slots/shard:            32M
+Per-worker:             phase 1: BI → CS slabs, phase 2: CS → S slabs
+Peak memory:            1024 MB (single allocation, repurposed)
 ```
 
 ## Dynamic Array Allocation
@@ -538,40 +579,30 @@ Benefits:
 
 ## Resolved Design Decisions
 
-1. **Pass 1 coordination**: Workers compete for `GRP.TK.` tokens (one per
-   coarse group) using the same exclusive lock + heartbeat mechanism as
-   `WRK.TK.` and `MD5.TK.` tokens. Uses `all_shard_tokens_completed()`.
-   `GRP.TK.` tokens are created at startup by `cluster::reset()` (new
-   `num_group_tokens` argument); when the system is small enough for
-   single-pass ingress, `num_group_tokens = 0` and no `GRP.TK.` tokens
-   are created.
+1. **Per-worker two-phase ingress (no GRP tokens)**: Each worker processes
+   its assigned BI shard in two internal phases without inter-worker
+   coordination between phases. Phase 1: BI → CS slabs (coarse ranges).
+   Phase 2: load CS slabs by range and output into final S slabs. Only
+   a single `work_shards_barrier` is needed at the end of ingress.
 
-2. **pass1_barrier**: Polls `GRP.TK.` tokens via
-   `all_shard_tokens_completed()` until every coarse group is complete or
-   timed out (30s heartbeat).
+2. **Config-driven memory model**: The allocation starts from
+   `rgw_dedup_min_mem_allocation_mb` (default 64 MB) and doubles until
+   B² >= num_md5_shards. Systems exceeding 2048 MB are rejected.
 
-3. **Pass 2 coordination**: RGW instances compete for `WRK.TK.` tokens (one
-   per worker) using the same mechanism. The dedup phase sees the same
-   `WRK.TK.` + `S`-prefix interface it has always used.
+3. **Routing formula**: Coarse routing uses modulo arithmetic
+   (`md5_shard % B`), which works correctly for uneven divisions —
+   some coarse ranges simply get one more shard than others.
 
-4. **pass2_barrier**: Uses the same `work_shards_barrier()` mechanism — polls
-   `WRK.TK.` tokens via `all_shard_tokens_completed()` until every worker
-   is complete or timed out.
-
-5. **Crash recovery**: No new phase tracking in `dedup_epoch_t`. Follows the
+4. **Crash recovery**: No new phase tracking in `dedup_epoch_t`. Follows the
    current model: barriers detect timed-out/crashed members and proceed
    without them. Partial data from crashed workers is simply missing. The
    dedup pool is deleted on successful cycle end (`safe_pool_delete`),
    cleaning up all transient slabs.
 
-6. **Routing formula**: Coarse routing uses modulo arithmetic
-   (`md5_shard % B`), which works correctly for uneven divisions —
-   some coarse ranges simply get one more shard than others.
-
-7. **d_completed_md5**: Dynamically allocated as `std::vector<uint8_t>` at
+5. **d_completed_md5**: Dynamically allocated as `std::vector<uint8_t>` at
    runtime, resolving the fixed-array issue for up to 1M MD5 shards.
 
-8. **MAX_WORK_SHARD stays at 255**: 255 workers cover all BI shards (up to
+6. **MAX_WORK_SHARD stays at 255**: 255 workers cover all BI shards (up to
    1,999) via modulo arithmetic. Growing beyond 255 would require widening
    `disk_rec_id_t` and adding token coordination overhead with diminishing
    returns. The 8-bit `work_shard` field is retained.

@@ -25,6 +25,9 @@
 #include "common/dout.h"
 
 #define FULL_DEDUP_SUPPORT
+#ifndef DIV_ROUND_UP
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+#endif
 
 namespace rgw::dedup {
   using namespace std::chrono;
@@ -52,6 +55,8 @@ namespace rgw::dedup {
   static_assert(MAX_WORK_SHARD < NULL_WORK_SHARD);
   static_assert(MAX_WORK_SHARD < NULL_SHARD);
   static_assert(MAX_WORK_SHARD <= WORK_SHARD_HARD_LIMIT);
+
+  static_assert(MIN_MD5_SHARD  <= MAX_MD5_SHARD);
   static_assert(MAX_MD5_SHARD  < NULL_MD5_SHARD);
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
@@ -60,6 +65,7 @@ namespace rgw::dedup {
   // the number of ref_count entries in the SRC-OBJ
   const uint8_t MAX_COPIES_PER_OBJ = 128;
 
+  static constexpr uint64_t HASH_ENTRY_SIZE = 32;
   //---------------------------------------------------------------------------
   enum dedup_req_type_t {
     DEDUP_TYPE_NONE     = 0,

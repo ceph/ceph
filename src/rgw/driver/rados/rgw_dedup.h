@@ -253,6 +253,12 @@ namespace rgw::dedup {
     uint64_t d_all_buckets_obj_count   = 0;
     uint64_t d_all_buckets_obj_size    = 0;
 
+    // Fan-out parameters: computed in setup(), used in run()
+    uint32_t d_fan_out_B  = 0;    // B = concurrent output streams (buffers)
+    uint32_t d_num_groups = 0;    // G = ceil(num_md5_shards / B), 0 = single-pass
+    uint64_t d_raw_mem_size = 0;  // actual allocation in bytes (B * PER_SHARD_BUFFER_SIZE)
+
+    uint64_t d_min_mem_allocation_mb = 64; // from yaml: rgw_dedup_min_mem_allocation_mb
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
     bool     d_split_head             = true;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);

@@ -74,8 +74,7 @@ namespace rgw::dedup {
     int          reset(rgw::sal::RadosStore *store,
                        struct dedup_epoch_t*,
                        work_shard_t num_work_shards,
-                       md5_shard_t num_md5_shards,
-                       uint32_t num_group_tokens = 0);
+                       md5_shard_t num_md5_shards);
 
     utime_t      get_epoch_time() { return d_epoch_time; }
     shard_t      get_next_work_shard_token(rgw::sal::RadosStore *store,

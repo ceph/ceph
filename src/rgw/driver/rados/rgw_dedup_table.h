@@ -158,6 +158,7 @@ namespace rgw::dedup {
       value_t val;
     } __attribute__((__packed__));
     static_assert(sizeof(table_entry_t) == 32);
+    static_assert(sizeof(table_entry_t) == HASH_ENTRY_SIZE);
 
     uint32_t find_entry(const key_t *p_key) const;
     void     inc_counters(const key_t *p_key,
