@@ -38,7 +38,9 @@ def task(ctx, config):
           m: 1
           crush-failure-domain: osd
         cleanup: false (defaults to true)
-        type: <write|seq|rand> (defaults to write)
+        type: <write|seq|rand|rollback> (defaults to write)
+        rollback_snap: <snapshot> (to be used with runtype `rollback`)
+        skip_write: skip write for seq|rand|rollback run type (defaults to `false`)
     example:
 
     tasks:
@@ -56,6 +58,7 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     manager = ctx.managers['ceph']
     runtype = config.get('type', 'write')
+    skip_write = config.get('skip_write', False)
 
     config_extra_args = shlex.split(config.setdefault('extra_args', ''))
     expected_rc = config.setdefault('expected_rc', 0)
@@ -83,6 +86,11 @@ def task(ctx, config):
         if config.get('write-omap', False):
             write_to_omap = ['--write-omap']
             log.info('omap writes')
+        rollback_snap = []
+        snap = config.get('rollback_snap', None)
+        if snap:
+            rollback_snap = ['--snap', snap]
+            log.info(f'rollback snap {snap}')
 
         pool = config.get('pool', 'data')
         if create_pool:
@@ -122,7 +130,7 @@ def task(ctx, config):
             size = config.get('size', 65536)
             if size > 0:
                 bench_args.append(f'--block-size={size}')
-        else:
+        if runtype != "write" and not skip_write:
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
@@ -147,6 +155,7 @@ def task(ctx, config):
                           str(config.get('time', 360)),
                           runtype,
                           *write_to_omap,
+                          *rollback_snap,
                           *cleanup,
                           ]).format(tdir=testdir),
                 ],
