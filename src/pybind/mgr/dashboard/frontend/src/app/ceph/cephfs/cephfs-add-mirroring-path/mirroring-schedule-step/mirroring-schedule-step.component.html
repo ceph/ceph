@@ -145,5 +145,70 @@
         ></cds-number>
       </div>
     </div>
+
+    <div class="cds--col-lg-16 existing-schedules-section">
+      @if (hasScheduleConflicts) {
+        <cd-alert-panel type="warning"
+                        spacingClass="cds-mb-0"
+                        i18n>
+          One or more selected paths already have configured schedules
+        </cd-alert-panel>
+      }
+
+      @if (hasSelectedPaths) {
+        <div class="form-item conflict-handling">
+          <cds-radio-group formControlName="existingScheduleHandling"
+                           legend="How do you want to handle existing schedules?"
+                           i18n-legend>
+            <cds-radio [value]="EXISTING_SCHEDULE_HANDLING.KEEP_AND_ADD"
+                       i18n>
+              Keep current schedules and add new one (all paths)
+            </cds-radio>
+            <cds-radio [value]="EXISTING_SCHEDULE_HANDLING.REPLACE"
+                       i18n>
+              Replace existing schedules with the new schedule (all paths)
+            </cds-radio>
+            <cds-radio [value]="EXISTING_SCHEDULE_HANDLING.CONFIGURE_INDIVIDUALLY"
+                       i18n>
+              Configure each path individually
+            </cds-radio>
+          </cds-radio-group>
+        </div>
+      }
+
+      <div class="paths-schedule-table">
+        <cd-table [data]="conflictRows"
+                  [columns]="conflictColumns"
+                  columnMode="flex"
+                  [hasDetails]="false"
+                  [autoReload]="true"
+                  [autoSave]="false"
+                  [toolHeader]="false"
+                  [footer]="false"
+                  [layer]="0"
+                  [limit]="0">
+        </cd-table>
+      </div>
+    </div>
   </div>
 </form>
+
+<ng-template #actionTpl
+             let-row="data.row">
+  <cds-select [id]="'conflict-action-' + row.id"
+              label="Action for existing schedule"
+              i18n-label
+              [hideLabel]="true"
+              [(ngModel)]="row.action"
+              [ngModelOptions]="{standalone: true}"
+              (ngModelChange)="onConflictActionChange(row, $event)">
+    <option [value]="EXISTING_SCHEDULE_ACTION.KEEP_AND_ADD"
+            i18n>
+      Keep current schedules and add new one
+    </option>
+    <option [value]="EXISTING_SCHEDULE_ACTION.REPLACE"
+            i18n>
+      Replace existing schedules with the new schedule
+    </option>
+  </cds-select>
+</ng-template>

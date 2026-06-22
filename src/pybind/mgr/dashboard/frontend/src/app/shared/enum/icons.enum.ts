@@ -181,7 +181,6 @@ export const ICON_TYPE = {
   replicate: 'replicate',
   share: 'share',
   chevronDown: 'chevron--down',
-  trash: 'trash-can',
   folder: 'folder'
 } as const;
 

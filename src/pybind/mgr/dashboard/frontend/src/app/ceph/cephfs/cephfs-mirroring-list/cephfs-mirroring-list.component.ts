@@ -83,7 +83,8 @@ export class CephfsMirroringListComponent implements OnInit {
     if (selected) {
       this.addPathFsName = selected.local_fs_name;
       this.addPathFsId = selected.filesystem_id ?? 0;
-      this.addPathDestCluster = selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
+      this.addPathDestCluster =
+        selected.remote_cluster_name !== '-' ? selected.remote_cluster_name : '';
       this.addPathDestFs = selected.fs_name !== '-' ? selected.fs_name : '';
       this.isAddPathOpen = true;
     }

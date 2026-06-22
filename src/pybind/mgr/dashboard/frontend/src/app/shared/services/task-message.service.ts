@@ -570,17 +570,15 @@ export class TaskMessageService {
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
     ),
-    'mirroring/token/create': this.newTaskMessage(this.commonOperations.create, () =>
-     // this.bootstrap()
-     // this.bootstrap()
-     $localize`bootstrap token`
+    'mirroring/token/create': this.newTaskMessage(
+      this.commonOperations.create,
+      () =>
+        // this.bootstrap()
+        // this.bootstrap()
+        $localize`bootstrap token`
     ),
     'mirroring/setup': this.newTaskMessage(
-      new TaskMessageOperation(
-        $localize`Setting up`,
-        $localize`set up`,
-        $localize`Set up`
-      ),
+      new TaskMessageOperation($localize`Setting up`, $localize`set up`, $localize`Set up`),
       () => $localize`CephFS mirroring successfully`
     )
   };

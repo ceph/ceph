@@ -33,6 +33,9 @@ import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
+import { MirroringScheduleStepComponent } from './cephfs-add-mirroring-path/mirroring-schedule-step/mirroring-schedule-step.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -75,11 +78,6 @@ import ShareIcon24 from '@carbon/icons/es/share/24';
 import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
 import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
-import {
-  CephfsAddMirroringPathComponent,
-  MirroringPathsStepComponent,
-  MirroringScheduleStepComponent,
-} from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
 import FolderIcon16 from '@carbon/icons/es/folder/16';
 
 @NgModule({
@@ -153,7 +151,7 @@ export class CephfsModule {
   constructor(private iconService: IconService) {
     this.iconService.registerAll([
       AddIcon,
-      AddIcon,
+      AddIcon16,
       LaunchIcon,
       Close,
       Trash,

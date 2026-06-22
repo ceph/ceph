@@ -1,28 +1,30 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
-import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
-
-export interface DirLevel {
-  options: string[];
-  selected: string;
-  kind: 'group' | 'subvolume' | 'dir';
-}
-
-export interface PathEntry {
-  fullPath: string;
-  levels: DirLevel[];
-  expanded: boolean;
-  subvolumePath?: string;
-  filePickerPath?: string;
-}
+import {
+  buildGroupPath,
+  buildSubvolumePath,
+  folderPathFromFileInput,
+  getMirrorPath,
+  normalizeMirroringPath,
+  splitResolvedSubvolumePath,
+  toGroupParam,
+  toMirroringPathSelections,
+  withResolvedDisplayPath
+} from '../mirroring-path-utils';
+import {
+  createPathEntry,
+  DirLevel,
+  MirroringPathSelection,
+  PathEntry
+} from '../mirroring-path.model';
 
 @Component({
   selector: 'cd-mirroring-paths-step',
@@ -33,8 +35,9 @@ export interface PathEntry {
 export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   @Input() fsName: string;
   @Input() fsId: number;
+  @Output() pathsChanged = new EventEmitter<MirroringPathSelection[]>();
 
-  formGroup: CdFormGroup;
+  formGroup!: CdFormGroup;
   paths: PathEntry[] = [];
 
   constructor(
@@ -43,180 +46,67 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     private subvolumeService: CephfsSubvolumeService
   ) {}
 
-  ngOnInit() {
-    this.formGroup = new CdFormGroup({
-      pathsControl: new UntypedFormControl([], Validators.required)
-    });
+  ngOnInit(): void {
+    this.createForm();
+    this.paths = [createPathEntry([])];
     this.resolveFsId();
     this.loadSubvolumeGroups();
   }
 
-  private resolveFsId() {
-    if (this.fsId) return;
-    this.cephfsService.list().subscribe((filesystems: any[]) => {
-      const match = filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName);
-      if (match) {
-        this.fsId = match.id;
-      }
+  createForm(): void {
+    this.formGroup = new CdFormGroup({
+      pathsControl: new UntypedFormControl([], Validators.required)
     });
   }
 
-  private loadSubvolumeGroups() {
-    this.subvolumeGroupService
-      .get(this.fsName, false)
-      .pipe(catchError(() => of([])))
-      .subscribe((groups: any[]) => {
-        const groupNames = groups.map((g) => g.name).filter(Boolean);
-        if (this.paths.length === 0) {
-          this.paths.push({
-            fullPath: '',
-            levels: [{ options: groupNames, selected: '', kind: 'group' }],
-            expanded: true
-          });
-        } else {
-          this.paths.forEach((p) => {
-            if (p.levels[0]) p.levels[0].options = groupNames;
-          });
-        }
-      });
-  }
-
-  addPath() {
+  addPath(): void {
     const groupOptions = this.paths[0]?.levels[0]?.options ?? [];
-    this.paths.push({
-      fullPath: '',
-      levels: [{ options: [...groupOptions], selected: '', kind: 'group' }],
-      expanded: true
-    });
+    this.paths.push(createPathEntry([...groupOptions]));
   }
 
-  removePath(index: number) {
+  removePath(index: number): void {
     this.paths.splice(index, 1);
     this.syncFormValue();
   }
 
-  onLevelChange(pathIndex: number, levelIndex: number, selected: string) {
-    const entry = this.paths[pathIndex];
-    if (!entry) return;
-
-    entry.levels[levelIndex].selected = selected;
-    entry.levels.splice(levelIndex + 1);
-
-    if (!selected) {
-      entry.fullPath = '';
-      entry.subvolumePath = undefined;
-      this.syncFormValue();
-      return;
-    }
-
-    const currentKind = entry.levels[levelIndex].kind;
-
-    if (currentKind === 'group') {
-      entry.fullPath = '';
-      entry.subvolumePath = undefined;
-      this.subvolumeService
-        .get(this.fsName, selected === DEFAULT_SUBVOLUME_GROUP ? '' : selected, false)
-        .pipe(catchError(() => of([])))
-        .subscribe((subvols: any[]) => {
-          const subvolNames = subvols.map((s) => s.name).filter(Boolean);
-          if (this.paths[pathIndex]) {
-            this.paths[pathIndex].levels = [
-              ...this.paths[pathIndex].levels,
-              { options: subvolNames, selected: '', kind: 'subvolume' as const }
-            ];
-          }
-        });
-      this.syncFormValue();
-      return;
-    }
-
-    if (currentKind === 'subvolume') {
-      const group = entry.levels[0].selected;
-      this.subvolumeService
-        .info(this.fsName, selected, group === DEFAULT_SUBVOLUME_GROUP ? '' : group)
-        .pipe(catchError(() => of({ path: null })))
-        .subscribe((info: any) => {
-          if (!this.paths[pathIndex]) return;
-          const resolvedPath = info?.path ?? `/${selected}`;
-          const parentPath =
-            resolvedPath.split('/').slice(0, -1).join('/') || '/';
-          const lastSegment = resolvedPath.split('/').filter(Boolean).pop();
-          this.paths[pathIndex].subvolumePath = parentPath;
-          this.cephfsService
-            .lsDir(this.fsId, parentPath, 1)
-            .pipe(catchError(() => of([])))
-            .subscribe((dirs: any[]) => {
-              if (!this.paths[pathIndex]) return;
-              const childNames = dirs
-                .filter((d) => d.path !== parentPath)
-                .map((d) => d.name)
-                .filter(Boolean);
-              if (childNames.length > 0) {
-                this.paths[pathIndex].levels = [
-                  ...this.paths[pathIndex].levels,
-                  { options: childNames, selected: '', kind: 'dir' as const }
-                ];
-              } else if (lastSegment) {
-                this.paths[pathIndex].levels = [
-                  ...this.paths[pathIndex].levels,
-                  { options: [lastSegment], selected: '', kind: 'dir' as const }
-                ];
-              } else {
-                this.paths[pathIndex].fullPath = resolvedPath;
-                this.syncFormValue();
-              }
-            });
-        });
-      return;
-    }
-
-    const dirSegments = entry.levels
-      .slice(entry.levels.findIndex((l) => l.kind === 'dir'))
-      .map((l) => l.selected)
-      .filter(Boolean);
-    entry.fullPath = entry.subvolumePath + (dirSegments.length ? '/' + dirSegments.join('/') : '');
-    this.syncFormValue();
-
-    this.cephfsService
-      .lsDir(this.fsId, entry.fullPath, 1)
-      .pipe(catchError(() => of([])))
-      .subscribe((dirs: any[]) => {
-        const childNames = dirs
-          .filter((d) => d.path !== entry.fullPath)
-          .map((d) => d.name)
-          .filter(Boolean);
-        if (childNames.length > 0 && this.paths[pathIndex]) {
-          this.paths[pathIndex].levels = [
-            ...this.paths[pathIndex].levels,
-            { options: childNames, selected: '', kind: 'dir' as const }
-          ];
-        }
-      });
-  }
-
-  toggleExpand(index: number) {
+  toggleExpand(index: number): void {
     this.paths[index].expanded = !this.paths[index].expanded;
   }
 
-  onFileSelected(index: number, event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input?.files?.[0];
-    if (!file) return;
-    const path = (file as any).webkitRelativePath || file.name;
-    const folderPath = '/' + path.split('/')[0];
-    const entry = this.paths[index];
-    entry.fullPath = folderPath;
-    entry.filePickerPath = folderPath;
-    this.syncFormValue();
-    input.value = '';
+  onLevelChange(pathIndex: number, levelIndex: number, selected: string): void {
+    const entry = this.paths[pathIndex];
+    if (!entry) {
+      return;
+    }
+
+    const levels = entry.levels.map((level, index) =>
+      index === levelIndex ? { ...level, selected } : level
+    );
+    levels.splice(levelIndex + 1);
+
+    const updatedEntry: PathEntry = { ...entry, levels };
+
+    if (!selected) {
+      this.updatePath(pathIndex, withResolvedDisplayPath(updatedEntry));
+      return;
+    }
+
+    const kind = levels[levelIndex].kind;
+    if (kind === 'group') {
+      this.handleGroupSelection(pathIndex, updatedEntry, selected);
+    } else if (kind === 'subvolume') {
+      this.handleSubvolumeSelection(pathIndex, updatedEntry, selected);
+    } else {
+      this.handleDirSelection(pathIndex, withResolvedDisplayPath(updatedEntry));
+    }
   }
 
-  onFilePickerSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input?.files?.[0];
-    if (!file) return;
-    const path = (file as any).webkitRelativePath || file.name;
-    const folderPath = '/' + path.split('/')[0];
+  onFilePickerSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0];
+    if (!file) {
+      return;
+    }
+    const folderPath = folderPathFromFileInput(file);
     this.paths.push({
       fullPath: folderPath,
       levels: [],
@@ -224,16 +114,192 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       filePickerPath: folderPath
     });
     this.syncFormValue();
-    input.value = '';
+    (event.target as HTMLInputElement).value = '';
   }
 
-  private syncFormValue() {
-    const validPaths = this.paths.filter((p) => !!p.fullPath).map((p) => p.fullPath);
-    this.formGroup?.get('pathsControl')?.setValue(validPaths);
-    this.formGroup?.get('pathsControl')?.updateValueAndValidity();
+  getPathSelections(): MirroringPathSelection[] {
+    return toMirroringPathSelections(this.paths);
   }
 
   getValidPaths(): string[] {
-    return this.paths.filter((p) => !!p.fullPath).map((p) => p.fullPath);
+    return this.paths.map((entry) => getMirrorPath(entry)).filter(Boolean);
+  }
+
+  getDisplayPath(entry: PathEntry): string {
+    return getMirrorPath(entry) || '—';
+  }
+
+  private handleGroupSelection(pathIndex: number, entry: PathEntry, groupName: string): void {
+    const updatedEntry = withResolvedDisplayPath({
+      ...entry,
+      subvol: undefined,
+      subvolumePath: undefined,
+      resolvedSubvolumeRoot: undefined,
+      group: toGroupParam(groupName),
+      fullPath: buildGroupPath(groupName)
+    });
+
+    this.updatePath(pathIndex, updatedEntry);
+
+    this.subvolumeService
+      .get(this.fsName, toGroupParam(groupName), false)
+      .pipe(catchError(() => of([])))
+      .subscribe((subvols: { name: string }[]) => {
+        const current = this.paths[pathIndex];
+        if (!current) {
+          return;
+        }
+        const subvolNames = subvols.map((subvol) => subvol.name).filter(Boolean);
+        this.updatePath(pathIndex, {
+          ...current,
+          levels: [
+            ...current.levels,
+            { options: subvolNames, selected: '', kind: 'subvolume' as const }
+          ]
+        });
+      });
+  }
+
+  private handleSubvolumeSelection(pathIndex: number, entry: PathEntry, subvolName: string): void {
+    const groupName = entry.levels[0].selected;
+    const groupParam = toGroupParam(groupName);
+
+    this.updatePath(
+      pathIndex,
+      withResolvedDisplayPath({
+        ...entry,
+        subvol: subvolName,
+        group: groupParam,
+        fullPath: buildSubvolumePath(groupName, subvolName)
+      })
+    );
+
+    this.subvolumeService
+      .info(this.fsName, subvolName, groupParam)
+      .pipe(
+        catchError(() => of({ path: null })),
+        switchMap((info: { path?: string }) => {
+          const resolvedPath = info?.path ?? buildSubvolumePath(groupName, subvolName);
+          const { parentPath, lastSegment } = splitResolvedSubvolumePath(resolvedPath);
+          return this.listChildDirNames(parentPath).pipe(
+            map((childNames) => ({ resolvedPath, parentPath, lastSegment, childNames }))
+          );
+        })
+      )
+      .subscribe(({ resolvedPath, parentPath, lastSegment, childNames }) => {
+        const current = this.paths[pathIndex];
+        if (!current) {
+          return;
+        }
+
+        const dirOptions = childNames.length > 0 ? childNames : lastSegment ? [lastSegment] : [];
+        const levels: DirLevel[] =
+          dirOptions.length > 0
+            ? [...current.levels, { options: dirOptions, selected: '', kind: 'dir' as const }]
+            : current.levels;
+
+        this.updatePath(
+          pathIndex,
+          withResolvedDisplayPath({
+            ...current,
+            subvol: subvolName,
+            group: groupParam,
+            subvolumePath: parentPath,
+            resolvedSubvolumeRoot: resolvedPath,
+            fullPath: buildSubvolumePath(groupName, subvolName),
+            levels
+          })
+        );
+      });
+  }
+
+  private handleDirSelection(pathIndex: number, entry: PathEntry): void {
+    this.updatePath(pathIndex, entry);
+
+    this.listChildDirNames(entry.fullPath).subscribe((childNames) => {
+      const current = this.paths[pathIndex];
+      if (!current || childNames.length === 0) {
+        return;
+      }
+      this.updatePath(pathIndex, {
+        ...current,
+        levels: [...current.levels, { options: childNames, selected: '', kind: 'dir' as const }]
+      });
+    });
+  }
+
+  private updatePath(pathIndex: number, entry: PathEntry): void {
+    if (!this.paths[pathIndex]) {
+      return;
+    }
+    this.paths = this.paths.map((current, index) => (index === pathIndex ? entry : current));
+    this.syncFormValue();
+  }
+
+  private syncFormValue(): void {
+    const validPaths = this.getValidPaths();
+    this.formGroup.get('pathsControl')?.setValue(validPaths);
+    this.formGroup.get('pathsControl')?.updateValueAndValidity();
+    this.pathsChanged.emit(this.getPathSelections());
+  }
+
+  private resolveFsId(): void {
+    if (!this.fsName) {
+      return;
+    }
+    this.ensureFsId().subscribe();
+  }
+
+  private ensureFsId(): Observable<number> {
+    if (!this.fsName) {
+      return of(this.fsId ?? 0);
+    }
+    return this.cephfsService.list().pipe(
+      map((filesystems: { id?: number; mdsmap?: { fs_name?: string } }[]) => {
+        const match = filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName);
+        return match?.id ?? this.fsId ?? 0;
+      }),
+      tap((id) => {
+        if (id) {
+          this.fsId = id;
+        }
+      })
+    );
+  }
+
+  private listChildDirNames(parentPath: string): Observable<string[]> {
+    const parent = normalizeMirroringPath(parentPath);
+    return this.ensureFsId().pipe(
+      switchMap((fsId) => {
+        if (!fsId) {
+          return of([] as string[]);
+        }
+        return this.cephfsService.lsDir(fsId, parent, 2).pipe(
+          catchError(() => of([])),
+          map((dirs) =>
+            dirs
+              .filter((dir) => normalizeMirroringPath(dir.parent) === parent)
+              .map((dir) => dir.name)
+              .filter(Boolean)
+              .sort()
+          )
+        );
+      })
+    );
+  }
+
+  private loadSubvolumeGroups(): void {
+    this.subvolumeGroupService
+      .get(this.fsName, false)
+      .pipe(catchError(() => of([])))
+      .subscribe((groups: { name: string }[]) => {
+        const groupNames = groups.map((group) => group.name).filter(Boolean);
+        this.paths = this.paths.map((entry) => ({
+          ...entry,
+          levels: entry.levels.map((level, index) =>
+            index === 0 ? { ...level, options: groupNames } : level
+          )
+        }));
+      });
   }
 }
