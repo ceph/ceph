@@ -1534,7 +1534,8 @@ paths:
       tags:
       - RbdMirrorGroup
     get:
-      description: Get mirror group information.
+      description: Get mirror group information.  Matches 'rbd group info --format
+        json'.
       parameters:
       - description: Pool name
         in: path
@@ -1560,23 +1561,37 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
-                  global_id:
-                    description: Global ID
+                  group_id:
+                    description: Group ID
                     type: string
-                  mode:
-                    description: Mirror mode
+                  group_name:
+                    description: Group name
                     type: string
-                  primary:
-                    description: Is primary
-                    type: boolean
-                  state:
-                    description: Mirror state
-                    type: string
+                  mirroring:
+                    description: Mirroring info
+                    properties:
+                      global_id:
+                        description: Global ID
+                        type: string
+                      mode:
+                        description: Mirror mode
+                        type: string
+                      primary:
+                        description: Is primary
+                        type: boolean
+                      state:
+                        description: Mirror state
+                        type: string
+                    required:
+                    - state
+                    - mode
+                    - global_id
+                    - primary
+                    type: object
                 required:
-                - state
-                - mode
-                - global_id
-                - primary
+                - group_name
+                - group_id
+                - mirroring
                 type: object
           description: OK
         '400':
@@ -1867,6 +1882,334 @@ paths:
       summary: Create a mirror group snapshot
       tags:
       - RbdMirrorGroup
+  /api/block/mirroring/pool/{pool_name}/group/{group_name}/snapshot/schedule:
+    get:
+      description: List all snapshot schedules for the specified mirror group.
+      parameters:
+      - description: Pool name
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Group name
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Namespace (optional)
+        in: query
+        name: namespace
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    schedule_interval:
+                      description: Schedule intervals
+                      items:
+                        properties:
+                          interval:
+                            description: Schedule interval
+                            type: string
+                          start_time:
+                            description: Start time (optional)
+                            type: string
+                        required:
+                        - interval
+                        - start_time
+                        type: object
+                      type: array
+                    spec:
+                      description: Group level spec (pool/group or pool/namespace/group)
+                      type: string
+                  type: object
+                required:
+                - spec
+                - schedule_interval
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List snapshot schedules for a mirror group
+      tags:
+      - RbdMirrorGroup
+    post:
+      description: Add a snapshot schedule to the specified mirror group.
+      parameters:
+      - description: Pool name
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Group name
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                interval:
+                  description: Schedule interval (e.g., 1m, 5m, 1h)
+                  type: string
+                namespace:
+                  description: Namespace (optional)
+                  type: string
+                start_time:
+                  description: Start time (optional)
+                  type: string
+              required:
+              - interval
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties: {}
+                type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Add a snapshot schedule to a mirror group
+      tags:
+      - RbdMirrorGroup
+  /api/block/mirroring/pool/{pool_name}/group/{group_name}/snapshot/schedule/info:
+    get:
+      description: Get combined snapshot schedule info (list + status) for the specified
+        mirror group.
+      parameters:
+      - description: Pool name
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Group name
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Namespace (optional)
+        in: query
+        name: namespace
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  schedules:
+                    description: Schedules
+                    items:
+                      properties:
+                        interval:
+                          description: Schedule interval
+                          type: string
+                        start_time:
+                          description: Start time (optional)
+                          type: string
+                      required:
+                      - interval
+                      - start_time
+                      type: object
+                    type: array
+                  status:
+                    description: Status
+                    properties:
+                      scheduled_images:
+                        description: Scheduled images
+                        items:
+                          properties:
+                            image:
+                              description: Image name
+                              type: string
+                            schedule:
+                              description: Schedule interval
+                              type: string
+                          required:
+                          - image
+                          - schedule
+                          type: object
+                        type: array
+                    required:
+                    - scheduled_images
+                    type: object
+                required:
+                - schedules
+                - status
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get combined snapshot schedule info for a mirror group
+      tags:
+      - RbdMirrorGroup
+  /api/block/mirroring/pool/{pool_name}/group/{group_name}/snapshot/schedule/status:
+    get:
+      description: "Get snapshot schedule status for the specified mirror group.\n\
+        \n        Unwraps the 'scheduled_groups' wrapper to return an array directly,\n\
+        \        matching 'rbd mirror group snapshot schedule status'.\n        "
+      parameters:
+      - description: Pool name
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Group name
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Namespace (optional)
+        in: query
+        name: namespace
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    schedule_time:
+                      description: Next scheduled snapshot time
+                      type: string
+                    spec:
+                      description: Group level spec (pool/group or pool/namespace/group)
+                      type: string
+                  type: object
+                required:
+                - schedule_time
+                - spec
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get snapshot schedule status for a mirror group
+      tags:
+      - RbdMirrorGroup
+  /api/block/mirroring/pool/{pool_name}/group/{group_name}/snapshot/schedule/{interval}:
+    delete:
+      description: Remove a snapshot schedule from the specified mirror group.
+      parameters:
+      - description: Pool name
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Group name
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      - description: Schedule interval to remove
+        in: path
+        name: interval
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Namespace (optional)
+        in: query
+        name: namespace
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Start time (optional)
+        in: query
+        name: start_time
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties: {}
+                type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove a snapshot schedule from a mirror group
+      tags:
+      - RbdMirrorGroup
   /api/block/mirroring/pool/{pool_name}/group/{group_name}/status:
     get:
       description: "\n        Get RBD mirroring status for a group.\n\n        :param\
@@ -1919,6 +2262,33 @@ paths:
                         last_update:
                           description: Last update time
                           type: string
+                        mirror_images:
+                          description: Per-image replication status
+                          items:
+                            properties:
+                              description:
+                                description: Image description
+                                type: string
+                              global_id:
+                                description: Image global ID
+                                type: string
+                              last_update:
+                                description: Last update time
+                                type: string
+                              state:
+                                description: Image state
+                                type: string
+                              up:
+                                description: Is up
+                                type: boolean
+                            required:
+                            - global_id
+                            - state
+                            - description
+                            - last_update
+                            - up
+                            type: object
+                          type: array
                         mirror_uuid:
                           description: Mirror UUID
                           type: string
@@ -1934,6 +2304,22 @@ paths:
                       - state
                       - description
                       - last_update
+                      - mirror_images
+                      type: object
+                    type: array
+                  snapshots:
+                    description: Group snapshots
+                    items:
+                      properties:
+                        name:
+                          description: Snapshot name
+                          type: string
+                        state:
+                          description: Snapshot state
+                          type: string
+                      required:
+                      - name
+                      - state
                       type: object
                     type: array
                   state:
@@ -1945,6 +2331,7 @@ paths:
                 - state
                 - description
                 - last_update
+                - snapshots
                 - peer_sites
                 type: object
           description: OK
