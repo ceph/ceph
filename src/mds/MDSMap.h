@@ -293,6 +293,8 @@ public:
     return wanted > standbys_avail ? wanted - standbys_avail : 0;
   }
   void set_standby_count_wanted(mds_rank_t n) { standby_count_wanted = n; }
+  bool get_standby_enable_host_anti_affinity() const { return standby_enable_host_anti_affinity; }
+  void set_standby_enable_host_anti_affinity(bool b) { standby_enable_host_anti_affinity = b; }
   bool check_health(mds_rank_t standby_daemon_count);
 
   const std::string get_balancer() const { return balancer; }
@@ -625,6 +627,7 @@ protected:
   mds_rank_t max_mds = 1; /* The maximum number of active MDSes. Also, the maximum rank. */
   mds_rank_t old_max_mds = 0; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted = -1;
+  bool standby_enable_host_anti_affinity = true;
   std::string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
 
   std::string bal_rank_mask = "-1";
