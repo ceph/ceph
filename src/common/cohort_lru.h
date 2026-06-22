@@ -250,6 +250,10 @@ namespace cohort {
               auto active = o->active.test();
               if (active) {
                 lane.active.erase(it);
+                /* object is moving to the evictable q; the flag must follow the
+                 * list, otherwise a later ref()/unref() erases it from the wrong
+                 * lane list and corrupts the constant_time_size counters */
+                o->active.clear();
               } else {
                 lane.q.erase(it);
               }
