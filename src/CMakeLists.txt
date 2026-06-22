@@ -510,6 +510,11 @@ if(WITH_CRIMSON)
     "-Wno-attributes"
     "-Wno-pessimizing-move"
     "-Wno-address-of-packed-member")
+  if(WITH_ASAN)
+    # As built here (RelWithDebInfo) seastar keeps its own allocator, which
+    # ASan calls via dlsym before init, crashing every test before main().
+    target_compile_definitions(seastar PUBLIC SEASTAR_DEFAULT_ALLOCATOR)
+  endif()
   add_subdirectory(crimson)
   add_dependencies(crimson-osd erasure_code)
 endif()

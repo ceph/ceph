@@ -64,6 +64,14 @@ if [ -e CMakeCache.txt ]; then
     CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
     CEPH_BUILD_DIR=`pwd`
     [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+
+    # Point the sanitizers at the in-tree suppression files so vstart daemons
+    # ignore the same still-reachable third-party leaks AddCephTest.cmake suppresses for
+    # unittests. Without this `ceph-mon --mkfs` aborts on LeakSanitizer.
+    if [ "$(get_cmake_variable WITH_ASAN)" = "ON" ]; then
+        [ -z "$ASAN_OPTIONS" ] && export ASAN_OPTIONS="suppressions=$CEPH_ROOT/qa/asan.supp,detect_odr_violation=0"
+        [ -z "$LSAN_OPTIONS" ] && export LSAN_OPTIONS="suppressions=$CEPH_ROOT/qa/lsan.supp,print_suppressions=0"
+    fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install'
