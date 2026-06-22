@@ -1685,18 +1685,20 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
                                           std::unique_ptr<File>& marker,
                                           std::string& name)
 {
-  //TODO: Create a tmp file
-  int ret = marker->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
+  // Create as temporary file first
+  int ret = marker->create(dpp, /*existed=*/nullptr, /*temp_file=*/true);
   if (ret < 0) {
     return ret;
   }
 
- // XXX: Hack to set the owner on the delete marker
+  // XXX: Hack to set the owner on the delete marker
   Attrs v_attrs;
   Attrs attrs;
 
   ret = get_x_attrs(y, dpp, get_fd(), v_attrs, get_name());
   if (ret < 0) {
+    // removing the temporary files before returning failure
+    marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
 
@@ -1704,14 +1706,26 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
   if (rgw::sal::get_attr(v_attrs, RGW_POSIX_ATTR_OWNER, owner_bl)) {
     attrs[RGW_POSIX_ATTR_OWNER] = std::move(owner_bl);
   }
+
   buffer::list bl;
   uint16_t flags = 0;
   flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
   ceph::encode(flags, bl);
   attrs[RGW_POSIX_ATTR_VERSION] = std::move(bl);
+
+  // Write attributes before linking
   ret = marker->write_attrs(dpp, y, attrs, nullptr);
   if (ret < 0) {
-    //TODO: Delete the marker file
+    // removing the temporary files before returning failure
+    marker->remove(dpp, y, /*delete_children=*/false, nullptr);
+    return ret;
+  }
+
+  // Link temp file to final name atomically
+  ret = marker->link_temp_file(dpp, y, name);
+  if (ret < 0) {
+    // removing the temporary files before returning failure
+    marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
 
@@ -1782,7 +1796,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
        result->delete_marker = true;
       }
-      ret = f->remove(dpp, y, /*delete_children=*/true, nullptr);
+      ret = f->remove(dpp, y, /*delete_children=*/true, result);
       if (ret < 0)
        return ret;
       result->version_id = instance_id;
