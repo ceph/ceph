@@ -181,6 +181,8 @@ struct BenchConfig {
   bool show_progress;        // --progress: show live bandwidth, IOPS, and ETA during phases
   int progress_interval;     // --progress-interval: minimum % between progress line updates
   bool async_io;             // --async-io: use ceph_ll_nonblocking_readv_writev instead of sync I/O
+  bool async_write_fsync;    // --async-write-fsync: carry fsync with each async write (Ganesha-style)
+  bool shared_file;          // --shared-file: use a single file for all threads
   int queue_depth;           // --queue-depth: max outstanding async I/Os per worker thread
 #ifdef CEPH_LOCKSTAT
   string lockstat_dump_path; // --lockstat-dump: base path for per-phase lock contention dumps
@@ -568,7 +570,8 @@ bench_async_write_worker(
     ctx->io_info.callback = async_io_callback;
     ctx->io_info.priv = ctx.get();
     ctx->io_info.write = true;
-    ctx->io_info.fsync = false;
+    ctx->io_info.fsync = config.async_write_fsync;
+    ctx->io_info.syncdataonly = false;
     ctx->completed = true;
     ctx->stop_signal_ptr = &stop_signal;
     ctx->stats_ptr = &stats;
@@ -589,9 +592,13 @@ bench_async_write_worker(
       break;
     }
 
-    int file_idx = file_iter % files_to_write;
-    string fname = config.subdir + "/" + config.prefix +
-                   std::to_string(thread_id) + "_" + std::to_string(file_idx);
+    int file_idx = config.shared_file ? 0 : (file_iter % files_to_write);
+    string fname = config.subdir + "/" + config.prefix;
+    if (config.shared_file) {
+      fname += "shared";
+    } else {
+      fname += std::to_string(thread_id) + "_" + std::to_string(file_idx);
+    }
 
     // Get just the filename without path
     size_t last_slash = fname.find_last_of('/');
@@ -714,7 +721,8 @@ bench_async_write_worker(
     }
 
     // Flush buffered data before close so files survive the post-write remount.
-    if (!write_error && !stop_signal) {
+    // Skip when each async write already carried fsync (Ganesha-style path).
+    if (!write_error && !stop_signal && !config.async_write_fsync) {
       if (int fsync_rc = ceph_ll_fsync(cmount, fh, 0); fsync_rc < 0) {
         ss << "Thread " << thread_id << " fsync error " << fname << ": "
            << strerror(-fsync_rc) << std::endl;
@@ -1367,6 +1375,8 @@ int do_bench(BenchConfig& config) {
     json_formatter->dump_bool("async_io", config.async_io);
     if (config.async_io) {
       json_formatter->dump_int("queue_depth", config.queue_depth);
+      json_formatter->dump_bool("async_write_fsync", config.async_write_fsync);
+      json_formatter->dump_bool("shared_file", config.shared_file);
     }
     json_formatter->close_section(); // configuration
     json_formatter->open_array_section("iterations");
@@ -1405,6 +1415,10 @@ int do_bench(BenchConfig& config) {
   cout << "  Async I/O: " << (config.async_io ? "enabled" : "disabled") << std::endl;
   if (config.async_io) {
     cout << "  Queue Depth: " << config.queue_depth << std::endl;
+    cout << "  Async write+fsync: "
+         << (config.async_write_fsync ? "enabled" : "disabled") << std::endl;
+    cout << "  Shared file (all threads): "
+         << (config.shared_file ? "yes" : "no") << std::endl;
   }
 
   if (int rc = ceph_mkdir(shared_cmount, config.subdir.c_str(), 0755); rc < 0) {
@@ -1821,6 +1835,8 @@ int main(int argc, char **argv) {
     ("progress", po::bool_switch(&config.show_progress), "Show progress and current bandwidth during benchmark")
     ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)")
     ("async-io", po::bool_switch(&config.async_io), "Use asynchronous I/O with ceph_ll_nonblocking_readv_writev")
+    ("async-write-fsync", po::bool_switch(&config.async_write_fsync), "With async-io, fsync each write via io_info.fsync (Ganesha-style; needs async-io)")
+    ("shared-file", po::bool_switch(&config.shared_file), "With async-io, all threads write to one shared file (stress cap flush waiters)")
     ("queue-depth", po::value<int>(&config.queue_depth)->default_value(16), "Queue depth for async I/O (number of outstanding I/Os per thread)")
 #ifdef CEPH_LOCKSTAT
     ("lockstat-dump", po::value<string>(&config.lockstat_dump_path), "Base path for lockstat output files (iteration and phase will be appended)")
@@ -1894,6 +1910,21 @@ int main(int argc, char **argv) {
     if (config.async_io && config.per_thread_mount) {
       cerr << "Error: async-io is not compatible with per-thread-mount\n";
       return 1;
+    }
+
+    if (config.async_write_fsync && !config.async_io) {
+      cerr << "Error: async-write-fsync requires --async-io\n";
+      return 1;
+    }
+
+    if (config.shared_file && !config.async_io) {
+      cerr << "Error: shared-file requires --async-io\n";
+      return 1;
+    }
+
+    if (config.shared_file && config.num_files > 1) {
+      cerr << "Warning: shared-file mode uses a single file; --files is ignored\n";
+      config.num_files = 1;
     }
 
     return do_bench(config);
