@@ -3612,9 +3612,11 @@ template <typename T>
 CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
                                std::string_view desc = {}) {
   const std::string primary = name.substr(0, name.find(','));
-  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
-    if (!p->get_option_no_throw(primary))
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
       p->add_option(name, var)->group("")->take_last();
+    }
+  }
   return cmd->add_option(name, var, std::string(desc))->take_last();
 }
 
@@ -3622,8 +3624,14 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
 // anything else -> 1 (invalid values warn but set, like legacy's truthy -EINVAL).
 static void parse_binary_flag(const std::string& flag,
                               const std::string& value, int& out) {
-  if (value.empty() || value == "true" || value == "1") { out = 1; return; }
-  if (value == "false" || value == "0")                 { out = 0; return; }
+  if (value.empty() || value == "true" || value == "1") {
+    out = 1;
+    return;
+  }
+  if (value == "false" || value == "0") {
+    out = 0;
+    return;
+  }
   cerr << "Warning: invalid value '" << value << "' for " << flag
        << ", treating as set" << std::endl;
   out = 1;
@@ -3640,17 +3648,23 @@ CLI::Option* add_multilevel_binary_flag(CLI::App* cmd, const std::string& name,
   auto setter = [&target, primary](const std::string& v) {
     parse_binary_flag(primary, v, target);
   };
-  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent())
-    if (!p->get_option_no_throw(primary))
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
       p->add_option_function<std::string>(name, setter)->group("")->expected(0, 1)->take_last();
+    }
+  }
   return cmd->add_option_function<std::string>(name, setter, std::string(desc))->expected(0, 1)->take_last();
 }
 
 // Builds a display string for warning messages, e.g. "--bucket/-b".
 static std::string option_display_name(const CLI::Option* opt) {
   std::string name;
-  for (const auto& n : opt->get_lnames()) name += (name.empty() ? "--" : "/--") + n;
-  for (const auto& n : opt->get_snames()) name += (name.empty() ?  "-" : "/-")  + n;
+  for (const auto& n : opt->get_lnames()) {
+    name += (name.empty() ? "--" : "/--") + n;
+  }
+  for (const auto& n : opt->get_snames()) {
+    name += (name.empty() ?  "-" : "/-")  + n;
+  }
   return name;
 }
 
@@ -3662,23 +3676,28 @@ static std::string option_display_name(const CLI::Option* opt) {
 // option is a multilevel registration and not some other hidden option.
 static void warn_wrong_position_impl(CLI::App* node, std::set<std::string>& warned) {
   for (const auto* opt : node->get_options()) {
-    if (!opt->get_group().empty() || opt->count() == 0)
+    if (!opt->get_group().empty() || opt->count() == 0) {
       continue;
+    }
     const std::string primary = "--" + opt->get_single_name();
     bool on_child = false;
-    for (auto* child : node->get_subcommands())
+    for (auto* child : node->get_subcommands()) {
       if (child->get_option_no_throw(primary)) {
         on_child = true;
         break;
       }
-    if (!on_child)
+    }
+    if (!on_child) {
       continue;
-    if (warned.insert(primary).second)
+    }
+    if (warned.insert(primary).second) {
       cerr << "Warning: " << option_display_name(opt)
            << " should appear after the subcommand\n";
+    }
   }
-  for (auto* child : node->get_subcommands())
+  for (auto* child : node->get_subcommands()) {
     warn_wrong_position_impl(child, warned);
+  }
 }
 
 void warn_wrong_position(CLI::App* root) {
@@ -3688,8 +3707,9 @@ void warn_wrong_position(CLI::App* root) {
 
 static void collect_parsed_path(CLI::App* node, std::vector<CLI::App*>& path) {
   path.push_back(node);
-  for (auto* child : node->get_subcommands())
+  for (auto* child : node->get_subcommands()) {
     collect_parsed_path(child, path);
+  }
 }
 
 // After parsing: warns if the same option was specified more than once
@@ -3704,15 +3724,19 @@ void warn_duplicates(CLI::App* root) {
   for (auto* path_node : path) {
     for (const auto* opt : path_node->get_options()) {
       const std::string primary = "--" + opt->get_single_name();
-      if (!checked.insert(primary).second)
+      if (!checked.insert(primary).second) {
         continue;
+      }
       std::size_t total = 0;
-      for (auto* node : path)
-        if (auto* option = node->get_option_no_throw(primary))
+      for (auto* node : path) {
+        if (auto* option = node->get_option_no_throw(primary)) {
           total += option->count();
-      if (total > 1)
+        }
+      }
+      if (total > 1) {
         cerr << "Warning: " << option_display_name(opt)
              << " specified multiple times, using last value\n";
+      }
     }
   }
 }
@@ -3917,7 +3941,9 @@ int main(int argc, const char **argv)
 
   int max_concurrent_ios = 32;
   ceph::timespan min_age = std::chrono::hours(1);
-  // int, not bool: bound by add_multilevel_binary_flag and ceph_argparse_binary_flag
+  // int, not bool: shared with the legacy ceph_argparse_binary_flag() path,
+  // which operates on ints.
+  // TODO: convert to bool once these flags are no longer used by the legacy parser.
   int hide_progress = false;
   int dump_keys = false;
   uint64_t orphan_stale_secs = (24 * 3600);
@@ -4050,10 +4076,11 @@ int main(int argc, const char **argv)
     bool show_cli11_help = false;
     int new_argc = 1;
     for (int i = 1; i < argc; ++i) {
-      if (std::string_view(argv[i]) == "--cli11-help")
+      if (std::string_view(argv[i]) == "--cli11-help") {
         show_cli11_help = true;
-      else
+      } else {
         argv[new_argc++] = argv[i];
+      }
     }
 
     // Transitional: the bucket subtree is half-migrated. Route the command to
@@ -4070,13 +4097,14 @@ int main(int argc, const char **argv)
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
-        if (std::string_view(argv[i]) != "bucket" &&
-            std::string_view(argv[i]) != "buckets") {
+        if (std::string_view(argv[i]) != "bucket" && std::string_view(argv[i]) != "buckets") {
           continue;
         }
         for (int j = i + 1; j < new_argc; ++j) {
           std::string_view word(argv[j]);
-          if (migrated_bucket_leaves.count(word)) break;
+          if (migrated_bucket_leaves.count(word)) {
+            break;
+          }
           if (legacy_bucket_words.count(word)) {
             route_bucket_to_legacy = true;
             break;
@@ -4157,6 +4185,7 @@ int main(int argc, const char **argv)
           throw CLI::RuntimeError(EINVAL);
         }
         cli11_allows_tenant_no_uid = true;
+
         cli11_action = [&tenant, script_ctx, script]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
@@ -4185,6 +4214,7 @@ int main(int argc, const char **argv)
         }
         cli11_readonly = true;
         cli11_allows_tenant_no_uid = true;
+
         cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           std::string script;
@@ -4218,6 +4248,7 @@ int main(int argc, const char **argv)
           throw CLI::RuntimeError(EINVAL);
         }
         cli11_allows_tenant_no_uid = true;
+
         cli11_action = [&tenant, script_ctx]() -> int {
           auto lua_manager = driver->get_lua_manager("");
           const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
@@ -4255,7 +4286,7 @@ int main(int argc, const char **argv)
       auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "remove bucket");
       bucket_rm->alias("remove");
       auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
-      auto* bucket_chown  = bucket_cmd->add_subcommand("chown",  "change bucket ownership to the specified user");
+      auto* bucket_chown  = bucket_cmd->add_subcommand("chown",  "link bucket to specified user and update its object ACLs");
       auto* bucket_limit       = bucket_cmd->add_subcommand("limit", "bucket limit commands");
       auto* bucket_limit_check = bucket_limit->add_subcommand("check", "show bucket sharding stats");
       bucket_limit->require_subcommand(show_cli11_help ? 0 : 1);
@@ -4348,7 +4379,6 @@ int main(int argc, const char **argv)
       // bucket chown options
       add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_chown, "--uid,-i",          uid_str,         uid_desc);
-      add_multilevel_option(bucket_chown, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
       add_multilevel_option(bucket_chown, "--tenant",          tenant,          tenant_desc);
       add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
@@ -4603,6 +4633,7 @@ int main(int argc, const char **argv)
           [&cli11_action, &cli11_need_gc,
            &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
         cli11_need_gc = true;  // legacy gc_ops_list: --purge-objects deletions go through GC
+
         // TODO: legacy behavior ignores bucket_rm's return value, so any
         // failure (missing --bucket, nonexistent bucket, deletion error)
         // silently exits 0. Consider validating --bucket and propagating
@@ -4729,6 +4760,7 @@ int main(int argc, const char **argv)
 
       bucket_logging_flush->callback(
           [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket] {
+
         cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket]() -> int {
           if (bucket_name.empty()) {
             cerr << "ERROR: bucket not specified" << std::endl;
@@ -4781,6 +4813,7 @@ int main(int argc, const char **argv)
 
       bucket_logging_info->callback(
           [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+
         cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
           if (bucket_name.empty()) {
             cerr << "ERROR: bucket not specified" << std::endl;
@@ -4825,6 +4858,7 @@ int main(int argc, const char **argv)
 
       bucket_logging_list->callback(
           [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+
         cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
           if (bucket_name.empty()) {
             cerr << "ERROR: bucket not specified" << std::endl;
@@ -5713,7 +5747,6 @@ int main(int argc, const char **argv)
 			 OPT::GC_LIST,
 			 OPT::GC_PROCESS,
 			 OPT::OBJECT_RM,
-			 OPT::BUCKET_RM,  // --purge-objects
 			 OPT::USER_RM,    // --purge-data
 			 OPT::OBJECTS_EXPIRE,
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
@@ -7841,8 +7874,7 @@ int main(int argc, const char **argv)
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
-                                        OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
-                                        OPT::BUCKET_CHOWN, OPT::METADATA_PUT,
+                                        OPT::METADATA_PUT,
                                         OPT::METADATA_RM, OPT::MFA_CREATE,
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
