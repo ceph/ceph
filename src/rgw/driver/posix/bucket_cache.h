@@ -362,9 +362,9 @@ public:
 	    /* inserts at cached insert iterator, releasing latch */
 	    cache.insert_latched(b, lat, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_UNLOCK);
 	  } else {
-	    /* recycle step invalidates Latch */
-	    lat.lock->unlock(); /* !LATCHED */
+	    /* recycle invalidated the Latch; re-insert under the held partition lock */
 	    cache.insert(fac.hk, b, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_NONE);
+	    lat.lock->unlock(); /* !LATCHED */
 	  }
 	  get<1>(result) |= BucketCache<D, B>::FLAG_CREATE;
 	} else {
