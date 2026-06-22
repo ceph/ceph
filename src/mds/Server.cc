@@ -3496,6 +3496,8 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
 {
   if (mdr->session) {
     std::string_view fs_name = mds->mdsmap->get_fs_name();
+    bool check_qtine = in->is_under_quarantine()
+                       && mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE);
     int r = mdr->session->check_access(
       fs_name, in, mask,
       mdr->client_request->get_caller_uid(),
@@ -3503,13 +3505,50 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
       &mdr->client_request->get_caller_gid_list(),
       mdr->client_request->head.args.setattr.uid,
       mdr->client_request->head.args.setattr.gid,
-      in->is_under_quarantine());
+      check_qtine);
     if (r < 0) {
       respond_to_request(mdr, r);
       return false;
     }
   }
   return true;
+}
+
+/**
+ * Block client requests from non-quarantine-aware clients when the target
+ * inode is under quarantine. Adds a waiter on the subvolume root inode so
+ * the request will be retried when quarantine is lifted.
+ *
+ * Returns true if the request was blocked (caller should return nullptr).
+ */
+bool Server::check_quarantine_block(const MDRequestRef& mdr, CInode *in)
+{
+  if (!mdr->client_request || !mdr->session)
+    return false;
+
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE))
+    return false;
+
+  if (!in->is_under_quarantine())
+    return false;
+
+  auto snaprealm = in->find_snaprealm();
+  while (snaprealm) {
+    inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
+    auto *subvol_in = mdcache->get_inode(subvol_ino);
+    if (subvol_in &&
+        (subvol_in->is_being_quarantined() || subvol_in->has_quarantined())) {
+      dout(10) << __func__ << " blocking request from old client "
+               << mdr->get_client() << " on quarantined inode " << *in
+               << " (subvol root " << subvol_ino << ")" << dendl;
+      subvol_in->add_waiter(CInode::WAIT_QUARANTINE,
+                            new C_MDS_RetryRequest(mdcache, mdr));
+      return true;
+    }
+    snaprealm = snaprealm->parent;
+  }
+
+  return false;
 }
 
 /**
@@ -3877,6 +3916,9 @@ CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
   CInode *ref = mdr->in[0];
   dout(10) << "ref is " << *ref << dendl;
 
+  if (check_quarantine_block(mdr, ref))
+    return nullptr;
+
   if (want_auth) {
     // auth_pin?
     //   do NOT proceed if freezing, as cap release may defer in that case, and
@@ -3971,6 +4013,9 @@ CDentry* Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr,
   CDentry *dn = mdr->dn[0].back();
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
+
+  if (check_quarantine_block(mdr, diri))
+    return nullptr;
 
   if (!mdr->reqid.name.is_mds()) {
     if (diri->is_system() && !diri->is_root() &&
@@ -4073,6 +4118,10 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
   CDir *srcdir = srcdn->get_dir();
   CDentry *destdn = mdr->dn[0].back();
   CDir *destdir = destdn->get_dir();
+
+  if (check_quarantine_block(mdr, srcdir->get_inode()) ||
+      check_quarantine_block(mdr, destdir->get_inode()))
+    return std::make_pair(nullptr, nullptr);
 
   if (!mdr->reqid.name.is_mds()) {
     if ((srcdir->get_inode()->is_system() && !srcdir->get_inode()->is_root()) ||
@@ -4407,6 +4456,9 @@ void Server::handle_client_lookup_ino(const MDRequestRef& mdr,
     mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
     return;
   }
+
+  if (check_quarantine_block(mdr, in))
+    return;
 
   // check for nothing (not read or write); this still applies the
   // path check.

@@ -14102,6 +14102,10 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       }
     }
 
+    if (qis->qtine_op == QUARANTINE_DEL) {
+      in->finish_waiting(CInode::WAIT_QUARANTINE);
+    }
+
     if (in->is_dir()) {
       MDSGatherBuilder gather(g_ceph_context, new C_MDS_RetryRequest(this, mdr));
       std::vector<MDRequestRef> todispatch;

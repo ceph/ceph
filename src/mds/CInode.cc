@@ -5920,6 +5920,9 @@ bool CInode::is_under_quarantine() const {
     inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
     auto *subvol_in = mdcache->get_inode(subvol_ino);
     if (subvol_in) {
+      if (subvol_in->is_quarantine_being_removed()) {
+        return false;
+      }
       if (subvol_in->is_being_quarantined() || subvol_in->has_quarantined()) {
         return true;
       }

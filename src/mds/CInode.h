@@ -412,7 +412,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const uint64_t WAIT_FROZEN      = (1<<1);
   static const uint64_t WAIT_TRUNC       = (1<<2);
   static const uint64_t WAIT_FLOCK       = (1<<3);
-  static const uint64_t WAIT_BITS        = 4;
+  static const uint64_t WAIT_QUARANTINE  = (1<<4);
+  static const uint64_t WAIT_BITS        = 5;
   
   static const uint64_t WAIT_ANY_MASK    = ((1ul << WAIT_BITS) - 1);
 
@@ -686,6 +687,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_under_quarantine() const;
   bool is_being_quarantined() const {
     return (quarantine_op == QUARANTINE_ADD);
+  }
+  bool is_quarantine_being_removed() const {
+    return (quarantine_op == QUARANTINE_DEL);
   }
   bool will_block_for_quiesce(const MDRequestRef& mdr);
 
