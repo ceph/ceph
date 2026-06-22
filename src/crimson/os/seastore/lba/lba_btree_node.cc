@@ -135,6 +135,7 @@ base_iertr::future<> LBACursor::refresh()
 
   modifications = leaf->modifications;
   iter = leaf->lower_bound(get_laddr());
+  assert(iter == leaf->end() || iter.get_key() == get_laddr());
   assert(is_viewable());
 }
 
