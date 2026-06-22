@@ -8754,19 +8754,20 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
   // bump pop
   mds->balancer->hit_dir(dn->get_dir(), META_POP_IWR);
 
-  // reply
-  respond_to_request(mdr, 0);
-  
-  // removing a new dn?
-  dn->get_dir()->try_remove_unlinked_dn(dn);
-
   // clean up ?
-  // respond_to_request() drops locks. So stray reintegration can race with us.
+  // evaluate stray before dropping locks to avoid racing with
+  // concurrent link/unlink requests that may modify nlink.
   if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
   }
+
+  // reply
+  respond_to_request(mdr, 0);
+
+  // removing a new dn?
+  dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // Dev config injection point: crash the MDS after the unlink journal
   // callback has committed nlink and moved the inode to the stray dir,
@@ -9702,17 +9703,18 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
 
   ceph_assert(g_conf()->mds_kill_rename_at != 7);
 
+  // clean up?
+  // evaluate stray before dropping locks to avoid racing with
+  // concurrent link/unlink requests that may modify nlink.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
+    mdcache->notify_stray(straydn);
+  }
+
   // reply
   respond_to_request(mdr, 0);
 
   if (need_eval)
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
-
-  // clean up?
-  // respond_to_request() drops locks. So stray reintegration can race with us.
-  if (straydn && !straydn->get_projected_linkage()->is_null()) {
-    mdcache->notify_stray(straydn);
-  }
 }
 
 
