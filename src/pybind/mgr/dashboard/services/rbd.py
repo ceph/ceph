@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument,too-many-lines
 import errno
 import json
 import math
@@ -937,6 +937,108 @@ class RbdMirroringService:
             schedule['inherited'] = 'cluster'
             return schedule
         return None
+
+    @staticmethod
+    def _group_level_spec(pool_name: str, namespace: Optional[str], group_name: str) -> str:
+        """Build the level spec string for a mirror group."""
+        if namespace:
+            return f"{pool_name}/{namespace}/{group_name}"
+        return f"{pool_name}/{group_name}"
+
+    @staticmethod
+    def transform_schedule_list(raw_dict: dict) -> list:
+        """Transform the raw rbd_support schedule dict into a spec-keyed list.
+
+        rbd_support returns:
+            {"3//381cd6abab0a": {"name": "rbd_mirror/test_group",
+                                 "schedule": [{"interval": "1m", "start_time": null}]}}
+
+        We produce a spec-style array consistent with the image schedule API:
+            [{"spec": "rbd_mirror/test_group",
+              "schedule_interval": [{"interval": "1m", "start_time": ""}]}]
+        """
+        result = []
+        for _spec_id, entry in raw_dict.items():
+            spec = entry.get('name', '')  # already "pool/group" or "pool/ns/group"
+            schedule_interval = [
+                {
+                    'interval': item.get('interval', ''),
+                    'start_time': item.get('start_time') or ''  # null → ""
+                }
+                for item in entry.get('schedule', [])
+            ]
+            result.append({'spec': spec, 'schedule_interval': schedule_interval})
+        return result
+
+    @classmethod
+    def group_snapshot_schedule_add(cls, pool_name: str, namespace: Optional[str],
+                                    group_name: str, interval: str,
+                                    start_time: Optional[str] = None):
+        """Add a snapshot schedule for a mirror group."""
+        level_spec = cls._group_level_spec(pool_name, namespace, group_name)
+        _rbd_support_remote('mirror_group_snapshot_schedule_add', level_spec,
+                            str(RBDSchedulerInterval(interval)), start_time or '')
+
+    @classmethod
+    def group_snapshot_schedule_remove(cls, pool_name: str, namespace: Optional[str],
+                                       group_name: str, interval: str,
+                                       start_time: Optional[str] = None):
+        """Remove a snapshot schedule from a mirror group."""
+        level_spec = cls._group_level_spec(pool_name, namespace, group_name)
+        _rbd_support_remote('mirror_group_snapshot_schedule_remove', level_spec,
+                            interval or '', start_time or '')
+
+    @classmethod
+    def group_snapshot_schedule_list(cls, pool_name: str, namespace: Optional[str],
+                                     group_name: str):
+        """List snapshot schedules for a mirror group.
+
+        Returns:
+            Tuple of (rc, json_string, stderr) from rbd_support.
+        """
+        level_spec = cls._group_level_spec(pool_name, namespace, group_name)
+        return _rbd_support_remote('mirror_group_snapshot_schedule_list', level_spec)
+
+    @classmethod
+    def group_snapshot_schedule_status(cls, pool_name: str, namespace: Optional[str],
+                                       group_name: str):
+        """Get status of snapshot schedules for a mirror group.
+
+        Returns:
+            Tuple of (rc, json_string, stderr) from rbd_support.
+        """
+        level_spec = cls._group_level_spec(pool_name, namespace, group_name)
+        return _rbd_support_remote('mirror_group_snapshot_schedule_status', level_spec)
+
+    @classmethod
+    def get_group_snapshot_schedule_info(cls, pool_name: str, namespace: Optional[str],
+                                         group_name: str):
+        """Retrieve group snapshot schedule info by merging schedule list and status.
+
+        Returns:
+            Dict with 'schedules' (human-readable array) and 'status' (array) keys.
+        """
+        schedule_list_raw = cls.group_snapshot_schedule_list(pool_name, namespace, group_name)
+        schedule_status_raw = cls.group_snapshot_schedule_status(pool_name, namespace, group_name)
+
+        try:
+            raw_list = json.loads(
+                schedule_list_raw[1]) if schedule_list_raw and schedule_list_raw[1] else {}
+            schedule_list = cls.transform_schedule_list(raw_list)
+            raw_status = json.loads(
+                schedule_status_raw[1]) if schedule_status_raw and schedule_status_raw[1] else {}
+            schedule_status = [
+                {'spec': g.get('group', ''),
+                 'schedule_time': g.get('schedule_time', '')}
+                for g in raw_status.get('scheduled_groups', [])
+            ]
+        except (json.JSONDecodeError, TypeError):
+            return {'schedules': [], 'status': []}
+
+        return {
+            'schedules': schedule_list,
+            'status': schedule_status
+        }
 
 
 class RbdImageMetadataService(object):
