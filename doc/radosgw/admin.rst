@@ -202,6 +202,32 @@ in a command of the following form:
 	
 .. note:: Disabling the user also disables any subusers.
 
+Bucket Suspend
+--------------
+
+It is possible to suspend an individual bucket without suspending its owner.
+When a bucket is suspended, S3 requests against that bucket fail with
+``403 BucketSuspended``. This is independent of S3 bucket versioning; the
+``versioning`` field in ``bucket stats`` refers to object versioning only.
+
+To suspend a bucket:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket suspend --bucket=mybucket
+
+To unsuspend a bucket:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket unsuspend --bucket=mybucket
+
+Use ``bucket stats`` to verify the ``suspended`` field, or ``metadata get`` to
+inspect the bucket ``flags`` value (``1`` means ``BUCKET_SUSPENDED``).
+
+.. note:: Suspending a user still suspends all of that user's buckets and
+   blocks all requests for that user, regardless of per-bucket state.
+
 
 Remove a User
 -------------
