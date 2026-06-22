@@ -4,6 +4,9 @@
 #include "rgw_xml.h"
 #include "rgw_lc.h"
 #include "rgw_lc_s3.h"
+#include "rgw_common.h"
+#include "common/ceph_context.h"
+#include "common/dout.h"
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
@@ -418,4 +421,79 @@ TEST_F(LCWorkTimeTests, ScheduleNextStartTime)
    };
 
    run_schedule_next_start_time_test(test_values_to_expectations);
+}
+
+// Build bucket attrs holding an encoded lifecycle configuration.
+static std::map<std::string, bufferlist>
+make_lc_attrs(const RGWLifecycleConfiguration& cfg)
+{
+  std::map<std::string, bufferlist> attrs;
+  bufferlist bl;
+  cfg.encode(bl);
+  attrs[RGW_ATTR_LC] = std::move(bl);
+  return attrs;
+}
+
+static LCRule make_rule(const std::string& id, const std::string* exp_days,
+                        const std::string* noncur_days)
+{
+  LCRule rule;
+  rule.set_id(id);
+  rule.set_status("Enabled");
+  if (exp_days) {
+    LCExpiration exp;
+    exp.set_days(*exp_days);
+    rule.set_expiration(exp);
+  }
+  if (noncur_days) {
+    LCExpiration ncexp;
+    ncexp.set_days(*noncur_days);
+    rule.set_noncur_expiration(ncexp);
+  }
+  return rule;
+}
+
+// x-amz-expiration must reflect only the current-version Expiration action, and
+// only for the current version (an empty instance). It must never be derived
+// from NoncurrentVersionExpiration, nor returned for an explicit versionId
+// request. Reproducer for https://tracker.ceph.com/issues/77564.
+TEST(ExpHdr, S3ExpirationHeaderCurrentVersionOnly)
+{
+  boost::intrusive_ptr<CephContext> cct{
+    new CephContext(CEPH_ENTITY_TYPE_ANY), false};
+  NoDoutPrefix dpp(cct.get(), ceph_subsys_rgw);
+  RGWObjTags notags;
+  auto mtime = ceph::real_clock::now();
+
+  const std::string days30{"30"}, days60{"60"};
+  const rgw_obj_key current_key{"obj"};
+  const rgw_obj_key versioned_key{"obj", "versionid-0123456789"};
+
+  // (1) only NoncurrentVersionExpiration: never emit the header (the bug).
+  {
+    RGWLifecycleConfiguration cfg(cct.get());
+    cfg.add_rule(make_rule("noncur-only", nullptr, &days60));
+    auto attrs = make_lc_attrs(cfg);
+
+    EXPECT_TRUE(rgw::lc::s3_expiration_header(
+                  &dpp, current_key, notags, mtime, attrs).empty());
+    EXPECT_TRUE(rgw::lc::s3_expiration_header(
+                  &dpp, versioned_key, notags, mtime, attrs).empty());
+  }
+
+  // (2) Expiration + NoncurrentVersionExpiration: emit for the current version
+  // from the Expiration rule only; nothing for an explicit versionId request.
+  {
+    RGWLifecycleConfiguration cfg(cct.get());
+    cfg.add_rule(make_rule("cur-and-noncur", &days30, &days60));
+    auto attrs = make_lc_attrs(cfg);
+
+    auto cur = rgw::lc::s3_expiration_header(
+                 &dpp, current_key, notags, mtime, attrs);
+    EXPECT_FALSE(cur.empty());
+    EXPECT_NE(cur.find("rule-id=\"cur-and-noncur\""), std::string::npos);
+
+    EXPECT_TRUE(rgw::lc::s3_expiration_header(
+                  &dpp, versioned_key, notags, mtime, attrs).empty());
+  }
 }
