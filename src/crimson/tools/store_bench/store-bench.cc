@@ -92,6 +92,7 @@ private:
 public:
   unsigned num_concurrent_io = 16;
   bool dump_metrics = false;
+  std::string track_metrics="";
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -106,6 +107,8 @@ public:
        "for")
       ("dump-metrics", po::bool_switch(&dump_metrics),
        "Dump JSON formatted metrics to stdout")
+      ("track-metrics",po:: value<std::string>(&track_metrics),
+        "Metrics we wnat to include in result list,filtered from dump-metrics")
       ;
     return ret;
   }
@@ -951,12 +954,22 @@ int main(int argc, char **argv) {
           }
           f.close_section();
         }
-        if (common_options.dump_metrics) {
+        if (common_options.dump_metrics ||!common_options.track_metrics.empty()) {
+          std::set<std::string> requested_metrics;
+          if(!common_options.track_metrics.empty()){
+            std::stringstream ss(common_options.track_metrics);
+            std::string name;
+            while (std::getline(ss,name,',')){
+              requested_metrics.insert(name);
+            }
+          }
           f.open_array_section("metrics_values");
           crimson::metrics::dump_metric_value_map(
             seastar::scollectd::get_value_map(),
             &f,
-            [](const auto &) { return true; });
+            [&requested_metrics](const std::string& full_name) { 
+              return requested_metrics.empty() || requested_metrics.count(full_name)>0;
+            });
           f.close_section();
         }
         f.close_section();
