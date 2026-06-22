@@ -498,11 +498,17 @@ bool StrayManager::_eval_stray(CDentry *dn)
       mds->mdcache->clear_dirty_bits_for_stray(in);
 
       if (!in->remote_parents.empty()) {
-	// unlink any stale remote snap dentry.
+	// unlink any stale remote dentries (both snap and non-snap).
+	// When nlink == 0, the inode has been fully deleted and all
+	// remote parents are stale.  Snap dentries are created during
+	// snapshot operations; non-snap dentries may remain from
+	// incomplete hardlink cleanup (e.g. after MDS failover).
 	for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
 	  CDentry *remote_dn = *it;
 	  ++it;
-	  ceph_assert(remote_dn->last != CEPH_NOSNAP);
+	  dout(10) << __func__ << ": unlinking stale remote "
+	           << (remote_dn->last != CEPH_NOSNAP ? "snap " : "")
+	           << "dentry " << *remote_dn << dendl;
 	  remote_dn->unlink_remote(remote_dn->get_linkage());
 	}
       }
