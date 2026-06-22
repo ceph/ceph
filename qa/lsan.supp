@@ -67,3 +67,11 @@ leak:^RAND_priv_bytes_ex
 # OpenSSL per-thread error stack/strings, freed only by OPENSSL_thread_stop.
 leak:^ossl_err_get_state_int
 leak:^ERR_add_error_vdata
+
+# unittest-seastore stops the seastar reactor (SeastarRunner, on its own thread)
+# without draining its pending tasks, so a few cached extents those tasks still
+# held are leaked at shutdown. Three anchors for the three seastore subsystems
+# they come from.
+leak:crimson::os::seastore::Cache::
+leak:crimson::os::seastore::omap_manager
+leak:crimson::os::seastore::FixedKVBtree
