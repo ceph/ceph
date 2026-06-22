@@ -1131,6 +1131,9 @@ def main():
             elif k != "watch_channel":
                 level = k.replace('watch_', '')
     if level:
+        if childargs:
+            print('Invalid command: unused arguments: {0}'.format(childargs), file=sys.stderr)
+            return errno.EINVAL
         # an awfully simple callback
         def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
             # Filter on channel
