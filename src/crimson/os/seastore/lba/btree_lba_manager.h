@@ -618,6 +618,7 @@ private:
     Transaction &t,
     laddr_t laddr,
     paddr_t paddr,
+    extent_len_t len,
     std::optional<paddr_t> shadow);
 
 

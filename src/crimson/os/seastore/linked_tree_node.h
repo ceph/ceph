@@ -350,7 +350,6 @@ public:
       auto &sparent = me.get_stable_for_key(key);
       auto spos = sparent.lower_bound(key).get_offset();
       child = sparent.children[spos];
-      assert(is_valid_child_ptr(child));
       auto ret = etvr.get_extent_viewable_by_trans_sync(
         t, static_cast<ChildT*>(child));
       return ret->template cast<ChildT>();
