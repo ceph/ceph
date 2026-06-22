@@ -686,6 +686,17 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       {
         fs.get_mds_map().set_standby_count_wanted(n);
       });
+    } else if (var == "standby_enable_host_anti_affinity") {
+      bool enable = false;
+      int r = parse_bool(val, &enable, ss);
+      if (r != 0) {
+        return r;
+      }
+      modify_filesystem(fsmap, fsv,
+          [enable](auto&& fs)
+      {
+        fs.get_mds_map().set_standby_enable_host_anti_affinity(enable);
+      });
     } else if (var == "session_timeout") {
       if (interr.length()) {
        ss << var << " requires an integer value";
