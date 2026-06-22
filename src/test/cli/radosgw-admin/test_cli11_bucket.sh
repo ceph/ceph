@@ -57,6 +57,7 @@ WARN_FIX_DUP="Warning: --fix specified multiple times, using last value"
 WARN_CHECK_OBJECTS_POS="Warning: --check-objects should appear after the subcommand"
 WARN_MAX_IOS_POS="Warning: --max-concurrent-ios should appear after the subcommand"
 WARN_MAX_IOS_DUP="Warning: --max-concurrent-ios specified multiple times, using last value"
+WARN_WARNINGS_POS="Warning: --warnings-only should appear after the subcommand"
 WARN_DUMP_KEYS_POS="Warning: --dump-keys should appear after the subcommand"
 WARN_HIDE_PROGRESS_POS="Warning: --hide-progress should appear after the subcommand"
 WARN_DUMP_KEYS_DUP="Warning: --dump-keys specified multiple times, using last value"
@@ -358,6 +359,28 @@ check_cluster "layout: missing --bucket" 22 "ERROR: bucket not specified" -- \
 check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- \
   bucket layout --bucket cli11-no-such-bucket
 
+# wrong-position warnings (flag before the leaf subcommand). --bucket/--bucket-id/
+# --format warn then fail on the nonexistent bucket (exit 2); --tenant trips the
+# global "no user ID" check (exit 22) before reaching the bucket.
+check_warns "layout: --bucket before subcommand"    2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket layout
+check_warns "layout: --bucket-id before subcommand" 2 "" "$WARN_BUCKETID_POS" -- \
+  bucket --bucket-id x layout --bucket cli11-no-such-bucket
+check_warns "layout: --format before subcommand"    2 "" "$WARN_FORMAT_POS" -- \
+  bucket --format json layout --bucket cli11-no-such-bucket
+check_warns "layout: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t layout --bucket cli11-no-such-bucket
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "layout: duplicate --bucket"    2 "" "$WARN_BUCKET_DUP" -- \
+  bucket layout --bucket a --bucket cli11-no-such-bucket
+check_warns "layout: duplicate --bucket-id" 2 "" "$WARN_BUCKETID_DUP" -- \
+  bucket layout --bucket-id a --bucket-id b --bucket cli11-no-such-bucket
+check_warns "layout: duplicate --format"    2 "" "$WARN_FORMAT_DUP" -- \
+  bucket layout --format json --format json --bucket cli11-no-such-bucket
+check_warns "layout: duplicate --tenant"    22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
+  bucket layout --tenant a --tenant b --bucket cli11-no-such-bucket
+
 # ============================================================
 echo ""
 echo "=== bucket chown ==="
@@ -379,14 +402,17 @@ check "chown: --bucket missing value"          114 "--bucket: 1 required TEXT mi
   bucket chown --bucket
 check "chown: --uid missing value"             114 "--uid: 1 required TEXT missing" \
   bucket chown --uid
-check "chown: --bucket-id missing value"       114 "--bucket-id: 1 required TEXT missing" \
-  bucket chown --bucket-id
 check "chown: --marker missing value"          114 "--marker: 1 required TEXT missing" \
   bucket chown --marker
 check "chown: --tenant missing value"          114 "--tenant: 1 required TEXT missing" \
   bucket chown --tenant
 check "chown: --bucket-new-name missing value" 114 "--bucket-new-name: 1 required TEXT missing" \
   bucket chown --bucket-new-name
+
+# --bucket-id is NOT a chown option (the handler never read it); the flag is
+# swallowed and its value trips the stray-positional check (exit 22).
+check "chown: --bucket-id rejected (not a chown option)" 22 "ERROR: unexpected argument: 'x'" \
+  bucket chown --bucket-id x
 
 # handler-level (cluster): bucket_name.empty() is checked inside the action
 # (note the "bucket name not specified" wording differs from layout); a
@@ -395,6 +421,26 @@ check_cluster "chown: missing --bucket" 22 "ERROR: bucket name not specified" --
   bucket chown
 check_cluster "chown: nonexistent bucket (exit 2)" 2 "$ERR_CHOWN_NO_BUCKET" -- \
   bucket chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
+
+# wrong-position warnings (flag before the leaf subcommand); all warn then fail on
+# the nonexistent bucket (exit 2). --uid is supplied, so --tenant does NOT trip the
+# global "no user ID" check here.
+check_warns "chown: --bucket before subcommand"          2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket chown --uid cli11_no_such_user
+check_warns "chown: --uid before subcommand"             2 "" "$WARN_UID_POS" -- \
+  bucket --uid cli11_no_such_user chown --bucket cli11-no-such-bucket
+check_warns "chown: --marker before subcommand"          2 "" "$WARN_MARKER_POS" -- \
+  bucket --marker m chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
+check_warns "chown: --tenant before subcommand"          2 "" "$WARN_TENANT_POS" -- \
+  bucket --tenant t chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
+check_warns "chown: --bucket-new-name before subcommand" 2 "" "$WARN_NEWNAME_POS" -- \
+  bucket --bucket-new-name nn chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "chown: duplicate --bucket" 2 "" "$WARN_BUCKET_DUP" -- \
+  bucket chown --bucket a --bucket cli11-no-such-bucket --uid cli11_no_such_user
+check_warns "chown: duplicate --uid"    2 "" "$WARN_UID_DUP" -- \
+  bucket chown --uid a --uid cli11_no_such_user --bucket cli11-no-such-bucket
 
 # ============================================================
 echo ""
@@ -421,6 +467,16 @@ check_cluster "limit check: --warnings-only" 0 "" -- \
   bucket limit check --warnings-only
 check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 "" -- \
   bucket limit check --uid cli11_no_such_user
+
+# wrong-position warnings (flag before the 'check' leaf); all paths exit 0
+check_warns "limit check: --uid before subcommand"           0 "" "$WARN_UID_POS" -- \
+  bucket --uid cli11_no_such_user limit check
+check_warns "limit check: --warnings-only before subcommand" 0 "" "$WARN_WARNINGS_POS" -- \
+  bucket --warnings-only limit check
+
+# duplicate-flag warning (flag specified twice; last value wins)
+check_warns "limit check: duplicate --uid" 0 "" "$WARN_UID_DUP" -- \
+  bucket limit check --uid a --uid cli11_no_such_user
 
 # ============================================================
 echo ""
@@ -1184,6 +1240,23 @@ check_help "cli11-help after logging list"         bucket logging list --cli11-h
 check_help "cli11-help bucket logging flush"       --cli11-help bucket logging flush
 check_help "cli11-help after logging flush"        bucket logging flush --cli11-help
 
+# bucket layout
+check_help "cli11-help bucket layout"            --cli11-help bucket layout
+check_help "cli11-help layout after bucket"      bucket --cli11-help layout
+check_help "cli11-help after layout"             bucket layout --cli11-help
+
+# bucket chown
+check_help "cli11-help bucket chown"             --cli11-help bucket chown
+check_help "cli11-help chown after bucket"       bucket --cli11-help chown
+check_help "cli11-help after chown"              bucket chown --cli11-help
+
+# bucket limit check (nested: limit node + check leaf)
+check_help "cli11-help bucket limit"             --cli11-help bucket limit
+check_help "cli11-help limit after bucket"       bucket --cli11-help limit
+check_help "cli11-help bucket limit check"       --cli11-help bucket limit check
+check_help "cli11-help limit check after bucket" bucket limit --cli11-help check
+check_help "cli11-help after limit check"        bucket limit check --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1266,6 +1339,30 @@ check_help_content "help content remove: --bypass-gc"          "--bypass-gc"    
 check_help_content "help content buckets list: --allow-unordered" "--allow-unordered"   buckets list --cli11-help
 check_help_content "help content buckets rm: --purge-objects"     "--purge-objects"      buckets rm --cli11-help
 check_help_content "help content buckets check: --fix"            "--fix"                buckets check --cli11-help
+
+# bucket layout: all flags + description
+check_help_content "help content layout: --bucket"     "--bucket"                 bucket layout --cli11-help
+check_help_content "help content layout: -b short"     "-b"                       bucket layout --cli11-help
+check_help_content "help content layout: --bucket-id"  "--bucket-id"              bucket layout --cli11-help
+check_help_content "help content layout: --tenant"     "--tenant"                 bucket layout --cli11-help
+check_help_content "help content layout: --format"     "--format"                 bucket layout --cli11-help
+check_help_content "help content layout: description"  "show the bucket's layout" bucket layout --cli11-help
+
+# bucket chown: all flags + description
+check_help_content "help content chown: --bucket"          "--bucket"               bucket chown --cli11-help
+check_help_content "help content chown: -b short"          "-b"                     bucket chown --cli11-help
+check_help_content "help content chown: --uid"             "--uid"                  bucket chown --cli11-help
+check_help_content "help content chown: -i short"          "-i"                     bucket chown --cli11-help
+check_help_content "help content chown: --marker"          "--marker"               bucket chown --cli11-help
+check_help_content "help content chown: --tenant"          "--tenant"               bucket chown --cli11-help
+check_help_content "help content chown: --bucket-new-name" "--bucket-new-name"      bucket chown --cli11-help
+check_help_content "help content chown: description"       "update its object ACLs" bucket chown --cli11-help
+
+# bucket limit check: all flags + description
+check_help_content "help content limit check: --uid"           "--uid"                      bucket limit check --cli11-help
+check_help_content "help content limit check: -i short"        "-i"                         bucket limit check --cli11-help
+check_help_content "help content limit check: --warnings-only" "--warnings-only"            bucket limit check --cli11-help
+check_help_content "help content limit check: description"     "show bucket sharding stats" bucket limit check --cli11-help
 
 # ============================================================
 echo ""
