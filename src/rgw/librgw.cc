@@ -47,7 +47,7 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
   using namespace rgw;
 
-  int rc = -EINVAL;
+  int rc = 0;
 
   g_rgwlib = &rgwlib;
 
