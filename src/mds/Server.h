@@ -230,6 +230,7 @@ public:
   bool check_fragment_space(const MDRequestRef& mdr, CDir *in);
   bool check_dir_max_entries(const MDRequestRef& mdr, CDir *in);
   bool check_access(const MDRequestRef& mdr, CInode *in, unsigned mask);
+  bool check_quarantine_block(const MDRequestRef& mdr, CInode *in);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
