@@ -4334,7 +4334,7 @@ def test_notification_metadata_sync_and_delivery():
         record = event['Records'][0]
         assert_equal(record['s3']['bucket']['name'], bucket_name)
         assert_equal(record['s3']['object']['key'], key)
-        assert_equal(record['eventName'], 's3:ObjectCreated:Put')
+        assert_equal(record['eventName'], 'ObjectCreated:Put')
 
         log.info('notification delivery verified: %s', record['eventName'])
 
