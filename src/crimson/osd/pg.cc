@@ -1062,14 +1062,29 @@ PG::submit_transaction(
 
 PG::interruptible_future<> PG::repair_object(
   const hobject_t& oid,
-  eversion_t& v) 
+  eversion_t& v)
 {
+  LOG_PREFIX(PG::repair_object);
   // see also PrimaryLogPG::rep_repair_primary_object()
-  assert(is_primary());
-  logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
-  // Add object to PG's missing set if it isn't there already
-  assert(!get_local_missing().is_missing(oid));
+  ceph_assert(is_primary());
+  DEBUGDPP("{} peers osd.{}", *this, oid, get_acting_recovery_backfill());
+  // Add object to PG's missing set if it isn't there already. The caller only
+  // gets here on a clean PG, which is what guarantees the object is not
+  // already missing, exactly as in rep_repair_primary_object().
+  ceph_assert(!get_local_missing().is_missing(oid));
   peering_state.force_object_missing(pg_whoami, oid, v);
+  // As PrimaryLogPG::primary_error() does, report the bad copy and whether
+  // anything is left to recover it from. Crimson's cluster log channels are
+  // still stubs that discard what is streamed into them (PG::get_clog_error()
+  // passes a null sink), so for now only the OSD log below carries this; the
+  // clog write starts working once the channels are wired up to the monitors.
+  const auto &missing_loc = peering_state.get_missing_loc();
+  auto errorstr = missing_loc.is_unfound(oid)
+    ? fmt::format("missing primary copy of {}, unfound", oid)
+    : fmt::format("missing primary copy of {}, will try copies on {}",
+		  oid, missing_loc.get_locations(oid));
+  ERRORDPP("{}", *this, errorstr);
+  get_clog_error() << get_pgid() << " " << errorstr;
   auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
     oid, v, this, get_shard_services(), get_osdmap_epoch());
   return std::move(fut);
