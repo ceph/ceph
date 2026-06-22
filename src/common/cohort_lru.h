@@ -237,6 +237,7 @@ namespace cohort {
             auto active = o->active.test();
             if (active) {
               lane.active.erase(it);
+              o->active.clear(); /* now on lane.q */
             } else {
               lane.q.erase(it);
             }
