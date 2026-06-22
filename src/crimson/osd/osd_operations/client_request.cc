@@ -20,6 +20,32 @@ SET_SUBSYS(osd);
 
 namespace crimson::osd {
 
+namespace {
+// object_corrupted (EILSEQ) only means "repair this object" when it came from
+// reading the object's data. The executer records the failing op's result in
+// OSDOp::rval, so find that op and confirm it is an object-data read; other ops
+// (notably a read-only class call) can surface EILSEQ for unrelated reasons and
+// must not trigger recovery. See tracker #77070.
+bool is_repairable_corrupt_read(const std::vector<OSDOp> &ops)
+{
+  for (const auto &osd_op : ops) {
+    if (osd_op.rval.code != -EILSEQ) {
+      continue;
+    }
+    switch (osd_op.op.op) {
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_CHECKSUM:
+    case CEPH_OSD_OP_CMPEXT:
+      return true;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+} // namespace
 
 void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
@@ -385,35 +411,85 @@ ClientRequest::process_op(
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
 
-  int load_err = co_await pg->obc_loader.load_and_lock(
-    obc_manager, pg->get_lock_type(op_info)
-  ).si_then([]() -> int {
-    return 0;
-  }).handle_error_interruptible(
-    PG::load_obc_ertr::all_same_way(
-      [](const auto &code) -> int {
-	return -code.value();
-      })
-  );
-  if (load_err) {
-    DEBUGDPP("{}.{}: saw error code loading obc {}",
-	     *pg, *this, this_instance_id, load_err);
-    co_await reply_op_error(pg, load_err);
-    co_return;
-  }
+  // tracker #77070: a read may discover the primary copy is corrupt (a
+  // data-digest mismatch or a store read error, both surfaced as
+  // object_corrupted). In that case do_process sets needs_repair instead of
+  // replying; we repair the object via PG::repair_object() with the obc lock
+  // released (recovery needs to take it) and retry the request once.
+  //
+  // Holding the obc_orderer process stage across the repair serializes other
+  // ops on this object behind the recovery, matching classic's
+  // waiting_for_unreadable_object behaviour (PrimaryLogPG::rep_repair_primary_object).
+  for (unsigned repair_attempt = 0; ; ++repair_attempt) {
+    int load_err = co_await pg->obc_loader.load_and_lock(
+      obc_manager, pg->get_lock_type(op_info)
+    ).si_then([]() -> int {
+      return 0;
+    }).handle_error_interruptible(
+      PG::load_obc_ertr::all_same_way(
+        [](const auto &code) -> int {
+	  return -code.value();
+        })
+    );
+    if (load_err) {
+      DEBUGDPP("{}.{}: saw error code loading obc {}",
+	       *pg, *this, this_instance_id, load_err);
+      co_await reply_op_error(pg, load_err);
+      co_return;
+    }
 
-  DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",
-	   *pg, *this, this_instance_id, obc_manager.get_obc()->obs);
-  co_await do_process(
-    ihref, pg, obc_manager.get_obc(), this_instance_id
-  );
+    DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",
+	     *pg, *this, this_instance_id, obc_manager.get_obc()->obs);
+    bool needs_repair = false;
+    co_await do_process(
+      ihref, pg, obc_manager.get_obc(), this_instance_id, needs_repair
+    );
+    if (!needs_repair) {
+      co_return;
+    }
+
+    // capture the object identity before dropping the obc
+    const hobject_t repair_soid = obc_manager.get_obc()->obs.oi.soid;
+    eversion_t repair_version = obc_manager.get_obc()->obs.oi.version;
+    // release the obc lock so UrgentRecovery can acquire it
+    obc_manager.release();
+
+    if (repair_attempt > 0) {
+      // already repaired once and still corrupt; no good copy to recover from
+      DEBUGDPP("{}.{}: {} still corrupt after repair, replying EIO",
+	       *pg, *this, this_instance_id, repair_soid);
+      co_await reply_op_error(pg, -EIO);
+      co_return;
+    }
+
+    DEBUGDPP("{}.{}: repairing {} (v {}) and retrying read",
+	     *pg, *this, this_instance_id, repair_soid, repair_version);
+    co_await pg->repair_object(repair_soid, repair_version);
+
+    // If no good copy exists anywhere, repair_object leaves the object
+    // unfound rather than recovered. Mirror process_op's normal unfound
+    // handling and hang the request until the object is found, instead of
+    // retrying into another EILSEQ. (Classic blocks the op the same way.)
+    const hobject_t head = m->get_hobj().get_head();
+    if (pg->get_peering_state().get_missing_loc().is_unfound(head)) {
+      DEBUGDPP("{}.{}: {} unfound after repair, hanging until found",
+	       *pg, *this, this_instance_id, head);
+      co_await interruptor::make_interruptible(
+	pg->get_recovery_backend()->add_unfound(head));
+    }
+
+    // recovery overwrote the cached obc; re-acquire a fresh manager and retry
+    obc_manager = pg->obc_loader.get_obc_manager(
+      *(ihref.obc_orderer), m->get_hobj());
+  }
 }
 
 ClientRequest::interruptible_future<>
 ClientRequest::do_process(
   instance_handle_t &ihref,
   Ref<PG> pg, crimson::osd::ObjectContextRef obc,
-  unsigned this_instance_id)
+  unsigned this_instance_id,
+  bool &needs_repair)
 {
   LOG_PREFIX(ClientRequest::do_process);
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
@@ -492,6 +568,26 @@ ClientRequest::do_process(
       return e;
     })
   );
+
+  // tracker #77070: PGBackend::read() surfaces both a full-object data-digest
+  // mismatch (see _read_verify_data) and a hard store read error as
+  // object_corrupted (EILSEQ). Replying that straight to the client leaves the
+  // corrupt primary copy in place forever. Instead, signal process_op to
+  // repair the object via PG::repair_object() and retry the read. Restricted
+  // to a primary replicated PG, a read-only request, and a failing op that
+  // actually read object data; writes, EC, and other EILSEQ sources fall
+  // through to the normal error path.
+  if (ret &&
+      ret->value() == EILSEQ &&
+      op_info.may_read() && !op_info.may_write() &&
+      pg->is_primary() &&
+      !pg->get_pgpool().info.is_erasure() &&
+      is_repairable_corrupt_read(m->ops)) {
+    DEBUGDPP("{}.{}: {} corrupt on read, requesting repair and retry",
+             *pg, *this, this_instance_id, obc->obs.oi.soid);
+    needs_repair = true;
+    co_return;
+  }
 
   auto should_log_error = [](std::error_code e) -> bool {
     switch (e.value()) {
