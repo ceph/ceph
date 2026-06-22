@@ -446,6 +446,13 @@ TEST_F(WebCacheTest, SieveAllVisited) {
 }
 
 class WebCacheConcurrencyTest : public WebCacheTest {
+ protected:
+  // 4x oversubscription is enough to race the threads. The original *100
+  // (3200 on CI) made exclusive-lock tests O(N^2) and timed out on Windows.
+  static unsigned stress_thread_count() {
+    return std::max(std::thread::hardware_concurrency() * 4, 32u);
+  }
+
   void TearDown() override {
     if (_uut->perf() != nullptr) {
       JSONFormatter f(true);
@@ -458,8 +465,7 @@ class WebCacheConcurrencyTest : public WebCacheTest {
 
 TEST_F(WebCacheConcurrencyTest, BasicAddSame) {
   reset_cache_system_mode(100);
-  const auto num_threads =
-      std::max(std::thread::hardware_concurrency() * 100, 100U);
+  const auto num_threads = stress_thread_count();
   std::vector<std::thread> threads;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
@@ -478,8 +484,7 @@ TEST_F(WebCacheConcurrencyTest, BasicAddSame) {
 
 TEST_F(WebCacheConcurrencyTest, BasicAddUnique) {
   reset_cache_system_mode(100);
-  const auto num_threads =
-      std::max(std::thread::hardware_concurrency() * 100, 100U);
+  const auto num_threads = stress_thread_count();
   std::vector<std::thread> threads;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
@@ -504,8 +509,7 @@ TEST_F(WebCacheConcurrencyTest, StampedeSyncCallOnce) {
   webcache::WebCache<std::string, CacheValue> cache(
       _cct.get(), "test_web_cache", 100);
   std::atomic_int fetches = 0;
-  const auto num_threads =
-      std::max(std::thread::hardware_concurrency() * 100, 100U);
+  const auto num_threads = stress_thread_count();
   std::vector<std::thread> threads;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
@@ -542,8 +546,7 @@ TEST_F(WebCacheConcurrencyTest, StampedeMutex) {
   webcache::WebCache<std::string, CacheValue> cache(
       _cct.get(), "test_web_cache", 100);
   std::atomic_int fetches = 0;
-  const auto num_threads =
-      std::max(std::thread::hardware_concurrency() * 100, 100U);
+  const auto num_threads = stress_thread_count();
   std::vector<std::thread> threads;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
