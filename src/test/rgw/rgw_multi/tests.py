@@ -4342,7 +4342,7 @@ def test_sync_notification_events():
         record = event['Records'][0]
         assert_equal(record['s3']['bucket']['name'], bucket_name)
         assert_equal(record['s3']['object']['key'], key)
-        assert_equal(record['eventName'], 's3:ObjectSynced:Create')
+        assert_equal(record['eventName'], 'ObjectSynced:Create')
 
         log.info('sync notification delivery verified: %s', record['eventName'])
 
