@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { Step } from 'carbon-components-angular';
 import { forkJoin, of } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
@@ -7,9 +7,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
-
-export { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
-export { MirroringScheduleStepComponent } from './mirroring-schedule-step/mirroring-schedule-step.component';
+import { MirroringPathSelection } from './mirroring-path.model';
 
 @Component({
   selector: 'cd-cephfs-add-mirroring-path',
@@ -17,27 +15,33 @@ export { MirroringScheduleStepComponent } from './mirroring-schedule-step/mirror
   styleUrls: ['./cephfs-add-mirroring-path.component.scss'],
   standalone: false
 })
-export class CephfsAddMirroringPathComponent {
+export class CephfsAddMirroringPathComponent implements OnInit {
   @Input() fsName: string;
   @Input() fsId: number;
   @Output() pathsAdded = new EventEmitter<string[]>();
   @Output() cancelled = new EventEmitter<void>();
 
-  @ViewChild(MirroringPathsStepComponent) pathsStep!: MirroringPathsStepComponent;
+  @ViewChild('pathsStep') pathsStep!: MirroringPathsStepComponent;
 
-  steps: Step[] = [
-    { label: 'Paths', secondaryLabel: 'Optional label', invalid: false },
-    { label: 'Schedule', secondaryLabel: 'Optional label', invalid: false },
-    { label: 'Review', secondaryLabel: 'Optional label', invalid: false }
-  ];
-  label = 'Filesystem mirroring';
-  title = 'Add mirroring path';
+  steps: Step[] = [];
+  label: string;
+  title: string;
   isSubmitLoading = false;
+  selectedPaths: MirroringPathSelection[] = [];
 
   constructor(
     private cephfsService: CephfsService,
     private notificationService: NotificationService
   ) {}
+
+  ngOnInit() {
+    this.label = $localize`Filesystem mirroring`;
+    this.title = $localize`Add mirroring path`;
+    this.steps = [
+      { label: $localize`Paths`, secondaryLabel: $localize`Optional label`, invalid: false },
+      { label: $localize`Schedule`, secondaryLabel: $localize`Optional label`, invalid: false }
+    ];
+  }
 
   onSubmit(_payload: any) {
     const validPaths = this.pathsStep?.getValidPaths() || [];
@@ -71,5 +75,15 @@ export class CephfsAddMirroringPathComponent {
 
   onClose() {
     this.cancelled.emit();
+  }
+
+  onPathsChanged(paths: MirroringPathSelection[]): void {
+    this.selectedPaths = [...paths];
+  }
+
+  onStepChanged(event: { current: number }): void {
+    if (event.current === 1) {
+      this.selectedPaths = this.pathsStep?.getPathSelections() ?? [];
+    }
   }
 }

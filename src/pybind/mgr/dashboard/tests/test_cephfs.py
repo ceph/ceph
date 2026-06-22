@@ -8,7 +8,7 @@ except ImportError:
     from unittest.mock import patch, Mock
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, CephFSSnapshotSchedule
 from ..tests import ControllerTestCase
 
 
@@ -279,3 +279,60 @@ class CephFSMirrorStatusTest(ControllerTestCase):
             response = self.json_body()
             self.assertFalse(response.get('available'))
             self.assertIn('Cephfs mirror module is not enabled', response.get('message', ''))
+
+
+class CephFSSnapshotScheduleTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([CephFSSnapshotSchedule])
+
+    def test_list_non_recursive_no_schedule(self):
+        mgr.remote = Mock(return_value=(0, '[]', ''))
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs',
+                  query_string='path=/volumes/Group1/A1/uuid&recursive=false')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+        mgr.remote.assert_called_once_with(
+            'snap_schedule', 'snap_schedule_get',
+            '/volumes/Group1/A1/uuid', 'cephfs', None, None, 'json')
+
+    def test_list_recursive_false_string_uses_get_not_list(self):
+        mgr.remote = Mock(return_value=(0, '[]', ''))
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs',
+                  query_string='path=/volumes/Group1/A1/uuid&recursive=false')
+        self.assertStatus(200)
+        self.assertFalse(
+            any(call.args[1] == 'snap_schedule_list' for call in mgr.remote.call_args_list))
+
+    def test_list_non_recursive_empty_get_response(self):
+        mgr.remote = Mock(return_value=(-2, '', 'not found'))
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs',
+                  query_string='path=/volumes/Group1/A1/uuid&recursive=false')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+
+    def test_list_remote_failure_returns_empty(self):
+        mgr.remote = Mock(side_effect=RuntimeError('snap_schedule unavailable'))
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs',
+                  query_string='path=/volumes/Group1/A1/uuid&recursive=false')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+
+        schedule_line = '/volumes/g/s/uuid 1d {}'
+        schedule_json = '[{"path":"/volumes/g/s/uuid","schedule":"1d"}]'
+        mgr.remote = Mock(side_effect=[
+            (0, schedule_line, ''),
+            (-2, '', 'not found'),
+            (0, schedule_json, ''),
+        ])
+
+        self._get('/api/cephfs/snapshot/schedule/cephfs',
+                  query_string='path=/volumes/g/s/uuid&recursive=true')
+        self.assertStatus(200)
+        self.assertJsonBody([{'path': '/volumes/g/s/uuid', 'schedule': '1d'}])
+

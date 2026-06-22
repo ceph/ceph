@@ -10,17 +10,23 @@
   submitButtonLabel="Add paths"
   i18n-submitButtonLabel
   (submitRequested)="onSubmit($event)"
-  (closeRequested)="onClose()">
+  (closeRequested)="onClose()"
+  (stepChanged)="onStepChanged($event)">
   <cd-tearsheet-step>
     <cd-mirroring-paths-step
+      #pathsStep
       #tearsheetStep
       [fsName]="fsName"
-      [fsId]="fsId">
+      [fsId]="fsId"
+      (pathsChanged)="onPathsChanged($event)">
     </cd-mirroring-paths-step>
   </cd-tearsheet-step>
   <cd-tearsheet-step>
     <cd-mirroring-schedule-step
-      #tearsheetStep>
+      #scheduleStep
+      #tearsheetStep
+      [fsName]="fsName"
+      [selectedPaths]="selectedPaths">
     </cd-mirroring-schedule-step>
   </cd-tearsheet-step>
 </cd-tearsheet>

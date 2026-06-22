@@ -6,7 +6,9 @@ export interface SnapshotSchedule {
   path: string;
   rel_path?: string;
   schedule: string;
+  scheduleCopy?: string;
   retention?: Record<string, number> | string;
+  retentionCopy?: string[];
   start: Date;
   created: Date;
   first?: string;

@@ -1,0 +1,30 @@
+@use './src/styles/vendor/variables' as vv;
+
+.existing-schedules-section {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid vv.$gray-200;
+}
+
+.conflict-handling {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.paths-schedule-table {
+  ::ng-deep {
+    cd-table .datatable-header {
+      background-color: vv.$gray-100;
+    }
+
+    cd-table .datatable-body-row {
+      border-bottom: 1px solid vv.$gray-200;
+    }
+
+    cd-table .datatable-body-cell,
+    cd-table .datatable-header-cell {
+      padding-top: 0.875rem;
+      padding-bottom: 0.875rem;
+    }
+  }
+}

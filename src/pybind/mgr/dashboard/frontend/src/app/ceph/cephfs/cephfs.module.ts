@@ -35,6 +35,7 @@ import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mir
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
 import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
+import { MirroringScheduleStepComponent } from './cephfs-add-mirroring-path/mirroring-schedule-step/mirroring-schedule-step.component';
 import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
@@ -70,6 +71,7 @@ import {
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
+import AddIcon16 from '@carbon/icons/es/add/16';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
@@ -153,7 +155,8 @@ import FolderIcon16 from '@carbon/icons/es/folder/16';
     CephfsDownloadTokenComponent,
     CephfsSetupMirroringComponent,
     CephfsAddMirroringPathComponent,
-    MirroringPathsStepComponent
+    MirroringPathsStepComponent,
+    MirroringScheduleStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -161,6 +164,7 @@ export class CephfsModule {
   constructor(private iconService: IconService) {
     this.iconService.registerAll([
       AddIcon,
+      AddIcon16,
       LaunchIcon,
       Close,
       Trash,
