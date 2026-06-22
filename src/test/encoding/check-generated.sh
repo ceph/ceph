@@ -4,6 +4,12 @@ set -e
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+if ldd $(command -v ceph-dencoder) 2>/dev/null | grep -q libasan; then
+  # Per-object leak checks dominate runtime here (~10s vs ~1s each on riscv64)
+  # and this test only checks encode/decode, so disable them; keep other checks.
+  export ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
+fi
+
 dir=$1
 
 test_selected_type() {
