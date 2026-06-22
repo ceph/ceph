@@ -216,6 +216,21 @@ public:
 
     }
 
+    // return true if reached the next mapping and false otherwise
+    bool next_sync(op_context_t c) {
+#ifndef NDEBUG
+      assert_valid();
+#endif
+      assert(is_full());
+      assert(!is_end());
+      leaf.pos++;
+      if (at_boundary()) {
+        return handle_boundary_sync(c);
+      } else {
+        return true;
+      }
+    }
+
     /**
      * Move to the previous entry.  If already at position 0 in the current
      * leaf, walks up the internal stack (ensure_internal_bottom_up) to find
@@ -520,6 +535,44 @@ public:
       });
     }
 
+    // return true if reached the next mapping and false otherwise
+    bool handle_boundary_sync(op_context_t c) {
+      assert(at_boundary());
+      assert(is_full());
+      depth_t depth = 2;
+      for (; depth <= get_depth(); depth++) {
+        auto &internal = get_internal(depth);
+        auto it = internal.node->iter_idx(internal.pos + 1);
+        if (it != internal.node->end()) {
+          auto pos = internal.pos + 1;
+          while (depth > 2) {
+            it = get_internal(depth).node->iter_idx(pos);
+            auto child = get_internal(depth).node->template get_child_sync<
+              internal_node_t>(c.trans, c.cache, pos, it.get_key());
+            if (!is_valid_child_ptr(child.get())) {
+              return false;
+            }
+            depth--;
+            get_internal(depth).node = child;
+            get_internal(depth).pos = pos;
+            pos = 0;
+          }
+          assert(depth == 2);
+          assert(pos == 0);
+          it = get_internal(depth).node->begin();
+          auto child = get_internal(depth).node->template get_child_sync<
+            leaf_node_t>(c.trans, c.cache, pos, it.get_key());
+          if (!is_valid_child_ptr(child.get())) {
+            return false;
+          }
+          leaf.node = child;
+          leaf.pos = 0;
+          return true;
+        }
+      }
+      return false;
+    }
+
     /**
      * Called when leaf.pos has advanced past the end of the current leaf
      * (at_boundary() == true).  Walks up the internal stack to find the
@@ -763,10 +816,12 @@ public:
       if (depth > 1) {
         auto child = entry.node->template get_child_sync<internal_node_t>(
           c.trans, c.cache, entry.pos, riter.get_key());
+        ceph_assert(is_valid_child_ptr(child.get()));
         iter.get_internal(depth).node = child;
       } else {
         auto child = entry.node->template get_child_sync<leaf_node_t>(
           c.trans, c.cache, entry.pos, riter.get_key());
+        ceph_assert(is_valid_child_ptr(child.get()));
         iter.leaf.node = child;
       }
     }
