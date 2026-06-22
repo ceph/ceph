@@ -629,8 +629,27 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
   CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
   ceph_assert(stray_dnl->is_primary());
   CInode *stray_in = stray_dnl->get_inode();
-  ceph_assert(stray_in->get_inode()->nlink >= 1);
+  ceph_assert(stray_in->get_inode()->nlink >= 0);
   ceph_assert(stray_in->last == CEPH_NOSNAP);
+
+  if (stray_in->get_inode()->nlink == 0) {
+    /*
+     * When nlink reaches 0, the inode has been fully deleted and is
+     * pending purge from the stray directory.  Any remote parents that
+     * still point here are stale dentries that haven't been cleaned
+     * up yet (e.g. after an MDS failover, stale remote dentries may
+     * still reside on disk and get loaded during dirfrag fetch).
+     *
+     * We must NOT attempt to reintegrate a stray with nlink == 0,
+     * because reintegration assumes at least one valid hard link
+     * remains.  Instead, just return; the normal _eval_stray path
+     * will handle cleanup when it processes this inode via the
+     * nlink == 0 purge path.
+     */
+    dout(10) << __func__ << ": stray inode " << *stray_in
+             << " nlink == 0, skipping reintegration" << dendl;
+    return;
+  }
 
   /* If no remote_dn hinted, pick one arbitrarily */
   if (remote_dn == NULL) {
