@@ -146,7 +146,8 @@ function(do_build_boost root_dir version)
   endif()
   set(b2_targets headers stage)
   set(b2_install_targets install)
-  if(WITH_ASAN)
+  # Except riscv64: its ASan mis-handles ucontext, so it keeps fcontext.
+  if(WITH_ASAN AND NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv"))
     list(APPEND b2 context-impl=ucontext)
     # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
     # and install targets never load it, so b2 aborts with `unknown feature
@@ -262,10 +263,8 @@ macro(build_boost version)
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
     endif()
-    if((c MATCHES "context") AND (WITH_ASAN))
-      set_target_properties(Boost::${c} PROPERTIES
-        INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_ASAN;BOOST_USE_UCONTEXT")
-    endif()
+    # ASan's BOOST_USE_ASAN/BOOST_USE_UCONTEXT are defined tree-wide in the
+    # top-level CMakeLists.txt, not per-target.
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()
   foreach(c ${Boost_BUILD_COMPONENTS})
