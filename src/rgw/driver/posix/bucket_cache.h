@@ -433,9 +433,11 @@ public:
 	    /* inserts at cached insert iterator, releasing latch */
 	    cache.insert_latched(b, lat, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_UNLOCK);
 	  } else {
-	    /* recycle step invalidates Latch */
-	    lat.lock->unlock(); /* !LATCHED */
+	    /* recycle invalidated the cached insert position, but the latch's
+	     * partition lock still guards this partition; hold it across the
+	     * insert so we don't race concurrent tree ops, then release it */
 	    cache.insert(fac.hk, b, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_NONE);
+	    lat.lock->unlock(); /* !LATCHED */
 	  }
 	  get<1>(result) |= BucketCache<D, B>::FLAG_CREATE;
 	} else {
