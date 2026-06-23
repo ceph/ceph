@@ -2,11 +2,13 @@
 
 import errno
 import unittest
+from unittest.mock import MagicMock
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
+from ..module import CherryPyConfig
 from ..settings import Settings, handle_option_command
 from ..tests import ControllerTestCase, KVStoreMockMixin
 
@@ -124,6 +126,33 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 
         self.assertEqual(str(ctx.exception),
                          "type object 'Options' has no attribute 'NON_EXISTENT_OPTION'")
+
+    def _setup_cherrypy_config(self, server_addr, server_port):
+        obj = CherryPyConfig()
+        config_map = {
+            'server_addr': server_addr,
+            'ssl': False,
+            'server_port': server_port
+        }
+        obj.get_localized_module_option = MagicMock(
+            side_effect=lambda key, default=None: config_map.get(key, default))
+        obj.get_mgr_ip = MagicMock(return_value='192.168.1.10')
+        obj.get_module_option = MagicMock(return_value='')
+        obj.get_mgr_id = MagicMock(return_value='test')
+        obj.module_name = 'dashboard'
+        obj.log = MagicMock()
+        obj.update_cherrypy_config = MagicMock()
+        return obj
+
+    def test_wildcard_bind_addr_preserved(self):
+        obj = self._setup_cherrypy_config('::', 8080)
+        _, bind_addr, _, _ = obj._configure()  # pylint: disable=protected-access
+        self.assertEqual(bind_addr, ('::', 8080))
+
+    def test_wildcard_bind_addr_preserved_ipv4(self):
+        obj = self._setup_cherrypy_config('0.0.0.0', 8443)
+        _, bind_addr, _, _ = obj._configure()  # pylint: disable=protected-access
+        self.assertEqual(bind_addr, ('0.0.0.0', 8443))
 
 
 class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
