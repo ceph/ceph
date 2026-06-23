@@ -12,6 +12,7 @@ Recommended methods
 :ref:`Cephadm <cephadm_deploying_new_cluster>` is a tool that can be used to
 install and manage a Ceph cluster.
 
+* cephadm supports only Octopus and newer releases.
 * cephadm is fully integrated with the orchestration API and fully supports the
   CLI and dashboard features that are used to manage cluster deployment.
 * cephadm requires container support (in the form of Podman or Docker) and
