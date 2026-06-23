@@ -1481,6 +1481,13 @@ check_help_content "help content limit check: -i short"        "-i"             
 check_help_content "help content limit check: --warnings-only" "--warnings-only"            bucket limit check --cli11-help
 check_help_content "help content limit check: description"     "show bucket sharding stats" bucket limit check --cli11-help
 
+# --bucket marked "<bucket> REQUIRED" in help for the commands that error on a
+# missing bucket (consistency with link/unlink/rm/chown/rewrite)
+check_help_content "help content layout: --bucket REQUIRED"        "<bucket> REQUIRED" bucket layout --cli11-help
+check_help_content "help content logging info: --bucket REQUIRED"  "<bucket> REQUIRED" bucket logging info --cli11-help
+check_help_content "help content logging list: --bucket REQUIRED"  "<bucket> REQUIRED" bucket logging list --cli11-help
+check_help_content "help content logging flush: --bucket REQUIRED" "<bucket> REQUIRED" bucket logging flush --cli11-help
+
 # ============================================================
 echo ""
 echo "=== functional: format and flag options (cluster) ==="
