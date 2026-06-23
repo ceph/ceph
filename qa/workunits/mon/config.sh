@@ -73,6 +73,23 @@ ceph config rm client.foo debug_asok
 ceph config set client.foo debug_asok 66
 ceph config rm client.foo 'debug asok'
 
+# whitespace in who/section (e.g. "osd.0  " with stray trailing spaces)
+ceph config set 'osd.0  ' debug_asok 44
+ceph config get osd.0 debug_asok | grep 44
+while ! ceph tell osd.0 config get debug_asok | grep 44
+do
+    sleep 1
+done
+ceph config rm osd.0 debug_asok
+while ceph tell osd.0 config get debug_asok | grep 44
+do
+    sleep 1
+done
+
+ceph config set '  osd.0' debug_asok 55
+ceph config get osd.0 debug_asok | grep 55
+ceph config rm osd.0 debug_asok
+
 # help
 ceph config help debug_asok | grep debug_asok
 
