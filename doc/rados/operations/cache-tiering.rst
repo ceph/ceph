@@ -7,11 +7,11 @@
    notice. **Do not deploy new cache tiers.** Migrate existing cache
    tier deployments as soon as possible.
 
-.. note:: The following documentation is retained for reference for existing
-   deployments only. For new deployments, use erasure-coded pools or fast
-   storage pools directly. As a community-supported block-level caching
-   alternative, consider ``dm-cache`` (the Linux kernel's device-mapper cache
-   target).
+.. note:: This documentation is retained for existing deployments only.
+   If you need to remove a cache tier, see :ref:`cache-tiering-removal`.
+   Some community members have adopted ``dm-cache`` (the Linux kernel's
+   device-mapper cache target) as a block-level caching alternative, though
+   this is not an officially supported or endorsed configuration.
 
 A cache tier provides Ceph clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
@@ -452,10 +452,12 @@ For example, to evict objects after 30 minutes, execute the following:
    ceph osd pool set hot-storage cache_min_evict_age 1800
 
 
+.. _cache-tiering-removal:
+
 Removing a Cache Tier
 =====================
 
-Removing a cache tier differs depending on whether it is a writeback 
+Removing a cache tier differs depending on whether it is a writeback
 cache or a read-only cache.
 
 
