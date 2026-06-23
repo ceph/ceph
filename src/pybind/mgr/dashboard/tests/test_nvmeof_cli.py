@@ -117,13 +117,7 @@ class TestNvmeofCLICommand:
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {})
         assert isinstance(result, HandleCommandResult)
         assert result.retval == 0
-        assert result.stdout == (
-            "++\n"
-            "||\n"
-            "++\n"
-            "\n"
-            "++"
-        )
+        assert result.stdout == ''
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
 
@@ -788,13 +782,7 @@ class TestNvmeofCLICommandSuccessMessage:
         )
         assert res.retval == 0
         assert res.stderr == ""
-        assert res.stdout == (
-            "++\n"
-            "||\n"
-            "++\n"
-            "\n"
-            "++"
-        )
+        assert res.stdout == ''
 
         del NvmeofCLICommand.COMMANDS[test_cmd]
         assert test_cmd not in NvmeofCLICommand.COMMANDS
