@@ -4843,6 +4843,8 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     return ret;
   }
 
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name());
+
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
 
