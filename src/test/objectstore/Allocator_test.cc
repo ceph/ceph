@@ -1243,6 +1243,84 @@ TEST_P(AllocTest, test_get_free_extents_fragmented_after_alloc_release)
   alloc->shutdown();
 }
 
+// ====================================================================
+// Nasty / adversarial cases
+// ====================================================================
+
+// A free extent that starts BEFORE range_begin must be clipped on its left
+// edge so the returned extent begins at range_begin, not at the extent's
+// actual start.  This is the symmetric counterpart of clipping_range_end.
+TEST_P(AllocTest, test_get_free_extents_clipping_range_begin)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  // free [0, 6*block), query only [4*block, capacity)
+  alloc->init_add_free(0, 6 * block_size);
+
+  uint64_t range_begin = 4 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(range_begin, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  ASSERT_EQ(1u, out.size());
+  EXPECT_EQ((uint64_t)range_begin, out[0].offset);
+  EXPECT_EQ((uint64_t)(2 * block_size), out[0].length);
+  alloc->shutdown();
+}
+
+// 5000 alternating free/allocated single blocks — maximum fragmentation at
+// scale.  Stresses cursor arithmetic, tree-walk depth, and termination.
+TEST_P(AllocTest, test_get_free_extents_massive_fragmentation)
+{
+  int64_t block_size = 4096;
+  const int n_extents = 5000;
+  int64_t capacity = 2 * n_extents * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < n_extents; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  int batches = 0;
+  while (cursor < (uint64_t)capacity) {
+    cursor = alloc->get_free_extents(cursor, capacity, 256, &out);
+    ASSERT_LE(++batches, n_extents) << "cursor walk did not terminate";
+  }
+
+  ASSERT_EQ((size_t)n_extents, out.size());
+  uint64_t total = 0;
+  for (size_t i = 0; i < out.size(); ++i) {
+    total += out[i].length;
+    if (i > 0) {
+      EXPECT_LT(out[i-1].offset, out[i].offset)
+        << "offsets not strictly ascending at index " << i;
+    }
+  }
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// Almost-full device: free space exists only at the very last block.  The
+// cursor must skip the entire allocated region to find it.
+TEST_P(AllocTest, test_get_free_extents_needle_at_end)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 10000 * block_size;
+  init_alloc(capacity, block_size);
+  uint64_t free_offset = (uint64_t)(capacity - block_size);
+  alloc->init_add_free(free_offset, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  ASSERT_EQ(1u, out.size());
+  EXPECT_EQ(free_offset, out[0].offset);
+  EXPECT_EQ((uint64_t)block_size, out[0].length);
+  alloc->shutdown();
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
