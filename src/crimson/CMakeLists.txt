@@ -1,6 +1,12 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
+option(WITH_CRIMSON_DETAILED_SAMPLING
+  "Enable detailed onode-tree sampling metrics in crimson-seastore" OFF)
+if(WITH_CRIMSON_DETAILED_SAMPLING)
+  list(APPEND crimson_cflag_definitions "CRIMSON_DETAILED_SAMPLING=1")
+endif()
+
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)

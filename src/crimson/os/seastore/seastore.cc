@@ -250,6 +250,54 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   }
 
   metrics.add_group(
+    "onode_tree",
+    {
+      sm::make_counter(
+        "onode_lookups",
+        [this] { return stats.onode_lookups; },
+        sm::description("onode-tree find + insert search"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "onode_lookup_nodes",
+        [this] { return stats.onode_lookup_nodes; },
+        sm::description("nodes searched across onode-tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "onode_lookup_str_cmp_count",
+        [this] { return stats.onode_str_cmp_count; },
+        sm::description("ns/oid key comparisons during onode-tree ops"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "onode_inserts",
+        [this] { return stats.onode_inserts; },
+        sm::description("onode-tree key inserts"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "onode_updates",
+        [this] { return stats.onode_updates; },
+        sm::description("onode-tree value updates"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "onode_erases",
+        [this] { return stats.onode_erases; },
+        sm::description("onode-tree key erases"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_gauge(
+        "onode_extents_delta",
+        [this] { return stats.onode_extents_delta; },
+        sm::description("net onode-tree extents added(+)/removed(-)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+    }
+  );
+
+  metrics.add_group(
     "seastore",
     {
       sm::make_gauge(
@@ -1786,6 +1834,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   add_latency_sample(
     op_type_t::DO_TRANSACTION,
     std::chrono::steady_clock::now() - ctx.begin_timestamp);
+  add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
 
   throttler.put();
 

@@ -569,13 +569,19 @@ public:
     uint64_t num_erases = 0;
     uint64_t num_updates = 0;
     int64_t extents_num_delta = 0;
+    uint64_t lookup_count = 0;
+    uint64_t nodes_visited = 0;
+    uint64_t string_cmp_count = 0;
 
     bool is_clear() const {
       return (depth == 0 &&
               num_inserts == 0 &&
               num_erases == 0 &&
               num_updates == 0 &&
-	      extents_num_delta == 0);
+	      extents_num_delta == 0 &&
+              lookup_count == 0 &&
+              nodes_visited == 0 &&
+              string_cmp_count == 0);
     }
   };
   tree_stats_t& get_onode_tree_stats() {
