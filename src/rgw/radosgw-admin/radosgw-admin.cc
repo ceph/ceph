@@ -4373,7 +4373,7 @@ int main(int argc, const char **argv)
       add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
 
       // bucket layout options
-      add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_layout, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
@@ -4391,18 +4391,18 @@ int main(int argc, const char **argv)
                                  "list only buckets nearing or over the current max objects per shard value")->ignore_underscore();
 
       // bucket logging flush options
-      add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_logging_flush, "--tenant",    tenant,      tenant_desc);
 
       // bucket logging info options
-      add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_logging_info, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
 
       // bucket logging list options
-      add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_logging_list, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
