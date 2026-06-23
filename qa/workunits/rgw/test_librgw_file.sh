@@ -74,4 +74,8 @@ ceph_test_librgw_file_gp ${K} --delete
 echo "phase 6.1"
 ceph_test_librgw_file_rename ${K} --create
 
+# second librgw_create() call regression test
+echo "phase 7.1"
+ceph_test_librgw_file_create ${K}
+
 exit 0
