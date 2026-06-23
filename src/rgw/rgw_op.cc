@@ -470,6 +470,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   std::unique_ptr<rgw::sal::Object> mpobj;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   rgw_obj obj;
 
   if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
@@ -482,7 +483,6 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   // 'copy_src' is used to make this function backward compatible.
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
-    std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = bucket->get_multipart_upload(object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
     mpobj->set_in_extra_data(true);
