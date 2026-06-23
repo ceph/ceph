@@ -84,7 +84,7 @@ class CBT(Task):
                 cbt_depends += ['pdsh', 'pdsh-rcmd-ssh']
 
             self.log.info('Installing collectl')
-            collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
+            collectl_location = "https://download.ceph.com/qa/collectl-4.3.1.src.tar.gz"
             self.first_mon.run(
                 args=[
                     'sudo', 'mkdir', 'collectl', run.Raw('&&'),
