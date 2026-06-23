@@ -13517,7 +13517,7 @@ std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std
   if (deleted.contains(pool_migration_watermark)) {
     hobject_t current(pool_migration_watermark);
     do {
-      update_range(&pool_migration_info, &pool_migration_watermark, nullptr);
+      update_range(&pool_migration_info, nullptr);
       dout(20) << __func__ << " deleting object " << current << dendl;
       current = next_pool_migration(current);
     } while (deleted.contains(current));
@@ -15040,25 +15040,21 @@ void PrimaryLogPG::update_range(
 
 void PrimaryLogPG::update_range(
   PoolMigrationInterval *pmi,
-  hobject_t *watermark,
   HBHandle *handle)
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
   std::string func_name = __func__;
 
-  if (pmi->version < info.log_tail) {
-    dout(10) << func_name << ": pmi is old, rescanning local pool_migration_info" << dendl;
+  bool is_old = (pmi->version < info.log_tail);
+  bool is_empty = (pmi->empty());
+  bool at_end = (last_pool_migration_started >= pmi->end);
+
+  if (is_old || is_empty || at_end) {
+    dout(10) << func_name << ": rescanning local pool_migration_info. is_old: "
+             << is_old << ". is_empty: " << is_empty << ". at_end: " << at_end << dendl;
     pmi->clear();
     pmi->version = info.last_update;
-    scan_range_migration(local_min, local_max, pmi, handle);
-  } else if (*watermark >= pmi->end || pmi->empty()) {
-    dout(10) << func_name << ": no migration targets in pmi, rescanning" << dendl;
-    pmi->version = info.last_update;
-    // pmi->end might already be at MAX if we previously called
-    // scan_range_migration in degraded state and objects were missing.
-    // Reset to the watermark.
-    pmi->end = *watermark;
     scan_range_migration(local_min, local_max, pmi, handle);
   }
 
@@ -15089,12 +15085,12 @@ void PrimaryLogPG::update_range(
                    << e.version << dendl;
           pmi->objects.erase(e.soid);
           pmi->objects.insert(make_pair(e.soid, e.version));
-          if (e.soid < *watermark) {
+          if (e.soid < last_pool_migration_started) {
             ObjectContextRef obc = get_object_context(e.soid, false);
             if (obc && obc->obs.exists) {
               dout(10) << func_name << ": update to " << e.soid << " lower than watermark ("
-                       << *watermark << "), updating watermark" << dendl;
-              *watermark = e.soid;
+                       << last_pool_migration_started << "), updating watermark" << dendl;
+              last_pool_migration_started = e.soid;
             }
           }
         } else if (e.is_delete()) {
@@ -15236,13 +15232,13 @@ void PrimaryLogPG::scan_range_migration(
   HBHandle *handle)
 {
   ceph_assert(is_locked());
-  dout(10) << "scan_range_migration from " << pmi->end << dendl;
+  dout(10) << __func__ << ": scanning from " << pool_migration_watermark << dendl;
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = pgbackend->objects_list_partial(pmi->end, min, max, &ls, &pmi->end);
+  int r = pgbackend->objects_list_partial(pool_migration_watermark, min, max, &ls, &pmi->end);
   ceph_assert(r >= 0);
-  dout(10) << " got " << ls.size() << " items, next " << pmi->end << dendl;
+  dout(10) << __func__ << " got " << ls.size() << " items, next " << pmi->end << dendl;
   dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -15275,10 +15271,10 @@ void PrimaryLogPG::scan_range_migration(
       version = oi.version;
     }
 
-    dout(20) << "  " << *p << " " << version << dendl;
+    dout(20) << __func__ << ": " << *p << " " << version << dendl;
     pmi->objects.insert(make_pair(*p, version));
-    dout(20) << "pmi->objects.size(): "  << pmi->objects.size() << dendl;
   }
+  dout(20) << __func__ << ": pmi->objects.size(): " << pmi->objects.size() << dendl;
 }
 
 /** check_local
@@ -15932,9 +15928,13 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     *work_started = true;
 
     // Process log updates and ensure our interval is populated
-    update_range(&pool_migration_info, &last_pool_migration_started, &handle);
+    update_range(&pool_migration_info, &handle);
     hobject_t soid = last_pool_migration_started;
 
+    if (soid == pool_migration_info.end) {
+      dout(20) << __func__ << " end of cache reached, waiting for pool_migration_watermark to catch up" << dendl;
+      return ops;
+    }
     // TODO Jamie - we can't call get_object_context if soid is min
     if (soid.is_min()) {
       dout(20) << __func__ << " soid is min" << dendl;
