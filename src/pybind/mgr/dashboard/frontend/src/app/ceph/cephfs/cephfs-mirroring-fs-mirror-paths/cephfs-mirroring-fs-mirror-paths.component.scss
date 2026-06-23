@@ -1,0 +1,29 @@
+.cephfs-mirroring-fs-mirror-paths {
+  .path-link {
+    color: var(--cds-link-primary);
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: none;
+    }
+  }
+
+  .text-success {
+    fill: var(--cds-support-success);
+  }
+
+  .text-info {
+    fill: var(--cds-support-info);
+  }
+
+  .text-danger {
+    fill: var(--cds-support-error);
+  }
+
+  .text-muted {
+    fill: var(--cds-text-secondary);
+  }
+}
+
+// Made with Bob
