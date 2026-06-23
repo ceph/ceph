@@ -1409,6 +1409,18 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out)
 
+    @Endpoint('GET', path='/snapshot-mirror-status')
+    @ReadPermission
+    def snapshot_mirror_status(self, fs_name: str, mirrored_dir_path=None, peer_uuid=None):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_status', fs_name, mirrored_dir_path, peer_uuid)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs snapshot mirror status: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
 
 @UIRouter('/cephfs/mirror')
 class CephFSMirrorStatus(RESTController):
