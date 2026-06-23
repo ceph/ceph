@@ -22,10 +22,7 @@ export class CephfsMirroringFsTabsComponent implements OnInit, OnDestroy {
 
   private subs = new Subscription();
 
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router
-  ) {}
+  constructor(private route: ActivatedRoute, private router: Router) {}
 
   ngOnInit(): void {
     this.subs.add(
@@ -55,8 +52,7 @@ export class CephfsMirroringFsTabsComponent implements OnInit, OnDestroy {
   }
 
   private updateActiveTab(url: string): void {
-    this.activeTab =
-      Object.values(TABS).find((tab) => url.includes(`/${tab}`)) || TABS.overview;
+    this.activeTab = Object.values(TABS).find((tab) => url.includes(`/${tab}`)) || TABS.overview;
   }
 
   private decodeFsName(fsName: string): string {

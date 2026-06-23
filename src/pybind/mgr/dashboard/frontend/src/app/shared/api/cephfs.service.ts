@@ -131,4 +131,19 @@ export class CephfsService {
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
+
+  getSnapshotMirrorStatus(
+    fsName: string,
+    mirroredDirPath?: string,
+    peerUuid?: string
+  ): Observable<any> {
+    let params = new HttpParams();
+    if (mirroredDirPath) {
+      params = params.append('mirrored_dir_path', mirroredDirPath);
+    }
+    if (peerUuid) {
+      params = params.append('peer_uuid', peerUuid);
+    }
+    return this.http.get(`${this.baseURL}/mirror/snapshot-mirror-status/${fsName}`, { params });
+  }
 }

@@ -1,6 +1,5 @@
 import { Component, ViewEncapsulation } from '@angular/core';
 
-
 @Component({
   selector: 'cd-cephfs-mirroring-fs-overview',
   templateUrl: './cephfs-mirroring-fs-overview.component.html',
