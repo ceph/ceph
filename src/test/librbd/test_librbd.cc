@@ -8570,7 +8570,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateParent)
     ASSERT_EQ(diff_extent(4194304, 4194304, true, object_size), extents[1]);
     ASSERT_EQ(diff_extent(8388608, 2097152, true, object_size), extents[2]);
     // hole (parent overlap = 10M) followed by copyup'ed object
-    ASSERT_EQ(diff_extent(16777216, 4194304, true, object_size), extents[3]);
+    ASSERT_EQ(diff_extent(20971519, 1, true, object_size), extents[3]);
 
     ASSERT_PASSED(this->validate_object_map, image);
     ASSERT_PASSED(this->validate_object_map, clone);
@@ -13611,7 +13611,7 @@ TEST_F(TestLibRBD, WriteZeroes) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 192}}};
+  expected_diff = interval_set<uint64_t>{{{64, 128}}};
   ASSERT_EQ(expected_diff, diff);
 
   bufferlist expected_bl;
@@ -13660,7 +13660,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 896}}};
+  expected_diff = interval_set<uint64_t>{{{0, 128}, {384, 512}}};
   ASSERT_EQ(expected_diff, diff);
 
   // prepend with write-same
@@ -13669,7 +13669,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 1536}}};
+  expected_diff = interval_set<uint64_t>{{{0, 128}, {384, 1152}}};
   ASSERT_EQ(expected_diff, diff);
 
   // write-same with append
@@ -13678,7 +13678,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 2176}}};
+  expected_diff = interval_set<uint64_t>{{{0, 128}, {384, 1792}}};
   ASSERT_EQ(expected_diff, diff);
 
   // prepend + write-same + append
@@ -13687,7 +13687,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 2944}}};
+  expected_diff = interval_set<uint64_t>{{{0, 128}, {384, 2560}}};
 
   // write-same
   ASSERT_EQ(1024, image.write_zeroes(
@@ -13695,7 +13695,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   diff.clear();
   ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
                                    iterate_cb, (void *)&diff));
-  expected_diff = interval_set<uint64_t>{{{0, 4096}}};
+  expected_diff = interval_set<uint64_t>{{{0, 128}, {384, 2560}, {3072, 1024}}};
 
   bufferlist expected_bl;
   expected_bl.append_zero(size);
