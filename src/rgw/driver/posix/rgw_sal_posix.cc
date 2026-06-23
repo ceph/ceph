@@ -2962,7 +2962,7 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 }
 
 int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
-				optional_yield y, bool check_size_only)
+				optional_yield y, bool check_size_only, const rgw_placement_rule* dest_placement)
 {
   return driver->get_quota_handler()->check_quota(dpp, info.owner, get_key(),
                                                   quota, (check_size_only ? 0 : 1),

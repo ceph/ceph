@@ -1714,6 +1714,30 @@ int set_bucket_sc_quota(rgw::sal::Driver* driver, OPT opt_cmd,
          << ": " << cpp_strerror(-r) << std::endl;
     return -r;
   }
+
+  if (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE) {
+    std::map<RGWObjCategory, RGWStorageStats> cat_stats;
+    std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
+    sc_stats.emplace();  // BUG 2 fix applies here too
+    std::string bver, mver;
+    const auto& idx = bucket->get_info().layout.current_index;
+    r = bucket->read_stats(dpp(), null_yield, idx, -1,
+                           &bver, &mver, cat_stats, sc_stats);
+    if (r < 0) {
+      cerr << "ERROR: failed reading bucket stats: "
+           << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    if (!sc_stats.has_value()) {
+      cerr << "ERROR: bucket '" << bucket_name << "' has not been "
+           << "converted to per-storage-class stats tracking. "
+           << "Per-storage-class quota cannot be enforced until the "
+           << "bucket is converted. See the radosgw documentation on "
+           << "storage-class stats conversion." << std::endl;
+      return EINVAL;
+    }
+  }
+  
   if (!set_sc_quota_info(bucket->get_info().quota, opt_cmd,
                          placement_id, storage_class,
                          max_size, max_objects,

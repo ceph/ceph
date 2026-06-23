@@ -259,7 +259,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
-      optional_yield y, bool check_size_only)
+      optional_yield y, bool check_size_only, const rgw_placement_rule* dest_placement)
   {
     /* Not Handled in the first pass as stats are also needed */
     return 0;

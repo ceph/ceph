@@ -1665,7 +1665,7 @@ public:
 
   int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                   RGWQuota& quota, uint64_t obj_size,
-		  optional_yield y, bool check_size_only = false);
+		  optional_yield y, bool check_size_only = false, const rgw_placement_rule* dest_placement = nullptr);
 
   void calculate_preferred_shards(const DoutPrefixProvider* dpp,
 				  bool is_versioned,

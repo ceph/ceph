@@ -322,7 +322,8 @@ class DaosBucket : public StoreBucket {
                           optional_yield y) override;
   virtual int check_quota(const DoutPrefixProvider* dpp, RGWQuota& quota,
                           uint64_t obj_size, optional_yield y,
-                          bool check_size_only = false) override;
+                          bool check_size_only = false,
+                          const rgw_placement_rule* dest_placement = nullptr) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs,
                                     optional_yield y) override;
   virtual int try_refresh_info(const DoutPrefixProvider* dpp,

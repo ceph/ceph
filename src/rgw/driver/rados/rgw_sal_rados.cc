@@ -788,10 +788,10 @@ int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 }
 
 int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
-				optional_yield y, bool check_size_only)
+				optional_yield y, bool check_size_only, const rgw_placement_rule* dest_placement)
 {
     return store->getRados()->check_quota(dpp, info.owner, get_key(),
-					  quota, obj_size, y, check_size_only);
+					  quota, obj_size, y, check_size_only, dest_placement);
 }
 
 int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)

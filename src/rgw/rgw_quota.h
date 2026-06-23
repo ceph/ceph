@@ -33,7 +33,7 @@ public:
   }
   virtual int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner,
                           const rgw_bucket& bucket, const RGWQuota& quota,
-			  uint64_t num_objs, uint64_t size, optional_yield y) = 0;
+			  uint64_t num_objs, uint64_t size, optional_yield y, const rgw_placement_rule* dest_placement = nullptr) = 0;
 
   virtual void update_stats(const rgw_owner& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 

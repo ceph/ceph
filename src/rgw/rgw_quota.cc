@@ -30,6 +30,8 @@
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
 #include "driver/rados/rgw_user.h"
+#include "rgw_sc_quota_checker.h"
+#include "rgw_sc_quota_types.h"
 
 #include "services/svc_sys_obj.h"
 
@@ -930,7 +932,75 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
                             << " stats.size=" << stats.size << dendl;
     return 0;
   }
-public:
+
+  int check_sc_quota(const DoutPrefixProvider* dpp,
+                    const RGWQuota& quota,
+                    const rgw_placement_rule& placement,
+                    const RGWStorageStats& bucket_stats,
+                    uint64_t new_size,
+                    uint64_t new_objects)
+  {
+    using namespace rgw::quota;
+
+    const bool bucket_active = sc_enforcement_active(quota.bucket_quota);
+    const bool user_active   = sc_enforcement_active(quota.user_quota);
+    if (!bucket_active && !user_active) return 0;
+
+    const std::string sc_key = rgw_sc_quota_key(placement);
+
+    const RGWStorageClassQuota* bq =
+        bucket_active ? quota.bucket_quota.get_sc_quota(sc_key) : nullptr;
+    const RGWStorageClassQuota* uq =
+        user_active   ? quota.user_quota.get_sc_quota(sc_key)   : nullptr;
+
+    if ((!bq || !bq->enabled) && (!uq || !uq->enabled)) return 0;
+
+    const EffectiveScQuota lim = combine_sc_quota(bq, uq);
+    if (!lim.have_size_limit && !lim.have_object_limit) return 0;
+
+    std::string sc_name = sc_key;
+    const auto sep = sc_key.rfind("::");
+    if (sep != std::string::npos) {
+      sc_name = sc_key.substr(sep + 2);
+    }
+
+    ScUsageStats usage{0, 0};
+    if (!bucket_stats.storage_class_stats.has_value()) {
+      ldpp_dout(dpp, 10) << "sc-quota: bucket has no per-SC stats "
+                        << "(predates #66501); failing open" << dendl;
+      return 0;
+    }
+    auto it = bucket_stats.storage_class_stats->find(sc_name);
+    if (it != bucket_stats.storage_class_stats->end()) {
+      usage.size        = it->second.size;
+      usage.num_objects = it->second.num_objects;
+    }
+
+    if (lim.have_size_limit &&
+        sc_quota_would_exceed(lim.max_size, usage.size, new_size)) {
+        ldpp_dout(dpp, 5) << "sc-quota: size exceeded sc=" << sc_name
+                        << " current=" << usage.size
+                        << " +" << new_size
+                        << " limit=" << lim.max_size << dendl;
+      return -EDQUOT;
+    }
+    if (lim.have_object_limit &&
+        sc_quota_would_exceed(lim.max_objects, usage.num_objects, new_objects)) {
+        ldpp_dout(dpp, 5) << "sc-quota: objects exceeded sc=" << sc_name
+                        << " current=" << usage.num_objects
+                        << " +" << new_objects
+                        << " limit=" << lim.max_objects << dendl;
+      return -EDQUOT;
+    }
+
+    ldpp_dout(dpp, 25) << "sc-quota: ok sc=" << sc_name
+                      << " size=" << usage.size << "+" << new_size
+                      << " objs=" << usage.num_objects << "+" << new_objects
+                      << dendl;
+    return 0;
+  }
+
+  public:
   RGWQuotaHandlerImpl(const DoutPrefixProvider *dpp, rgw::sal::Driver* _driver, bool quota_threads) : driver(_driver),
                                     bucket_stats_cache(_driver),
                                     owner_stats_cache(dpp, _driver, quota_threads) {}
@@ -940,11 +1010,14 @@ public:
                   const rgw_bucket& bucket,
                   const RGWQuota& quota,
                   uint64_t num_objs,
-                  uint64_t size, optional_yield y) override {
+                  uint64_t size, optional_yield y,
+                  const rgw_placement_rule* dest_placement = nullptr) override {
 
-    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled) {
-      return 0;
-    }
+    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled &&
+        !quota.bucket_quota.has_any_sc_quota() &&
+        !quota.user_quota.has_any_sc_quota()) {
+            return 0;
+        }
 
     /*
      * we need to fetch bucket stats if the user quota is enabled, because
@@ -954,15 +1027,25 @@ public:
      */
 
     const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw quota handler: ");
-    if (quota.bucket_quota.enabled) {
-      RGWStorageStats bucket_stats;
+    RGWStorageStats bucket_stats;
+    if (quota.bucket_quota.enabled || quota.bucket_quota.has_any_sc_quota()) {
       int ret = bucket_stats_cache.get_stats(owner, bucket, bucket_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
-      ret = check_quota(dpp, "bucket", quota.bucket_quota, bucket_stats, num_objs, size);
-      if (ret < 0) {
-        return ret;
+      if (quota.bucket_quota.enabled) {
+        ret = check_quota(&dp, "bucket", quota.bucket_quota, bucket_stats,
+                          num_objs, size);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+      if (dest_placement && quota.bucket_quota.has_any_sc_quota()) {
+        ret = check_sc_quota(dpp, quota, *dest_placement, bucket_stats,
+                            size, num_objs);
+        if (ret < 0) {
+          return ret;
+        }
       }
     }
 
@@ -972,11 +1055,13 @@ public:
       if (ret < 0) {
         return ret;
       }
-      ret = check_quota(dpp, "user", quota.user_quota, owner_stats, num_objs, size);
+      ret = check_quota(&dp, "user", quota.user_quota, owner_stats,
+                        num_objs, size);
       if (ret < 0) {
         return ret;
       }
     }
+
     return 0;
   }
 

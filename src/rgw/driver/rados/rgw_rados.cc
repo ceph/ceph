@@ -11916,8 +11916,8 @@ int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp,
 
 int RGWRados::check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                           RGWQuota& quota,
-			  uint64_t obj_size, optional_yield y,
-			  bool check_size_only)
+			                    uint64_t obj_size, optional_yield y,
+			                    bool check_size_only, const rgw_placement_rule* dest_placement)
 {
   // if we only check size, then num_objs will set to 0
   if(check_size_only)
