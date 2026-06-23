@@ -511,6 +511,14 @@ uint64_t AvlAllocator::get_free_extents(
   std::lock_guard l(lock);
   auto it = range_tree.lower_bound(range_t{range_begin, range_begin},
 				   range_tree.key_comp());
+  // An extent starting before range_begin may still straddle it; step back
+  // one to include it so its left edge can be clipped by the lo= max() below.
+  if (it != range_tree.begin()) {
+    auto prev = std::prev(it);
+    if (prev->end > range_begin) {
+      it = prev;
+    }
+  }
   size_t n = 0;
   const bool unbounded = (max_count == 0);
   while (it != range_tree.end() && it->start < range_end &&
