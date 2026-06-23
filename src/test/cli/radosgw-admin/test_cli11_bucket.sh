@@ -71,6 +71,9 @@ WARN_MINRW_POS="Warning: --min-rewrite-size should appear after the subcommand"
 WARN_MINRW_DUP="Warning: --min-rewrite-size specified multiple times, using last value"
 WARN_MAXRW_POS="Warning: --max-rewrite-size should appear after the subcommand"
 WARN_MINRWSTRIPE_POS="Warning: --min-rewrite-stripe-size should appear after the subcommand"
+# set-min-shards-specific flag
+WARN_NUM_SHARDS_POS="Warning: --num-shards should appear after the subcommand"
+WARN_NUM_SHARDS_DUP="Warning: --num-shards specified multiple times, using last value"
 
 # Error message constants
 # Legacy behavior: missing --bucket/--uid is not validated up front; the op
@@ -666,6 +669,102 @@ check_warns "rewrite: --start-date + --end-date + --tenant before (3 warns)" 22 
   "ERROR: --tenant is set, but there's no user ID" \
   "$WARN_STARTDATE_POS" "$WARN_ENDDATE_POS" "$WARN_TENANT_POS" -- \
   bucket --start-date 2020-01-01 --end-date 2021-01-01 --tenant t rewrite --bucket cli11-no-such-bucket
+
+# ============================================================
+echo ""
+echo "=== bucket set-min-shards ==="
+# ============================================================
+
+# stray positional args
+check "set-min-shards: stray after flags"            22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket set-min-shards strayarg
+check "set-min-shards: stray before bucket"          22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket set-min-shards
+check "set-min-shards: stray between bucket and leaf" 22 "ERROR: unexpected argument: 'extra'" \
+  bucket extra set-min-shards
+
+check "set-min-shards: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket set-min-shards --fakeflag
+# Unrelated flags differ by TYPE, not relatedness (both --fix and --max-entries
+# are registered on the shared root via add_multilevel_*). A value option in
+# SPACE form leaks its value token as a stray positional (exit 22) — the known
+# global space-form-value divergence; legacy parsed-and-ignored it. The =form
+# binds the value and is accepted instead (see the cluster cases below).
+check "set-min-shards: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+  bucket set-min-shards --max-entries 5
+
+# missing option value (parse-level, exit 114)
+check "set-min-shards: --bucket missing value"     114 "--bucket: 1 required TEXT missing" \
+  bucket set-min-shards --bucket
+check "set-min-shards: --bucket-id missing value"  114 "--bucket-id: 1 required TEXT missing" \
+  bucket set-min-shards --bucket-id
+check "set-min-shards: --tenant missing value"     114 "--tenant: 1 required TEXT missing" \
+  bucket set-min-shards --tenant
+check "set-min-shards: --num-shards missing value" 114 "--num-shards: 1 required INT missing" \
+  bucket set-min-shards --num-shards
+# --num-shards is a strict CLI11 integer; a non-numeric value is rejected at
+# parse (exit 104), where legacy would emit its own strict_strtol error
+check "set-min-shards: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
+  bucket set-min-shards --num-shards abc
+
+# handler-level (cluster): validations live inside cli11_action and run after
+# driver init. Order: bucket empty -> num-shards specified -> num-shards >= 1.
+# Each returns -EINVAL (shell exit 234), faithful to the legacy handler.
+check_cluster "set-min-shards: missing --bucket"            234 "ERROR: bucket not specified" -- \
+  bucket set-min-shards --num-shards 11
+check_cluster "set-min-shards: --num-shards not specified"  234 "ERROR: --num-shards not specified" -- \
+  bucket set-min-shards --bucket cli11-no-such-bucket
+check_cluster "set-min-shards: --num-shards < 1"            234 "ERROR: --num-shards must be at least 1" -- \
+  bucket set-min-shards --bucket cli11-no-such-bucket --num-shards 0
+# valid args but nonexistent bucket: init_bucket fails (exit 2, no handler message)
+check_cluster "set-min-shards: nonexistent bucket (exit 2)" 2 "" -- \
+  bucket set-min-shards --bucket cli11-no-such-bucket --num-shards 11
+# The three unrelated-flag cases side by side (identical args, only the flag
+# differs): a binary flag (--fix, expected(0,1)) takes 0 values -> accepted,
+# exit 2; a value option in =form binds its value -> accepted, exit 2; the same
+# value option in SPACE form leaks its value as a stray positional -> exit 22
+# (the known global space-form-value divergence; legacy parsed-and-ignored it).
+check_cluster "set-min-shards: unrelated binary flag --fix accepted (exit 2)" 2 "" -- \
+  bucket set-min-shards --fix --bucket cli11-no-such-bucket --num-shards 11
+check_cluster "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- \
+  bucket set-min-shards --max-entries=5 --bucket cli11-no-such-bucket --num-shards 11
+check "set-min-shards: unrelated value flag --max-entries 5 (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+  bucket set-min-shards --max-entries 5 --bucket cli11-no-such-bucket --num-shards 11
+
+# wrong-position warnings (flag before the leaf subcommand). The value still
+# flows in via the shared option, so with a valid --num-shards and a nonexistent
+# bucket they warn then fail at init_bucket (exit 2). --tenant trips the global
+# "no user ID" check (exit 22).
+check_warns "set-min-shards: --bucket before subcommand"     2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket set-min-shards --num-shards 11
+check_warns "set-min-shards: -b before subcommand (short)"   2 "" "$WARN_BUCKET_POS" -- \
+  bucket -b cli11-no-such-bucket set-min-shards --num-shards 11
+check_warns "set-min-shards: --bucket-id before subcommand"  2 "" "$WARN_BUCKETID_POS" -- \
+  bucket --bucket-id x set-min-shards --bucket cli11-no-such-bucket --num-shards 11
+check_warns "set-min-shards: --num-shards before subcommand" 2 "" "$WARN_NUM_SHARDS_POS" -- \
+  bucket --num-shards 11 set-min-shards --bucket cli11-no-such-bucket
+check_warns "set-min-shards: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t set-min-shards --bucket cli11-no-such-bucket --num-shards 11
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "set-min-shards: duplicate --bucket"     2 "" "$WARN_BUCKET_DUP" -- \
+  bucket set-min-shards --bucket a --bucket cli11-no-such-bucket --num-shards 11
+check_warns "set-min-shards: duplicate --num-shards" 2 "" "$WARN_NUM_SHARDS_DUP" -- \
+  bucket set-min-shards --bucket cli11-no-such-bucket --num-shards 11 --num-shards 12
+check_warns "set-min-shards: duplicate --tenant"     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
+  bucket set-min-shards --tenant a --tenant b --bucket cli11-no-such-bucket --num-shards 11
+
+# multi-warning combinations (2 and 3 warnings)
+check_warns "set-min-shards: --bucket + --num-shards before (2 pos warnings)" 2 "" \
+  "$WARN_BUCKET_POS" "$WARN_NUM_SHARDS_POS" -- \
+  bucket --bucket cli11-no-such-bucket --num-shards 11 set-min-shards
+check_warns "set-min-shards: pos + duplicate --bucket (2 warns)"             2 "" \
+  "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
+  bucket --bucket a set-min-shards --bucket cli11-no-such-bucket --num-shards 11
+check_warns "set-min-shards: --bucket + --num-shards + --tenant before (3 warns)" 22 \
+  "ERROR: --tenant is set, but there's no user ID" \
+  "$WARN_BUCKET_POS" "$WARN_NUM_SHARDS_POS" "$WARN_TENANT_POS" -- \
+  bucket --bucket cli11-no-such-bucket --num-shards 11 --tenant t set-min-shards
 
 # ============================================================
 echo ""
@@ -1374,6 +1473,11 @@ check_help "cli11-help bucket rewrite"           --cli11-help bucket rewrite
 check_help "cli11-help rewrite after bucket"     bucket --cli11-help rewrite
 check_help "cli11-help after rewrite"            bucket rewrite --cli11-help
 
+# bucket set-min-shards
+check_help "cli11-help bucket set-min-shards"        --cli11-help bucket set-min-shards
+check_help "cli11-help set-min-shards after bucket"  bucket --cli11-help set-min-shards
+check_help "cli11-help after set-min-shards"         bucket set-min-shards --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1481,12 +1585,22 @@ check_help_content "help content limit check: -i short"        "-i"             
 check_help_content "help content limit check: --warnings-only" "--warnings-only"            bucket limit check --cli11-help
 check_help_content "help content limit check: description"     "show bucket sharding stats" bucket limit check --cli11-help
 
+# bucket set-min-shards: all flags present
+check_help_content "help content set-min-shards: --bucket"      "--bucket"      bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: -b short"      "-b"            bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: --bucket-id"   "--bucket-id"   bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: --tenant"      "--tenant"      bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: --num-shards"  "--num-shards"  bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: --num-shards REQUIRED" "<num-shards> REQUIRED" bucket set-min-shards --cli11-help
+check_help_content "help content set-min-shards: description"   "minimum number of shards that dynamic resharding" bucket set-min-shards --cli11-help
+
 # --bucket marked "<bucket> REQUIRED" in help for the commands that error on a
 # missing bucket (consistency with link/unlink/rm/chown/rewrite)
 check_help_content "help content layout: --bucket REQUIRED"        "<bucket> REQUIRED" bucket layout --cli11-help
 check_help_content "help content logging info: --bucket REQUIRED"  "<bucket> REQUIRED" bucket logging info --cli11-help
 check_help_content "help content logging list: --bucket REQUIRED"  "<bucket> REQUIRED" bucket logging list --cli11-help
 check_help_content "help content logging flush: --bucket REQUIRED" "<bucket> REQUIRED" bucket logging flush --cli11-help
+check_help_content "help content set-min-shards: --bucket REQUIRED" "<bucket> REQUIRED" bucket set-min-shards --cli11-help
 
 # ============================================================
 echo ""
@@ -1761,6 +1875,21 @@ if cluster_running; then
       check_cluster "integration: limit check --uid --warnings-only" 0 "" -- \
         bucket limit check --uid "$_test_uid" --warnings-only
 
+      # bucket set-min-shards: set the dynamic-resharding minimum on the (Normal)
+      # test bucket; succeeds with no output (exit 0). Assert the value actually
+      # changed by reading it back via bucket layout. Exercises -b, the =form,
+      # and an empty --tenant.
+      check_cluster "integration: bucket set-min-shards (num 7)" 0 "" -- \
+        bucket set-min-shards --bucket "$_test_bucket" --num-shards 7
+      check_cluster "integration: set-min-shards effect (layout shows 7)" 0 '"min_num_shards": 7' -- \
+        bucket layout --bucket "$_test_bucket"
+      check_cluster "integration: bucket set-min-shards -b --num-shards=9 (short + =form)" 0 "" -- \
+        bucket set-min-shards -b "$_test_bucket" --num-shards=9
+      check_cluster "integration: set-min-shards effect (layout shows 9)" 0 '"min_num_shards": 9' -- \
+        bucket layout --bucket "$_test_bucket"
+      check_cluster "integration: bucket set-min-shards --tenant '' (empty)" 0 "" -- \
+        bucket set-min-shards --bucket "$_test_bucket" --num-shards 11 --tenant ""
+
       # bucket logging on a bucket WITHOUT logging configured: info is silent
       # (exit 0, no output); list and flush print an error but still exit 0
       # (legacy quirk, kept verbatim)
@@ -1830,7 +1959,7 @@ if cluster_running; then
         bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+34))
+      SKIP=$((SKIP+39))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
