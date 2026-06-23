@@ -112,7 +112,10 @@ The Linux kernel Ceph client (``krbd`` for RBD block devices, ``kcephfs``
 for CephFS) ships with the kernel, not with Ceph packages, so its version
 is independent of the cluster release. New OSD map features reach the
 kernel client only after they are implemented and merged upstream, which
-can lag the Ceph daemon release by months or years.
+can lag the Ceph daemon release by months or years. The userspace clients
+(``ceph-fuse`` and ``libcephfs`` for CephFS, ``librbd`` for RBD) link the
+Ceph release they were built from and advertise its full feature set, so
+they are not subject to this lag.
 
 The *Min kernel* column shows the minimum Linux kernel version required on
 kernel client hosts before the corresponding commands are used. If no
@@ -163,6 +166,21 @@ kernel clients are present in the cluster, that column can be ignored.
       ceph osd dump | grep -E "pg_upmap_primary|msr"
 
    See :ref:`read_balancer` for removal commands.
+
+When a kernel mount blocks the flag
+===================================
+
+A single kernel mount can hold the whole cluster below the release you
+want, even when every daemon and userspace client is already newer.
+``ceph features`` reports such a mount as ``luminous`` because the kernel
+client does not advertise the ``pg-upmap-primary`` (reef) feature. To
+confirm which entry it adds, run ``ceph features`` with the mount
+unmounted, then again with it mounted, and compare the client counts.
+
+Since the userspace clients advertise the full feature set, switching the
+holdout to its userspace equivalent (``ceph-fuse`` or ``libcephfs`` for
+CephFS, ``librbd`` for RBD) clears the blocker, after which the flag can
+be raised and the read balancer enabled.
 
 See :ref:`upmap` and :ref:`read_balancer` for the operational procedures
 that depend on raising the flag. CephFS clients must satisfy both this
