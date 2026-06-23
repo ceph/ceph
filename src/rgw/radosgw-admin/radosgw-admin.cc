@@ -3930,6 +3930,7 @@ int main(int argc, const char **argv)
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
+  std::string min_rw_val, max_rw_val, min_rw_stripe_val;  // sinks; conversion via ->each (legacy atoll compat)
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -4090,9 +4091,9 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging"};
+        "limit", "logging", "rewrite"};
     static const std::set<std::string_view> legacy_bucket_words = {
-        "sync", "rewrite", "reshard", "set-min-shards",
+        "sync", "reshard", "set-min-shards",
         "radoslist", "rados", "shard", "object", "resync"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
@@ -4294,6 +4295,7 @@ int main(int argc, const char **argv)
       auto* bucket_logging_flush = bucket_logging->add_subcommand("flush", "flush pending log records object of source bucket to the log bucket");
       auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
       auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
+      auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4404,6 +4406,32 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_logging_list, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
+
+      // bucket rewrite options
+      add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_rewrite, "--tenant",    tenant,      tenant_desc);
+      add_multilevel_option(bucket_rewrite, "--format",    format,      format_desc);
+      add_multilevel_option(bucket_rewrite, "--start-date,--start-time", start_date,
+                            "start date in the format yyyy-mm-dd")->ignore_underscore();
+      add_multilevel_option(bucket_rewrite, "--end-date,--end-time",     end_date,
+                            "end date in the format yyyy-mm-dd")->ignore_underscore();
+      // The size flags use atoll() in ->each (runs only when the flag is given) to match the
+      // legacy parse loop exactly: malformed input becomes 0 instead of being rejected, and an
+      // absent flag leaves the default untouched. Binding directly to the uint64_t would parse
+      // strictly and reject inputs like --min-rewrite-size=abc.
+      add_multilevel_option(bucket_rewrite, "--min-rewrite-size", min_rw_val,
+                            "min object size for bucket rewrite (default 4M)")
+          ->ignore_underscore()
+          ->each([&min_rewrite_size](const std::string& v) { min_rewrite_size = (uint64_t)atoll(v.c_str()); });
+      add_multilevel_option(bucket_rewrite, "--max-rewrite-size", max_rw_val,
+                            "max object size for bucket rewrite (default ULLONG_MAX)")
+          ->ignore_underscore()
+          ->each([&max_rewrite_size](const std::string& v) { max_rewrite_size = (uint64_t)atoll(v.c_str()); });
+      add_multilevel_option(bucket_rewrite, "--min-rewrite-stripe-size", min_rw_stripe_val,
+                            "min stripe size for object rewrite (default 0)")
+          ->ignore_underscore()
+          ->each([&min_rewrite_stripe_size](const std::string& v) { min_rewrite_stripe_size = (uint64_t)atoll(v.c_str()); });
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -4904,6 +4932,133 @@ int main(int argc, const char **argv)
               formatter->dump_string("log", entry);
           }
           formatter->close_section(); // objs
+          formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      bucket_rewrite->callback(
+          [&cli11_action, &cli11_need_gc,
+           &bucket_name, &tenant, &bucket_id, &bucket, &start_date, &end_date,
+           &min_rewrite_size, &max_rewrite_size, &min_rewrite_stripe_size, &formatter] {
+        cli11_need_gc = true;  // legacy: BUCKET_REWRITE is in gc_ops_list
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &start_date, &end_date,
+                        &min_rewrite_size, &max_rewrite_size, &min_rewrite_stripe_size,
+                        &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+          uint64_t start_epoch = 0;
+          uint64_t end_epoch = 0;
+
+          if (!end_date.empty()) {
+            int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+            if (ret < 0) {
+              cerr << "ERROR: failed to parse end date" << std::endl;
+              return EINVAL;
+            }
+          }
+          if (!start_date.empty()) {
+            int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+            if (ret < 0) {
+              cerr << "ERROR: failed to parse start date" << std::endl;
+              return EINVAL;
+            }
+          }
+
+          bool is_truncated = true;
+          bool cls_filtered = true;
+
+          rgw_obj_index_key marker;
+          string empty_prefix;
+          string empty_delimiter;
+
+          formatter->open_object_section("result");
+          formatter->dump_string("bucket", bucket_name);
+          formatter->open_array_section("objects");
+
+          constexpr uint32_t NUM_ENTRIES = 1000;
+          uint16_t expansion_factor = 1;
+          while (is_truncated) {
+            RGWRados::ent_map_t result;
+            result.reserve(NUM_ENTRIES);
+
+            const auto& current_index = bucket->get_info().layout.current_index;
+            int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->cls_bucket_list_ordered(
+              dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
+              marker, empty_prefix, empty_delimiter,
+              NUM_ENTRIES, true, expansion_factor,
+              result, &is_truncated, &cls_filtered, &marker,
+              null_yield,
+              rgw_bucket_object_check_filter);
+            if (r < 0 && r != -ENOENT) {
+              cerr << "ERROR: failed operation r=" << r << std::endl;
+            } else if (r == -ENOENT) {
+              break;
+            }
+
+            if (result.size() < NUM_ENTRIES / 8) {
+              ++expansion_factor;
+            } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
+                       expansion_factor > 1) {
+              --expansion_factor;
+            }
+
+            for (auto iter = result.begin(); iter != result.end(); ++iter) {
+              rgw_obj_key key = iter->second.key;
+              rgw_bucket_dir_entry& entry = iter->second;
+
+              formatter->open_object_section("object");
+              formatter->dump_string("name", key.name);
+              formatter->dump_string("instance", key.instance);
+              formatter->dump_int("size", entry.meta.size);
+              utime_t ut(entry.meta.mtime);
+              ut.gmtime(formatter->dump_stream("mtime"));
+
+              if ((entry.meta.size < min_rewrite_size) ||
+                  (entry.meta.size > max_rewrite_size) ||
+                  (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
+                  (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
+                formatter->dump_string("status", "Skipped");
+              } else {
+                std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
+
+                bool need_rewrite = true;
+                if (min_rewrite_stripe_size > 0) {
+                  r = check_min_obj_stripe_size(driver, obj.get(), min_rewrite_stripe_size, &need_rewrite);
+                  if (r < 0) {
+                    ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
+                  }
+                }
+                if (!need_rewrite) {
+                  formatter->dump_string("status", "Skipped");
+                } else {
+                  RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+                  r = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+                  if (r == 0) {
+                    formatter->dump_string("status", "Success");
+                  } else {
+                    formatter->dump_string("status", cpp_strerror(-r));
+                  }
+                }
+              }
+              formatter->dump_int("flags", entry.flags);
+
+              formatter->close_section();
+              formatter->flush(cout);
+            }
+          }
+          formatter->close_section();
+          formatter->close_section();
           formatter->flush(cout);
           return 0;
         };
@@ -9426,123 +9581,6 @@ next:
       cerr << "ERROR: removing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-  }
-
-  if (opt_cmd == OPT::BUCKET_REWRITE) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    uint64_t start_epoch = 0;
-    uint64_t end_epoch = 0;
-
-    if (!end_date.empty()) {
-      int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
-      if (ret < 0) {
-        cerr << "ERROR: failed to parse end date" << std::endl;
-        return EINVAL;
-      }
-    }
-    if (!start_date.empty()) {
-      int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
-      if (ret < 0) {
-        cerr << "ERROR: failed to parse start date" << std::endl;
-        return EINVAL;
-      }
-    }
-
-    bool is_truncated = true;
-    bool cls_filtered = true;
-
-    rgw_obj_index_key marker;
-    string empty_prefix;
-    string empty_delimiter;
-
-    formatter->open_object_section("result");
-    formatter->dump_string("bucket", bucket_name);
-    formatter->open_array_section("objects");
-
-    constexpr uint32_t NUM_ENTRIES = 1000;
-    uint16_t expansion_factor = 1;
-    while (is_truncated) {
-      RGWRados::ent_map_t result;
-      result.reserve(NUM_ENTRIES);
-
-      const auto& current_index = bucket->get_info().layout.current_index;
-      int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->cls_bucket_list_ordered(
-	dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
-	marker, empty_prefix, empty_delimiter,
-	NUM_ENTRIES, true, expansion_factor,
-	result, &is_truncated, &cls_filtered, &marker,
-	null_yield,
-	rgw_bucket_object_check_filter);
-      if (r < 0 && r != -ENOENT) {
-        cerr << "ERROR: failed operation r=" << r << std::endl;
-      } else if (r == -ENOENT) {
-        break;
-      }
-
-      if (result.size() < NUM_ENTRIES / 8) {
-	++expansion_factor;
-      } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
-		 expansion_factor > 1) {
-	--expansion_factor;
-      }
-
-      for (auto iter = result.begin(); iter != result.end(); ++iter) {
-        rgw_obj_key key = iter->second.key;
-        rgw_bucket_dir_entry& entry = iter->second;
-
-        formatter->open_object_section("object");
-        formatter->dump_string("name", key.name);
-        formatter->dump_string("instance", key.instance);
-        formatter->dump_int("size", entry.meta.size);
-        utime_t ut(entry.meta.mtime);
-        ut.gmtime(formatter->dump_stream("mtime"));
-
-        if ((entry.meta.size < min_rewrite_size) ||
-            (entry.meta.size > max_rewrite_size) ||
-            (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
-            (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
-          formatter->dump_string("status", "Skipped");
-        } else {
-	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-
-          bool need_rewrite = true;
-          if (min_rewrite_stripe_size > 0) {
-            r = check_min_obj_stripe_size(driver, obj.get(), min_rewrite_stripe_size, &need_rewrite);
-            if (r < 0) {
-              ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
-            }
-          }
-          if (!need_rewrite) {
-            formatter->dump_string("status", "Skipped");
-          } else {
-            RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-            r = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
-            if (r == 0) {
-              formatter->dump_string("status", "Success");
-            } else {
-              formatter->dump_string("status", cpp_strerror(-r));
-            }
-          }
-        }
-        formatter->dump_int("flags", entry.flags);
-
-        formatter->close_section();
-        formatter->flush(cout);
-      }
-    }
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_RESHARD) {

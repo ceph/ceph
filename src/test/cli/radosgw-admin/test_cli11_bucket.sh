@@ -62,6 +62,15 @@ WARN_DUMP_KEYS_POS="Warning: --dump-keys should appear after the subcommand"
 WARN_HIDE_PROGRESS_POS="Warning: --hide-progress should appear after the subcommand"
 WARN_DUMP_KEYS_DUP="Warning: --dump-keys specified multiple times, using last value"
 WARN_HIDE_PROGRESS_DUP="Warning: --hide-progress specified multiple times, using last value"
+# rewrite-specific flags (date flags warn with both aliases joined by '/')
+WARN_STARTDATE_POS="Warning: --start-date/--start-time should appear after the subcommand"
+WARN_STARTDATE_DUP="Warning: --start-date/--start-time specified multiple times, using last value"
+WARN_ENDDATE_POS="Warning: --end-date/--end-time should appear after the subcommand"
+WARN_ENDDATE_DUP="Warning: --end-date/--end-time specified multiple times, using last value"
+WARN_MINRW_POS="Warning: --min-rewrite-size should appear after the subcommand"
+WARN_MINRW_DUP="Warning: --min-rewrite-size specified multiple times, using last value"
+WARN_MAXRW_POS="Warning: --max-rewrite-size should appear after the subcommand"
+WARN_MINRWSTRIPE_POS="Warning: --min-rewrite-stripe-size should appear after the subcommand"
 
 # Error message constants
 # Legacy behavior: missing --bucket/--uid is not validated up front; the op
@@ -554,6 +563,109 @@ check_warns "logging info: duplicate --bucket" 2 "" "$WARN_BUCKET_DUP" -- \
   bucket logging info --bucket a --bucket cli11-no-such-bucket
 check_warns "logging list: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
   bucket logging list --tenant a --tenant b --bucket cli11-no-such-bucket
+
+# ============================================================
+echo ""
+echo "=== bucket rewrite ==="
+# ============================================================
+
+# stray positional args
+check "rewrite: stray after flags"               22 "ERROR: unexpected argument: 'strayarg'" \
+  bucket rewrite strayarg
+check "rewrite: stray before bucket"             22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket rewrite
+check "rewrite: stray between bucket and rewrite" 22 "ERROR: unexpected argument: 'extra'" \
+  bucket extra rewrite
+
+check "rewrite: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket rewrite --fakeflag
+
+# missing option value (parse-level, exit 114). The size flags are bound to a
+# string sink (legacy atoll compat) so they behave like any other TEXT option
+# here; the date flags report the canonical name even when the alias is used.
+check "rewrite: --bucket missing value"                114 "--bucket: 1 required TEXT missing" \
+  bucket rewrite --bucket
+check "rewrite: --bucket-id missing value"             114 "--bucket-id: 1 required TEXT missing" \
+  bucket rewrite --bucket-id
+check "rewrite: --tenant missing value"                114 "--tenant: 1 required TEXT missing" \
+  bucket rewrite --tenant
+check "rewrite: --format missing value"                114 "--format: 1 required TEXT missing" \
+  bucket rewrite --format
+check "rewrite: --start-date missing value"            114 "--start-date: 1 required TEXT missing" \
+  bucket rewrite --start-date
+check "rewrite: --start-time missing value (alias)"    114 "--start-date: 1 required TEXT missing" \
+  bucket rewrite --start-time
+check "rewrite: --end-date missing value"              114 "--end-date: 1 required TEXT missing" \
+  bucket rewrite --end-date
+check "rewrite: --end-time missing value (alias)"      114 "--end-date: 1 required TEXT missing" \
+  bucket rewrite --end-time
+check "rewrite: --min-rewrite-size missing value"        114 "--min-rewrite-size: 1 required TEXT missing" \
+  bucket rewrite --min-rewrite-size
+check "rewrite: --max-rewrite-size missing value"        114 "--max-rewrite-size: 1 required TEXT missing" \
+  bucket rewrite --max-rewrite-size
+check "rewrite: --min-rewrite-stripe-size missing value" 114 "--min-rewrite-stripe-size: 1 required TEXT missing" \
+  bucket rewrite --min-rewrite-stripe-size
+
+# handler-level (cluster): bucket_name.empty() is checked inside the action;
+# a nonexistent bucket fails init_bucket with exit 2 (legacy quirk kept)
+check_cluster "rewrite: missing --bucket" 22 "ERROR: bucket not specified" -- \
+  bucket rewrite
+check_cluster "rewrite: nonexistent bucket (exit 2)" 2 "ERROR: could not init bucket" -- \
+  bucket rewrite --bucket cli11-no-such-bucket
+
+# atoll compat: malformed size values are ACCEPTED at parse (not rejected like a
+# strict integer would be) and only later become 0 via atoll. We assert parse
+# acceptance by reaching init_bucket (exit 2), not a parse error (exit 22).
+check_cluster "rewrite: --min-rewrite-size=abc accepted (atoll compat)" 2 "ERROR: could not init bucket" -- \
+  bucket rewrite --bucket cli11-no-such-bucket --min-rewrite-size=abc
+check_cluster "rewrite: --max-rewrite-size=abc accepted (atoll compat)" 2 "ERROR: could not init bucket" -- \
+  bucket rewrite --bucket cli11-no-such-bucket --max-rewrite-size=abc
+check_cluster "rewrite: --min-rewrite-stripe-size=abc accepted (atoll compat)" 2 "ERROR: could not init bucket" -- \
+  bucket rewrite --bucket cli11-no-such-bucket --min-rewrite-stripe-size=abc
+
+# wrong-position warnings (flag before the leaf subcommand); all warn then fail
+# on the nonexistent bucket (exit 2). --tenant trips the global "no user ID"
+# check (exit 22) before reaching the bucket.
+check_warns "rewrite: --bucket before subcommand"     2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket rewrite
+check_warns "rewrite: --bucket-id before subcommand"  2 "" "$WARN_BUCKETID_POS" -- \
+  bucket --bucket-id x rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --format before subcommand"     2 "" "$WARN_FORMAT_POS" -- \
+  bucket --format json rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --start-date before subcommand" 2 "" "$WARN_STARTDATE_POS" -- \
+  bucket --start-date 2020-01-01 rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --end-date before subcommand"   2 "" "$WARN_ENDDATE_POS" -- \
+  bucket --end-date 2020-01-01 rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --min-rewrite-size before subcommand"        2 "" "$WARN_MINRW_POS" -- \
+  bucket --min-rewrite-size 1 rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --max-rewrite-size before subcommand"        2 "" "$WARN_MAXRW_POS" -- \
+  bucket --max-rewrite-size 1 rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --min-rewrite-stripe-size before subcommand" 2 "" "$WARN_MINRWSTRIPE_POS" -- \
+  bucket --min-rewrite-stripe-size 1 rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t rewrite --bucket cli11-no-such-bucket
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "rewrite: duplicate --bucket"            2 "" "$WARN_BUCKET_DUP" -- \
+  bucket rewrite --bucket a --bucket cli11-no-such-bucket
+check_warns "rewrite: duplicate --start-date"        2 "" "$WARN_STARTDATE_DUP" -- \
+  bucket rewrite --start-date 2020-01-01 --start-date 2021-01-01 --bucket cli11-no-such-bucket
+check_warns "rewrite: duplicate --min-rewrite-size"  2 "" "$WARN_MINRW_DUP" -- \
+  bucket rewrite --min-rewrite-size 1 --min-rewrite-size 2 --bucket cli11-no-such-bucket
+check_warns "rewrite: duplicate --tenant"            22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
+  bucket rewrite --tenant a --tenant b --bucket cli11-no-such-bucket
+
+# multi-warning combinations (2 and 3 warnings)
+check_warns "rewrite: --bucket + --min-rewrite-size before (2 pos warnings)" 2 "" \
+  "$WARN_BUCKET_POS" "$WARN_MINRW_POS" -- \
+  bucket --bucket cli11-no-such-bucket --min-rewrite-size 1 rewrite
+check_warns "rewrite: pos + duplicate --bucket (2 warns)"                    2 "" \
+  "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
+  bucket --bucket a rewrite --bucket cli11-no-such-bucket
+check_warns "rewrite: --start-date + --end-date + --tenant before (3 warns)" 22 \
+  "ERROR: --tenant is set, but there's no user ID" \
+  "$WARN_STARTDATE_POS" "$WARN_ENDDATE_POS" "$WARN_TENANT_POS" -- \
+  bucket --start-date 2020-01-01 --end-date 2021-01-01 --tenant t rewrite --bucket cli11-no-such-bucket
 
 # ============================================================
 echo ""
@@ -1257,6 +1369,11 @@ check_help "cli11-help bucket limit check"       --cli11-help bucket limit check
 check_help "cli11-help limit check after bucket" bucket limit --cli11-help check
 check_help "cli11-help after limit check"        bucket limit check --cli11-help
 
+# bucket rewrite
+check_help "cli11-help bucket rewrite"           --cli11-help bucket rewrite
+check_help "cli11-help rewrite after bucket"     bucket --cli11-help rewrite
+check_help "cli11-help after rewrite"            bucket rewrite --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1580,6 +1697,52 @@ if cluster_running; then
       check_cluster "integration: bucket layout --tenant ''" 0 "current_index" -- \
         bucket layout --bucket "$_test_bucket" --tenant ""
 
+      # bucket rewrite: rewrites all objects in the bucket (empty bucket -> empty
+      # "objects" array, exit 0). Exercises -b, --format, the size flags, the
+      # date aliases, and the atoll-compat path on a REAL bucket.
+      check_cluster "integration: bucket rewrite" 0 "objects" -- \
+        bucket rewrite --bucket "$_test_bucket"
+      check_cluster "integration: bucket rewrite -b (short flag)" 0 "objects" -- \
+        bucket rewrite -b "$_test_bucket"
+      check_cluster "integration: bucket rewrite --format json" 0 "objects" -- \
+        bucket rewrite --bucket "$_test_bucket" --format json
+      check_cluster "integration: bucket rewrite --min-rewrite-size (numeric)" 0 "objects" -- \
+        bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
+      check_cluster "integration: bucket rewrite --min-rewrite-size=abc (atoll -> 0)" 0 "objects" -- \
+        bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
+      check_cluster "integration: bucket rewrite --start-time/--end-time (aliases)" 0 "objects" -- \
+        bucket rewrite --bucket "$_test_bucket" --start-time 2000-01-01 --end-time 2100-01-01
+      # bad date is parsed AFTER init_bucket, so on a real bucket it reaches the
+      # date check and fails with EINVAL (exit 22)
+      check_cluster "integration: bucket rewrite bad --start-date (exit 22)" 22 "ERROR: failed to parse start date" -- \
+        bucket rewrite --bucket "$_test_bucket" --start-date notadate
+
+      # status assertions: with a small (<4MB) object present, the per-object
+      # "status" field proves the filters actually work. Default min (4MB) skips
+      # it; atoll("abc")=0 disables the min filter so it is rewritten (Success);
+      # a past --end-time filters it out by date (Skipped).
+      echo "rewrite-status-probe" > /tmp/cli11_rw_small.txt
+      AWS_ACCESS_KEY_ID="$_access_key" \
+      AWS_SECRET_ACCESS_KEY="$_secret_key" \
+      aws --endpoint-url "$_rgw_endpoint" \
+        s3 cp /tmp/cli11_rw_small.txt "s3://$_test_bucket/" >/dev/null 2>&1
+
+      check_cluster "integration: rewrite small obj Skipped (default 4M min)"        0 '"status": "Skipped"' -- \
+        bucket rewrite --bucket "$_test_bucket"
+      check_cluster "integration: rewrite --min-rewrite-size=abc Success (atoll->0)" 0 '"status": "Success"' -- \
+        bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
+      check_cluster "integration: rewrite --min-rewrite-size 1 Success"             0 '"status": "Success"' -- \
+        bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
+      check_cluster "integration: rewrite past --end-time Skipped (date filter)"    0 '"status": "Skipped"' -- \
+        bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1 --end-time 2000-01-01
+
+      # remove the probe object so later lifecycle tests see an empty bucket
+      AWS_ACCESS_KEY_ID="$_access_key" \
+      AWS_SECRET_ACCESS_KEY="$_secret_key" \
+      aws --endpoint-url "$_rgw_endpoint" \
+        s3 rm "s3://$_test_bucket/cli11_rw_small.txt" >/dev/null 2>&1
+      rm -f /tmp/cli11_rw_small.txt
+
       # bucket chown: chown to the (already-owning) test user — a no-op ownership
       # change that still exercises the full chown path; exit 0, no output
       check_cluster "integration: bucket chown" 0 "" -- \
@@ -1660,11 +1823,11 @@ if cluster_running; then
         bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+23))
+      SKIP=$((SKIP+34))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+23))
+    SKIP=$((SKIP+34))
   fi
 
   # Cleanup: remove the test user
