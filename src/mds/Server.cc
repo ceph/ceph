@@ -8767,6 +8767,28 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
   }
+
+  // Dev config injection point: crash the MDS after the unlink journal
+  // callback has committed nlink and moved the inode to the stray dir,
+  // but before CDir::commit has written the directory omap to RADOS.
+  // This reproduces the stale remote dentry crash in _eval_stray_remote
+  // on recovery (tracker 62663).
+  //
+  // Test procedure:
+  //   1. set mds_kill_after_unlink_finish = true
+  //   2. create a file with primary + remote hardlinks (nlink >= 2)
+  //   3. unlink all hardlinks (nlink drops to 0)
+  //   4. the last unlink triggers this assertion; MDS crashes
+  //   5. restart MDS → journal replay restores nlink=0 + stray location
+  //   6. stale remote dentry on disk triggers eval_remote →
+  //      _eval_stray_remote → fixed code handles nlink==0 without crash
+  if (unlikely(g_conf()->mds_kill_after_unlink_finish)) {
+    ceph_abort_msg(
+        "mds_kill_after_unlink_finish is set; "
+        "the nlink==0 commit was applied and the MDS will now crash. "
+        "On recovery, any stale remote dentries still on disk will "
+        "trigger the _eval_stray_remote path to verify the fix.");
+  }
 }
 
 bool Server::_rmdir_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn)
