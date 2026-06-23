@@ -75,6 +75,7 @@ import ReplicateIcon from '@carbon/icons/es/replicate/32';
 import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
 import ShareIcon from '@carbon/icons/es/share/32';
 import ShareIcon24 from '@carbon/icons/es/share/24';
+import PendingFilled from '@carbon/icons/es/pending--filled/16';
 
 @NgModule({
   imports: [
@@ -157,7 +158,8 @@ export class CephfsModule {
       ReplicateIcon,
       ReplicateIcon24,
       ShareIcon,
-      ShareIcon24
+      ShareIcon24,
+      PendingFilled
     ]);
   }
 }
