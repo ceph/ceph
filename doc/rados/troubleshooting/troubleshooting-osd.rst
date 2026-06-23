@@ -656,7 +656,7 @@ The Three Commands
 
 **dump_ops_in_flight**: see operations being processed right now
 
-To see in-flight operations, run:
+Run a command of the following form:
 
 .. prompt:: bash
 
@@ -671,7 +671,7 @@ the ``filterstr`` argument filters results by client IP address.
 **dump_historic_ops_by_duration**: see recently completed operations sorted
 by execution time
 
-To find the slowest recent operations, run:
+Run a command of the following form:
 
 .. prompt:: bash
 
@@ -693,7 +693,7 @@ filters results by client IP address.
 
 **dump_historic_slow_ops**: see operations exceeding the slow threshold
 
-To see operations that exceeded the slow threshold, run:
+Run a command of the following form:
 
 .. prompt:: bash
 
