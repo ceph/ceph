@@ -1127,6 +1127,122 @@ TEST_P(AllocTest, test_foreach_interruptible_single_block_positions)
   run(15 * block_size);      // last block
 }
 
+// ====================================================================
+// get_free_extents / foreach_interruptible × allocate() / release()
+// ====================================================================
+
+// After allocating space from a full device, get_free_extents must report
+// exactly the remaining free bytes and must not include any allocated region.
+TEST_P(AllocTest, test_get_free_extents_after_allocate)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 32 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  PExtentVector allocated;
+  ASSERT_GT(alloc->allocate(8 * block_size, block_size, 0, (int64_t)-1, &allocated), 0);
+
+  interval_set<uint64_t> alloc_set;
+  for (auto& e : allocated) {
+    alloc_set.insert(e.offset, e.length);
+  }
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+    EXPECT_FALSE(alloc_set.intersects(e.offset, e.length))
+      << "free extent [" << e.offset << ", +" << e.length
+      << ") overlaps an allocated region";
+  }
+  EXPECT_EQ(alloc->get_free(), total);
+  alloc->shutdown();
+}
+
+// After releasing previously allocated extents, get_free_extents must see
+// the released space and return the full device capacity as free.
+TEST_P(AllocTest, test_get_free_extents_after_release)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 32 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  PExtentVector allocated;
+  ASSERT_GT(alloc->allocate(8 * block_size, block_size, 0, (int64_t)-1, &allocated), 0);
+
+  interval_set<uint64_t> release_set;
+  for (auto& e : allocated) {
+    release_set.insert(e.offset, e.length);
+  }
+  alloc->release(release_set);
+  ASSERT_EQ((uint64_t)capacity, alloc->get_free());
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ((uint64_t)capacity, total);
+
+  // every released byte must be covered by some returned free extent
+  interval_set<uint64_t> free_set;
+  for (auto& e : out) free_set.insert(e.offset, e.length);
+  for (auto [start, len] : release_set) {
+    EXPECT_TRUE(free_set.contains(start, len))
+      << "released region [" << start << ", +" << len
+      << ") not found in free extents";
+  }
+  alloc->shutdown();
+}
+
+// Allocate all blocks one at a time, release every other allocation.
+// get_free_extents must account for exactly the released bytes and each
+// returned extent must lie entirely within the released set.
+TEST_P(AllocTest, test_get_free_extents_fragmented_after_alloc_release)
+{
+  int64_t block_size = 4096;
+  int n_blocks = 32;
+  int64_t capacity = n_blocks * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  std::vector<PExtentVector> per_block(n_blocks);
+  for (int i = 0; i < n_blocks; ++i) {
+    int64_t got = alloc->allocate(block_size, block_size, 0, (int64_t)-1, &per_block[i]);
+    ASSERT_EQ(block_size, got) << "failed to allocate block " << i;
+  }
+  ASSERT_EQ(0u, alloc->get_free());
+
+  interval_set<uint64_t> released;
+  for (int i = 0; i < n_blocks; i += 2) {
+    interval_set<uint64_t> rs;
+    for (auto& e : per_block[i]) {
+      rs.insert(e.offset, e.length);
+      released.insert(e.offset, e.length);
+    }
+    alloc->release(rs);
+  }
+  uint64_t expected_free = (uint64_t)(n_blocks / 2) * block_size;
+  ASSERT_EQ(expected_free, alloc->get_free());
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+    EXPECT_TRUE(released.contains(e.offset, e.length))
+      << "free extent [" << e.offset << ", +" << e.length
+      << ") is not fully within the released set";
+  }
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
