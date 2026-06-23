@@ -4091,9 +4091,9 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging", "rewrite"};
+        "limit", "logging", "rewrite", "set-min-shards"};
     static const std::set<std::string_view> legacy_bucket_words = {
-        "sync", "reshard", "set-min-shards",
+        "sync", "reshard",
         "radoslist", "rados", "shard", "object", "resync"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
@@ -4296,6 +4296,7 @@ int main(int argc, const char **argv)
       auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
       auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
       auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
+      auto* bucket_set_min_shards = bucket_cmd->add_subcommand("set-min-shards", "set the minimum number of shards that dynamic resharding will consider for a bucket");
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4432,6 +4433,17 @@ int main(int argc, const char **argv)
                             "min stripe size for object rewrite (default 0)")
           ->ignore_underscore()
           ->each([&min_rewrite_stripe_size](const std::string& v) { min_rewrite_stripe_size = (uint64_t)atoll(v.c_str()); });
+
+      // bucket set-min-shards options
+      add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_set_min_shards, "--tenant",     tenant,      tenant_desc);
+      // Track whether --num-shards was provided, so the handler can
+      // distinguish an omitted option from an explicit value of 0.
+      add_multilevel_option(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
+          ->option_text("<num-shards> REQUIRED")
+          ->ignore_underscore()
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5060,6 +5072,57 @@ int main(int argc, const char **argv)
           formatter->close_section();
           formatter->close_section();
           formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      bucket_set_min_shards->callback(
+          [&cli11_action, &bucket_name, &bucket_id, &tenant, &bucket,
+           &num_shards, &num_shards_specified] {
+
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &bucket,
+                        &num_shards, &num_shards_specified]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return -EINVAL;
+          }
+
+          if (!num_shards_specified) {
+            cerr << "ERROR: --num-shards not specified" << std::endl;
+            return -EINVAL;
+          }
+
+          if (num_shards < 1) {
+            cerr << "ERROR: --num-shards must be at least 1" << std::endl;
+            return -EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          auto& bucket_info = bucket->get_info();
+
+          const rgw::BucketIndexType type =
+            bucket_info.layout.current_index.layout.type;
+          if (type != rgw::BucketIndexType::Normal) {
+            cerr << "ERROR: the bucket's layout is type " << type <<
+              " instead of type " << rgw::BucketIndexType::Normal <<
+              " and therefore does not have a "
+              "minimum number of shards that can be altered" << std::endl;
+            return EINVAL;
+          }
+
+          uint32_t& min_num_shards =
+            bucket_info.layout.current_index.layout.normal.min_num_shards;
+          min_num_shards = num_shards;
+
+          ret = bucket->put_info(dpp(), false, real_time(), null_yield);
+          if (ret < 0) {
+            cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
           return 0;
         };
       });
@@ -9814,51 +9877,6 @@ next:
       return -ret;
     }
   } // OPT_RESHARD_CANCEL
-
-  if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
-    }
-
-    if (!num_shards_specified) {
-      cerr << "ERROR: --num-shards not specified" << std::endl;
-      return -EINVAL;
-    }
-
-    if (num_shards < 1) {
-      cerr << "ERROR: --num-shards must be at least 1" << std::endl;
-      return -EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    auto& bucket_info = bucket->get_info();
-
-    const rgw::BucketIndexType type =
-      bucket_info.layout.current_index.layout.type;
-    if (type != rgw::BucketIndexType::Normal) {
-      cerr << "ERROR: the bucket's layout is type " << type <<
-	" instead of type " << rgw::BucketIndexType::Normal <<
-	" and therefore does not have a "
-	"minimum number of shards that can be altered" << std::endl;
-      return EINVAL;
-    }
-
-    uint32_t& min_num_shards =
-      bucket_info.layout.current_index.layout.normal.min_num_shards;
-    min_num_shards = num_shards;
-
-    ret = bucket->put_info(dpp(), false, real_time(), null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    return 0;
-  } // SET_MIN_SHARDS
 
   if (opt_cmd == OPT::OBJECT_UNLINK) {
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
