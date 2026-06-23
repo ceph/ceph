@@ -258,7 +258,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          
+
+      - name: Fetch main for parity check
+        if: steps.router.outputs.run_audit == 'true'
+        # checkout only fetches the PR's base branch (e.g. squid/tentacle/umbrella).
+        # The parity check needs the main ref to walk the commit history graph and find the upstream
+        # merge commit for each cherry-pick, so fetch it explicitly as origin/main.
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
       - name: Setup Python
         if: steps.router.outputs.run_audit == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
