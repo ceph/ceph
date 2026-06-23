@@ -135,3 +135,5 @@ target_link_libraries(
   unittest-crimson-scrub
   crimson-common
   crimson::gtest)
+
+add_subdirectory(cbt)
