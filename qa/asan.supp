@@ -1,3 +1,10 @@
 # ASan's interceptor is not able to find the real throw function because of
 # https://github.com/google/sanitizers/issues/934
 interceptor_via_fun:__interceptor___cxa_throw
+
+# ASan has incomplete support for boost::context fiber/coroutine operations
+# https://github.com/google/sanitizers/issues/189
+# False positive on makecontext/swapcontext in boost fiber_activation_record::resume
+# Used by RGW async operations (RGWSI_Notify::do_start and similar)
+interceptor_via_fun:*makecontext*
+interceptor_via_fun:*swapcontext*
