@@ -173,8 +173,9 @@ and the user key. However, bootstrapping a peer is the recommended way to add a
 peer.
 
 .. note:: Only a single peer is currently supported.
-          The ``peer_add`` command is deprecated and will be removed in a future release.
-          Use the ``peer_bootstrap`` command instead.
+          The ``peer_add`` command is deprecated and will be removed in a future
+          release. Use the ``peer_bootstrap create`` command instead. See the
+          :ref:`Bootstrap Peers<cephfs_mirroring_bootstrap_peers>` section.
 
 To remove a peer, run a command of the following form:
 
