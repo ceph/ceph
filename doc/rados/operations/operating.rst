@@ -10,7 +10,9 @@ Running Ceph with systemd
 
 In deployments managed by systemd, Ceph daemons behave like any other
 daemons that can be controlled by the ``systemctl`` command, as in
-the following examples:
+the following examples. Note that this applies to Podman-based container
+deployments. Docker-based deployments do not integrate with systemd in the
+same way and may require different management commands.
 
 .. prompt:: bash $
 
