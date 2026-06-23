@@ -823,7 +823,7 @@ static void bench_bufferlistiter_deref(const size_t step,
 
   utime_t start = ceph_clock_now();
   bufferlist::iterator iter = bl.begin();
-  while (iter != bl.end()) {
+  while (iter.get_remaining() >= step) {
     iter += step;
   }
   utime_t end = ceph_clock_now();
