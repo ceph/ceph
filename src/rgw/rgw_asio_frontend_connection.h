@@ -35,7 +35,7 @@ struct Connection : boost::intrusive::list_base_hook<>,
 class ConnectionList {
   using List = boost::intrusive::list<Connection>;
   List connections;
-  std::mutex mutex;
+  mutable std::mutex mutex;
 
   void remove(Connection& c) {
     std::lock_guard lock{mutex};
@@ -55,6 +55,10 @@ class ConnectionList {
     std::lock_guard lock{mutex};
     connections.push_back(conn);
     return Guard{this, &conn};
+  }
+  size_t size() const {
+    std::lock_guard lock{mutex};
+    return connections.size();
   }
   void close(boost::system::error_code& ec) {
     std::lock_guard lock{mutex};
