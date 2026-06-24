@@ -1,0 +1,112 @@
+name: Pull Request Job Dispatcher POC
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-auto-poc-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify-pr:
+    if: contains(join(github.event.pull_request.labels.*.name, ','), 'ci-poc')
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.meta.outputs.pr_number }}
+      pr_sha: ${{ steps.meta.outputs.pr_sha }}
+      only_docs: ${{ steps.classify.outputs.only_docs }}
+      only_container: ${{ steps.classify.outputs.only_container }}
+    steps:
+      - name: Capture PR metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          echo "pr_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: List changed files via GitHub API
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo='${{ github.repository }}'
+          pr='${{ github.event.pull_request.number }}'
+          curl --fail --retry 4 --retry-delay 3 --retry-connrefused -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$repo/pulls/$pr/files?per_page=100" > files.json
+          jq -r '.[].filename' files.json > changed_files.txt
+
+      - name: Classify docs-only / container-only
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          is_docs_file() {
+            local f="$1"
+            [[ "$f" == doc/* ||
+               "$f" == admin/* ||
+               "$f" == src/sample.ceph.conf ||
+               "$f" == CodingStyle ||
+               "$f" == *.rst ||
+               "$f" == *.md ||
+               "$f" == COPYING* ||
+               "$f" == README.* ||
+               "$f" == SubmittingPatches ||
+               "$f" == .readthedocs.yml ||
+               "$f" == PendingReleaseNotes ]]
+          }
+
+          is_container_file() {
+            local f="$1"
+            [[ "$f" == container/* ||
+               "$f" == Dockerfile.build ||
+               "$f" == src/script/buildcontainer-setup.sh ||
+               "$f" == src/script/build-with-container.py ]]
+          }
+
+          only_docs=true
+          only_container=true
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if ! is_docs_file "$file"; then
+              only_docs=false
+            fi
+            if ! is_container_file "$file"; then
+              only_container=false
+            fi
+          done < changed_files.txt
+
+          echo "only_docs=$only_docs" >> "$GITHUB_OUTPUT"
+          echo "only_container=$only_container" >> "$GITHUB_OUTPUT"
+
+  fake-statuses:
+    needs: classify-pr
+    if: needs.classify-pr.result == 'success' && (needs.classify-pr.outputs.only_docs == 'true' || needs.classify-pr.outputs.only_container == 'true')
+    uses: ./.github/workflows/pr-checks-faker.yml
+    secrets: inherit
+    with:
+      pr_sha: ${{ needs.classify-pr.outputs.pr_sha }}
+      triggered_by: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  trigger-poc:
+    needs: classify-pr
+    if: needs.classify-pr.result == 'success' && needs.classify-pr.outputs.only_docs != 'true' && needs.classify-pr.outputs.only_container != 'true'
+    uses: ./.github/workflows/dispatch-jenkins-job.yml
+    secrets: inherit
+    with:
+      pr_number: ${{ needs.classify-pr.outputs.pr_number }}
+      pr_sha: ${{ needs.classify-pr.outputs.pr_sha }}
+      jenkins_job: preserve-ceph-pr-trigger-poc
+      status_context: jenkins poc test
+      trigger_method: Branch push POC
+      triggered_by: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      dry_run: false
+      post_pending_status: true
