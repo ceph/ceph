@@ -406,6 +406,10 @@ target_link_libraries(ceph_test_datalog
   ${rgw_libs})
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(unittest_rgw_asio_frontend_connection test_rgw_asio_frontend_connection.cc)
+add_ceph_unittest(unittest_rgw_asio_frontend_connection)
+target_link_libraries(unittest_rgw_asio_frontend_connection ${rgw_libs} ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
