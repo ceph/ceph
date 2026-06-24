@@ -21,6 +21,7 @@ import contextlib
 import copy
 import json
 import logging
+import sqlite3
 import threading
 
 from .config_store import ObjectCachingEntry
@@ -34,6 +35,11 @@ from .proto import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class StoreUnavailable(RuntimeError):
+    """Raised when the underlying store backend cannot be reached (e.g. a
+    transient RADOS/lock-loss condition during cluster instability)."""
 
 
 class DirectDBAcessor(Protocol):
@@ -290,26 +296,29 @@ class SqliteStore:
 
     @contextlib.contextmanager
     def _db(self) -> Iterator[Cursor]:
-        if self._cursor is not None:
-            log.debug('fetching cached cursor')
-            yield self._cursor
-            return
-        if hasattr(self._backend, 'exclusive_db_cursor'):
-            log.debug('fetching exclusive db cursor')
-            with self._backend.exclusive_db_cursor() as cursor:
+        try:
+            if self._cursor is not None:
+                log.debug('fetching cached cursor')
+                yield self._cursor
+                return
+            if hasattr(self._backend, 'exclusive_db_cursor'):
+                log.debug('fetching exclusive db cursor')
+                with self._backend.exclusive_db_cursor() as cursor:
+                    try:
+                        self._cursor = cursor
+                        yield cursor
+                    finally:
+                        self._cursor = None
+                return
+            log.debug('fetching default db cursor')
+            with self._backend.db:
                 try:
-                    self._cursor = cursor
-                    yield cursor
+                    self._cursor = self._backend.db.cursor()
+                    yield self._cursor
                 finally:
                     self._cursor = None
-            return
-        log.debug('fetching default db cursor')
-        with self._backend.db:
-            try:
-                self._cursor = self._backend.db.cursor()
-                yield self._cursor
-            finally:
-                self._cursor = None
+        except sqlite3.DatabaseError as e:
+            raise StoreUnavailable(str(e)) from e
 
     def __getitem__(self, key: EntryKey) -> SqliteStoreEntry:
         """Return an entry object given a namespaced entry key. This entry does
