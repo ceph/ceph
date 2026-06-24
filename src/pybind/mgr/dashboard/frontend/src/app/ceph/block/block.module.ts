@@ -381,6 +381,17 @@ const routes: Routes = [
             }
           },
           {
+            path: `${URLVerbs.EDIT}/:name`,
+            component: NvmeofGroupFormComponent,
+            data: {
+              breadcrumbs: ActionLabels.EDIT,
+              pageHeader: {
+                title: $localize`Edit Gateway Group`,
+                description: $localize`Modify gateway group configuration.`
+              }
+            }
+          },
+          {
             path: `${URLVerbs.VIEW}/:group`,
             component: NvmeGatewayViewComponent,
             data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver },

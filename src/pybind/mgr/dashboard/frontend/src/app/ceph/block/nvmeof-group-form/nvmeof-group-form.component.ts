@@ -1,5 +1,6 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -10,7 +11,6 @@ import { NvmeofGatewayNodeComponent } from '../nvmeof-gateway-node/nvmeof-gatewa
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { Router } from '@angular/router';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 
@@ -33,9 +33,13 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   groupForm!: CdFormGroup;
   action!: string;
   resource: string;
-  group: string;
-  pageURL: string;
+  group = '';
+  pageURL = '';
   hasAvailableNodes = true;
+  editing = false;
+  gatewayGroupName = '';
+  existingServiceData: any = null;
+  preSelectedHostnames: string[] = [];
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -43,7 +47,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     private taskWrapperService: TaskWrapperService,
     private cephServiceService: CephServiceService,
     private nvmeofService: NvmeofService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().nvmeof;
@@ -51,23 +56,38 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.action = this.actionLabels.CREATE;
-    this.createForm();
+    // Resolve create vs edit before building the form so validators/disable state are correct.
+    this.route.params.subscribe((params) => {
+      if (params['name']) {
+        this.editing = true;
+        this.gatewayGroupName = params['name'];
+        this.action = this.actionLabels.EDIT;
+        this.createForm();
+        this.loadGatewayGroupData(params['name']);
+      } else {
+        this.editing = false;
+        this.gatewayGroupName = '';
+        this.action = this.actionLabels.CREATE;
+        this.createForm();
+      }
+    });
   }
 
   createForm() {
+    const groupNameValidators = [
+      Validators.required,
+      (control: any) => {
+        const value = control.value;
+        return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
+      }
+    ];
+
+    const groupNameAsyncValidators = this.editing
+      ? []
+      : [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)];
+
     this.groupForm = new CdFormGroup({
-      groupName: new UntypedFormControl(
-        null,
-        [
-          Validators.required,
-          (control) => {
-            const value = control.value;
-            return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
-          }
-        ],
-        [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)]
-      ),
+      groupName: new UntypedFormControl(null, groupNameValidators, groupNameAsyncValidators),
       unmanaged: new UntypedFormControl(false),
       enableEncryption: new UntypedFormControl(false),
       encryptionConfig: new UntypedFormControl(null),
@@ -97,6 +117,53 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
       }
     });
+
+    if (this.editing) {
+      this.groupForm.get('groupName')?.disable();
+    }
+  }
+
+  loadGatewayGroupData(groupName: string) {
+    this.nvmeofService.listGatewayGroups().subscribe(
+      (gatewayGroups: any) => {
+        const groups = gatewayGroups?.[0] ?? [];
+        const group = groups.find((g: any) => g.spec?.group === groupName);
+
+        if (group) {
+          this.existingServiceData = group;
+          const spec = group.spec || {};
+          this.preSelectedHostnames = group.placement?.hosts || [];
+
+          this.groupForm.patchValue({
+            groupName: groupName,
+            unmanaged: !!spec.unmanaged,
+            enableEncryption: !!spec.encryption_key,
+            enableMtls: !!(spec.ssl || spec.enable_auth),
+            certificateType:
+              spec.certificate_source === 'inline'
+                ? CertificateType.external
+                : CertificateType.internal,
+            encryptionKey: spec.encryption_key || '',
+            encryptionConfig: spec.encryption_key || '',
+            pool: spec.pool || 'rbd',
+            custom_sans: spec.custom_sans || []
+          });
+
+          if (spec.certificate_source === 'inline') {
+            this.groupForm.patchValue({
+              rootCACert: spec.root_ca_cert || null,
+              clientCert: spec.client_cert || null,
+              clientKey: spec.client_key || null,
+              serverCert: spec.server_cert || null,
+              serverKey: spec.server_key || null
+            });
+          }
+        }
+      },
+      (_error) => {
+        // Error loading gateway group data
+      }
+    );
   }
 
   onHostsLoaded(count: number): void {
@@ -104,7 +171,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   get isCreateDisabled(): boolean {
-    if (!this.hasAvailableNodes) {
+    // Create requires free nodes; edit can proceed with the group's current hosts.
+    if (!this.editing && !this.hasAvailableNodes) {
       return true;
     }
     if (!this.groupForm) {
@@ -140,19 +208,22 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       return;
     }
 
-    const formValues = this.groupForm.value;
+    // getRawValue includes disabled groupName in edit mode
+    const formValues = this.groupForm.getRawValue();
     const selectedHostnames = this.gatewayNodeComponent?.getSelectedHostnames() || [];
     if (selectedHostnames.length === 0) {
       this.groupForm.setErrors({ cdSubmitButton: true });
       return;
     }
-    const taskUrl = `service/${URLVerbs.CREATE}`;
-    const serviceId = `${formValues.groupName}`;
+
+    const groupName = this.editing ? this.gatewayGroupName : formValues.groupName;
+    const serviceId = this.resolveServiceId(groupName, formValues);
+    const taskUrl = this.editing ? `service/${URLVerbs.EDIT}` : `service/${URLVerbs.CREATE}`;
 
     const serviceSpec: Record<string, any> = {
       service_type: 'nvmeof',
       service_id: serviceId,
-      group: formValues.groupName,
+      group: groupName,
       placement: {
         hosts: selectedHostnames
       },
@@ -174,7 +245,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
 
       if (formValues.pool) {
         serviceSpec['pool'] = formValues.pool;
-        serviceSpec['service_id'] = `${formValues.pool}.${formValues.groupName}`;
       }
 
       if (
@@ -193,12 +263,16 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       }
     }
 
+    const apiCall = this.editing
+      ? this.cephServiceService.update(serviceSpec)
+      : this.cephServiceService.create(serviceSpec);
+
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
           service_name: `nvmeof.${serviceId}`
         }),
-        call: this.cephServiceService.create(serviceSpec)
+        call: apiCall
       })
       .subscribe({
         complete: () => {
@@ -210,12 +284,25 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       });
   }
 
-  private goToListView() {
-    this.router.navigateByUrl('/block/nvmeof/gateways');
+  /**
+   * CephServiceService prefixes service_type to service_id.
+   * Never pass `nvmeof.<name>` as service_id or the API name becomes `nvmeof.nvmeof.<name>`.
+   */
+  private resolveServiceId(groupName: string, formValues: any): string {
+    if (this.editing && this.existingServiceData?.service_id) {
+      const existing = this.existingServiceData.service_id as string;
+      return existing.startsWith('nvmeof.') ? existing.slice('nvmeof.'.length) : existing;
+    }
+
+    if (formValues.enableMtls && formValues.pool) {
+      return `${formValues.pool}.${groupName}`;
+    }
+
+    return groupName;
   }
 
-  onCertificateTypeChange(type: CertificateType): void {
-    this.groupForm.get('certificateType')?.setValue(type);
+  private goToListView() {
+    this.router.navigateByUrl('/block/nvmeof/gateways');
   }
 
   onFileUpload(event: Event, controlName: string): void {
@@ -229,5 +316,22 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     const reader = new FileReader();
     reader.onload = () => control.setValue(reader.result);
     reader.readAsText(file, 'utf8');
+  }
+
+  onCertificateTypeChange(type: CertificateType): void {
+    this.groupForm.get('certificateType')?.setValue(type);
+    if (type === CertificateType.internal) {
+      this.groupForm.patchValue({
+        rootCACert: null,
+        clientCert: null,
+        clientKey: null,
+        serverCert: null,
+        serverKey: null
+      });
+    } else {
+      this.groupForm.patchValue({
+        custom_sans: []
+      });
+    }
   }
 }

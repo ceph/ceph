@@ -87,7 +87,10 @@
           cdsCol
           class="cds-pt-3 cds-pb-3"
         >
-          <cd-nvmeof-gateway-node (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
+          <cd-nvmeof-gateway-node
+            [preSelectedHostnames]="preSelectedHostnames"
+            (hostsLoaded)="onHostsLoaded($event)"
+          ></cd-nvmeof-gateway-node>
         </div>
       </div>
 
