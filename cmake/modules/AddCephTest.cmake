@@ -33,8 +33,8 @@ function(add_ceph_test test_name test_path)
     set_property(TEST ${test_name}
       APPEND
       PROPERTY ENVIRONMENT
-      ASAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0
-      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0)
+      ASAN_OPTIONS=${CEPH_ASAN_OPTIONS}
+      LSAN_OPTIONS=${CEPH_LSAN_OPTIONS})
   endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})

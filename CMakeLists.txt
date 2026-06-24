@@ -724,6 +724,13 @@ endif(LINUX)
 option(WITH_ASAN "build with ASAN" OFF)
 if(WITH_ASAN)
   list(APPEND sanitizers "address")
+  # Shared ASan/LSan runtime options: the in-tree suppression files plus the
+  # flags our tests need.  Consumed by add_ceph_test() and baked into bin/ceph
+  # so both ignore the same still-reachable third-party leaks.
+  set(CEPH_ASAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0"
+      CACHE INTERNAL "ASAN_OPTIONS for ceph tests and the ceph CLI")
+  set(CEPH_LSAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0"
+      CACHE INTERNAL "LSAN_OPTIONS for ceph tests and the ceph CLI")
 endif()
 
 option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)

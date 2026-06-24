@@ -140,6 +140,13 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",
                                       get_pythonlib_dir())
+        if with_asan:
+            # respawn_in_path() below re-execs with the ASan runtime preloaded.
+            # Load the same suppression options add_ceph_test() uses (configured
+            # by CMake) first, so the re-exec'd interpreter does not report
+            # CPython/Cython module-init allocations as leaks at exit.
+            os.environ.setdefault("ASAN_OPTIONS", "@CEPH_ASAN_OPTIONS@")
+            os.environ.setdefault("LSAN_OPTIONS", "@CEPH_LSAN_OPTIONS@")
         respawn_in_path(lib_path, pybind_path, pythonlib_path,
                         asan_lib_path if with_asan else None)
 
