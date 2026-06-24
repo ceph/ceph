@@ -140,7 +140,7 @@ These options are used with the ``bench`` command.
 
 .. option:: --json <path>
 
-   Write structured benchmark results to a JSON file
+   Write structured benchmark results to a JSON file. Use ``-`` to output to stdout.
 
 .. option:: --duration <seconds>
 

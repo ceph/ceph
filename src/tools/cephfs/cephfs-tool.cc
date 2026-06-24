@@ -1721,13 +1721,20 @@ int do_bench(BenchConfig& config) {
   if (json_formatter) {
     json_formatter->close_section(); // summary
     json_formatter->close_section(); // benchmark
-    std::ofstream ofs(config.json_path);
-    if (ofs.is_open()) {
-      json_formatter->flush(ofs);
-      cout << "\nResults saved to " << config.json_path << std::endl;
+    if (config.json_path == "-") {
+      // Output to stdout
+      json_formatter->flush(cout);
+      cout << std::endl;
     } else {
-      cerr << "\nError: Could not open " << config.json_path << " for writing."
-           << std::endl;
+      // Output to file
+      std::ofstream ofs(config.json_path);
+      if (ofs.is_open()) {
+        json_formatter->flush(ofs);
+        cout << "\nResults saved to " << config.json_path << std::endl;
+      } else {
+        cerr << "\nError: Could not open " << config.json_path << " for writing."
+             << std::endl;
+      }
     }
   }
 
@@ -1808,7 +1815,7 @@ int main(int argc, char **argv) {
     ("root-path", po::value<string>(&config.mount_root)->default_value("/"), "Root path in CephFS")
     ("per-thread-mount", po::bool_switch(&config.per_thread_mount), "Use separate mount per thread")
     ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files")
-    ("json", po::value<string>(&config.json_path), "Output results to a JSON file")
+    ("json", po::value<string>(&config.json_path), "Output results to a JSON file (use '-' for stdout)")
     ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)")
     ("perf-dump", po::value<string>(&config.perf_dump_path), "File to dump performance counters to")
     ("progress", po::bool_switch(&config.show_progress), "Show progress and current bandwidth during benchmark")
