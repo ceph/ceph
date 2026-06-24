@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           auth_args=(--user "$JENKINS_USER:$JENKINS_API_TOKEN")
 
-          builds_json=$(curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-connrefused \
+          builds_json=$(curl -g --fail --silent --show-error --retry 4 --retry-delay 3 --retry-connrefused \
             "${auth_args[@]}" \
             "$JENKINS_BASE_URL/job/$JENKINS_JOB/api/json?tree=builds[number,url,building]")
 
