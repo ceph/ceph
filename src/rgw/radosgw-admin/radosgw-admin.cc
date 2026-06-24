@@ -987,7 +987,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
-  { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -4087,10 +4086,10 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging", "rewrite", "set-min-shards", "object", "shard"};
+        "limit", "logging", "rewrite", "set-min-shards", "object", "shard", "resync"};
     static const std::set<std::string_view> legacy_bucket_words = {
         "sync", "reshard",
-        "radoslist", "rados", "resync"};
+        "radoslist", "rados"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4300,6 +4299,11 @@ int main(int argc, const char **argv)
       auto* bucket_shard_objects = bucket_shard->add_subcommand("objects", "show sample object names that map to bucket shards");
       bucket_shard_objects->alias("object");
       bucket_shard->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_resync           = bucket_cmd->add_subcommand("resync", "bucket resync commands");
+      auto* bucket_resync_encrypted = bucket_resync->add_subcommand("encrypted", "encrypted multipart resync commands");
+      auto* bucket_resync_encrypted_multipart = bucket_resync_encrypted->add_subcommand("multipart", "repair replication of encrypted multipart uploads");
+      bucket_resync->require_subcommand(show_cli11_help ? 0 : 1);
+      bucket_resync_encrypted->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4470,6 +4474,14 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_shard_objects, "--prefix", prefix_val, "object name prefix (default \"obj\")")
           ->each([&opt_prefix](const std::string& v) { opt_prefix = v; });
       add_multilevel_option(bucket_shard_objects, "--format", format, format_desc);
+
+      // bucket resync encrypted multipart options
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc)->ignore_underscore();
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--tenant",     tenant,     tenant_desc);
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
+      add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5230,6 +5242,54 @@ int main(int argc, const char **argv)
             formatter->flush(cout);
           }
 
+          return 0;
+        };
+      });
+
+      bucket_resync_encrypted_multipart->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket,
+           &yes_i_really_mean_it, &marker, &formatter, &stream_flusher_ptr] {
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket,
+                        &yes_i_really_mean_it, &marker, &formatter,
+                        &stream_flusher_ptr]() -> int {
+          // repair logic for replication of encrypted multipart uploads:
+          // https://tracker.ceph.com/issues/46062
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!rados_driver) {
+            cerr << "ERROR: this command can only work when the cluster "
+                "has a RADOS backing store." << std::endl;
+            return EPERM;
+          }
+
+          // fail if recovery wouldn't generate replication log entries
+          if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
+            cerr << "This command is only necessary for replicated buckets." << std::endl;
+            cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+            return EPERM;
+          }
+
+          formatter->open_object_section("modified");
+          encode_json("bucket", bucket->get_name(), formatter.get());
+          encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
+
+          ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
+              dpp(), null_yield, rados_driver, bucket->get_info(),
+              marker, *stream_flusher_ptr);
+          if (ret < 0) {
+            return -ret;
+          }
+          formatter->close_section();
+          formatter->flush(cout);
           return 0;
         };
       });
@@ -8979,47 +9039,6 @@ int main(int argc, const char **argv)
 	"************************************" << std::endl;
       return -ret;
     }
-  }
-
-  if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
-    // repair logic for replication of encrypted multipart uploads:
-    // https://tracker.ceph.com/issues/46062
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!rados_driver) {
-      cerr << "ERROR: this command can only work when the cluster "
-          "has a RADOS backing store." << std::endl;
-      return EPERM;
-    }
-
-    // fail if recovery wouldn't generate replication log entries
-    if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
-      cerr << "This command is only necessary for replicated buckets." << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EPERM;
-    }
-
-    formatter->open_object_section("modified");
-    encode_json("bucket", bucket->get_name(), formatter.get());
-    encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
-
-    ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
-        dpp(), null_yield, rados_driver, bucket->get_info(),
-        marker, stream_flusher);
-    if (ret < 0) {
-      return -ret;
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    return 0;
   }
 
   if (opt_cmd == OPT::LOG_LIST) {
