@@ -16276,6 +16276,11 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
       delete req;
       return r;
     }
+
+    if (enc_target.size() > PATH_MAX) {
+      return -ENAMETOOLONG;
+    }
+
     ldout(cct, 25) << "encrypted symlink is: " << binstrprint(enc_target) << dendl;
     req->set_string2(enc_target.c_str());
   } else
