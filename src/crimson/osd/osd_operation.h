@@ -376,7 +376,11 @@ public:
     return !max_in_progress || in_progress < max_in_progress;
   }
 
-  class ThrottleReleaser {
+  // The returned guard's destructor is the mClock RequestCompletion
+  // (release_throttle), so it must be held for the throttled operation's whole
+  // lifetime.  Dropping it at acquisition frees the slot immediately and the
+  // operation never counts against max_in_progress.
+  class [[nodiscard("discarding the guard releases the throttle slot immediately")]] ThrottleReleaser {
     OperationThrottler *parent = nullptr;
   public:
     ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
