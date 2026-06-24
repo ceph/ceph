@@ -1013,11 +1013,19 @@ void MonClient::tick()
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
-	utime_t interval = now - lk;
-	if (interval > cct->_conf->mon_client_ping_timeout) {
-	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
-			<< " seconds), reconnecting" << dendl;
-	  return _reopen_session();
+	// Only treat this as a missed keepalive when the last ack is genuinely
+	// in the past. utime_t stores seconds as an unsigned 32-bit value and
+	// operator- does not clamp, so if 'lk' is even slightly ahead of 'now'
+	// (clock skew / a forward step between the reads), "now - lk" wraps to
+	// ~2^32 seconds and spuriously exceeds mon_client_ping_timeout, forcing
+	// a needless _reopen_session(). Guard the subtraction against that.
+	if (now > lk) {
+	  utime_t interval = now - lk;
+	  if (interval > cct->_conf->mon_client_ping_timeout) {
+	    ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
+			  << " seconds), reconnecting" << dendl;
+	    return _reopen_session();
+	  }
 	}
       }
 
