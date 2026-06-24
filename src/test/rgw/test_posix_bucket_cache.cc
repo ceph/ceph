@@ -95,6 +95,8 @@ protected:
       return 0;
     } /* fill_cache */
 
+    /* default LMDB sort order, mirroring POSIXBucket::lmdb_cmp() */
+    static MDB_cmp_func* lmdb_cmp() { return nullptr; }
   }; /* MockSalBucket */
 
   using BucketCache = file::listing::BucketCache<MockSalDriver, MockSalBucket>;
