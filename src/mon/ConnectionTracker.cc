@@ -261,17 +261,14 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   ceph_assert((peer_reports.size() == starting_size) ||
 	  (peer_reports.size() + 1 == starting_size));
 
-  if (rank_removed < rank) { // if the rank removed is lower than us, we need to adjust.
-    --rank;
-    my_reports.rank = rank; // also adjust my_reports.rank.
-  }
+  // Trust the caller's new_rank from the monmap rather than trying to compute it.
+  // This handles cases where multiple ranks are removed simultaneously.
+  rank = new_rank;
+  my_reports.rank = new_rank;
 
   ldout(cct, 20) << "my rank after: " << rank << dendl;
   ldout(cct, 20) << "peer_reports after: " << peer_reports << dendl;
   ldout(cct, 20) << "my_reports after: " << my_reports << dendl;
-
-  //check if the new_rank from monmap is equal to our adjusted rank.
-  ceph_assert(rank == new_rank);
 
   increase_version();
 }
