@@ -48,8 +48,6 @@ private:
   std::chrono::time_point<std::chrono::steady_clock>
               last_map_time; // used to panic on disconnect
   std::chrono::time_point<std::chrono::steady_clock>
-                reset_timestamp; // used to bypass some validations
-  std::chrono::time_point<std::chrono::steady_clock>
                 start_time; // used to panic on connect
 
   bool first_beacon = true;
