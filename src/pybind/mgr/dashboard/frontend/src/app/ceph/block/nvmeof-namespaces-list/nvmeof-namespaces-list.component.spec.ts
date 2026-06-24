@@ -194,4 +194,19 @@ describe('NvmeofNamespacesListComponent', () => {
 
     component.fetchData();
   });
+
+  it('should update group and trigger namespace fetch on group change', () => {
+    const fetchDataSpy = jest.spyOn(component, 'fetchData');
+
+    component.onGroupChange('g1');
+
+    expect(component.group).toBe('g1');
+    expect(fetchDataSpy).not.toHaveBeenCalled(); // onGroupChange calls namespaceSubject.next() directly
+  });
+
+  it('should clear group on onGroupChange with null', () => {
+    component.group = 'g1';
+    component.onGroupChange(null);
+    expect(component.group).toBeNull();
+  });
 });

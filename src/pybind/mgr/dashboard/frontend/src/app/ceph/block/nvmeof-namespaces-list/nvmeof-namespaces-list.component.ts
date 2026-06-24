@@ -223,6 +223,18 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     });
   }
 
+  get group(): string | null {
+    return this.groupHandler.group;
+  }
+
+  set group(value: string | null) {
+    this.groupHandler.group = value;
+  }
+
+  onGroupChange(group: string | null): void {
+    this.groupHandler.onGroupChange(group);
+  }
+
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
