@@ -283,6 +283,7 @@ def get_certificate_info(cert_data: str, include_details: bool = False) -> Dict[
         remaining_days = (cert.not_valid_after - datetime.utcnow()).days
         info = {
             'subject': {get_oid_name(attr.oid): attr.value for attr in cert.subject},
+            'contains_chain': is_fullchain_pem(cert_data),
             'validity': {
                 'remaining_days': remaining_days,
             }
