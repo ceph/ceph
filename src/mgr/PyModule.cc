@@ -299,9 +299,28 @@ PyObject* PyModule::init_ceph_logger()
   return py_logger;
 }
 
+// module-independent sink for the Python root-logger fallback; the Python
+// side filters and formats, this just emits like PyModuleRunner::log()
+static PyObject*
+ceph_mgr_log(PyObject *self, PyObject *args)
+{
+  char *record = nullptr;
+  if (!PyArg_ParseTuple(args, "s:mgr_log", &record)) {
+    return nullptr;
+  }
+#undef dout_prefix
+#define dout_prefix *_dout
+  dout(0) << record << dendl;
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr[py] "
+  Py_RETURN_NONE;
+}
+
 PyObject* PyModule::init_ceph_module()
 {
   static PyMethodDef module_methods[] = {
+    {"mgr_log", ceph_mgr_log, METH_VARARGS,
+     "log a preformatted record to the mgr daemon log"},
     {nullptr, nullptr, 0, nullptr}
   };
   static PyModuleDef ceph_module_def = {
