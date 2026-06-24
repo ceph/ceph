@@ -24,6 +24,28 @@
   .text-muted {
     fill: var(--cds-text-secondary);
   }
-}
 
-// Made with Bob
+  .side-panel-content {
+    height: 100%;
+
+    cds-tabs {
+      height: 100%;
+    }
+
+    .cds-p-4 {
+      padding: 1rem;
+    }
+
+    .cds-mb-2 {
+      margin-bottom: 0.5rem;
+    }
+
+    .cds-mb-4 {
+      margin-bottom: 1rem;
+    }
+
+    .cds-mb-6 {
+      margin-bottom: 1.5rem;
+    }
+  }
+}
