@@ -439,8 +439,6 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     this.hostsLoaded.emit(this.count);
   }
 
-  onEditGateway(): void {}
-
   private buildGatewayDetails(
     serviceSpec: CephServiceSpec,
     gatewayNodeCount: number

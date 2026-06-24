@@ -1153,7 +1153,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
-         this.updateRgwControlStates();
+        this.updateRgwControlStates();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1162,7 +1162,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
-         this.updateRgwControlStates();
+        this.updateRgwControlStates();
       }
     );
   }
@@ -1226,7 +1226,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
   }
 
-  private updateGrafanaPasswordControlState(serviceType = this.serviceForm?.get('service_type')?.value): void {
+  private updateGrafanaPasswordControlState(
+    serviceType = this.serviceForm?.get('service_type')?.value
+  ): void {
     this.toggleFormControlState(
       'grafana_admin_password',
       this.editing && serviceType === 'grafana'
