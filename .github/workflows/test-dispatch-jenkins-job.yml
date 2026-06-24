@@ -21,6 +21,9 @@ on:
         required: true
         default: false
         type: boolean
+  push:
+    branches:
+      - jeets-pr-trigger
 
 permissions:
   contents: read
