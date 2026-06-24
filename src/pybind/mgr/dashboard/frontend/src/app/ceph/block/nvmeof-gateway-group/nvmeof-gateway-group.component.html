@@ -16,6 +16,7 @@
     <div class="table-actions">
       <cd-table-actions [permission]="permission"
                         [selection]="selection"
+                        class="btn-group"
                         [tableActions]="tableActions">
       </cd-table-actions>
     </div>
@@ -30,7 +31,7 @@
 <ng-template #customTableItemTemplate
              let-value="data.value">
   <a cdsLink
-     [routerLink]="[viewUrl, value]"
+     [routerLink]="[viewUrl, value | encodeUri]"
      (click)="$event.stopPropagation()">
     {{ value }}
   </a>

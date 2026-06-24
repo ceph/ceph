@@ -79,6 +79,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
+
   iconSize = IconSize;
 
   constructor(
@@ -191,8 +192,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
           }),
           catchError(() => {
             return of([]);
-          }),
-          finalize(() => this.setTableLoading(false))
+          })
         )
       ),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -210,20 +210,12 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       .subscribe(() => this.fetchData());
   }
   fetchData(): void {
-    this.setTableLoading(true);
     this.subject.next([]);
     this.checkNodesAvailability();
   }
 
-  private setTableLoading(loading: boolean): void {
-    if (this.table) {
-      this.table.loadingIndicator = loading;
-    }
-  }
-
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
-    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {
@@ -342,11 +334,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.router.navigate([this.viewUrl, groupName]);
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   editSelectedGatewayGroup(): void {
     const selectedGroup = this.selection.first();
     if (!selectedGroup) {
@@ -355,34 +342,8 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
   }
 
-  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
-    if (!selectedGroup) {
-      return [];
-    }
-
-    const runningGateways = selectedGroup.statusCount?.running ?? 0;
-    const errorGateways = selectedGroup.statusCount?.error ?? 0;
-    const totalGateways = runningGateways + errorGateways;
-
-    return [
-      {
-        label: $localize`Gateway name`,
-        value: selectedGroup.name
-      },
-      {
-        label: $localize`Gateway nodes`,
-        value: totalGateways
-      },
-      {
-        label: $localize`Encryption`,
-        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      },
-      {
-        label: $localize`mTLS`,
-        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      }
-    ];
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }
