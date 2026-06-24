@@ -71,9 +71,12 @@ WARN_MINRW_POS="Warning: --min-rewrite-size should appear after the subcommand"
 WARN_MINRW_DUP="Warning: --min-rewrite-size specified multiple times, using last value"
 WARN_MAXRW_POS="Warning: --max-rewrite-size should appear after the subcommand"
 WARN_MINRWSTRIPE_POS="Warning: --min-rewrite-stripe-size should appear after the subcommand"
-# set-min-shards-specific flag
+# set-min-shards / object-shard shared flag
 WARN_NUM_SHARDS_POS="Warning: --num-shards should appear after the subcommand"
 WARN_NUM_SHARDS_DUP="Warning: --num-shards specified multiple times, using last value"
+# object-shard flag
+WARN_OBJECT_POS="Warning: --object/-o should appear after the subcommand"
+WARN_OBJECT_DUP="Warning: --object/-o specified multiple times, using last value"
 
 # Error message constants
 # Legacy behavior: missing --bucket/--uid is not validated up front; the op
@@ -765,6 +768,90 @@ check_warns "set-min-shards: --bucket + --num-shards + --tenant before (3 warns)
   "ERROR: --tenant is set, but there's no user ID" \
   "$WARN_BUCKET_POS" "$WARN_NUM_SHARDS_POS" "$WARN_TENANT_POS" -- \
   bucket --bucket cli11-no-such-bucket --num-shards 11 --tenant t set-min-shards
+
+# ============================================================
+echo ""
+echo "=== bucket object shard ==="
+# ============================================================
+
+# stray positional args
+check "object shard: stray after flags"              22 "ERROR: unexpected argument: 'stray'" \
+  bucket object shard stray
+check "object shard: stray before bucket"            22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket object shard
+check "object shard: stray between object and shard" 22 "ERROR: unexpected argument: 'extra'" \
+  bucket object extra shard
+check "object shard: stray word after leaf (banana)"  22 "ERROR: unexpected argument: 'banana'" \
+  bucket object shard banana
+
+# unknown subcommand under the 'object' node: require_subcommand fires (exit 106)
+check "object: unknown subcommand (banana)"           106 "A subcommand is required" \
+  bucket object banana
+check "object: no subcommand"                         106 "A subcommand is required" \
+  bucket object
+
+check "object shard: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket object shard --fakeflag
+# Unrelated flags differ by TYPE (both registered on the shared root). A value
+# option in SPACE form leaks its value as a stray positional (exit 22); the =form
+# binds the value and is accepted instead (see the cluster cases below).
+check "object shard: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+  bucket object shard --object foo --num-shards 11 --max-entries 5
+
+# missing option value (parse-level, exit 114)
+check "object shard: --object missing value"     114 "--object: 1 required TEXT missing" \
+  bucket object shard --object
+check "object shard: --num-shards missing value" 114 "--num-shards: 1 required INT missing" \
+  bucket object shard --num-shards
+# --num-shards is a strict CLI11 integer; a non-numeric value is rejected at parse (exit 104)
+check "object shard: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
+  bucket object shard --object foo --num-shards abc
+
+# handler-level (cluster): validations live inside cli11_action and run after
+# driver init. The handler returns a positive EINVAL (shell exit 22), faithful
+# to the legacy handler (note: this differs from set-min-shards' -EINVAL/234).
+check_cluster "object shard: missing object (only --num-shards)" 22 "ERROR: num-shards and object must be specified." -- \
+  bucket object shard --num-shards 11
+check_cluster "object shard: missing num-shards (only --object)" 22 "ERROR: num-shards and object must be specified." -- \
+  bucket object shard --object foo
+check_cluster "object shard: non-positive num-shards"           22 "ERROR: non-positive value supplied for num-shards: 0" -- \
+  bucket object shard --object foo --num-shards 0
+
+# unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
+# accepted; a value option in =form binds its value -> accepted; both still
+# compute the shard (foo % 11 -> 10).
+check_cluster "object shard: unrelated binary flag --fix accepted"        0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --fix
+check_cluster "object shard: unrelated value flag --max-entries=5 (=form)" 0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --max-entries=5
+
+# wrong-position warnings (flag before the leaf subcommand). The value still
+# flows in via the shared option, so the shard is still computed (exit 0).
+check_warns "object shard: --object before subcommand"     0 "" "$WARN_OBJECT_POS" -- \
+  bucket --object foo object shard --num-shards 11
+check_warns "object shard: -o before subcommand (short)"   0 "" "$WARN_OBJECT_POS" -- \
+  bucket -o foo object shard --num-shards 11
+check_warns "object shard: --num-shards before subcommand" 0 "" "$WARN_NUM_SHARDS_POS" -- \
+  bucket --num-shards 11 object shard --object foo
+check_warns "object shard: --format before subcommand"     0 "" "$WARN_FORMAT_POS" -- \
+  bucket --format xml object shard --object foo --num-shards 11
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "object shard: duplicate --object"     0 "" "$WARN_OBJECT_DUP" -- \
+  bucket object shard --object a --object foo --num-shards 11
+check_warns "object shard: duplicate --num-shards" 0 "" "$WARN_NUM_SHARDS_DUP" -- \
+  bucket object shard --object foo --num-shards 4 --num-shards 11
+
+# multi-warning combinations (2 and 3 warnings)
+check_warns "object shard: --object + --num-shards before (2 pos warnings)" 0 "" \
+  "$WARN_OBJECT_POS" "$WARN_NUM_SHARDS_POS" -- \
+  bucket --object foo --num-shards 11 object shard
+check_warns "object shard: pos + duplicate --object (2 warns)"             0 "" \
+  "$WARN_OBJECT_POS" "$WARN_OBJECT_DUP" -- \
+  bucket --object a object shard --object foo --num-shards 11
+check_warns "object shard: --object + --num-shards + --format before (3 warns)" 0 "" \
+  "$WARN_OBJECT_POS" "$WARN_NUM_SHARDS_POS" "$WARN_FORMAT_POS" -- \
+  bucket --object foo --num-shards 11 --format xml object shard
 
 # ============================================================
 echo ""
@@ -1478,6 +1565,12 @@ check_help "cli11-help bucket set-min-shards"        --cli11-help bucket set-min
 check_help "cli11-help set-min-shards after bucket"  bucket --cli11-help set-min-shards
 check_help "cli11-help after set-min-shards"         bucket set-min-shards --cli11-help
 
+# bucket object shard
+check_help "cli11-help bucket object shard"          --cli11-help bucket object shard
+check_help "cli11-help object shard after bucket"    bucket --cli11-help object shard
+check_help "cli11-help after object shard"           bucket object shard --cli11-help
+check_help "cli11-help bucket object (node)"         bucket object --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1593,6 +1686,16 @@ check_help_content "help content set-min-shards: --tenant"      "--tenant"      
 check_help_content "help content set-min-shards: --num-shards"  "--num-shards"  bucket set-min-shards --cli11-help
 check_help_content "help content set-min-shards: --num-shards REQUIRED" "<num-shards> REQUIRED" bucket set-min-shards --cli11-help
 check_help_content "help content set-min-shards: description"   "minimum number of shards that dynamic resharding" bucket set-min-shards --cli11-help
+
+# bucket object shard: all flags present
+check_help_content "help content object shard: --object"      "--object"      bucket object shard --cli11-help
+check_help_content "help content object shard: -o short"      "-o"            bucket object shard --cli11-help
+check_help_content "help content object shard: --object REQUIRED"     "<object> REQUIRED"     bucket object shard --cli11-help
+check_help_content "help content object shard: --num-shards" "--num-shards"  bucket object shard --cli11-help
+check_help_content "help content object shard: --num-shards REQUIRED" "<num-shards> REQUIRED" bucket object shard --cli11-help
+check_help_content "help content object shard: --format"     "--format"      bucket object shard --cli11-help
+check_help_content "help content object shard: description"   "show the shard index a given object maps to" bucket object shard --cli11-help
+check_help_content "help content object (node): description"  "bucket object commands" bucket object --cli11-help
 
 # --bucket marked "<bucket> REQUIRED" in help for the commands that error on a
 # missing bucket (consistency with link/unlink/rm/chown/rewrite)
@@ -1889,6 +1992,18 @@ if cluster_running; then
         bucket layout --bucket "$_test_bucket"
       check_cluster "integration: bucket set-min-shards --tenant '' (empty)" 0 "" -- \
         bucket set-min-shards --bucket "$_test_bucket" --num-shards 11 --tenant ""
+
+      # bucket object shard: pure computation (no bucket needed), but runs after
+      # driver init so a cluster is required. Deterministic: foo % 11 -> 10,
+      # any object % 1 -> 0. Exercises -o short form, =form, and --format xml.
+      check_cluster "integration: object shard (foo/11 -> 10)" 0 '"shard": 10' -- \
+        bucket object shard --object foo --num-shards 11
+      check_cluster "integration: object shard (foo/1 -> 0)"   0 '"shard": 0' -- \
+        bucket object shard --object foo --num-shards 1
+      check_cluster "integration: object shard -o --num-shards=11 (short + =form)" 0 '"shard": 10' -- \
+        bucket object shard -o foo --num-shards=11
+      check_cluster "integration: object shard --format xml" 0 "<obj_shard><shard>10</shard></obj_shard>" -- \
+        bucket object shard --object foo --num-shards 11 --format xml
 
       # bucket logging on a bucket WITHOUT logging configured: info is silent
       # (exit 0, no output); list and flush print an error but still exit 0

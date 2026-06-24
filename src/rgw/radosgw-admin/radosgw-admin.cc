@@ -1059,17 +1059,12 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync run", OPT::BUCKET_SYNC_RUN },
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
-  { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
-#endif
-  { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
-#ifdef WITH_RADOSGW_RADOS
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
 #endif
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
-  { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
 #ifdef WITH_RADOSGW_RADOS
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
 #endif
@@ -4259,10 +4254,10 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging", "rewrite", "set-min-shards"};
+        "limit", "logging", "rewrite", "set-min-shards", "object"};
     static const std::set<std::string_view> legacy_bucket_words = {
         "sync", "reshard",
-        "radoslist", "rados", "shard", "object", "resync"};
+        "radoslist", "rados", "shard", "resync"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4465,6 +4460,9 @@ int main(int argc, const char **argv)
       auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
       auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
       auto* bucket_set_min_shards = bucket_cmd->add_subcommand("set-min-shards", "set the minimum number of shards that dynamic resharding will consider for a bucket");
+      auto* bucket_object       = bucket_cmd->add_subcommand("object", "bucket object commands");
+      auto* bucket_object_shard = bucket_object->add_subcommand("shard", "show the shard index a given object maps to");
+      bucket_object->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4612,6 +4610,15 @@ int main(int argc, const char **argv)
           ->option_text("<num-shards> REQUIRED")
           ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+
+      // bucket object shard options
+      add_multilevel_option(bucket_object_shard, "--object,-o",  object, "object name")
+          ->option_text("<object> REQUIRED");
+      add_multilevel_option(bucket_object_shard, "--num-shards", num_shards, "number of shards")
+          ->option_text("<num-shards> REQUIRED")
+          ->ignore_underscore()
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+      add_multilevel_option(bucket_object_shard, "--format",     format, format_desc);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5291,6 +5298,33 @@ int main(int argc, const char **argv)
             cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
             return -ret;
           }
+
+          return 0;
+        };
+      });
+
+      bucket_object_shard->callback(
+          [&cli11_readonly, &cli11_action, &object, &num_shards,
+           &num_shards_specified, &formatter] {
+        cli11_readonly = true;
+
+        cli11_action = [&object, &num_shards, &num_shards_specified,
+                        &formatter]() -> int {
+          if (!num_shards_specified || object.empty()) {
+            cerr << "ERROR: num-shards and object must be specified."
+                 << std::endl;
+            return EINVAL;
+          } else if (num_shards <= 0) {
+            cerr << "ERROR: non-positive value supplied for num-shards: " <<
+              num_shards << std::endl;
+            return EINVAL;
+          }
+          auto shard =
+            RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+          formatter->open_object_section("obj_shard");
+          encode_json("shard", shard, formatter.get());
+          formatter->close_section();
+          formatter->flush(cout);
 
           return 0;
         };
@@ -6099,7 +6133,6 @@ int main(int argc, const char **argv)
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
 			 OPT::BUCKET_SHARD_OBJECTS,
-			 OPT::BUCKET_OBJECT_SHARD,
 			 OPT::LOG_LIST,
 			 OPT::LOG_SHOW,
 #endif
@@ -9368,24 +9401,6 @@ int main(int argc, const char **argv)
       formatter->close_section();
       formatter->flush(cout);
     }
-  }
-
-  if (opt_cmd == OPT::BUCKET_OBJECT_SHARD) {
-    if (!num_shards_specified || object.empty()) {
-      cerr << "ERROR: num-shards and object must be specified."
-	   << std::endl;
-      return EINVAL;
-    } else if (num_shards <= 0) {
-      cerr << "ERROR: non-positive value supplied for num-shards: " <<
-	num_shards << std::endl;
-      return EINVAL;
-    }
-    auto shard =
-      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
-    formatter->open_object_section("obj_shard");
-    encode_json("shard", shard, formatter.get());
-    formatter->close_section();
-    formatter->flush(cout);
   }
 
 #ifdef WITH_RADOSGW_RADOS
