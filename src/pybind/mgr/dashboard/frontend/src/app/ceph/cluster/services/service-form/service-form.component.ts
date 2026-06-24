@@ -1204,6 +1204,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
+  private updateRgwPlacementControlsState(): void {
+    this.toggleFormControlState('realm_name', this.editing || this.realmList.length === 0);
+    this.toggleFormControlState('zonegroup_name', this.editing || this.zonegroupList.length === 0);
+    this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
+  }
+
+  private updateGrafanaPasswordControlState(
+    serviceType = this.serviceForm?.get('service_type')?.value
+  ): void {
+    this.toggleFormControlState(
+      'grafana_admin_password',
+      this.editing && serviceType === 'grafana'
+    );
+  }
+
+  private toggleFormControlState(controlName: string, disabled: boolean): void {
+    const control = this.serviceForm.get(controlName);
+    if (!control) {
+      return;
+    }
+    if (disabled && control.enabled) {
+      control.disable({ emitEvent: false });
+      return;
+    }
+    if (!disabled && control.disabled) {
+      control.enable({ emitEvent: false });
+    }
+  }
+
   onPlacementChange(selected: string) {
     if (selected === 'label') {
       this.serviceForm.get('count').setValue(null);

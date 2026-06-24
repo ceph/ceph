@@ -47,9 +47,9 @@
             class="invalid-feedback"
             *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
             i18n>Special characters are not allowed.</span>
-
         </div>
       </div>
+
       <!-- Target Nodes Selection -->
       <div
         cdsRow
@@ -121,7 +121,8 @@
                     id="encryptionKey"
                     formControlName="encryptionKey"
                     rows="4"
-                    cols="100">
+                    cols="100"
+                    cdsTheme="g10">
                   </textarea>
                 </cds-textarea-label>
                 <span

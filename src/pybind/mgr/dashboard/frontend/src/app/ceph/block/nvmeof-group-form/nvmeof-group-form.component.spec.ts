@@ -16,6 +16,7 @@ import { NvmeofGroupFormComponent } from './nvmeof-group-form.component';
 import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { FormHelper } from '~/testing/unit-test-helper';
 
 describe('NvmeofGroupFormComponent', () => {
@@ -25,6 +26,7 @@ describe('NvmeofGroupFormComponent', () => {
   let formHelper: FormHelper;
   let taskWrapperService: TaskWrapperService;
   let cephServiceService: CephServiceService;
+  let nvmeofService: NvmeofService;
   let router: Router;
 
   beforeEach(async () => {
@@ -51,7 +53,11 @@ describe('NvmeofGroupFormComponent', () => {
     component = fixture.componentInstance;
     taskWrapperService = TestBed.inject(TaskWrapperService);
     cephServiceService = TestBed.inject(CephServiceService);
+    nvmeofService = TestBed.inject(NvmeofService);
     router = TestBed.inject(Router);
+
+    // Mock NvmeofService.exists so the async unique validator resolves immediately
+    spyOn(nvmeofService, 'exists').and.returnValue(of(false));
 
     component.ngOnInit();
     form = component.groupForm;
@@ -125,7 +131,7 @@ describe('NvmeofGroupFormComponent', () => {
 
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'nvmeof',
-        service_id: 'default',
+        service_id: 'nvmeof.default',
         group: 'default',
         placement: {
           hosts: ['host1', 'host2']
@@ -152,7 +158,7 @@ describe('NvmeofGroupFormComponent', () => {
       );
     });
 
-    it('should create service with encryption when enabled', () => {
+    it('should create service with encryption key when enabled', () => {
       component.gatewayNodeComponent = {
         getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
         getSelectedHostnames: (): string[] => ['host1']
@@ -167,6 +173,67 @@ describe('NvmeofGroupFormComponent', () => {
         jasmine.objectContaining({
           group: 'encrypted-group',
           encryption_key: 'encryption-key-123'
+        })
+      );
+    });
+
+    it('should create service with cephadm-signed mTLS when internal selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-internal');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.internal);
+      component.groupForm.get('custom_sans').setValue(['gw1.local', '192.168.0.10']);
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_type: 'nvmeof',
+          service_id: 'nvmeof.mtls-internal',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'cephadm-signed',
+          custom_sans: ['gw1.local', '192.168.0.10']
+        })
+      );
+    });
+
+    it('should create service with inline mTLS when external selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-external');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.external);
+      component.groupForm.get('rootCACert').setValue('root');
+      component.groupForm.get('clientCert').setValue('client-cert');
+      component.groupForm.get('clientKey').setValue('client-key');
+      component.groupForm.get('serverCert').setValue('server-cert');
+      component.groupForm.get('serverKey').setValue('server-key');
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_id: 'nvmeof.mtls-external',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'inline',
+          root_ca_cert: 'root',
+          client_cert: 'client-cert',
+          client_key: 'client-key',
+          server_cert: 'server-cert',
+          server_key: 'server-key'
         })
       );
     });
