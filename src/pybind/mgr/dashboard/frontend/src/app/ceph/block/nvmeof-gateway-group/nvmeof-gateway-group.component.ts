@@ -26,7 +26,6 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
-import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -74,7 +73,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   gatewayGroupName = '';
   subsystemCount = 0;
   gatewayCount = 0;
-  selectedGatewayDetails: DetailItem[] = [];
   private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
@@ -216,7 +214,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
-    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {
@@ -335,11 +332,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.router.navigate([this.viewUrl, groupName]);
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   editSelectedGatewayGroup(): void {
     const selectedGroup = this.selection.first();
     if (!selectedGroup) {
@@ -348,34 +340,8 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
   }
 
-  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
-    if (!selectedGroup) {
-      return [];
-    }
-
-    const runningGateways = selectedGroup.statusCount?.running ?? 0;
-    const errorGateways = selectedGroup.statusCount?.error ?? 0;
-    const totalGateways = runningGateways + errorGateways;
-
-    return [
-      {
-        label: $localize`Gateway name`,
-        value: selectedGroup.name
-      },
-      {
-        label: $localize`Gateway nodes`,
-        value: totalGateways
-      },
-      {
-        label: $localize`Encryption`,
-        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      },
-      {
-        label: $localize`mTLS`,
-        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      }
-    ];
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

@@ -48,59 +48,28 @@
             i18n>Special characters are not allowed.</span>
         </div>
       </div>
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-checkbox id="enableCds"
-                        formControlName="enable_auth"
-                        i18n>Enable encryption
-          </cds-checkbox>
-        </div>
-      </div>
 
-      @if (groupForm.controls.enableEncryption.value) {
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-textarea-label
-            labelInputID="encryptionConfig"
-            helperText="Provide the encryption configuration details."
-            cdRequiredField="Encryption configuration"
-            i18n
-            i18n-helperText
-            [invalid]="encryptionConfigRef.isInvalid">Encryption configuration
-            <textarea cdsTextArea
-                      id="encryptionConfig"
-                      cdValidate
-                      #encryptionConfigRef="cdValidate"
-                      [invalid]="encryptionConfigRef.isInvalid"
-                      formControlName="encryptionKey"
-                      cols="100"
-                      rows="4"></textarea>
-          </cds-textarea-label>
-          <span
-            class="invalid-feedback"
-            *ngIf="groupForm.showError('encryptionKey', formDir, 'required')"
-            i18n>This field is required.</span>
-        </div>
+      <!-- Target Nodes Selection -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+      <div cdsCol>
+        <h1 class="cds--type-heading-02">Select target nodes</h1>
+      <cd-help-text>
+        <span i18n>
+          Gateway nodes to run NVMe-oF target pods/services
+        </span>
+      </cd-help-text>
       </div>
-      }
-
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <h1 class="cds--type-heading-02">Select target nodes</h1>
-          <cd-help-text>
-            <span i18n>
-              Gateway nodes to run NVMe-oF target pods/services
-            </span>
-          </cd-help-text>
-        </div>
-        <div cdsCol
-             class="cds-pt-3 cds-pb-3">
-          <cd-nvmeof-gateway-node
-            (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
-        </div>
+      <div
+        cdsCol
+        class="cds-pt-3 cds-pb-3"
+      >
+        <cd-nvmeof-gateway-node
+          (hostsLoaded)="onHostsLoaded($event)"
+        ></cd-nvmeof-gateway-node>
+      </div>
       </div>
       <div cdsRow class="form-item cds-mb-0">
         <div cdsCol>
@@ -151,7 +120,8 @@
                     id="encryptionKey"
                     formControlName="encryptionKey"
                     rows="4"
-                    cols="100">
+                    cols="100"
+                    cdsTheme="g10">
                   </textarea>
                 </cds-textarea-label>
                 <span

@@ -29,10 +29,9 @@
 </ng-template>
 
 <ng-template #customTableItemTemplate
-             let-value="data.value"
-             let-row="data.row">
+             let-value="data.value">
   <a cdsLink
-     [routerLink]="[viewUrl, value]"
+     [routerLink]="[viewUrl, value | encodeUri]"
      (click)="$event.stopPropagation()">
     {{ value }}
   </a>
