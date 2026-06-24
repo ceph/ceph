@@ -3363,7 +3363,7 @@ void PeeringState::rewind_divergent_log(
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.rewind_divergent_log(
     newhead, info, rollbacker.get(), dirty_info, dirty_big_info,
-    pool.info.allows_ecoptimizations(), pg_whoami);
+    pool.info.allows_ecoptimizations(), pg_whoami, pool.info);
 }
 
 
@@ -3513,9 +3513,9 @@ void PeeringState::proc_master_log(
       }
     }
     while (p != pg_log.get_log().log.end()) {
-      if (p->is_written_shard(from.shard)) {
+      if (p->is_written_shard(pool.info.get_relative_shard(from.shard))) {
         psdout(10) << "entry " << p->version << " has written shards "
-		   << p->written_shards << " so is divergent" << dendl;
+     << p->written_shards << " so is divergent" << dendl;
 	// This entry was meant to be written on from, this is the first
 	// divergent entry
 	break;
@@ -3527,7 +3527,7 @@ void PeeringState::proc_master_log(
 	psdout(20) << "version " << p->version
 		   << " testing osd " << pg_shard
 		   << " written=" << p->written_shards << dendl;
-	if (p->is_written_shard(pg_shard.shard)) {
+	if (p->is_written_shard(pool.info.get_relative_shard(pg_shard.shard))) {
 	  if (pi.last_update < p->version) {
 	    if (!shards_with_update.contains(pg_shard.shard)) {
 	      shards_without_update.insert(pg_shard.shard);
@@ -3581,7 +3581,7 @@ void PeeringState::proc_master_log(
       if (invalidate_stats && my_info.stats.version == olog.head &&
           (!pool.info.is_nonprimary_shard(shard.shard) ||
            (head_log_entry &&
-            head_log_entry->is_written_shard(shard.shard)))) {
+            head_log_entry->is_written_shard(pool.info.get_relative_shard(shard.shard))))) {
         oinfo.stats = my_info.stats;
         invalidate_stats = false;
         psdout(10) << "keeping stats for " << shard
@@ -3620,8 +3620,8 @@ void PeeringState::proc_master_log(
       (pool.info.allows_ecoptimizations() &&
        pool.info.is_nonprimary_shard(from.shard) &&
       (!head_log_entry ||
-       !head_log_entry->is_written_shard(from.shard)))){
-    invalidate_stats = true;
+       !head_log_entry->is_written_shard(pool.info.get_relative_shard(from.shard))))){
+   invalidate_stats = true;
   }
 
   info.stats.stats_invalid |= invalidate_stats;
@@ -3669,7 +3669,7 @@ void PeeringState::proc_replica_log(
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
 	       &olog);
   }
-  pg_log.proc_replica_log(oinfo, olog, omissing, from, pg_whoami, pool.info.allows_ecoptimizations());
+  pg_log.proc_replica_log(oinfo, olog, omissing, from, pg_whoami, pool.info.allows_ecoptimizations(), pool.info);
 
   peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
