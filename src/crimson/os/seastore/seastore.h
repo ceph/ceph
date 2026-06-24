@@ -49,6 +49,7 @@ enum class op_type_t : uint8_t {
 
 enum class txn_stage_t : uint8_t {
     COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
+    COLLOCK_HOLD,      // collection ordering_lock held (acquire -> release at prepare_record)
     THROTTLER_WAIT,    // waiting for a throttler slot
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD

@@ -215,6 +215,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
+    {txn_stage_t::COLLOCK_HOLD,          sm::label_instance("stage", "collock_hold")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
@@ -1743,7 +1744,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   co_await ctx.transaction->get_handle().take_collection_lock(
     static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
   );
-  auto collock_wait = std::chrono::steady_clock::now() - t_pre_collock;
+  auto t_post_collock = std::chrono::steady_clock::now();
+  auto collock_wait = t_post_collock - t_pre_collock;
+  ctx.transaction->get_handle().set_lock_acquire_time(t_post_collock);
 
   assert(shard_stats.waiting_collock_io_num);
   --(shard_stats.waiting_collock_io_num);
@@ -1818,6 +1821,8 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   DEBUGT("done", *ctx.transaction);
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   add_stage_latency_sample(txn_stage_t::COLLOCK_WAIT, collock_wait);
+  add_stage_latency_sample(txn_stage_t::COLLOCK_HOLD,
+                           ctx.transaction->get_handle().get_lock_hold_time());
   add_stage_latency_sample(txn_stage_t::THROTTLER_WAIT, throttler_wait);
   add_stage_latency_sample(txn_stage_t::BUILD, ctx.build_time);
   add_stage_latency_sample(txn_stage_t::BUILD_GET_ONODE, ctx.get_onode_time);
