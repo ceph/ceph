@@ -619,8 +619,13 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
                 self.log.debug("attempting reopen of database")
-                self.close_db()
-                self.open_db()
+                try:
+                    self.close_db()
+                    self.open_db()
+                except sqlite3.DatabaseError as e2:
+                    self.log.warning(
+                        f"reopen attempt {retries}/{MAX_DBCLEANUP_RETRIES} failed: {e2}"
+                    )
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
