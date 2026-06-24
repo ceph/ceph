@@ -16,6 +16,7 @@ from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UP
     CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
+from ceph.cephadm.version_entry import UpgradeStatus
 
 from mgr_module import MonCommandFailed
 
@@ -555,6 +556,9 @@ class CephadmUpgrade:
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None,
                       bucket_type: Optional[str] = None, bucket_name: Optional[str] = None) -> str:
+        # params variable needs to be at the top to only capture the parameters
+        params = locals()
+
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
             'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
@@ -633,6 +637,13 @@ class CephadmUpgrade:
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
+        # Stores upgrade attempt in version tracker
+        self.mgr.version_tracker.add_cluster_version(
+            version=target_name,
+            time=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            status=UpgradeStatus.STARTED,
+            params={k: v for k, v in params.items() if k != 'self'}
+        )
         return 'Initiating upgrade to %s' % (target_name)
 
     def _validate_upgrade_filters(self, target_name: str, daemon_types: Optional[List[str]] = None, hosts: Optional[List[str]] = None, services: Optional[List[str]] = None) -> None:
@@ -769,6 +780,7 @@ class CephadmUpgrade:
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
+        self.mgr.version_tracker.update_cluster_version_status(status=UpgradeStatus.STOPPED)
         return 'Stopped upgrade to %s' % target_image
 
     def update_service(self, service_type: str, service_image: str, image: str) -> List[str]:
@@ -1744,13 +1756,10 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
-        if self.mgr.version_tracker.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc))):
-            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + str(self.mgr._version) + '" added successfully')
-        else:
-            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + str(self.mgr._version) + '" could not be added')
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
+        self.mgr.version_tracker.update_cluster_version_status(status=UpgradeStatus.COMPLETE)
 
     def _do_upgrade(self):
         # type: () -> None

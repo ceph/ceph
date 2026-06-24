@@ -121,7 +121,7 @@ class CephadmServe:
                     self._check_for_moved_osds()
 
                     self._retry_failed_operations()
-                        
+
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
 
@@ -130,12 +130,6 @@ class CephadmServe:
 
                     if self.mgr.upgrade.continue_upgrade():
                         continue
-
-                    if not self.mgr.bootstrap_version_stored:
-                        if self.mgr.db_ready():
-                            self.mgr.version_tracker.add_bootstrap_cluster_version()
-                        else:
-                            self.mgr.log.debug('Version Tracker, cluster bootstrap version "' + str(self.mgr._version) + '" could not be added during Cephadm serve loop: mgr db not ready')
 
                     # refresh node-proxy cache
                     self.mgr.node_proxy_cache.load()
