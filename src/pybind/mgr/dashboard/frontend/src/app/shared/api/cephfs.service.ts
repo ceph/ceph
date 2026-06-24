@@ -9,6 +9,67 @@ import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import { Daemon } from '../models/cephfs.model';
 
+export interface SnapshotMirrorStatusResponse {
+  metrics: {
+    [path: string]: {
+      peer: {
+        [peerId: string]: {
+          state: string;
+          current_sync_snap?: {
+            name: string;
+            files?: string | number;
+            bytes?: string | number;
+            eta_completion?: string;
+            files_synced?: number;
+            total_files?: number;
+            bytes_synced?: number;
+            total_bytes?: number;
+          };
+          current_syncing_snap?: {
+            id?: number;
+            name: string;
+            'sync-mode'?: string;
+            avg_read_throughput_bytes?: string;
+            avg_write_throughput_bytes?: string;
+            crawl?: {
+              state?: string;
+              duration?: string;
+            };
+            datasync_queue_wait?: {
+              state?: string;
+              duration?: string;
+            };
+            bytes?: {
+              sync_bytes?: string;
+              total_bytes?: string;
+              sync_percent?: string;
+            };
+            files?: {
+              sync_files?: number;
+              total_files?: number;
+              sync_percent?: string;
+            };
+            eta?: string;
+          };
+          last_synced_snap?: {
+            id: number;
+            name: string;
+            crawl_duration?: string;
+            datasync_queue_wait_duration?: string;
+            sync_duration?: string;
+            sync_time_stamp?: string;
+            sync_bytes?: string;
+            sync_files?: number;
+          };
+          snaps_synced?: number;
+          snaps_deleted?: number;
+          snaps_renamed?: number;
+        };
+      };
+    };
+  };
+}
+
 @cdEncode
 @Injectable({
   providedIn: 'root'
@@ -157,7 +218,7 @@ export class CephfsService {
     fsName: string,
     mirroredDirPath?: string,
     peerUuid?: string
-  ): Observable<any> {
+  ): Observable<SnapshotMirrorStatusResponse> {
     let params = new HttpParams();
     if (mirroredDirPath) {
       params = params.append('mirrored_dir_path', mirroredDirPath);
@@ -165,6 +226,9 @@ export class CephfsService {
     if (peerUuid) {
       params = params.append('peer_uuid', peerUuid);
     }
-    return this.http.get(`${this.baseURL}/mirror/snapshot-mirror-status/${fsName}`, { params });
+    return this.http.get<SnapshotMirrorStatusResponse>(
+      `${this.baseURL}/mirror/snapshot-mirror-status/${fsName}`,
+      { params }
+    );
   }
 }

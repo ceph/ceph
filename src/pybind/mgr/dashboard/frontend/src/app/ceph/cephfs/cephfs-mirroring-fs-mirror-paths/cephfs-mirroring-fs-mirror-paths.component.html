@@ -1,57 +1,157 @@
-<div class="cephfs-mirroring-fs-mirror-paths">
-  <span class="cds--type-heading-03 cds-mt-6">Mirror paths</span>
-    <div class="cds-mt-6">
-      <cd-table
-        [data]="mirrorPaths"
-        [columns]="columns"
-        columnMode="flex"
-        selectionType="single"
-        [hasDetails]="false"
-        (updateSelection)="onSelectionChange($event)"
-        [toolHeader]="true"
-        [searchableObjects]="true"
-        (fetchData)="fetchFsName()">
+<span class="cds--type-heading-03 cds-mt-6">Mirror paths</span>
+<div class="cds-mt-6">
+  <cd-table
+    [data]="mirrorPaths"
+    [columns]="columns"
+    columnMode="flex"
+    [hasDetails]="false"
+    [autoReload]="5000"
+    [toolHeader]="true"
+    [searchableObjects]="true"
+    (fetchData)="loadMirrorPaths()">
 
-        <ng-template
-          #pathTpl
-          let-row="data.row">
-          <a href="javascript:void(0)" 
-            (click)="onPathClick(row)"
-            class="path-link">
-            {{ row.path }}
-          </a>
-        </ng-template>
+    <ng-template
+      #pathTpl
+      let-row="data.row">
+      <a href="javascript:void(0)"
+        (click)="onPathClick(row)"
+        class="cds--link">
+        {{ row.path }}
+      </a>
+    </ng-template>
 
-        <ng-template
-          #syncStatusTpl
-          let-row="data.row">
-          <div class="d-flex align-items-center">
-            <svg
-              [cdsIcon]="getSyncStatusIcon(row.syncStatus)"
-              [size]="icons.size16"
-              [ngClass]="['me-2', getSyncStatusClass(row.syncStatus)]"></svg>
-            <span>{{ row.syncStatus | titlecase }}</span>
-          </div>
-        </ng-template>
+    <ng-template
+      #syncStatusTpl
+      let-row="data.row">
+      <div class="d-flex align-items-center">
+        <cd-icon
+          [type]="getSyncStatusIcon(row.syncStatus)"
+          [ngClass]="['cds-mr-2', getSyncStatusClass(row.syncStatus)]">
+        </cd-icon>
+        <span>{{ row.syncStatus | titlecase }}</span>
+      </div>
+    </ng-template>
 
-        <ng-template
-          #currentSyncSnapshotTpl
-          let-row="data.row">
-          <div>
-            <div>{{ row.currentSyncSnapshot }}</div>
-            <div *ngIf="row.currentSyncEta" class="cds--type-helper-text-01">
-              ETA: {{ row.currentSyncEta }}
+    <ng-template
+      #currentSyncSnapshotTpl
+      let-row="data.row">
+      <div>
+        <div>{{ row.currentSyncSnapshot }}</div>
+        <div *ngIf="row.currentSyncEta" class="cds--type-helper-text-01">
+          Time remaining: {{ row.currentSyncEta }}
+        </div>
+      </div>
+    </ng-template>
+  </cd-table>
+</div>
+
+<cd-side-panel
+  *ngIf="selectedPath"
+  [expanded]="sidePanelOpen"
+  [headerText]="selectedPath.path"
+  size="xl"
+  (closed)="closeSidePanel()">
+  <div class="panel-content">
+    <div class="side-panel-content">
+    <cds-tabs type="line">
+      <cds-tab heading="Details"
+               i18n-heading>
+        <div class="cds-p-4">
+          <!-- Replication status section -->
+          <div class="cds-mb-6">
+            <h5 class="cds--type-heading-compact-01 cds-mb-4"
+                i18n>Replication status</h5>
+
+            <div class="cds-mb-4">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Sync status</div>
+              <div class="d-flex align-items-center">
+                <cd-icon
+                  [type]="getSyncStatusIcon(selectedPath.syncStatus)"
+                  [ngClass]="['cds-mr-2', getSyncStatusClass(selectedPath.syncStatus)]">
+                </cd-icon>
+                <span class="cds--type-body-01">{{ selectedPath.syncStatus | titlecase }}</span>
+              </div>
+            </div>
+
+            <div class="cds-mb-4">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Current snapshot</div>
+              <div class="cds--type-body-01">{{ selectedPath.currentSyncSnapshot }}</div>
+            </div>
+
+            <div class="cds-mb-4">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Last replicated snapshot</div>
+              <div class="cds--type-body-01">{{ selectedPath.lastSyncedSnapshot }}</div>
             </div>
           </div>
-        </ng-template>
-      </cd-table>
-    </div>
 
-    <cd-side-panel
-      *ngIf="selectedPath"
-      [expanded]="sidePanelOpen"
-      [headerText]="selectedPath.path"
-      size="xl"
-      (closed)="closeSidePanel()">
-    </cd-side-panel>
-</div>
+          <!-- Current snapshot progress section -->
+          <div class="cds-mb-6"
+                *ngIf="selectedPath.syncStatus === 'syncing' && selectedPath.syncProgress !== undefined">
+            <hr>
+
+            <h5 class="cds--type-heading-compact-01 cds-mb-4"
+                i18n>Current snapshot progress</h5>
+
+            <div class="cds-mb-4">
+              <div class="cds--type-body-01 cds-mb-2">
+                <strong>{{ selectedPath.syncProgress }}% synced</strong>
+              </div>
+              <cds-progress-bar
+                [max]="100"
+                [value]="selectedPath.syncProgress || 0"
+                status="active"
+                type="inline"
+                size="small">
+              </cds-progress-bar>
+            </div>
+
+            <div class="cds-mb-4"
+                 *ngIf="selectedPath.filesSynced !== undefined && selectedPath.totalFiles !== undefined">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Files Synced</div>
+              <div class="cds--type-body-01">{{ selectedPath.filesSynced }}/{{ selectedPath.totalFiles }}</div>
+            </div>
+
+            <div class="cds-mb-4"
+                 *ngIf="selectedPath.bytesSynced !== undefined && selectedPath.totalBytes !== undefined">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Bytes Synced</div>
+              <div class="cds--type-body-01">{{ selectedPath.bytesSynced | dimlessBinary }}/{{ selectedPath.totalBytes | dimlessBinary }}</div>
+            </div>
+
+            <div class="cds-mb-4"
+                 *ngIf="selectedPath.currentSyncEta">
+              <div class="cds--type-label-01 cds-mb-2"
+                   i18n>Estimated time remaining</div>
+              <div class="cds--type-body-01">{{ selectedPath.currentSyncEta }}</div>
+            </div>
+          </div>
+        </div>
+      </cds-tab>
+
+      <cds-tab heading="Snapshots"
+               i18n-heading>
+        <div class="cds-p-4">
+          <div class="cds--type-body-01"
+               i18n>
+            Snapshot information will be displayed here.
+          </div>
+        </div>
+      </cds-tab>
+
+      <cds-tab heading="Schedule policy"
+               i18n-heading>
+        <div class="cds-p-4">
+          <div class="cds--type-body-01"
+               i18n>
+            Schedule policy information will be displayed here.
+          </div>
+        </div>
+      </cds-tab>
+    </cds-tabs>
+    </div>
+  </div>
+</cd-side-panel>
