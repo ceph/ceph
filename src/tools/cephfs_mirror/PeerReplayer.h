@@ -9,7 +9,9 @@
 #include "mds/FSMap.h"
 #include "ServiceDaemon.h"
 #include "Types.h"
+#include "json_spirit/json_spirit.h"
 
+#include <set>
 #include <stack>
 #include <boost/optional.hpp>
 
@@ -24,7 +26,7 @@ public:
   PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                RadosRef local_cluster, const Filesystem &filesystem,
                const Peer &peer, const std::set<std::string, std::less<>> &directories,
-               MountRef mount, ServiceDaemon *service_daemon);
+               IoCtxRef local_ioctx, MountRef mount, ServiceDaemon *service_daemon);
   ~PeerReplayer();
 
   // initialize replayer for a peer
@@ -37,7 +39,7 @@ public:
   void add_directory(std::string_view dir_root);
 
   // remove a directory from queue
-  void remove_directory(std::string_view dir_root);
+  void remove_directory(std::string_view dir_root, bool purging = false);
 
   // admin socket helpers
   void peer_status(Formatter *f);
@@ -50,6 +52,7 @@ private:
 
   inline static const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
   inline static const std::string SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY = "recovery_count";
+  inline static const std::string PEER_SYNC_STAT_KEY_PREFIX = "sync_stat";
 
   using Snapshot = std::pair<std::string, uint64_t>;
 
@@ -456,6 +459,32 @@ private:
     sync_stat.last_failed_reason = boost::none;
   }
 
+  void _reset_last_synced_snap_stat(const std::string &dir_root) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.last_synced = clock::zero();
+    sync_stat.last_sync_duration.reset();
+    sync_stat.last_sync_crawl_duration.reset();
+    sync_stat.last_sync_datasync_queue_wait_duration.reset();
+    sync_stat.last_sync_bytes.reset();
+    sync_stat.last_sync_files.reset();
+  }
+
+  void reconcile_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
+                                  const std::string &snap_name) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    if (sync_stat.last_synced_snap &&
+        sync_stat.last_synced_snap->first == snap_id &&
+        sync_stat.last_synced_snap->second == snap_name) {
+      return;
+    }
+    _reset_last_synced_snap_stat(dir_root);
+    _set_last_synced_snap(dir_root, snap_id, snap_name);
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_last_sync_perf_counters(dir_perf, sync_stat);
+    }
+  }
+
   void _reset_sync_stat(const std::string &dir_root) {
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes = 0;
@@ -647,12 +676,14 @@ private:
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
   RadosRef m_local_cluster;
+  IoCtxRef m_local_ioctx;
   Filesystem m_filesystem;
   Peer m_peer;
   // probably need to be encapsulated when supporting cancelations
   std::map<std::string, DirRegistry> m_registered;
   std::vector<std::string> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
+  std::set<std::string> m_purging_directories;
   MountRef m_local_mount;
   ServiceDaemon *m_service_daemon;
   PeerReplayerAdminSocketHook *m_asok_hook = nullptr;
@@ -707,11 +738,22 @@ private:
 
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
-  void unregister_directory(const std::string &dir_root);
+  void unregister_directory(const std::string &dir_root,
+                            std::unique_lock<ceph::mutex> &locker);
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
   int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  void load_persisted_dir_sync_stats();
+  void load_persisted_dir_sync_stat(const std::string &dir_root);
+  void apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat, const bufferlist &bl);
+  void remove_persisted_dir_sync_stat(const std::string &dir_root);
+  void persist_dir_sync_stat(const std::string &dir_root);
+  void add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
+                                        SnapSyncStat &sync_stat);
+  void add_last_sync_metrics_to_persist(json_spirit::mObject &obj,
+                                        SnapSyncStat &sync_stat);
+  std::string peer_sync_stat_omap_key(std::string_view dir_root) const;
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,

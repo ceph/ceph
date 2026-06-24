@@ -10,6 +10,7 @@
 #include <boost/scope_exit.hpp>
 
 #include "common/admin_socket.h"
+#include "common/Clock.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -20,6 +21,7 @@
 #include "FSMirror.h"
 #include "PeerReplayer.h"
 #include "Utils.h"
+#include "aio_utils.h"
 
 #include "json_spirit/json_spirit.h"
 
@@ -87,6 +89,9 @@ namespace {
 
 const std::string PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer";
 
+// Matches the mgr mirroring omap read batch size (dir_map/load.py MAX_RETURN).
+constexpr size_t SYNC_STAT_OMAP_LOAD_BATCH_SIZE = 256;
+
 std::string snapshot_dir_path(CephContext *cct, const std::string &path) {
   return path + "/" + cct->_conf->client_snapdir;
 }
@@ -116,6 +121,54 @@ std::map<std::string, std::string> decode_snap_metadata(snap_metadata *snap_meta
 std::string peer_config_key(const std::string &fs_name, const std::string &uuid) {
   return PEER_CONFIG_KEY_PREFIX + "/" + fs_name + "/" + uuid;
 }
+
+bool get_json_value(const json_spirit::mObject& obj,
+                    const std::string& key,
+                    json_spirit::mValue *val) {
+  auto it = obj.find(key);
+  if (it != obj.end()) {
+    *val = it->second;
+    return true;
+  }
+  return false;
+}
+
+double monotime_to_double(monotime t) {
+  return sec_duration(t.time_since_epoch()).count();
+}
+
+monotime monotime_from_double(double seconds) {
+  auto d = std::chrono::duration_cast<clock::duration>(sec_duration(seconds));
+  return monotime(d);
+}
+
+struct C_PersistSyncStatAio : Context {
+  std::string dir_root;
+
+  explicit C_PersistSyncStatAio(std::string dir_root_)
+    : dir_root(std::move(dir_root_)) {}
+
+  void finish(int r) override {
+    if (r < 0) {
+      generic_derr << "cephfs::mirror: aio persist sync stats failed for dir_root="
+                     << dir_root << ": " << cpp_strerror(r) << dendl;
+    }
+  }
+};
+
+struct C_RemovePersistedSyncStatAio : Context {
+  std::string dir_root;
+
+  explicit C_RemovePersistedSyncStatAio(std::string dir_root_)
+    : dir_root(std::move(dir_root_)) {}
+
+  void finish(int r) override {
+    if (r < 0 && r != -ENOENT) {
+      generic_derr << "cephfs::mirror: aio remove persisted sync stats failed for dir_root="
+                     << dir_root << ": " << cpp_strerror(r) << dendl;
+    }
+  }
+};
 
 class PeerAdminSocketCommand {
 public:
@@ -201,10 +254,11 @@ private:
 PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                            RadosRef local_cluster, const Filesystem &filesystem,
                            const Peer &peer, const std::set<std::string, std::less<>> &directories,
-                           MountRef mount, ServiceDaemon *service_daemon)
+                           IoCtxRef local_ioctx, MountRef mount, ServiceDaemon *service_daemon)
   : m_cct(cct),
     m_fs_mirror(fs_mirror),
     m_local_cluster(local_cluster),
+    m_local_ioctx(local_ioctx),
     m_filesystem(filesystem),
     m_peer(peer),
     m_directories(directories.begin(), directories.end()),
@@ -271,10 +325,6 @@ uint64_t percent_basis_points(uint64_t num, uint64_t den) {
     return 0;
   }
   return static_cast<uint64_t>((static_cast<double>(num) * 10000.0) / den);
-}
-
-double monotime_to_double(monotime t) {
-  return sec_duration(t.time_since_epoch()).count();
 }
 
 void PeerReplayer::create_directory_perf_counters(const std::string &dir_root) {
@@ -543,6 +593,7 @@ int PeerReplayer::init() {
   for (auto &dir_root : m_directories) {
     m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
   }
+  load_persisted_dir_sync_stats();
   for (auto &dir_root : m_directories) {
     create_directory_perf_counters(dir_root);
     auto *dir_perf = find_directory_perf_counters(dir_root);
@@ -687,14 +738,18 @@ void PeerReplayer::add_directory(string_view dir_root) {
   dout(20) << ": dir_root=" << dir_root << dendl;
   auto _dir_root = std::string(dir_root);
 
-  std::scoped_lock locker(m_lock);
-  if (std::find(m_directories.begin(), m_directories.end(), _dir_root) !=
-      m_directories.end()) {
-    dout(10) << ": dir_root=" << _dir_root << " already in replay list" << dendl;
-    return;
+  {
+    std::scoped_lock locker(m_lock);
+    if (std::find(m_directories.begin(), m_directories.end(), _dir_root) !=
+        m_directories.end()) {
+      dout(10) << ": dir_root=" << _dir_root << " already in replay list" << dendl;
+      return;
+    }
+    m_directories.emplace_back(_dir_root);
+    m_snap_sync_stats.emplace(_dir_root, SnapSyncStat());
   }
-  m_directories.emplace_back(_dir_root);
-  m_snap_sync_stats.emplace(_dir_root, SnapSyncStat());
+  load_persisted_dir_sync_stat(_dir_root);
+  std::scoped_lock locker(m_lock);
   if (m_directory_perf_counters.find(_dir_root) ==
       m_directory_perf_counters.end()) {
     create_directory_perf_counters(_dir_root);
@@ -707,24 +762,391 @@ void PeerReplayer::add_directory(string_view dir_root) {
   m_cond.notify_all();
 }
 
-void PeerReplayer::remove_directory(string_view dir_root) {
-  dout(20) << ": dir_root=" << dir_root << dendl;
+void PeerReplayer::remove_directory(string_view dir_root, bool purging) {
+  dout(20) << ": dir_root=" << dir_root << ", purging=" << purging << dendl;
   auto _dir_root = std::string(dir_root);
+  bool persist_idle = false;
+
+  {
+    std::scoped_lock locker(m_lock);
+    auto it = std::find(m_directories.begin(), m_directories.end(), _dir_root);
+    if (it != m_directories.end()) {
+      m_directories.erase(it);
+    }
+
+    auto it1 = m_registered.find(_dir_root);
+    if (it1 == m_registered.end()) {
+      if (purging) {
+        remove_persisted_dir_sync_stat(_dir_root);
+      }
+      remove_directory_perf_counters(_dir_root);
+      m_snap_sync_stats.erase(_dir_root);
+    } else {
+      it1->second.canceled = true;
+      if (purging) {
+        m_purging_directories.insert(_dir_root);
+      } else {
+        auto &sync_stat = m_snap_sync_stats.at(_dir_root);
+        sync_stat.current_syncing_snap = boost::none;
+        if (auto *dir_perf = find_directory_perf_counters(_dir_root)) {
+          update_directory_current_sync_perf_counters(dir_perf, sync_stat);
+        }
+        persist_idle = true;
+      }
+    }
+    m_cond.notify_all();
+  }
+
+  if (persist_idle) {
+    persist_dir_sync_stat(_dir_root);
+  }
+}
+
+std::string PeerReplayer::peer_sync_stat_omap_key(std::string_view dir_root) const {
+  // dir_root is usually absolute (e.g. "/d0"); avoid ".../uuid//d0" from an extra slash.
+  std::string d(dir_root);
+  while (!d.empty() && d.front() == '/') {
+    d.erase(0, 1);
+  }
+  return PEER_SYNC_STAT_KEY_PREFIX + "/" + m_filesystem.fs_name + "/" + m_peer.uuid
+         + "/" + d;
+}
+
+void PeerReplayer::apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat,
+                                                 const bufferlist &bl) {
+  json_spirit::mValue root;
+  if (!json_spirit::read(bl.to_str(), root) || root.type() != json_spirit::obj_type) {
+    return;
+  }
+
+  auto &obj = root.get_obj();
+  json_spirit::mValue v;
+
+  if (get_json_value(obj, "last_synced_snap", &v) && v.type() == json_spirit::obj_type) {
+    auto &last_synced_snap = v.get_obj();
+    if (get_json_value(last_synced_snap, "id", &v)) {
+      uint64_t snap_id = v.get_uint64();
+      if (get_json_value(last_synced_snap, "name", &v)) {
+        sync_stat.last_synced_snap = std::make_pair(snap_id, v.get_str());
+      }
+    }
+    if (get_json_value(last_synced_snap, "crawl_duration", &v)) {
+      sync_stat.last_sync_crawl_duration = v.get_real();
+    }
+    if (get_json_value(last_synced_snap, "datasync_queue_wait_duration", &v)) {
+      sync_stat.last_sync_datasync_queue_wait_duration = v.get_real();
+    }
+    if (get_json_value(last_synced_snap, "sync_duration", &v)) {
+      sync_stat.last_sync_duration = v.get_real();
+    }
+    if (get_json_value(last_synced_snap, "sync_time_stamp", &v)) {
+      sync_stat.last_synced = monotime_from_double(v.get_real());
+    }
+    if (get_json_value(last_synced_snap, "sync_bytes", &v)) {
+      sync_stat.last_sync_bytes = v.get_uint64();
+    }
+    if (get_json_value(last_synced_snap, "sync_files", &v)) {
+      sync_stat.last_sync_files = v.get_uint64();
+    }
+  }
+}
+
+void PeerReplayer::load_persisted_dir_sync_stat(const std::string &dir_root) {
+  ceph_assert(m_local_ioctx);
+
+  const std::string key = peer_sync_stat_omap_key(dir_root);
+  std::set<std::string> keys{key};
+  std::map<std::string, bufferlist> vals;
+  // Sync call is fine since it's called once during add_directory
+  int r = m_local_ioctx->omap_get_vals_by_keys(CEPHFS_MIRROR_OBJECT, keys, &vals);
+  if (r == -ENOENT) {
+    return;
+  }
+  if (r < 0) {
+    derr << ": failed to read persisted sync stat for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  auto vit = vals.find(key);
+  if (vit == vals.end()) {
+    return;
+  }
 
   std::scoped_lock locker(m_lock);
-  auto it = std::find(m_directories.begin(), m_directories.end(), _dir_root);
-  if (it != m_directories.end()) {
-    m_directories.erase(it);
+  auto st_it = m_snap_sync_stats.find(dir_root);
+  if (st_it == m_snap_sync_stats.end()) {
+    return;
+  }
+  apply_persisted_dir_sync_stat(st_it->second, vit->second);
+}
+
+void PeerReplayer::load_persisted_dir_sync_stats() {
+  ceph_assert(m_local_ioctx);
+  if (m_directories.empty()) {
+    return;
   }
 
-  auto it1 = m_registered.find(_dir_root);
-  if (it1 == m_registered.end()) {
-    remove_directory_perf_counters(_dir_root);
-    m_snap_sync_stats.erase(_dir_root);
-  } else {
-    it1->second.canceled = true;
+  std::vector<std::string> omap_keys;
+  omap_keys.reserve(m_directories.size());
+  std::map<std::string, std::string> key_to_dir;
+  for (const auto &dir_root : m_directories) {
+    const std::string key = peer_sync_stat_omap_key(dir_root);
+    omap_keys.push_back(key);
+    key_to_dir[key] = dir_root;
   }
-  m_cond.notify_all();
+
+  std::map<std::string, bufferlist> all_vals;
+
+  auto fetch_keys = [&](const std::set<std::string> &keys) -> int {
+    if (keys.empty()) {
+      return 0;
+    }
+    std::map<std::string, bufferlist> vals;
+    // Sync call is fine since the stats are loaded once during startup
+    int r = m_local_ioctx->omap_get_vals_by_keys(CEPHFS_MIRROR_OBJECT, keys, &vals);
+    if (r == -ENOENT) {
+      return 0;
+    }
+    if (r < 0) {
+      return r;
+    }
+    all_vals.merge(std::move(vals));
+    return 0;
+  };
+
+  if (m_directories.size() <= SYNC_STAT_OMAP_LOAD_BATCH_SIZE) {
+    std::set<std::string> keys(omap_keys.begin(), omap_keys.end());
+    int r = fetch_keys(keys);
+    if (r < 0) {
+      derr << ": failed to read persisted sync stats: " << cpp_strerror(r) << dendl;
+      return;
+    }
+  } else {
+    for (size_t i = 0; i < omap_keys.size(); i += SYNC_STAT_OMAP_LOAD_BATCH_SIZE) {
+      std::set<std::string> keys;
+      const size_t end = std::min(i + SYNC_STAT_OMAP_LOAD_BATCH_SIZE, omap_keys.size());
+      for (size_t j = i; j < end; ++j) {
+        keys.insert(omap_keys[j]);
+      }
+      int r = fetch_keys(keys);
+      if (r < 0) {
+        derr << ": failed to read persisted sync stats: " << cpp_strerror(r) << dendl;
+        return;
+      }
+    }
+  }
+
+  std::scoped_lock locker(m_lock);
+  for (auto &[key, bl] : all_vals) {
+    auto kit = key_to_dir.find(key);
+    if (kit == key_to_dir.end()) {
+      continue;
+    }
+    auto st_it = m_snap_sync_stats.find(kit->second);
+    if (st_it == m_snap_sync_stats.end()) {
+      continue;
+    }
+    apply_persisted_dir_sync_stat(st_it->second, bl);
+  }
+}
+
+void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
+  ceph_assert(m_local_ioctx);
+
+  const std::string key = peer_sync_stat_omap_key(dir_root);
+  dout(5) << ": removing persisted sync stat omap key=" << key
+          << " for dir_root=" << dir_root << dendl;
+  librados::ObjectWriteOperation write_op;
+  write_op.omap_rm_keys({key});
+
+  Context *ctx = new C_RemovePersistedSyncStatAio(dir_root);
+  librados::AioCompletion *aio_comp = create_rados_callback(ctx);
+  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  if (r < 0) {
+    delete ctx;
+    derr << ": failed to submit aio remove persisted sync stats for dir_root="
+         << dir_root << ": " << cpp_strerror(r) << dendl;
+    aio_comp->release();
+    return;
+  }
+  aio_comp->release();
+}
+
+void PeerReplayer::add_live_sync_metrics_to_persist(json_spirit::mObject &obj,
+                                                    SnapSyncStat &sync_stat) {
+  if (sync_stat.current_syncing_snap) {
+    json_spirit::mObject snap;
+    snap["id"] =
+      json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.current_syncing_snap->first));
+    snap["name"] = json_spirit::mValue(sync_stat.current_syncing_snap->second);
+    snap["sync-mode"] = json_spirit::mValue(sync_stat.snapdiff ? "delta" : "full");
+
+    double read_bps = sync_stat.read_time_sec > 0 ?
+        sync_stat.bytes_read / sync_stat.read_time_sec : 0;
+    double write_bps = sync_stat.write_time_sec > 0 ?
+        sync_stat.bytes_written / sync_stat.write_time_sec : 0;
+    snap["avg_read_throughput_bytes"] =
+      json_spirit::mValue(format_bytes(read_bps) + "/s");
+    snap["avg_write_throughput_bytes"] =
+      json_spirit::mValue(format_bytes(write_bps) + "/s");
+
+    json_spirit::mObject crawl;
+    if (sync_stat.crawl_finished) {
+      crawl["state"] = json_spirit::mValue("completed");
+      crawl["duration"] = json_spirit::mValue(format_time(sync_stat.crawl_duration));
+    } else {
+      crawl["state"] = json_spirit::mValue("in-progress");
+      auto cur_time = clock::now();
+      sec_duration crawl_duration_till_now =
+        sec_duration(cur_time - sync_stat.crawl_start_time);
+      crawl["duration"] =
+        json_spirit::mValue(format_time(crawl_duration_till_now.count()));
+    }
+    snap["crawl"] = json_spirit::mValue(crawl);
+
+    if (sync_stat.datasync_queue_wait_duration ||
+        sync_stat.datasync_queue_wait_start_time) {
+      json_spirit::mObject datasync_queue_wait;
+      if (sync_stat.datasync_queue_wait_duration) {
+        datasync_queue_wait["state"] = json_spirit::mValue("completed");
+        datasync_queue_wait["duration"] =
+          json_spirit::mValue(format_time(*sync_stat.datasync_queue_wait_duration));
+      } else {
+        datasync_queue_wait["state"] = json_spirit::mValue("waiting");
+        auto cur_time = clock::now();
+        sec_duration dq_wait =
+          sec_duration(cur_time - *sync_stat.datasync_queue_wait_start_time);
+        datasync_queue_wait["duration"] =
+          json_spirit::mValue(format_time(dq_wait.count()));
+      }
+      snap["datasync_queue_wait"] = json_spirit::mValue(datasync_queue_wait);
+    }
+
+    json_spirit::mObject bytes;
+    bytes["sync_bytes"] = json_spirit::mValue(format_bytes(sync_stat.sync_bytes));
+    bytes["total_bytes"] = json_spirit::mValue(format_bytes(sync_stat.total_bytes));
+    if (sync_stat.total_bytes > 0) {
+      double sync_pct =
+        (static_cast<double>(sync_stat.sync_bytes) * 100.0) / sync_stat.total_bytes;
+      std::ostringstream os;
+      os << std::fixed << std::setprecision(2) << sync_pct << "%";
+      bytes["sync_percent"] = json_spirit::mValue(os.str());
+    }
+    snap["bytes"] = json_spirit::mValue(bytes);
+
+    json_spirit::mObject files;
+    files["sync_files"] =
+      json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.sync_files));
+    files["total_files"] =
+      json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.total_files));
+    if (sync_stat.total_files > 0) {
+      double sync_file_pct =
+        (static_cast<double>(sync_stat.sync_files) * 100.0) / sync_stat.total_files;
+      std::ostringstream os;
+      os << std::fixed << std::setprecision(2) << sync_file_pct << "%";
+      files["sync_percent"] = json_spirit::mValue(os.str());
+    }
+    snap["files"] = json_spirit::mValue(files);
+
+    double eta = compute_eta(sync_stat);
+    if (eta == -1.0) {
+      snap["eta"] = json_spirit::mValue("calculating...");
+    } else {
+      snap["eta"] = json_spirit::mValue(format_time(eta));
+    }
+
+    obj["state"] = json_spirit::mValue("syncing");
+    obj["current_syncing_snap"] = json_spirit::mValue(snap);
+  } else if (sync_stat.failed) {
+    obj["state"] = json_spirit::mValue("failed");
+    if (sync_stat.last_failed_reason) {
+      obj["failure_reason"] = json_spirit::mValue(*sync_stat.last_failed_reason);
+    }
+  } else {
+    obj["state"] = json_spirit::mValue("idle");
+  }
+}
+
+void PeerReplayer::add_last_sync_metrics_to_persist(json_spirit::mObject &obj,
+                                                    SnapSyncStat &sync_stat) {
+  if (sync_stat.last_synced_snap) {
+    json_spirit::mObject snap;
+    snap["id"] =
+      json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.last_synced_snap->first));
+    snap["name"] = json_spirit::mValue(sync_stat.last_synced_snap->second);
+    if (sync_stat.last_sync_crawl_duration) {
+      snap["crawl_duration"] = json_spirit::mValue(*sync_stat.last_sync_crawl_duration);
+    }
+    if (sync_stat.last_sync_datasync_queue_wait_duration) {
+      snap["datasync_queue_wait_duration"] =
+        json_spirit::mValue(*sync_stat.last_sync_datasync_queue_wait_duration);
+    }
+    if (sync_stat.last_sync_duration) {
+      snap["sync_duration"] = json_spirit::mValue(*sync_stat.last_sync_duration);
+    }
+    if (!clock::is_zero(sync_stat.last_synced)) {
+      snap["sync_time_stamp"] =
+        json_spirit::mValue(monotime_to_double(sync_stat.last_synced));
+    }
+    if (sync_stat.last_sync_bytes) {
+      snap["sync_bytes"] =
+        json_spirit::mValue(static_cast<boost::uint64_t>(*sync_stat.last_sync_bytes));
+    }
+    if (sync_stat.last_sync_files) {
+      snap["sync_files"] =
+        json_spirit::mValue(static_cast<boost::uint64_t>(*sync_stat.last_sync_files));
+    }
+    obj["last_synced_snap"] = json_spirit::mValue(snap);
+  }
+
+  obj["snaps_synced"] =
+    json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.synced_snap_count));
+  obj["snaps_deleted"] =
+    json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.deleted_snap_count));
+  obj["snaps_renamed"] =
+    json_spirit::mValue(static_cast<boost::uint64_t>(sync_stat.renamed_snap_count));
+}
+
+void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
+  ceph_assert(m_local_ioctx);
+
+  SnapSyncStat sync_stat;
+  {
+    std::scoped_lock locker(m_lock);
+    auto it = m_snap_sync_stats.find(dir_root);
+    if (it == m_snap_sync_stats.end()) {
+      return;
+    }
+    sync_stat = it->second;
+  }
+
+  json_spirit::mObject obj;
+  add_live_sync_metrics_to_persist(obj, sync_stat);
+  add_last_sync_metrics_to_persist(obj, sync_stat);
+  obj["metrics_updated_at"] =
+    json_spirit::mValue(static_cast<double>(ceph_clock_now()));
+  obj["_instance_id"] =
+    json_spirit::mValue(stringify(m_local_ioctx->get_instance_id()));
+
+  bufferlist bl;
+  bl.append(json_spirit::write(json_spirit::mValue(obj)));
+  std::map<std::string, bufferlist> kv{{peer_sync_stat_omap_key(dir_root), bl}};
+
+  librados::ObjectWriteOperation write_op;
+  write_op.omap_set(kv);
+
+  Context *ctx = new C_PersistSyncStatAio(dir_root);
+  librados::AioCompletion *aio_comp = create_rados_callback(ctx);
+  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  if (r < 0) {
+    delete ctx;
+    derr << ": failed to submit aio persist sync stats for dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    aio_comp->release();
+    return;
+  }
+  aio_comp->release();
 }
 
 void PeerReplayer::enqueue_syncm(const std::shared_ptr<SyncMechanism>& item) {
@@ -778,7 +1200,8 @@ int PeerReplayer::register_directory(const std::string &dir_root,
   return 0;
 }
 
-void PeerReplayer::unregister_directory(const std::string &dir_root) {
+void PeerReplayer::unregister_directory(const std::string &dir_root,
+                                        std::unique_lock<ceph::mutex> &locker) {
   dout(20) << ": dir_root=" << dir_root << dendl;
 
   auto it = m_registered.find(dir_root);
@@ -787,6 +1210,18 @@ void PeerReplayer::unregister_directory(const std::string &dir_root) {
   unlock_directory(it->first, it->second);
   m_registered.erase(it);
   if (std::find(m_directories.begin(), m_directories.end(), dir_root) == m_directories.end()) {
+    if (m_purging_directories.erase(dir_root)) {
+      remove_persisted_dir_sync_stat(dir_root);
+    } else {
+      auto &sync_stat = m_snap_sync_stats.at(dir_root);
+      sync_stat.current_syncing_snap = boost::none;
+      if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+        update_directory_current_sync_perf_counters(dir_perf, sync_stat);
+      }
+      locker.unlock();
+      persist_dir_sync_stat(dir_root);
+      locker.lock();
+    }
     remove_directory_perf_counters(dir_root);
     m_snap_sync_stats.erase(dir_root);
   }
@@ -964,6 +1399,7 @@ int PeerReplayer::propagate_snap_deletes(const std::string &dir_root,
       return r;
     }
     inc_deleted_snap(dir_root);
+    persist_dir_sync_stat(dir_root);
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_deleted);
     }
@@ -990,6 +1426,7 @@ int PeerReplayer::propagate_snap_renames(
       return r;
     }
     inc_renamed_snap(dir_root);
+    persist_dir_sync_stat(dir_root);
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_renamed);
     }
@@ -2595,8 +3032,11 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     auto last = remote_snap_map.rbegin();
     last_snap_id = last->first;
     last_snap_name = last->second;
-    set_last_synced_snap(dir_root, last_snap_id, last_snap_name);
+
+    reconcile_last_synced_snap(dir_root, last_snap_id, last_snap_name);
   }
+  // Session counters reset on restart; persist unconditionally to clear stale state.
+  persist_dir_sync_stat(dir_root);
 
   dout(5) << ": last snap-id transferred=" << last_snap_id << dendl;
   auto it = local_snap_map.upper_bound(last_snap_id);
@@ -2647,6 +3087,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
 
     set_last_synced_stat(dir_root, it->first, it->second, duration);
+    persist_dir_sync_stat(dir_root);
     if (--snaps_per_cycle == 0) {
       break;
     }
@@ -2676,6 +3117,11 @@ int PeerReplayer::sync_snaps(const std::string &dir_root,
     update_directory_current_sync_perf_counters(dir_perf,
                                                 m_snap_sync_stats.at(dir_root));
   }
+  if (r < 0) {
+    locker.unlock();
+    persist_dir_sync_stat(dir_root);
+    locker.lock();
+  }
   return r;
 }
 
@@ -2696,6 +3142,18 @@ void PeerReplayer::run_tick() {
     for (const auto &kv : m_registered) {
       refresh_directory_current_sync_perf_counters(kv.first);
     }
+
+    // persist sync stats to omap for registered directories
+    std::vector<std::string> dirs;
+    dirs.reserve(m_registered.size());
+    for (const auto &kv : m_registered) {
+      dirs.push_back(kv.first);
+    }
+    locker.unlock();
+    for (const auto &dir_root : dirs) {
+      persist_dir_sync_stat(dir_root);
+    }
+    locker.lock();
   }
 }
 
@@ -2745,11 +3203,14 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
               update_directory_current_sync_perf_counters(
                 dir_perf, m_snap_sync_stats.at(*dir_root));
             }
+            locker.unlock();
+            persist_dir_sync_stat(*dir_root);
+            locker.lock();
             if (m_perf_counters) {
               m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
             }
           }
-          unregister_directory(*dir_root);
+          unregister_directory(*dir_root, locker);
         }
       }
 

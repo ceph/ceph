@@ -19,7 +19,12 @@ from mgr_module import NotifyType
 from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
-    AsyncOpTracker, connect_to_filesystem, disconnect_from_filesystem
+    AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
+    disconnect_from_filesystem
+from .metrics.cache import (
+    COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
+    metrics_for_dir_and_peers, try_get_from_complete)
+from .metrics import load as metrics_load
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
@@ -60,6 +65,13 @@ class FSPolicy:
 
     def schedule_action(self, dir_paths):
         self.dir_paths.extend(dir_paths)
+
+    def get_live_instance_ids(self):
+        watcher = self.instance_watcher
+        if watcher is None:
+            return None
+        with watcher.lock:
+            return frozenset(str(instance_id) for instance_id in watcher.instances)
 
     def init(self, dir_mapping, instances):
         with self.lock:
@@ -181,10 +193,12 @@ class FSPolicy:
             return json.dumps({'dir_path': dir_path,
                                'mode': 'acquire'
                                })
-        def release_message(dir_path):
-            return json.dumps({'dir_path': dir_path,
-                               'mode': 'release'
-                               })
+        def release_message(dir_path, purging=False):
+            msg = {'dir_path': dir_path,
+                   'mode': 'release'}
+            if purging:
+                msg['purging'] = True
+            return json.dumps(msg)
         with self.lock:
             if not self.dir_paths or self.stopping.is_set():
                 return
@@ -211,7 +225,9 @@ class FSPolicy:
                 elif action_type == ActionType.ACQUIRE:
                     notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
                 elif action_type == ActionType.RELEASE:
-                    notifies[dir_path] = (lookup_info['instance_id'], release_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          release_message(dir_path,
+                                                          lookup_info['purging']))
             if update_map or removals:
                 self.update_mapping(update_map, removals, callback=self.continue_action)
             for dir_path, message in notifies.items():
@@ -308,13 +324,6 @@ class FSSnapshotMirror:
             return client_name, cluster_name
         except ValueError:
             raise MirrorException(-errno.EINVAL, f'invalid cluster spec {spec}')
-
-    @staticmethod
-    def get_metadata_pool(filesystem, fs_map):
-        for fs in fs_map['filesystems']:
-            if fs['mdsmap']['fs_name'] == filesystem:
-                return fs['mdsmap']['metadata_pool']
-        return None
 
     @staticmethod
     def get_filesystem_id(filesystem, fs_map):
@@ -479,7 +488,7 @@ class FSSnapshotMirror:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
     def init_pool_policy(self, filesystem):
-        metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+        metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
         if not metadata_pool_id:
             log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
             raise Exception(-errno.EINVAL)
@@ -518,7 +527,7 @@ class FSSnapshotMirror:
         log.info(f'enabling mirror for filesystem {filesystem}')
         with self.lock:
             try:
-                metadata_pool_id = FSSnapshotMirror.get_metadata_pool(filesystem, self.fs_map)
+                metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
                 if not metadata_pool_id:
                     log.error(f'cannot find metadata pool-id for filesystem {filesystem}')
                     raise Exception(-errno.EINVAL)
@@ -686,12 +695,6 @@ class FSSnapshotMirror:
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    @staticmethod
-    def norm_path(dir_path):
-        if not os.path.isabs(dir_path):
-            raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
-        return os.path.normpath(dir_path)
-
     def add_dir(self, filesystem, dir_path):
         try:
             with self.lock:
@@ -700,7 +703,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
                 fspolicy.add_dir(dir_path)
                 return 0, json.dumps({}), ''
@@ -717,7 +720,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 fspolicy.remove_dir(dir_path)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
@@ -747,7 +750,7 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                dir_path = norm_path(dir_path)
                 return fspolicy.status(dir_path)
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -763,6 +766,174 @@ class FSSnapshotMirror:
                 return fspolicy.summary()
         except MirrorException as me:
             return me.args[0], '', me.args[1]
+
+    def _metrics_cache_enabled(self):
+        return self.mgr.get_module_option('snapshot_mirror_metrics_cache_enabled')
+
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
+        COMPLETE_CACHE_MAX)
+    def sync_stat_complete_cache(self, filesystem):
+        """Load all directories and all peers for a filesystem from omap.
+
+        Cache key: (time_token, filesystem). Each entry stores the full omap
+        snapshot for that filesystem (all dirs, all peers). A hit means every
+        directory is present, so full-scan queries can be served safely.
+        Used for 'status <fs>' and 'status <fs> --peer_uuid=<uuid>'; peer
+        filtering is applied when serving.
+        """
+        log.debug('sync stat metrics for filesystem %s loaded from omap (complete)',
+                  filesystem)
+        fspolicy = self.pool_policy[filesystem]
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        return metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids(),
+            self.get_filesystem_peers(filesystem))
+
+    @lru_cache_timeout(
+        lambda self, *_args, **_kwargs: self.mgr.get_module_option(
+            'snapshot_mirror_metrics_cache_ttl'),
+        PARTIAL_CACHE_MAX)
+    def sync_stat_partial_cache(self, filesystem, dir_path, peer_ids):
+        """Load sync-stat omap keys for one directory and a peer set.
+
+        Cache key: (time_token, filesystem, dir_path, peer_ids). Used as a
+        fallback for 'status <fs> <dir>' when the complete cache is cold or
+        does not contain the requested directory.
+        """
+        peer_scope = (next(iter(peer_ids)) if len(peer_ids) == 1 else '*')
+        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                  'loaded from omap',
+                  filesystem, dir_path, peer_scope)
+        peers = {peer_id: None for peer_id in peer_ids}
+        fspolicy = self.pool_policy[filesystem]
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+            ioctx, filesystem, peers, dir_path, None,
+            fspolicy.policy, fspolicy.get_live_instance_ids())
+        return metrics
+
+    def _load_sync_stat_metrics_from_omap(self, filesystem, mirrored_dir_path,
+                                          peer_uuid, peers, fspolicy):
+        ioctx = metrics_load.open_metadata_ioctx(
+            self.rados, self.fs_map, filesystem)
+        if mirrored_dir_path:
+            dir_path = norm_path(mirrored_dir_path)
+            metrics, _, _ = metrics_load.fetch_sync_stat_metrics(
+                ioctx, filesystem, peers, mirrored_dir_path, peer_uuid,
+                fspolicy.policy, fspolicy.get_live_instance_ids())
+            return metrics_for_dir_and_peers(metrics, dir_path, peers)
+        complete_metrics = metrics_load.load_sync_stat_metrics(
+            ioctx, filesystem, None, fspolicy.policy,
+            fspolicy.get_live_instance_ids(), peers)
+        return try_get_from_complete(
+            complete_metrics, mirrored_dir_path, peer_uuid, peers)
+
+    def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
+        """Return persisted mirror directory snapshot metrics as JSON.
+
+        Uses two caches (see metrics/cache.py): complete for full-scan queries
+        where a hit proves all dirs are present; partial for single-dir
+        queries when the complete cache is cold or lacks that directory.
+        """
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT,
+                                          f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL,
+                                          f'filesystem {filesystem} is not mirrored')
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    if not fspolicy.policy.lookup(dir_path):
+                        raise MirrorException(-errno.ENOENT,
+                                              f'directory {dir_path} is not mirrored')
+                all_peers = self.get_filesystem_peers(filesystem)
+                if not all_peers:
+                    return 0, json.dumps({'metrics': {}}, indent=4), ''
+
+                if peer_uuid:
+                    if peer_uuid not in all_peers:
+                        raise MirrorException(-errno.ENOENT,
+                                              f'peer {peer_uuid} not found for '
+                                              f'filesystem {filesystem}')
+                    requested_peers = {peer_uuid: all_peers[peer_uuid]}
+                else:
+                    requested_peers = all_peers
+
+                if not self._metrics_cache_enabled():
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'cache disabled; loading from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                    metrics = self._load_sync_stat_metrics_from_omap(
+                        filesystem, mirrored_dir_path, peer_uuid,
+                        requested_peers, fspolicy)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                if mirrored_dir_path:
+                    dir_path = norm_path(mirrored_dir_path)
+                    # Single-dir query: peek complete cache (key: filesystem
+                    # only); on miss fall back to partial cache (key:
+                    # filesystem, dir_path, peer_ids).
+                    complete_metrics = self.sync_stat_complete_cache.cache_peek(
+                        filesystem)
+                    if complete_metrics is not None:
+                        metrics = try_get_from_complete(
+                            complete_metrics, mirrored_dir_path, peer_uuid,
+                            requested_peers)
+                        if metrics is not None:
+                            log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                      'served from complete cache',
+                                      filesystem, dir_path, peer_uuid or '*')
+                            return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                    partial_info_before = self.sync_stat_partial_cache.cache_info()
+                    raw_metrics = self.sync_stat_partial_cache(
+                        filesystem, dir_path, frozenset(requested_peers))
+                    if (self.sync_stat_partial_cache.cache_info().hits >
+                            partial_info_before.hits):
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'served from partial cache',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    else:
+                        log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                                  'loaded from omap',
+                                  filesystem, dir_path, peer_uuid or '*')
+                    metrics = metrics_for_dir_and_peers(
+                        raw_metrics, dir_path, requested_peers)
+                    return 0, json.dumps({'metrics': metrics}, indent=4), ''
+
+                # Full-scan query: load complete cache on miss (key: filesystem
+                # only); peer filtering is applied when serving.
+                complete_info_before = self.sync_stat_complete_cache.cache_info()
+                complete_metrics = self.sync_stat_complete_cache(filesystem)
+                complete_hit = (self.sync_stat_complete_cache.cache_info().hits >
+                                complete_info_before.hits)
+                metrics = try_get_from_complete(
+                    complete_metrics, mirrored_dir_path, peer_uuid, requested_peers)
+                if complete_hit:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'served from complete cache',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                else:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'loaded from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                return 0, json.dumps({'metrics': metrics}, indent=4), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            log.error(f'failed to get snapshot mirror metrics: {e}')
+            return -errno.EINVAL, '', 'failed to get snapshot mirror metrics'
 
     def daemon_status(self, format='json'):
         try:
