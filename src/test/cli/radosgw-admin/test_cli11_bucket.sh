@@ -59,6 +59,11 @@ WARN_FIX_DUP="Warning: --fix specified multiple times, using last value"
 WARN_CHECK_OBJECTS_POS="Warning: --check-objects should appear after the subcommand"
 WARN_MAX_IOS_POS="Warning: --max-concurrent-ios should appear after the subcommand"
 WARN_MAX_IOS_DUP="Warning: --max-concurrent-ios specified multiple times, using last value"
+# radoslist flags
+WARN_ORPHAN_POS="Warning: --orphan-stale-secs should appear after the subcommand"
+WARN_ORPHAN_DUP="Warning: --orphan-stale-secs specified multiple times, using last value"
+WARN_RGW_OBJ_FS_POS="Warning: --rgw-obj-fs should appear after the subcommand"
+WARN_RGW_OBJ_FS_DUP="Warning: --rgw-obj-fs specified multiple times, using last value"
 WARN_WARNINGS_POS="Warning: --warnings-only should appear after the subcommand"
 WARN_DUMP_KEYS_POS="Warning: --dump-keys should appear after the subcommand"
 WARN_HIDE_PROGRESS_POS="Warning: --hide-progress should appear after the subcommand"
@@ -1035,6 +1040,111 @@ check_warns "resync: --bucket + --marker + --yes-i-really-mean-it before (3 warn
 
 # ============================================================
 echo ""
+echo "=== bucket radoslist (+ 'bucket rados list' alias) ==="
+# ============================================================
+# 'bucket radoslist' and 'bucket rados list' are two entry points to the same
+# command (shared registration). The radoslist block below is the full coverage;
+# the rados-list block after it confirms the alias path is wired identically.
+
+# stray positional args
+check "radoslist: stray after leaf (banana)" 22 "ERROR: unexpected argument: 'banana'" \
+  bucket radoslist banana
+check "radoslist: stray before bucket"       22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket radoslist
+
+check "radoslist: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket radoslist --fakeflag
+# a value option in SPACE form leaks its value as a stray positional (exit 22)
+check "radoslist: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+  bucket radoslist --bucket cli11chk --max-entries 5
+
+# missing option value (parse-level, exit 114)
+check "radoslist: --bucket missing value"            114 "--bucket: 1 required TEXT missing" \
+  bucket radoslist --bucket
+check "radoslist: --tenant missing value"            114 "--tenant: 1 required TEXT missing" \
+  bucket radoslist --tenant
+check "radoslist: --max-concurrent-ios missing value" 114 "--max-concurrent-ios: 1 required INT missing" \
+  bucket radoslist --max-concurrent-ios
+check "radoslist: --orphan-stale-secs missing value" 114 "--orphan-stale-secs: 1 required UINT missing" \
+  bucket radoslist --orphan-stale-secs
+check "radoslist: --rgw-obj-fs missing value"        114 "--rgw-obj-fs: 1 required TEXT missing" \
+  bucket radoslist --rgw-obj-fs
+# --max-concurrent-ios (int) / --orphan-stale-secs (uint) are strict CLI11 numbers;
+# a non-numeric value is rejected at parse (exit 104)
+check "radoslist: --max-concurrent-ios non-integer" 104 "Could not convert: --max-concurrent-ios = abc" \
+  bucket radoslist --max-concurrent-ios abc
+check "radoslist: --orphan-stale-secs non-integer"  104 "Could not convert: --orphan-stale-secs = abc" \
+  bucket radoslist --orphan-stale-secs abc
+
+# cluster: readonly command, lists rados objects backing the bucket (exit 0).
+check_cluster "radoslist: --bucket (lists, exit 0)" 0 "" -- \
+  bucket radoslist --bucket cli11chk
+# unrelated flags alongside valid args: binary flag (--fix) takes 0 values ->
+# accepted; value option in =form binds -> accepted; both still exit 0.
+check_cluster "radoslist: unrelated binary flag --fix accepted"        0 "" -- \
+  bucket radoslist --bucket cli11chk --fix
+check_cluster "radoslist: unrelated value flag --max-entries=5 (=form)" 0 "" -- \
+  bucket radoslist --bucket cli11chk --max-entries=5
+
+# wrong-position warnings (flag before the leaf subcommand). Value still flows in
+# via the shared option, so radoslist still runs (exit 0). --tenant trips the
+# global "no user ID" check (exit 22).
+check_warns "radoslist: --bucket before subcommand"   0 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11chk radoslist
+check_warns "radoslist: -b before subcommand (short)" 0 "" "$WARN_BUCKET_POS" -- \
+  bucket -b cli11chk radoslist
+check_warns "radoslist: --max-concurrent-ios before subcommand" 0 "" "$WARN_MAX_IOS_POS" -- \
+  bucket --max-concurrent-ios 16 radoslist --bucket cli11chk
+check_warns "radoslist: --orphan-stale-secs before subcommand" 0 "" "$WARN_ORPHAN_POS" -- \
+  bucket --orphan-stale-secs 100 radoslist --bucket cli11chk
+check_warns "radoslist: --rgw-obj-fs before subcommand" 0 "" "$WARN_RGW_OBJ_FS_POS" -- \
+  bucket --rgw-obj-fs ":" radoslist --bucket cli11chk
+check_warns "radoslist: --yes-i-really-mean-it before subcommand" 0 "" "$WARN_YIRMI_POS" -- \
+  bucket --yes-i-really-mean-it radoslist --bucket cli11chk
+check_warns "radoslist: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t radoslist --bucket cli11chk
+
+# duplicate-flag warnings (flag specified twice; last value wins)
+check_warns "radoslist: duplicate --bucket"             0 "" "$WARN_BUCKET_DUP" -- \
+  bucket radoslist --bucket a --bucket cli11chk
+check_warns "radoslist: duplicate --max-concurrent-ios" 0 "" "$WARN_MAX_IOS_DUP" -- \
+  bucket radoslist --bucket cli11chk --max-concurrent-ios 8 --max-concurrent-ios 16
+check_warns "radoslist: duplicate --orphan-stale-secs"  0 "" "$WARN_ORPHAN_DUP" -- \
+  bucket radoslist --bucket cli11chk --orphan-stale-secs 1 --orphan-stale-secs 2
+check_warns "radoslist: duplicate --rgw-obj-fs"         0 "" "$WARN_RGW_OBJ_FS_DUP" -- \
+  bucket radoslist --bucket cli11chk --rgw-obj-fs a --rgw-obj-fs b
+
+# multi-warning combinations (2 and 3 warnings)
+check_warns "radoslist: --bucket + --max-concurrent-ios before (2 pos warnings)" 0 "" \
+  "$WARN_BUCKET_POS" "$WARN_MAX_IOS_POS" -- \
+  bucket --bucket cli11chk --max-concurrent-ios 16 radoslist
+check_warns "radoslist: --bucket + --max-concurrent-ios + --orphan-stale-secs before (3 warns)" 0 "" \
+  "$WARN_BUCKET_POS" "$WARN_MAX_IOS_POS" "$WARN_ORPHAN_POS" -- \
+  bucket --bucket cli11chk --max-concurrent-ios 16 --orphan-stale-secs 100 radoslist
+
+# ---- 'bucket rados list' alias: same command via the rados node ----
+# stray + nesting under the 'rados' node
+check "rados list: stray after leaf (banana)" 22 "ERROR: unexpected argument: 'banana'" \
+  bucket rados list banana
+check "rados list: stray between rados and list" 22 "ERROR: unexpected argument: 'extra'" \
+  bucket rados extra list
+# unknown subcommand under the 'rados' node (require_subcommand -> 106)
+check "rados: unknown subcommand (banana)" 106 "A subcommand is required" \
+  bucket rados banana
+check "rados: no subcommand"               106 "A subcommand is required" \
+  bucket rados
+# parse error + warn parity with the radoslist entry point
+check "rados list: --max-concurrent-ios non-integer" 104 "Could not convert: --max-concurrent-ios = abc" \
+  bucket rados list --max-concurrent-ios abc
+check_warns "rados list: --bucket before subcommand"  0 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11chk rados list
+check_warns "rados list: duplicate --rgw-obj-fs"      0 "" "$WARN_RGW_OBJ_FS_DUP" -- \
+  bucket rados list --bucket cli11chk --rgw-obj-fs a --rgw-obj-fs b
+check_cluster "rados list: --bucket (lists, exit 0)"  0 "" -- \
+  bucket rados list --bucket cli11chk
+
+# ============================================================
+echo ""
 echo "=== bucket link ==="
 # ============================================================
 
@@ -1765,6 +1875,13 @@ check_help "cli11-help after resync multipart"            bucket resync encrypte
 check_help "cli11-help bucket resync (node)"              bucket resync --cli11-help
 check_help "cli11-help bucket resync encrypted (node)"    bucket resync encrypted --cli11-help
 
+# bucket radoslist (+ 'bucket rados list' alias, + 'rados' node)
+check_help "cli11-help bucket radoslist"            --cli11-help bucket radoslist
+check_help "cli11-help radoslist after bucket"      bucket --cli11-help radoslist
+check_help "cli11-help after radoslist"             bucket radoslist --cli11-help
+check_help "cli11-help bucket rados (node)"         bucket rados --cli11-help
+check_help "cli11-help after rados list (alias)"    bucket rados list --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1912,6 +2029,23 @@ check_help_content "help content resync: --format"      "--format"      bucket r
 check_help_content "help content resync: leaf description"   "repair replication of encrypted multipart uploads" bucket resync encrypted multipart --cli11-help
 check_help_content "help content resync (node): description" "bucket resync commands" bucket resync --cli11-help
 check_help_content "help content resync encrypted (node): description" "encrypted multipart resync commands" bucket resync encrypted --cli11-help
+
+# bucket radoslist: all flags present (descriptions from usage())
+check_help_content "help content radoslist: --bucket"             "--bucket"             bucket radoslist --cli11-help
+check_help_content "help content radoslist: -b short"             "-b"                   bucket radoslist --cli11-help
+check_help_content "help content radoslist: --tenant"             "--tenant"             bucket radoslist --cli11-help
+check_help_content "help content radoslist: --max-concurrent-ios" "--max-concurrent-ios" bucket radoslist --cli11-help
+check_help_content "help content radoslist: --orphan-stale-secs"  "--orphan-stale-secs"  bucket radoslist --cli11-help
+check_help_content "help content radoslist: --rgw-obj-fs"         "--rgw-obj-fs"         bucket radoslist --cli11-help
+check_help_content "help content radoslist: --yes-i-really-mean-it" "--yes-i-really-mean-it" bucket radoslist --cli11-help
+check_help_content "help content radoslist: description"  "list rados objects backing bucket's objects" bucket radoslist --cli11-help
+check_help_content "help content radoslist: max-concurrent-ios desc" "maximum concurrent ios for bucket operations (default: 32)" bucket radoslist --cli11-help
+# alias entry point + node descriptions
+check_help_content "help content rados list (alias): description" "list rados objects backing bucket's objects" bucket rados list --cli11-help
+check_help_content "help content rados list (alias): --rgw-obj-fs" "--rgw-obj-fs" bucket rados list --cli11-help
+check_help_content "help content rados (node): description" "bucket rados commands" bucket rados --cli11-help
+# the --max-concurrent-ios description swap also landed on check/olh/unlinked
+check_help_content "help content check: max-concurrent-ios desc (swapped)" "maximum concurrent ios for bucket operations (default: 32)" bucket check --cli11-help
 
 # --bucket marked "<bucket> REQUIRED" in help for the commands that error on a
 # missing bucket (consistency with link/unlink/rm/chown/rewrite)
@@ -2250,6 +2384,18 @@ if cluster_running; then
         bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
       check_cluster "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 "This command is only necessary" -- \
         bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
+
+      # bucket radoslist: read-only, lists the rados objects backing the bucket
+      # (exit 0). Exercises both entry points (radoslist + 'rados list' alias),
+      # the -b short form, and the --rgw-obj-fs field separator.
+      check_cluster "integration: radoslist --bucket" 0 "" -- \
+        bucket radoslist --bucket "$_test_bucket"
+      check_cluster "integration: radoslist -b (short)" 0 "" -- \
+        bucket radoslist -b "$_test_bucket"
+      check_cluster "integration: radoslist --rgw-obj-fs" 0 "" -- \
+        bucket radoslist --bucket "$_test_bucket" --rgw-obj-fs ":"
+      check_cluster "integration: rados list --bucket (alias)" 0 "" -- \
+        bucket rados list --bucket "$_test_bucket"
 
       # bucket logging on a bucket WITHOUT logging configured: info is silent
       # (exit 0, no output); list and flush print an error but still exit 0

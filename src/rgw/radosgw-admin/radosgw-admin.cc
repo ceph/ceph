@@ -985,8 +985,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
-  { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
-  { "bucket rados list", OPT::BUCKET_RADOS_LIST },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -3926,6 +3924,7 @@ int main(int argc, const char **argv)
   uint64_t min_rewrite_stripe_size = 0;
   std::string min_rw_val, max_rw_val, min_rw_stripe_val;  // sinks; conversion via ->each (legacy atoll compat)
   std::string prefix_val;  // sink; feeds the std::optional opt_prefix via ->each (only set when given)
+  std::string rgw_obj_fs_val;  // sink; feeds the std::optional rgw_obj_fs via ->each (only set when given)
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -4086,10 +4085,10 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging", "rewrite", "set-min-shards", "object", "shard", "resync"};
-    static const std::set<std::string_view> legacy_bucket_words = {
-        "sync", "reshard",
+        "limit", "logging", "rewrite", "set-min-shards", "object", "shard", "resync",
         "radoslist", "rados"};
+    static const std::set<std::string_view> legacy_bucket_words = {
+        "sync", "reshard"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4304,6 +4303,13 @@ int main(int argc, const char **argv)
       auto* bucket_resync_encrypted_multipart = bucket_resync_encrypted->add_subcommand("multipart", "repair replication of encrypted multipart uploads");
       bucket_resync->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_resync_encrypted->require_subcommand(show_cli11_help ? 0 : 1);
+      // 'bucket radoslist' and 'bucket rados list' are two entry points to the
+      // same command; both leaves share one option-registration helper and one
+      // action lambda below to keep them identical (CLI11 can't alias a two-token path).
+      auto* bucket_radoslist  = bucket_cmd->add_subcommand("radoslist", "list rados objects backing bucket's objects");
+      auto* bucket_rados      = bucket_cmd->add_subcommand("rados", "bucket rados commands");
+      auto* bucket_rados_list = bucket_rados->add_subcommand("list", "list rados objects backing bucket's objects");
+      bucket_rados->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4354,13 +4360,13 @@ int main(int argc, const char **argv)
       add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
-      add_multilevel_option(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum number of concurrent I/O operations")->ignore_underscore();
+      add_multilevel_option(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
 
       // bucket check olh options
       add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_option(bucket_check_olh, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
+      add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
@@ -4368,7 +4374,7 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_option(bucket_check_unlinked, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum number of concurrent I/O operations")->ignore_underscore();
+      add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
@@ -4482,6 +4488,29 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
       add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
       add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
+
+      // bucket radoslist / bucket rados list options (shared by both entry points).
+      // rgw_obj_fs is a std::optional; bind a string sink and set it via ->each so it
+      // stays unset (no field separator) when --rgw-obj-fs is not given.
+      auto register_radoslist_opts =
+          [&bucket_name, &tenant, &max_concurrent_ios, &orphan_stale_secs,
+           &rgw_obj_fs_val, &rgw_obj_fs, &yes_i_really_mean_it,
+           &bucket_desc, &tenant_desc](CLI::App* cmd) {
+        add_multilevel_option(cmd, "--bucket,-b", bucket_name, bucket_desc);
+        add_multilevel_option(cmd, "--tenant",    tenant,      tenant_desc);
+        add_multilevel_option(cmd, "--max-concurrent-ios", max_concurrent_ios,
+                              "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+        add_multilevel_option(cmd, "--orphan-stale-secs", orphan_stale_secs,
+                              "num of seconds to wait before declaring an object to be an orphan (default: 86400)")->ignore_underscore();
+        add_multilevel_option(cmd, "--rgw-obj-fs", rgw_obj_fs_val,
+                              "the field separator that will separate the rados object name from the rgw object name; "
+                              "additionally rados objects for incomplete multipart uploads will not be output")
+            ->ignore_underscore()
+            ->each([&rgw_obj_fs](const std::string& v) { rgw_obj_fs = v; });
+        add_multilevel_binary_flag(cmd, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
+      };
+      register_radoslist_opts(bucket_radoslist);
+      register_radoslist_opts(bucket_rados_list);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5292,6 +5321,49 @@ int main(int argc, const char **argv)
           formatter->flush(cout);
           return 0;
         };
+      });
+
+      // Shared by both 'bucket radoslist' and 'bucket rados list' (same command,
+      // two entry points). Defined once; each leaf's callback installs it.
+      auto radoslist_action =
+          [&max_concurrent_ios, &orphan_stale_secs, &tenant, &rgw_obj_fs,
+           &bucket_name, &yes_i_really_mean_it]() -> int {
+        RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
+                            max_concurrent_ios, orphan_stale_secs, tenant);
+        if (rgw_obj_fs) {
+          lister.set_field_separator(*rgw_obj_fs);
+        }
+
+        int ret;
+        if (bucket_name.empty()) {
+          // yes_i_really_mean_it means continue with listing even if
+          // there are indexless buckets
+          ret = lister.run(dpp(), yes_i_really_mean_it);
+        } else {
+          ret = lister.run(dpp(), bucket_name);
+        }
+
+        if (ret < 0) {
+          std::cerr <<
+            "ERROR: bucket radoslist failed to finish before " <<
+            "encountering error: " << cpp_strerror(-ret) << std::endl;
+          std::cerr << "************************************"
+            "************************************" << std::endl;
+          std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+            "BE USED IN DELETING ORPHANS" << std::endl;
+          std::cerr << "************************************"
+            "************************************" << std::endl;
+          return -ret;
+        }
+        return 0;
+      };
+      bucket_radoslist->callback([&cli11_action, radoslist_action] {
+
+        cli11_action = radoslist_action;
+      });
+      bucket_rados_list->callback([&cli11_action, radoslist_action] {
+
+        cli11_action = radoslist_action;
       });
     } // bucket command registrations
 
@@ -9009,35 +9081,6 @@ int main(int argc, const char **argv)
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-    }
-  }
-
-  if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
-    RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
-			max_concurrent_ios, orphan_stale_secs, tenant);
-    if (rgw_obj_fs) {
-      lister.set_field_separator(*rgw_obj_fs);
-    }
-
-    if (bucket_name.empty()) {
-      // yes_i_really_mean_it means continue with listing even if
-      // there are indexless buckets
-      ret = lister.run(dpp(), yes_i_really_mean_it);
-    } else {
-      ret = lister.run(dpp(), bucket_name);
-    }
-
-    if (ret < 0) {
-      std::cerr <<
-	"ERROR: bucket radoslist failed to finish before " <<
-	"encountering error: " << cpp_strerror(-ret) << std::endl;
-      std::cerr << "************************************"
-	"************************************" << std::endl;
-      std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
-	"BE USED IN DELETING ORPHANS" << std::endl;
-      std::cerr << "************************************"
-	"************************************" << std::endl;
-      return -ret;
     }
   }
 
