@@ -6197,7 +6197,7 @@ float OSDMap::build_pool_pgs_info (
     }
     total_pgs += pdata.get_size() * pdata.get_pg_num();
 
-    osds_weight_total = get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
+    osds_weight_total += get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
   }
   for (auto& [oid, oweight] : osds_weight) {
     int pgs = 0;
