@@ -190,6 +190,10 @@ function build() {
     ci_debug "Running cmake"
     $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
+    # print sccache stats too when built with WITH_SCCACHE
+    if type sccache > /dev/null 2>&1; then
+        $DRY_RUN sccache --show-stats
+    fi
 }
 
 DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
