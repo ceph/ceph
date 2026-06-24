@@ -59,9 +59,12 @@ class ConnectionList {
   void close(boost::system::error_code& ec) {
     std::lock_guard lock{mutex};
     for (auto& conn : connections) {
-      conn.socket.close(ec);
+      // cancel pending reactor operations which delivers operation_aborted
+      // to completion handlers and then shutdown the transport so any
+      // subsequent I/O attempts fail immediately.
+      conn.socket.cancel(ec);
+      conn.socket.shutdown(tcp::socket::shutdown_both, ec);
     }
-    connections.clear();
   }
 };
 
