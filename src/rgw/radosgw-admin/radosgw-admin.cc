@@ -987,8 +987,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
-  { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
-  { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
@@ -3928,6 +3926,7 @@ int main(int argc, const char **argv)
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
   std::string min_rw_val, max_rw_val, min_rw_stripe_val;  // sinks; conversion via ->each (legacy atoll compat)
+  std::string prefix_val;  // sink; feeds the std::optional opt_prefix via ->each (only set when given)
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -4088,10 +4087,10 @@ int main(int argc, const char **argv)
     // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
     static const std::set<std::string_view> migrated_bucket_leaves = {
         "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
-        "limit", "logging", "rewrite", "set-min-shards", "object"};
+        "limit", "logging", "rewrite", "set-min-shards", "object", "shard"};
     static const std::set<std::string_view> legacy_bucket_words = {
         "sync", "reshard",
-        "radoslist", "rados", "shard", "resync"};
+        "radoslist", "rados", "resync"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
@@ -4297,6 +4296,10 @@ int main(int argc, const char **argv)
       auto* bucket_object       = bucket_cmd->add_subcommand("object", "bucket object commands");
       auto* bucket_object_shard = bucket_object->add_subcommand("shard", "show the shard index a given object maps to");
       bucket_object->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_shard         = bucket_cmd->add_subcommand("shard", "bucket shard commands");
+      auto* bucket_shard_objects = bucket_shard->add_subcommand("objects", "show sample object names that map to bucket shards");
+      bucket_shard_objects->alias("object");
+      bucket_shard->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
@@ -4453,6 +4456,20 @@ int main(int argc, const char **argv)
           ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
       add_multilevel_option(bucket_object_shard, "--format",     format, format_desc);
+
+      // bucket shard objects options
+      add_multilevel_option(bucket_shard_objects, "--num-shards", num_shards, "number of shards")
+          ->option_text("<num-shards> REQUIRED")
+          ->ignore_underscore()
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+      add_multilevel_option(bucket_shard_objects, "--shard-id", shard_id, "shard id")
+          ->ignore_underscore()
+          ->each([&specified_shard_id](const std::string&) { specified_shard_id = true; });
+      // opt_prefix is a std::optional; bind a string sink and set it via ->each so it
+      // stays unset (handler defaults to "obj") when --prefix is not given.
+      add_multilevel_option(bucket_shard_objects, "--prefix", prefix_val, "object name prefix (default \"obj\")")
+          ->each([&opt_prefix](const std::string& v) { opt_prefix = v; });
+      add_multilevel_option(bucket_shard_objects, "--format", format, format_desc);
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5158,6 +5175,60 @@ int main(int argc, const char **argv)
           encode_json("shard", shard, formatter.get());
           formatter->close_section();
           formatter->flush(cout);
+
+          return 0;
+        };
+      });
+
+      bucket_shard_objects->callback(
+          [&cli11_readonly, &cli11_action, &opt_prefix, &num_shards,
+           &num_shards_specified, &specified_shard_id, &shard_id, &formatter] {
+        cli11_readonly = true;
+
+        cli11_action = [&opt_prefix, &num_shards, &num_shards_specified,
+                        &specified_shard_id, &shard_id, &formatter]() -> int {
+          const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
+          if (!num_shards_specified) {
+            cerr << "ERROR: num-shards must be specified."
+                 << std::endl;
+            return EINVAL;
+          }
+
+          if (specified_shard_id) {
+            if (shard_id >= num_shards) {
+              cerr << "ERROR: shard-id must be less than num-shards."
+                   << std::endl;
+              return EINVAL;
+            }
+            std::string obj;
+            uint64_t ctr = 0;
+            int shard;
+            do {
+              obj = fmt::format("{}{:0>20}", prefix, ctr);
+              shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
+              ++ctr;
+            } while (shard != shard_id);
+
+            formatter->open_object_section("shard_obj");
+            encode_json("obj", obj, formatter.get());
+            formatter->close_section();
+            formatter->flush(cout);
+          } else {
+            std::vector<std::string> objs(num_shards);
+            for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
+              auto key = fmt::format("{}{:0>20}", prefix, ctr);
+              auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+              if (objs[shard].empty()) {
+                objs[shard] = std::move(key);
+                --shardsleft;
+              }
+            }
+
+            formatter->open_object_section("shard_objs");
+            encode_json("objs", objs, formatter.get());
+            formatter->close_section();
+            formatter->flush(cout);
+          }
 
           return 0;
         };
@@ -5925,7 +5996,6 @@ int main(int argc, const char **argv)
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
-			 OPT::BUCKET_SHARD_OBJECTS,
 			 OPT::LOG_LIST,
 			 OPT::LOG_SHOW,
 			 OPT::USAGE_SHOW,
@@ -8908,51 +8978,6 @@ int main(int argc, const char **argv)
       std::cerr << "************************************"
 	"************************************" << std::endl;
       return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::BUCKET_SHARD_OBJECTS) {
-    const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
-    if (!num_shards_specified) {
-      cerr << "ERROR: num-shards must be specified."
-	   << std::endl;
-      return EINVAL;
-    }
-
-    if (specified_shard_id) {
-      if (shard_id >= num_shards) {
-	cerr << "ERROR: shard-id must be less than num-shards."
-	     << std::endl;
-	return EINVAL;
-      }
-      std::string obj;
-      uint64_t ctr = 0;
-      int shard;
-      do {
-	obj = fmt::format("{}{:0>20}", prefix, ctr);
-	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
-	++ctr;
-      } while (shard != shard_id);
-
-      formatter->open_object_section("shard_obj");
-      encode_json("obj", obj, formatter.get());
-      formatter->close_section();
-      formatter->flush(cout);
-    } else {
-      std::vector<std::string> objs(num_shards);
-      for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
-	auto key = fmt::format("{}{:0>20}", prefix, ctr);
-	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
-	if (objs[shard].empty()) {
-	  objs[shard] = std::move(key);
-	  --shardsleft;
-	}
-      }
-
-      formatter->open_object_section("shard_objs");
-      encode_json("objs", objs, formatter.get());
-      formatter->close_section();
-      formatter->flush(cout);
     }
   }
 
