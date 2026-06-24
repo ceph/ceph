@@ -1167,6 +1167,8 @@ private:
   void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
   bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
   void schedule_quarantine_cleanup(const MDRequestRef& mdr);
+  void start_quarantine_cap_revocation(CInode *root, unsigned qtine_op,
+                                       Context *on_finish = nullptr);
   void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
                                        bool is_quarantined);
 

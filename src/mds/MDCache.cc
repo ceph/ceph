@@ -6486,6 +6486,33 @@ void MDCache::identify_files_to_recover()
   }
 }
 
+void MDCache::start_quarantine_cap_revocation(CInode *root, unsigned qtine_op,
+					      Context *on_finish)
+{
+  if (!root) {
+    if (on_finish) {
+      on_finish->complete(-EINVAL);
+    }
+    return;
+  }
+
+  if (!root->snaprealm ||
+      root->snaprealm->get_subvolume_ino() != root->ino()) {
+    if (on_finish) {
+      on_finish->complete(-EINVAL);
+    }
+    return;
+  }
+
+  dout(10) << __func__ << " " << *root << " op " << qtine_op << dendl;
+
+  auto qc = new C_MDS_QuiescePath(this, on_finish);
+  qc->quarantine = true;
+  qc->qtine_op = qtine_op;
+  qc->qtine_root_ino = root->ino();
+  quiesce_path(filepath(root->ino()), qc);
+}
+
 void MDCache::handle_quarantine_policy_update(CInode *root,
 					      bool was_quarantined,
 					      bool is_quarantined)
@@ -6498,46 +6525,8 @@ void MDCache::handle_quarantine_policy_update(CInode *root,
 	   << " quarantine " << was_quarantined
 	   << " -> " << is_quarantined << dendl;
 
-  auto reissue_inode = [this, is_quarantined](CInode *in) {
-    if (!in || !in->is_head() || !in->is_any_caps()) {
-      return;
-    }
-
-    if (in->is_frozen_inode()) {
-      in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDC_ReIssueCaps(this, in));
-    } else if (!mds->locker->eval(in, CEPH_CAP_LOCKS)) {
-      mds->locker->issue_caps(in);
-    }
-
-    if (!is_quarantined) {
-      for (auto& [client, cap] : in->get_client_caps()) {
-        dout(20) << __func__ << " sending MQuarantineDisable for inode "
-		 << in->ino() << " to client " << client << dendl;
-        auto msg = make_message<MQuarantineDisable>();
-        msg->ino = in->ino();
-        mds->send_message_client_counted(msg, cap.get_session());
-      }
-    }
-  };
-
-  reissue_inode(root);
-
-  if (!root->snaprealm || root->snaprealm->get_subvolume_ino() != root->ino()) {
-    return;
-  }
-
-  for (auto p = root->snaprealm->inodes_with_caps.begin();
-       !p.end(); ++p) {
-    auto *in = *p;
-    if (in == root) {
-      continue;
-    }
-    if (auto *dn = in->get_projected_parent_dn();
-        dn && dn->get_name() == ".meta") {
-      continue;
-    }
-    reissue_inode(in);
-  }
+  unsigned qtine_op = is_quarantined ? QUARANTINE_ADD : QUARANTINE_DEL;
+  start_quarantine_cap_revocation(root, qtine_op);
 }
 
 void MDCache::start_files_to_recover()
@@ -14437,7 +14426,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     }
   }
 
-  if (!rooti->is_auth() && !splitauth) {
+  if (!rooti->is_auth() && !splitauth && !qfinisher->quarantine) {
     dout(5) << __func__ << ": skipping recursive quiesce of path for non-auth inode" << dendl;
     mdr->mark_event("quiesce complete for non-auth tree");
   } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(rootino) == 0) {
@@ -14987,21 +14976,14 @@ class C_MDC_quarantine_inode : public MDCacheContext {
     if (!r) {
       dout(20) << __func__ << " quarantine has passed for inode " << qtine_root_ino << dendl;
       if (root) {
-        // Use the quiesce agent's subtree walk for cap revocation.
-        // This reuses dispatch_quiesce_path/dispatch_quiesce_inode to walk the
-        // directory tree and call eval/issue_caps on each inode, with the
-        // quarantine flag set so that all caps except PIN are revoked.
         auto qmgr = qtine_mgr;
-        auto qc = new MDCache::C_MDS_QuiescePath(mdcache,
+        qtine_mgr->get();
+        mdcache->start_quarantine_cap_revocation(
+            root, qtine_op,
             new LambdaContext([qmgr](int) {
               qmgr->work_done();
               qmgr->put();
             }));
-        qc->quarantine = true;
-        qc->qtine_op = qtine_op;
-        qc->qtine_root_ino = qtine_root_ino;
-        qtine_mgr->get();
-        mdcache->quiesce_path(filepath(qtine_root_ino), qc);
       }
     } else {
       dout(20) << __func__ << " quarantine has failed for inode " << qtine_root_ino <<  ": " << cpp_strerror(r) << dendl;
@@ -15190,7 +15172,8 @@ void MDCache::quarantine_inode(MDRequestRef const& mdr)
 
   // On the auth MDS, acquire all necessary locks for journaling the mutation.
   // Replica MDS ranks learn the quarantine state through policylock replication
-  // and react in CInode::decode_lock_ipolicy().
+  // and start a quiesce-path cap revocation walk in
+  // CInode::decode_lock_ipolicy().
   if (in->is_auth()) {
     MutationImpl::LockOpVec lov;
     lov.add_xlock(&in->authlock);
