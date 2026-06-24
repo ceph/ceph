@@ -59,7 +59,11 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
         except Exception:
             pass
         try:
-            self.mount_a.umount_wait(force=True)
+            self.mount_a.kill_background()
+        except Exception:
+            pass
+        try:
+            self._safe_umount(force=True)
         except Exception:
             pass
         try:
@@ -67,14 +71,10 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
                          self.SUBVOLUME_NAME, "--force")
         except Exception:
             pass
-        try:
-            self.mount_a.kill_cleanup()
-        except Exception:
-            pass
-        try:
-            self.mount_a.mount_wait()
-        except Exception:
-            pass
+        # Do not remount before super().tearDown(): vstart's gather_mount_info
+        # often leaves self.addr unset, and teardown()->umount()->is_blocked()
+        # crashes on None addr. Leave the client unmounted; the framework
+        # restores mount details after tearDown.
         super().tearDown()
 
     def _fs_cmd(self, *args):
@@ -84,10 +84,49 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
         return self._fs_cmd("subvolume", "quarantine", action,
                             self.volname, self.SUBVOLUME_NAME)
 
+    def _ensure_mount_addr(self):
+        """Populate mount addr when session-ls lookup failed (vstart)."""
+        m = self.mount_a
+        if m.addr is not None:
+            return
+        try:
+            m.id = m._get_global_id()
+            m.addr = m._global_addr
+            if m.addr:
+                m.inst = "client%d %s" % (int(m.id), m.addr)
+        except Exception as e:
+            log.warning("could not populate mount addr: %s", e)
+
+    def _safe_umount(self, force=False):
+        """
+        Umount without tripping vstart_runner is_blocked() when addr is unset.
+        """
+        m = self.mount_a
+        if not m.is_mounted():
+            m.cleanup()
+            return
+
+        self._ensure_mount_addr()
+        if m.addr is None:
+            cmd = ['sudo', 'umount', m.hostfs_mntpt]
+            if force:
+                cmd.append('-f')
+            try:
+                m.client_remote.run(args=cmd, omit_sudo=False)
+            except Exception:
+                if not force:
+                    raise
+                m._run_umount_lf()
+            m.cleanup()
+            return
+
+        m.umount_wait(force=force)
+
     def _setup_mount_and_file(self):
         """Mount at the subvolume data path and create the test file."""
-        self.mount_a.umount_wait()
+        self._safe_umount()
         self.mount_a.mount_wait(cephfs_mntpt=self.subvol_path)
+        self._ensure_mount_addr()
         test_file = os.path.join(self.mount_a.hostfs_mntpt, self.TEST_FILE)
         self.mount_a.write_file(test_file, self.TEST_DATA)
         self.mount_a.run_shell(["sync"])
@@ -318,7 +357,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
            path, but access blocks until quarantine is disabled.
         """
         self._setup_mount_and_file()
-        self.mount_a.umount_wait()
+        self._safe_umount()
 
         self._quarantine_cmd("enable")
 
@@ -331,6 +370,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
 
         # Mount at fs root and access the quarantined path on a fresh session.
         self.mount_a.mount_wait(cephfs_mntpt="/")
+        self._ensure_mount_addr()
 
         test_file = os.path.join(
             self.mount_a.hostfs_mntpt,
