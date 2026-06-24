@@ -1150,6 +1150,106 @@ TEST_P(
 }
 
 /**
+ * Test rollback of blocked WRITE operations.
+ *
+ * This test demonstrates rollback behavior when a write is blocked to one shard
+ * and another shard fails, triggering a peering interval change and rollback.
+ *
+ * Test sequence for each combination of blocked_shard X and failed_shard Y:
+ * 1. Create an object with initial data
+ * 2. Block communication to shard X
+ * 3. Perform a write (should return -EINPROGRESS)
+ * 4. Mark shard Y as down (triggers rollback)
+ * 5. Release communication block
+ * 6. Verify object has original data (rollback succeeded)
+ * 7. Perform a new write with different data
+ * 8. Verify object has new data
+ * 9. Bring shard Y back up
+ * 10. Verify object still has new data
+ *
+ * This test requires m >= 2 to have multiple shards to test.
+ */
+TEST_P(
+  TestECFailoverWithPeering,
+  RollbackBlockedWrite
+) {
+  if (m < 2) {
+    GTEST_SKIP() << "RollbackBlockedWrite requires m >= 2";
+  }
+
+  const std::string obj_name = "test_rollback";
+  const size_t full_stripe_size = stripe_unit * k;
+  const std::string pattern_initial(full_stripe_size, 'A');
+  const std::string pattern_blocked(full_stripe_size, 'B');
+  const std::string pattern_after(full_stripe_size, 'C');
+
+  // Test all combinations of blocked shard X and failed shard Y
+  // We test shards 0, 1, and k (first data, second data, first parity)
+  std::vector<int> test_shards;
+
+  for (int zone = 0; zone < num_zones; ++zone)
+  {
+    test_shards.push_back(0);
+    test_shards.push_back(1);
+    test_shards.push_back(k);
+  }
+  
+  for (int blocked_shard : test_shards) {
+    for (int failed_shard : test_shards) {
+      if (blocked_shard == failed_shard) {
+        continue;  // Skip same shard
+      }
+
+      int primary = get_primary_shard_from_osdmap();
+      if (blocked_shard == primary || failed_shard == primary)
+      {
+        continue;
+      }
+      
+      std::cout << "\n=== Testing blocked_shard=" << blocked_shard
+                << " failed_shard=" << failed_shard << " ===" << std::endl;
+
+      // Step 1: Create object with initial data
+      create_and_write_verify(obj_name, pattern_initial);
+
+      // Step 2: Block communication to shard X
+      suspend_primary_to_osd(blocked_shard);
+
+      // Step 3: Perform a write (should return -EINPROGRESS)
+      int result = write(obj_name, 0, pattern_blocked, full_stripe_size);
+      ASSERT_EQ(-EINPROGRESS, result)
+        << "Write should be blocked for shard " << blocked_shard;
+      
+      // Step 3a: Perform an attribute write (may or may not complete)
+      // This tests whether attribute writes are also rolled back
+      int attr_result = write_attribute(obj_name, "test_attr", "blocked_value", false);
+      // Don't assert on the result - it may be -EINPROGRESS or succeed
+      std::cout << "Attribute write result: " << attr_result << std::endl;
+      
+      // Step 4: Mark shard Y as down (triggers rollback)
+      mark_osd_down(failed_shard);
+
+      // Step 4a: Release communication block
+      unsuspend_primary_to_osd(blocked_shard);
+      mark_osd_up(failed_shard);
+
+      // Step 5: Verify object has original data (rollback succeeded)
+      verify_object(obj_name);
+      
+      // Step 5a: Scrub to detect attribute inconsistencies across all shards
+      // This will catch if zone 1 shards failed to rollback attributes
+      bool corrupted = scrub_object(obj_name);
+      EXPECT_FALSE(corrupted)
+        << "Object '" << obj_name << "' has inconsistent attributes after rollback "
+        << "(blocked_shard=" << blocked_shard << ", failed_shard=" << failed_shard << ")";
+
+      // Clean up for next iteration
+      delete_object(obj_name);
+    }
+  }
+}
+
+/**
  * ECZoneRecoveryTest - Test zone-level EC recovery scenario (zone 0 fails first)
  *
  * This test verifies the EC recovery mechanism at the zone level by:

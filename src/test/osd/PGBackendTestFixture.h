@@ -642,6 +642,17 @@ public:
     bool force_all_shards);
 
   /**
+   * List all attributes on an object.
+   *
+   * @param obj_name Name of the object
+   * @param attrs Output map of attribute name to bufferlist
+   * @return 0 on success, negative on error
+   */
+  int list_attributes(
+    const std::string& obj_name,
+    std::map<std::string, ceph::buffer::list, std::less<>>& attrs);
+
+  /**
    * Read object_info_t directly from the ObjectStore for a specific shard.
    *
    * This bypasses the OBC cache and reads the actual on-disk state,

@@ -1044,10 +1044,11 @@ public:
   }
 
   void proc_replica_log(pg_info_t &oinfo,
-			const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from,
-			const pg_shard_t &to,
-			bool ec_optimizations_enabled) const;
+  	const pg_log_t &olog,
+  	pg_missing_t& omissing, pg_shard_t from,
+  	const pg_shard_t &to,
+  	bool ec_optimizations_enabled,
+  	const pg_pool_t &pool) const;
 
   void set_missing_may_contain_deletes() {
     missing.may_include_deletes = true;
@@ -1098,7 +1099,7 @@ protected:
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
-    shard_id_t orig_shard,               ///< [in] Which shard has orig_entries
+    shard_id_t orig_rel_shard,               ///< [in] Which shard has orig_entries
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
@@ -1150,7 +1151,7 @@ protected:
       }
       if (i->is_error()) {
         ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
-      } else if (!i->written_shards.empty() && !i->written_shards.contains(orig_shard)) {
+      } else if (!i->written_shards.empty() && !i->written_shards.contains(orig_rel_shard)) {
         ldpp_dout(dpp, 20) << __func__ << ": ignoring partial write " << *i << dendl;
         last = i->version;
         if (!prior_version_opt) {
@@ -1339,7 +1340,7 @@ protected:
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
-    shard_id_t orig_shard,               ///< [in] Which shard is this (for detecting partial writes)
+    shard_id_t orig_rel_shard,           ///< [in] Which relative shard is this (for detecting partial writes)
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     std::map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
@@ -1354,7 +1355,7 @@ protected:
 	omissing,
 	rollbacker,
 	ec_optimizations_enabled,
-	orig_shard,
+	orig_rel_shard,
 	dpp);
     }
   }
@@ -1393,7 +1394,8 @@ public:
                             bool &dirty_info,
                             bool &dirty_big_info,
 			    bool ec_optimizations_enabled,
-			    const pg_shard_t &shard);
+			    const pg_shard_t &shard,
+                            const pg_pool_t &pool);
 
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,

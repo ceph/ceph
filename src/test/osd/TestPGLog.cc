@@ -140,7 +140,12 @@ struct PGLogTestBase {
 
 class PGLogTest : virtual public ::testing::Test, protected PGLog, public PGLogTestBase  {
 public:
-  PGLogTest() : PGLog(g_ceph_context) {}
+  pg_pool_t test_pool;
+  
+  PGLogTest() : PGLog(g_ceph_context) {
+    test_pool.type = pg_pool_t::TYPE_REPLICATED;
+    test_pool.size = 3;
+  }
   void SetUp() override {
     missing.may_include_deletes = true;
   }
@@ -327,7 +332,7 @@ public:
 
     proc_replica_log(
       oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)),
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     ceph_assert(oinfo.last_update >= log.tail);
 
@@ -450,7 +455,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
 
     EXPECT_TRUE(log.objects.count(divergent));
     EXPECT_TRUE(missing.is_missing(divergent_object));
@@ -515,7 +520,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(0U, log.objects.count(divergent_object));
@@ -554,7 +559,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     TestHandler h(remove_snap);
     roll_forward_to(eversion_t(1, 6), &info, &h);
     rewind_divergent_log(eversion_t(1, 5), info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
     pg_log_t log;
     reset_backfill_claim_log(log, &info, &h);
   }
@@ -1434,7 +1439,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
@@ -1509,7 +1514,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_FALSE(omissing.have_missing());
   }
@@ -1612,7 +1617,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1700,7 +1705,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1791,7 +1796,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1886,7 +1891,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
