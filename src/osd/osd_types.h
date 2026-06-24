@@ -5304,7 +5304,8 @@ public:
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
-      } else if (pool.is_nonprimary_shard(shard) && !e.is_written_shard(shard)) {
+      } else if (pool.is_nonprimary_shard(shard) &&
+		 !e.is_written_shard(pool.get_relative_shard(shard))) {
 	// new object, partial write and not already missing - skip
 	skipped = true;
       } else {
@@ -5323,7 +5324,7 @@ public:
         missing_it->second.clean_regions.mark_fully_dirty();
       else
         missing_it->second.clean_regions.merge(e.clean_regions);
-    } else if (pool.is_nonprimary_shard(shard) && !e.is_written_shard(shard)) {
+    } else if (pool.is_nonprimary_shard(shard) && !e.is_written_shard(pool.get_relative_shard(shard))) {
       // existing object, partial write and not already missing - skip
       skipped = true;
     } else {

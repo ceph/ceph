@@ -227,7 +227,8 @@ void PGLog::proc_replica_log(
   pg_missing_t& omissing,
   pg_shard_t from,
   const pg_shard_t &to,
-  bool ec_optimizations_enabled) const
+  bool ec_optimizations_enabled,
+  const pg_pool_t &pool) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -305,7 +306,7 @@ void PGLog::proc_replica_log(
     omissing,
     nullptr,
     ec_optimizations_enabled,
-    from.shard,
+    pool.get_relative_shard(from.shard),
     this);
 
   if (lu < oinfo.last_update) {
@@ -340,7 +341,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
 				 bool &dirty_info, bool &dirty_big_info,
 				 bool ec_optimizations_enabled,
-				 const pg_shard_t &shard)
+				 const pg_shard_t &shard, const pg_pool_t &pool)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " <<
     newhead << dendl;
@@ -378,7 +379,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     missing,
     rollbacker,
     ec_optimizations_enabled,
-    shard.shard,
+    pool.get_relative_shard(shard.shard),
     this);
 
   dirty_info = true;
@@ -448,8 +449,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
     rewind_divergent_log(olog.head, info, rollbacker,
-			 dirty_info, dirty_big_info, ec_optimizations_enabled,
-			 toosd);
+                         dirty_info, dirty_big_info, ec_optimizations_enabled,
+                         toosd, pool);
     changed = true;
   }
 
