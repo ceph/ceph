@@ -1,14 +1,12 @@
 <ng-container *ngIf="gatewayGroup$ | async as gateways">
   <!-- Details Card Section -->
-  <ng-container *ngIf="selection.hasSelection">
+  <ng-container *ngIf="selection.hasSelection && showDetailsCard">
     <cd-details-card
       cardTitle="Details"
       i18n-cardTitle
       [details]="selectedGatewayDetails"
-      [showEditButton]="true"
-      [editButtonLabel]="actionLabels.EDIT"
-      [columns]="4"
-      (editClicked)="editSelectedGatewayGroup()">
+      [showEditButton]="false"
+      [columns]="4">
     </cd-details-card>
   </ng-container>
 
@@ -42,10 +40,11 @@
 </ng-template>
 
 <ng-template #customTableItemTemplate
-             let-value="data.value">
+             let-value="data.value"
+             let-row="data.row">
   <a cdsLink
-     [routerLink]="[viewUrl, value | encodeUri]"
-     (click)="$event.stopPropagation()">
+     href="#"
+     (click)="onNameClick(row, $event)">
     {{ value }}
   </a>
 </ng-template>

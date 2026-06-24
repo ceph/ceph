@@ -65,6 +65,7 @@ describe('NvmeofGroupFormComponent', () => {
     expect(form.controls.groupName.value).toBeNull();
     expect(form.controls.unmanaged.value).toBe(false);
     expect(form.controls.enableEncryption.value).toBe(false);
+    expect(form.controls.certificateType.value).toBe('internal');
   });
 
   it('should set action to CREATE on init', () => {
@@ -165,6 +166,69 @@ describe('NvmeofGroupFormComponent', () => {
         jasmine.objectContaining({
           group: 'encrypted-group',
           encryption_key: 'encryption-key-123'
+        })
+      );
+    });
+
+    it('should create service with cephadm-signed mTLS when internal selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-internal');
+      component.groupForm.get('pool').setValue('rbd');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.internal);
+      component.groupForm.get('custom_sans').setValue(['gw1.local', '192.168.0.10']);
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_type: 'nvmeof',
+          service_id: 'rbd.mtls-internal',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'cephadm-signed',
+          custom_sans: ['gw1.local', '192.168.0.10']
+        })
+      );
+    });
+
+    it('should create service with inline mTLS when external selected', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('mtls-external');
+      component.groupForm.get('pool').setValue('rbd');
+      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('encryptionKey').setValue('test-encryption-key');
+      component.groupForm.get('enableMtls').setValue(true);
+      component.groupForm.get('certificateType').setValue(component.CertificateType.external);
+      component.groupForm.get('rootCACert').setValue('root');
+      component.groupForm.get('clientCert').setValue('client-cert');
+      component.groupForm.get('clientKey').setValue('client-key');
+      component.groupForm.get('serverCert').setValue('server-cert');
+      component.groupForm.get('serverKey').setValue('server-key');
+
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_id: 'rbd.mtls-external',
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'inline',
+          root_ca_cert: 'root',
+          client_cert: 'client-cert',
+          client_key: 'client-key',
+          server_cert: 'server-cert',
+          server_key: 'server-key'
         })
       );
     });

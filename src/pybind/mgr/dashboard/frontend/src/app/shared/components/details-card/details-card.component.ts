@@ -43,9 +43,6 @@ export class DetailsCardComponent {
   onEditClick(): void {
     this.editClicked.emit();
   }
-  
-  @Input()
-  columns = 4;
 
   getVisibleDetails(): DetailItem[] {
     return (this.details || []).filter((detail) => !detail.hidden);
