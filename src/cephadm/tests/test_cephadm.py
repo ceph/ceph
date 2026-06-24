@@ -2401,10 +2401,11 @@ exec /usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1
 
 class TestCheckHost:
 
+    @mock.patch('cephadm.find_program', return_value='foo')
     @mock.patch('cephadm.find_executable', return_value='foo')
     @mock.patch('cephadm.check_time_sync', return_value=True)
     @mock.patch('cephadm.logger')
-    def test_container_engine(self, _logger, _find_executable, _check_time_sync):
+    def test_container_engine(self, _logger, _find_executable, _check_time_sync, _find_program):
         ctx = _cephadm.CephadmContext()
 
         ctx.container_engine = None
