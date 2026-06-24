@@ -39,12 +39,14 @@ WARN_FIX_POS="Warning: --fix should appear after the subcommand"
 WARN_FORMAT_POS="Warning: --format should appear after the subcommand"
 WARN_FORMAT_DUP="Warning: --format specified multiple times, using last value"
 WARN_MARKER_POS="Warning: --marker should appear after the subcommand"
+WARN_MARKER_DUP="Warning: --marker specified multiple times, using last value"
 WARN_MAXENT_POS="Warning: --max-entries should appear after the subcommand"
 WARN_PURGE_POS="Warning: --purge-objects should appear after the subcommand"
 WARN_PURGE_DUP="Warning: --purge-objects specified multiple times, using last value"
 WARN_BYPASS_POS="Warning: --bypass-gc should appear after the subcommand"
 WARN_INCONSISTENT_POS="Warning: --inconsistent-index should appear after the subcommand"
 WARN_YIRMI_POS="Warning: --yes-i-really-mean-it should appear after the subcommand"
+WARN_YIRMI_DUP="Warning: --yes-i-really-mean-it specified multiple times, using last value"
 WARN_SHOWRESTORE_POS="Warning: --show-restore-stats should appear after the subcommand"
 WARN_SHOWRESTORE_DUP="Warning: --show-restore-stats specified multiple times, using last value"
 WARN_REMOVE_BAD_POS="Warning: --remove-bad should appear after the subcommand"
@@ -943,6 +945,96 @@ check_warns "shard objects: --num-shards + --shard-id + --prefix before (3 warns
 
 # ============================================================
 echo ""
+echo "=== bucket resync encrypted multipart ==="
+# ============================================================
+
+# stray positional args
+check "resync: stray after leaf (banana)"          22 "ERROR: unexpected argument: 'banana'" \
+  bucket resync encrypted multipart banana
+check "resync: stray before bucket"                22 "ERROR: unexpected argument: 'foo'" \
+  foo bucket resync encrypted multipart
+check "resync: stray between resync and encrypted"  22 "ERROR: unexpected argument: 'x'" \
+  bucket resync x encrypted multipart
+check "resync: stray between encrypted and multipart" 22 "ERROR: unexpected argument: 'x'" \
+  bucket resync encrypted x multipart
+
+# unknown subcommand under the resync / encrypted nodes (require_subcommand -> 106)
+check "resync: unknown subcommand (banana)"           106 "A subcommand is required" \
+  bucket resync banana
+check "resync encrypted: unknown subcommand (banana)" 106 "A subcommand is required" \
+  bucket resync encrypted banana
+check "resync: no subcommand"                         106 "A subcommand is required" \
+  bucket resync
+
+check "resync: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
+  bucket resync encrypted multipart --fakeflag
+# a value option in SPACE form leaks its value as a stray positional (exit 22)
+check "resync: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+  bucket resync encrypted multipart --bucket cli11chk --max-entries 5 --yes-i-really-mean-it
+
+# missing option value (parse-level, exit 114)
+check "resync: --bucket missing value"    114 "--bucket: 1 required TEXT missing" \
+  bucket resync encrypted multipart --bucket
+check "resync: --bucket-id missing value" 114 "--bucket-id: 1 required TEXT missing" \
+  bucket resync encrypted multipart --bucket-id
+check "resync: --tenant missing value"    114 "--tenant: 1 required TEXT missing" \
+  bucket resync encrypted multipart --tenant
+check "resync: --marker missing value"    114 "--marker: 1 required TEXT missing" \
+  bucket resync encrypted multipart --marker
+
+# handler-level (cluster). empty bucket -> EINVAL (exit 22). Real-bucket EPERM and
+# success cases live in the integration section (need a bucket that exists).
+check_cluster "resync: bucket not specified" 22 "ERROR: bucket not specified" -- \
+  bucket resync encrypted multipart
+# valid args, nonexistent bucket: init_bucket fails (exit 2, no handler message)
+check_cluster "resync: nonexistent bucket (exit 2)" 2 "" -- \
+  bucket resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
+# unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
+# accepted; a value option in =form binds -> accepted; both proceed to init_bucket
+# (which fails on the nonexistent bucket, exit 2) rather than being rejected at parse.
+check_cluster "resync: unrelated binary flag --fix accepted (exit 2)" 2 "" -- \
+  bucket resync encrypted multipart --fix --bucket cli11-no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- \
+  bucket resync encrypted multipart --max-entries=5 --bucket cli11-no-such-bucket --yes-i-really-mean-it
+
+# wrong-position warnings (flag before the leaf). Value still flows via the shared
+# option, so with a nonexistent bucket they warn then fail at init_bucket (exit 2).
+# --tenant trips the global "no user ID" check (exit 22).
+check_warns "resync: --bucket before subcommand"  2 "" "$WARN_BUCKET_POS" -- \
+  bucket --bucket cli11-no-such-bucket resync encrypted multipart --yes-i-really-mean-it
+check_warns "resync: -b before subcommand (short)" 2 "" "$WARN_BUCKET_POS" -- \
+  bucket -b cli11-no-such-bucket resync encrypted multipart --yes-i-really-mean-it
+check_warns "resync: --bucket-id before subcommand" 2 "" "$WARN_BUCKETID_POS" -- \
+  bucket --bucket-id x resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
+check_warns "resync: --marker before subcommand"   2 "" "$WARN_MARKER_POS" -- \
+  bucket --marker m resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
+check_warns "resync: --yes-i-really-mean-it before subcommand" 2 "" "$WARN_YIRMI_POS" -- \
+  bucket --yes-i-really-mean-it resync encrypted multipart --bucket cli11-no-such-bucket
+check_warns "resync: --format before subcommand"   2 "" "$WARN_FORMAT_POS" -- \
+  bucket --format json resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
+check_warns "resync: --tenant before subcommand"   22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+  bucket --tenant t resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
+
+# duplicate-flag warnings
+check_warns "resync: duplicate --bucket" 2 "" "$WARN_BUCKET_DUP" -- \
+  bucket resync encrypted multipart --bucket a --bucket cli11-no-such-bucket --yes-i-really-mean-it
+check_warns "resync: duplicate --marker" 2 "" "$WARN_MARKER_DUP" -- \
+  bucket resync encrypted multipart --bucket cli11-no-such-bucket --marker a --marker b --yes-i-really-mean-it
+check_warns "resync: duplicate --yes-i-really-mean-it" 2 "" "$WARN_YIRMI_DUP" -- \
+  bucket resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it --yes-i-really-mean-it
+check_warns "resync: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
+  bucket resync encrypted multipart --tenant a --tenant b --bucket cli11-no-such-bucket --yes-i-really-mean-it
+
+# multi-warning combinations (2 and 3 warnings)
+check_warns "resync: --bucket + --marker before (2 pos warnings)" 2 "" \
+  "$WARN_BUCKET_POS" "$WARN_MARKER_POS" -- \
+  bucket --bucket cli11-no-such-bucket --marker m resync encrypted multipart --yes-i-really-mean-it
+check_warns "resync: --bucket + --marker + --yes-i-really-mean-it before (3 warns)" 2 "" \
+  "$WARN_BUCKET_POS" "$WARN_MARKER_POS" "$WARN_YIRMI_POS" -- \
+  bucket --bucket cli11-no-such-bucket --marker m --yes-i-really-mean-it resync encrypted multipart
+
+# ============================================================
+echo ""
 echo "=== bucket link ==="
 # ============================================================
 
@@ -1666,6 +1758,13 @@ check_help "cli11-help after shard objects"          bucket shard objects --cli1
 check_help "cli11-help after shard object (alias)"   bucket shard object --cli11-help
 check_help "cli11-help bucket shard (node)"          bucket shard --cli11-help
 
+# bucket resync encrypted multipart (3-level nesting)
+check_help "cli11-help bucket resync encrypted multipart" --cli11-help bucket resync encrypted multipart
+check_help "cli11-help resync after bucket"               bucket --cli11-help resync encrypted multipart
+check_help "cli11-help after resync multipart"            bucket resync encrypted multipart --cli11-help
+check_help "cli11-help bucket resync (node)"              bucket resync --cli11-help
+check_help "cli11-help bucket resync encrypted (node)"    bucket resync encrypted --cli11-help
+
 # ============================================================
 echo ""
 echo "=== --cli11-help content verification ==="
@@ -1800,6 +1899,19 @@ check_help_content "help content shard objects: --prefix"     "--prefix"      bu
 check_help_content "help content shard objects: --format"     "--format"      bucket shard objects --cli11-help
 check_help_content "help content shard objects: description"  "show sample object names that map to bucket shards" bucket shard objects --cli11-help
 check_help_content "help content shard (node): description"   "bucket shard commands" bucket shard --cli11-help
+
+# bucket resync encrypted multipart: all flags present
+check_help_content "help content resync: --bucket"      "--bucket"      bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: -b short"      "-b"            bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --bucket REQUIRED" "<bucket> REQUIRED" bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --bucket-id"   "--bucket-id"   bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --tenant"      "--tenant"      bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --marker"      "--marker"      bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --yes-i-really-mean-it" "--yes-i-really-mean-it" bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: --format"      "--format"      bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync: leaf description"   "repair replication of encrypted multipart uploads" bucket resync encrypted multipart --cli11-help
+check_help_content "help content resync (node): description" "bucket resync commands" bucket resync --cli11-help
+check_help_content "help content resync encrypted (node): description" "encrypted multipart resync commands" bucket resync encrypted --cli11-help
 
 # --bucket marked "<bucket> REQUIRED" in help for the commands that error on a
 # missing bucket (consistency with link/unlink/rm/chown/rewrite)
@@ -2127,6 +2239,17 @@ if cluster_running; then
         bucket shard objects --num-shards 4 --prefix ""
       check_cluster "integration: shard objects --format xml" 0 "<shard_obj><obj>obj00000000000000000010</obj></shard_obj>" -- \
         bucket shard objects --num-shards 4 --shard-id 0 --format xml
+
+      # bucket resync encrypted multipart: a repair op. On a non-replicated single-zone
+      # cluster it needs --yes-i-really-mean-it; without it -> EPERM (exit 1). With it,
+      # runs and emits the "modified" report (exit 0, idempotent on a normal bucket).
+      # The binary flag's =false / space-form 'false' both leave it unset -> EPERM.
+      check_cluster "integration: resync without --yes (EPERM)" 1 "This command is only necessary for replicated buckets." -- \
+        bucket resync encrypted multipart --bucket "$_test_bucket"
+      check_cluster "integration: resync --yes-i-really-mean-it (success)" 0 '"bucket_id"' -- \
+        bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
+      check_cluster "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 "This command is only necessary" -- \
+        bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
 
       # bucket logging on a bucket WITHOUT logging configured: info is silent
       # (exit 0, no output); list and flush print an error but still exit 0
