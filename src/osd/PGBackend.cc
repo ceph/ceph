@@ -227,8 +227,8 @@ void PGBackend::rollback(
       auto dpp = pg->get_parent()->get_dpp();
       const pg_pool_t &pool = pg->get_parent()->get_pool();
       if (pool.is_nonprimary_shard(pg->get_parent()->whoami_shard().shard)) {
-        if (entry.is_written_shard(pg->get_parent()->whoami_shard().shard)) {
-	  // Written shard - only rollback OI attr
+        if (entry.is_written_shard(pool.get_relative_shard(pg->get_parent()->whoami_shard().shard))) {
+          // Written shard - only rollback OI attr
 	  ldpp_dout(dpp, 20) << " entry " << entry.version
 			     << " written shard OI attr rollback "
 			     << pg->get_parent()->whoami_shard().shard
@@ -291,11 +291,13 @@ void PGBackend::rollback(
 		  pool.allows_ecoptimizations());
       auto dpp = pg->get_parent()->get_dpp();
       bool donework = false;
+      const shard_id_t rel_shard =
+        pool.get_relative_shard(pg->get_parent()->whoami_shard().shard);
       ceph_assert(shards.empty() || shards.size() == extents.size());
       for (unsigned int i = 0; i < extents.size(); i++) {
         if (shards.empty() ||
 	    shards[i].empty() ||
-	    shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+            shards[i].contains(rel_shard)) {
 	  // Written shard - rollback extents
 	  const uint64_t shard_size = pg->object_size_to_shard_size(
 					object_size,
@@ -365,11 +367,13 @@ struct TrimmerPostRemove : public ObjectModDesc::Visitor {
     const uint64_t object_size,
     const std::vector<shard_id_set> &shards) override {
     auto dpp = pg->get_parent()->get_dpp();
+    const shard_id_t rel_shard = pg->get_parent()->get_pool().get_relative_shard(
+      pg->get_parent()->whoami_shard().shard);
     ceph_assert(shards.empty() || shards.size() == extents.size());
     for (unsigned int i = 0; i < extents.size(); i++) {
       if (shards.empty() ||
 	  shards[i].empty() ||
-	  shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+          shards[i].contains(rel_shard)) {
         ldpp_dout(dpp, 30) << __func__ << " trim " << shards << " "
 			   << pg->get_parent()->whoami_shard().shard << dendl;
         pg->trim_rollback_object(
@@ -535,8 +539,10 @@ void PGBackend::partial_write(
 		     << " previous_version=" << previous_version
 		     << dendl;
   for (shard_id_t shard : pool.nonprimary_shards) {
+    // nonprimary_shards and partial_writes_last_complete are keyed by absolute
+    // shard id, but written_shards holds relative ids.
     auto pwlc_iter = info->partial_writes_last_complete.find(shard);
-    if (!entry.is_written_shard(shard)) {
+    if (!entry.is_written_shard(pool.get_relative_shard(shard))) {
       if (pwlc_iter == info->partial_writes_last_complete.end()) {
 	// 1st partial write since all logs were updated
 	info->partial_writes_last_complete[shard] =
@@ -779,8 +785,9 @@ void PGBackend::rollback_setattrs(
     decode(oi, p);
 
     shard_id_t my_shard = get_parent()->whoami_shard().shard;
-    if (oi.shard_versions.contains(my_shard) && oi.shard_versions.at(my_shard) != oi.version) {
-      oi.version = oi.shard_versions.at(my_shard);
+    const shard_id_t rel_shard = get_parent()->get_pool().get_relative_shard(my_shard);
+    if (oi.shard_versions.contains(rel_shard) && oi.shard_versions.at(rel_shard) != oi.version) {
+      oi.version = oi.shard_versions.at(rel_shard);
       oi.shard_versions.clear();
       
       bufferlist bl;
