@@ -462,6 +462,9 @@ public:
       10000, 15000, 20000, 30000, 50000, 100000
     };
 
+    static constexpr uint64_t TAIL_SLOW_US = 5000;        // 5 ms
+    static constexpr uint64_t TAIL_VERY_SLOW_US = 10000;  // 10 ms
+
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
       seastar::metrics::histogram conflict_replays;
@@ -473,6 +476,10 @@ public:
       uint64_t onode_updates = 0;
       uint64_t onode_erases = 0;
       int64_t  onode_extents_delta = 0;
+
+      // same metrics collected two more times for high tail txns.
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_very_slow;
     } stats;
 
     void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
@@ -528,9 +535,11 @@ public:
     // Record the latency of one do_transaction stage (microseconds). Buckets are
     // non-cumulative (bucket = first upper_bound >= value); values above the top
     // bound aren't bucketed but still land in sample_count/sample_sum.
-    void add_stage_latency_sample(txn_stage_t stage,
+    void add_stage_latency_sample(
+        std::array<seastar::metrics::histogram, STAGE_MAX>& arr,
+        txn_stage_t stage,
         std::chrono::steady_clock::duration dur) {
-      auto& hist = stats.stage_lat[static_cast<std::size_t>(stage)];
+      auto& hist = arr[static_cast<std::size_t>(stage)];
       if (hist.buckets.empty()) {
         // register_metrics() did not run (store inactive); nothing to record.
         return;

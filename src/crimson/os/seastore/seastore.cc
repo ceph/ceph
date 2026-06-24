@@ -227,27 +227,38 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::SUBMIT_PREPARE_RECORD, sm::label_instance("stage", "submit_prepare_record")},
     {txn_stage_t::SUBMIT_JOURNAL,        sm::label_instance("stage", "submit_journal")},
   };
-  for (auto& [stage, label] : labels_by_stage) {
-    auto idx = static_cast<std::size_t>(stage);
-    auto& hist = stats.stage_lat[idx];
-    hist.buckets.resize(STAGE_LAT_BUCKETS_US.size());
-    for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_US.size(); ++i) {
-      hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_US[i];
-      hist.buckets[i].count = 0;
-    }
-    metrics.add_group(
-      "seastore",
-      {
-        sm::make_histogram(
-          "do_transaction_stage_lat",
-          [this, idx]() -> seastar::metrics::histogram& {
-            return stats.stage_lat[idx];
-          },
-          sm::description("per-stage latency (microseconds) of do_transaction"),
-          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
-        )
+  // Three tiers of the same per-stage histograms
+  std::pair<std::array<seastar::metrics::histogram, STAGE_MAX>*, const char*>
+    tail_tiers[] = {
+      {&stats.stage_lat,           "all"},
+      {&stats.stage_lat_slow,      "slow"},
+      {&stats.stage_lat_very_slow, "very_slow"},
+    };
+  for (auto& [arr_ptr, tail] : tail_tiers) {
+    for (auto& [stage, label] : labels_by_stage) {
+      auto idx = static_cast<std::size_t>(stage);
+      auto& hist = (*arr_ptr)[idx];
+      hist.buckets.resize(STAGE_LAT_BUCKETS_US.size());
+      for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_US.size(); ++i) {
+        hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_US[i];
+        hist.buckets[i].count = 0;
       }
-    );
+      metrics.add_group(
+        "seastore",
+        {
+          sm::make_histogram(
+            "do_transaction_stage_lat",
+            [arr_ptr, idx]() -> seastar::metrics::histogram& {
+              return (*arr_ptr)[idx];
+            },
+            sm::description("per-stage latency (microseconds) of do_transaction"),
+            {label,
+             sm::label_instance("tail", tail),
+             sm::label_instance("shard_store_index", std::to_string(store_index))}
+          )
+        }
+      );
+    }
   }
 
   metrics.add_group(
@@ -1820,21 +1831,39 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
   DEBUGT("done", *ctx.transaction);
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
-  add_stage_latency_sample(txn_stage_t::COLLOCK_WAIT, collock_wait);
-  add_stage_latency_sample(txn_stage_t::COLLOCK_HOLD,
-                           ctx.transaction->get_handle().get_lock_hold_time());
-  add_stage_latency_sample(txn_stage_t::THROTTLER_WAIT, throttler_wait);
-  add_stage_latency_sample(txn_stage_t::BUILD, ctx.build_time);
-  add_stage_latency_sample(txn_stage_t::BUILD_GET_ONODE, ctx.get_onode_time);
-  add_stage_latency_sample(txn_stage_t::SUBMIT_TOTAL, ctx.submit_time);
   {
     auto& pd = ctx.transaction->get_phase_durations();
-    add_stage_latency_sample(txn_stage_t::SUBMIT_RESERVE, pd.reserve);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE, pd.ool_write);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_LBA_UPDATE, pd.lba_update);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_ENTER, pd.prepare_enter);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_JOURNAL, pd.journal);
+    auto total = std::chrono::steady_clock::now() - ctx.begin_timestamp;
+    auto total_us = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(total).count());
+
+    const std::array<
+      std::pair<txn_stage_t, std::chrono::steady_clock::duration>, STAGE_MAX>
+      stage_samples = {{
+        {txn_stage_t::COLLOCK_WAIT,          collock_wait},
+        {txn_stage_t::COLLOCK_HOLD,          ctx.transaction->get_handle().get_lock_hold_time()},
+        {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
+        {txn_stage_t::BUILD,                 ctx.build_time},
+        {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
+        {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
+        {txn_stage_t::SUBMIT_RESERVE,        pd.reserve},
+        {txn_stage_t::SUBMIT_OOL_WRITE,      pd.ool_write},
+        {txn_stage_t::SUBMIT_LBA_UPDATE,     pd.lba_update},
+        {txn_stage_t::SUBMIT_PREPARE_ENTER,  pd.prepare_enter},
+        {txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record},
+        {txn_stage_t::SUBMIT_JOURNAL,        pd.journal},
+      }};
+
+    for (auto& [stage, dur] : stage_samples) {
+      add_stage_latency_sample(stats.stage_lat, stage, dur);
+      if (total_us > TAIL_SLOW_US) {
+        add_stage_latency_sample(stats.stage_lat_slow, stage, dur);
+      }
+      if (total_us > TAIL_VERY_SLOW_US) {
+        add_stage_latency_sample(stats.stage_lat_very_slow, stage, dur);
+      }
+    }
+    add_latency_sample(op_type_t::DO_TRANSACTION, total);
   }
   add_latency_sample(
     op_type_t::DO_TRANSACTION,
