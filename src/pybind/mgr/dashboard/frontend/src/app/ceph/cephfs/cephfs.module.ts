@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import {
@@ -63,7 +63,8 @@ import {
   TilesModule,
   TreeviewModule,
   TabsModule,
-  NotificationModule
+  NotificationModule,
+  ProgressBarModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
@@ -76,6 +77,7 @@ import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
 import ShareIcon from '@carbon/icons/es/share/32';
 import ShareIcon24 from '@carbon/icons/es/share/24';
 import PendingFilled from '@carbon/icons/es/pending--filled/16';
+import DotMark from '@carbon/icons/es/dot-mark/16';
 
 @NgModule({
   imports: [
@@ -114,7 +116,8 @@ import PendingFilled from '@carbon/icons/es/pending--filled/16';
     RadioModule,
     TilesModule,
     TagModule,
-    NotificationModule
+    NotificationModule,
+    ProgressBarModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -145,7 +148,8 @@ import PendingFilled from '@carbon/icons/es/pending--filled/16';
     CephfsDownloadTokenComponent,
     CephfsSetupMirroringComponent
   ],
-  providers: [provideCharts(withDefaultRegisterables())]
+  providers: [provideCharts(withDefaultRegisterables())],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
@@ -159,7 +163,8 @@ export class CephfsModule {
       ReplicateIcon24,
       ShareIcon,
       ShareIcon24,
-      PendingFilled
+      PendingFilled,
+      DotMark
     ]);
   }
 }
