@@ -3435,11 +3435,11 @@ void PeeringState::proc_master_log(
 	} else {
 	  consider_adjusting_pwlc(pg_log.get_tail());
 	}
-      } else if (op->version == p->version) {
+      } else if (std::prev(op)->version == p->version) {
 	// Normal case - both logs have this entry
 	consider_adjusting_pwlc(p->version);
 	++p;
-      } else if (op->version < p->version) {
+      } else if (std::prev(op)->version < p->version) {
 	// Last entry in other log is before this entry
 	consider_adjusting_pwlc(pg_log.get_tail());
       } else {
