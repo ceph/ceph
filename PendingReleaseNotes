@@ -1,3 +1,12 @@
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
+  variable is now checked in combination with infrastructure topology rules to enforce
+  node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
+  now be chosen over a preferred standby daemon targeting that file system if the
+  preferred standby resides on the same physical host as the failed active rank (Score 3).
+  This safely mitigates localized hardware failure boundaries during rapid automatic
+  recovery cycles.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
