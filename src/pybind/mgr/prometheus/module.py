@@ -2068,7 +2068,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                     )
                     self.metrics['node_proxy_memory_capacity_mib'].set(capacity, labels)
 
-            for category in ['storage', 'processors', 'memory', 'power', 'fans', 'network']:
+            for category in ['storage', 'processors', 'memory', 'power', 'fans', 'network', 'temperatures']:
                 for sys_id, components in status.get(category, {}).items():
                     for comp_id, comp in components.items():
                         health_str = comp.get('status', {}).get('health', 'Unknown')

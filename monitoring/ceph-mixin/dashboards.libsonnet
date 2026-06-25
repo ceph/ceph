@@ -13,5 +13,6 @@
     (import 'dashboards/smb-overview.libsonnet') +
     (import 'dashboards/ceph-nvmeof.libsonnet') +
     (import 'dashboards/ceph-nvmeof-performance.libsonnet') +
+    (import 'dashboards/hardware.libsonnet') +
     { _config:: $._config },
 }
