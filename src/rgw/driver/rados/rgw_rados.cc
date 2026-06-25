@@ -9172,6 +9172,31 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
   return r;
 }
 
+int RGWRados::bucket_index_refresh_instance(const DoutPrefixProvider *dpp,
+                                            RGWBucketInfo& bucket_info,
+                                            const rgw_obj& obj_instance,
+                                            optional_yield y)
+{
+  rgw_rados_ref ref;
+  int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  BucketShard bs(this);
+
+  return guard_reshard(dpp, &bs, obj_instance, bucket_info,
+                       [&](BucketShard *bs) -> int {
+                         cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
+                         auto& ref = bs->bucket_obj;
+                         librados::ObjectWriteOperation op;
+                         op.assert_exists(); // bucket index shard must exist
+                         cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
+                         cls_rgw_bucket_refresh_instance(op, key);
+                         return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+                       }, y);
+}
+
 void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjState& olh_state, ObjectOperation& op)
 {
   ldpp_dout(dpp, 20) << __func__ << "(): olh_state.olh_tag=" << string(olh_state.olh_tag.c_str(), olh_state.olh_tag.length()) << dendl;
