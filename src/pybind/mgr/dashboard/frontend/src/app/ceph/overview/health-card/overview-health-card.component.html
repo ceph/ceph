@@ -303,19 +303,17 @@
 
         @if (hwEnabled && hwSections) {
           <div class="overview-health-card-hardware-sections">
-            @for (section of sections; track $index; let isLast = $last) {
-              <div
-                class="overview-health-card-hardware-section"
-                [class.border-subtle-right]="!isLast"
-              >
-                @for (row of section; track row.key) {
-                  <div class="overview-health-card-hardware-row">
-                    <span class="overview-health-card-icon-and-text">
-                      <cd-icon [type]="row.key"></cd-icon>
-                      <span class="cds--type-body-compact-01">
-                        {{ row.label }}
-                      </span>
-                    </span>
+          @for (section of hwSections; track $index; let isLast = $last) {
+            <div class="overview-health-card-hardware-section"
+                 [class.border-subtle-right]="!isLast">
+            @for (row of section; track row.key) {
+            <div class="overview-health-card-hardware-row">
+              <span class="overview-health-card-icon-and-text">
+                <cd-icon [type]="row.icon"></cd-icon>
+                <span class="cds--type-body-compact-01">
+                  {{ row.label }}
+                </span>
+              </span>
 
                     <span class="overview-health-card-hardware-status">
                       @if (row.error > 0) {
