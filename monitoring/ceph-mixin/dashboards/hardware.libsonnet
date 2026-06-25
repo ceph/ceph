@@ -670,6 +670,27 @@ local g = import 'grafonnet/grafana.libsonnet';
             { alias: 'Critical', color: 'dark-red', dashes: true, fill: 0 },
           ],
         },
+
+        // PSU Temperatures
+        g.graphPanel.new(
+          title='PSU Temperatures',
+          datasource='$datasource',
+          format='celsius',
+        ).addTarget(
+          g.prometheus.target(
+            'ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~"PSU.*_TEMP.*"}',
+            legendFormat='{{sensor_name}}'
+          )
+        ).addTarget(
+          g.prometheus.target('vector(65)', legendFormat='Critical')
+        )
+        + {
+          gridPos: { x: 0, y: 20, w: 12, h: 8 },
+          yaxes: [{ min: 0 }, {}],
+          seriesOverrides: [
+            { alias: 'Critical', color: 'dark-red', dashes: true, fill: 0 },
+          ],
+        },
       ] },
 
       // Row 5: FAN Speed History
