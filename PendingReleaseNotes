@@ -2,6 +2,16 @@
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
   (``brew install bash gnu-getopt``).
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
+  variable is now checked in combination with infrastructure topology rules to enforce
+  node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
+  now be chosen over a preferred standby daemon targeting that file system if the
+  preferred standby resides on the same physical host as the failed active rank (Score 3).
+  This safely mitigates localized hardware failure boundaries during rapid automatic
+  recovery cycles. This behavior can be disabled per file system using the command
+  `ceph fs set <fs_name> standby_enable_host_anti_affinity false` (default: true)
+  to restore legacy strict 'mds_join_fs' prioritization.
 
 * CephFS: New MDS configuration options for non-blocking dirfrag prefetch have
   been added. ``mds_dir_prefetch_backend``, when enabled with
