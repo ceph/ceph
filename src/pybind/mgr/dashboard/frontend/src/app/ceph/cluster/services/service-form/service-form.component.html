@@ -197,8 +197,7 @@
                     [invalid]="serviceForm.controls.realm_name.invalid && serviceForm.controls.realm_name.dirty"
                     [invalidText]="authModeError"
                     helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
-                    i18n-helperText
-                    [disabled]="realmList.length === 0  || editing ? true : false">
+                    i18n-helperText>
           @if (realmList.length === 0) {
           <option i18n
                   selected>-- No realm available --
@@ -221,8 +220,7 @@
       <div class="form-item">
         <cds-select id="zonegroup_name"
                     formControlName="zonegroup_name"
-                    label="Zonegroup"
-                    [disabled]="zonegroupList.length === 0  || editing ? true : null">
+                    label="Zonegroup">
           @for (zonegroup of zonegroupList; track zonegroup) {
           <option [value]="zonegroup.name">
             {{ zonegroup.name }}
@@ -234,8 +232,7 @@
       <div class="form-item">
         <cds-select id="zone_name"
                     formControlName="zone_name"
-                    label="Zone"
-                    [disabled]="zoneList.length === 0  || editing ? true : null">
+                    label="Zone">
           @for (zone of zoneList; track zone) {
           <option [value]="zone.name">
             {{ zone.name }}
@@ -1218,8 +1215,7 @@
           <input cdsPassword
                  type="password"
                  id="grafana_admin_password"
-                 formControlName="grafana_admin_password"
-                 [disabled]="editing ? true:null" />
+                 formControlName="grafana_admin_password" />
         </cds-password-label>
         <cd-copy-2-clipboard-button source="grafana_admin_password"
                                     class="mt-4">

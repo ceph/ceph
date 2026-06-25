@@ -10,6 +10,7 @@ import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -78,7 +79,8 @@ import {
   LayoutModule,
   ContainedListModule,
   LayerModule,
-  ThemeModule
+  ThemeModule,
+  TilesModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -142,8 +144,10 @@ import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter
     SideNavModule,
     LayoutModule,
     ThemeModule,
+    TilesModule,
     NvmeofSetupCardsComponent,
-    NvmeofGatewayGroupFilterComponent
+    NvmeofGatewayGroupFilterComponent,
+    TextLabelListComponent
   ],
   declarations: [
     RbdListComponent,
