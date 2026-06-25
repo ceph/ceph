@@ -13,3 +13,9 @@
 - **Action**: Added notes to qa/AGENTS.md about RGW test split: src/test/rgw has unit+standalone tests, qa/ has setup code only, most RGW tests in separate s3-tests repo.
 - **Commit**: `doc: qa/AGENTS.md: clarify RGW test locations`
 - **Status**: Done
+
+### 3. Fix dependency graph + replace ASCII diagram (yuvalif, JonBailey1993/Bob)
+- **Comment ID**: 3436325550 (yuvalif), external feedback from JonBailey1993
+- **Action**: Replaced ASCII box diagram with text-based dependency list. Fixed incorrect dependencies: rgw depends on librados (not os/crush directly, not librbd). ASCII diagrams are unreliable for LLM parsing.
+- **Commit**: `doc: AGENTS.md: replace ASCII diagram with text dependency list`
+- **Status**: Done

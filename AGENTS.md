@@ -201,31 +201,13 @@ When asked to prepare for a PR, restructure commits to tell a **story for human 
 
 ## Key Interdependencies
 
-```
-                    ┌──────────┐
-                    │  common/ │  (used by everything)
-                    │ include/ │
-                    └────┬─────┘
-                         │
-              ┌──────────┼──────────┐
-              │          │          │
-         ┌────▼───┐ ┌───▼────┐ ┌──▼───┐
-         │  msg/  │ │  os/   │ │crush/│
-         └───┬────┘ └───┬────┘ └──┬───┘
-             │          │         │
-    ┌────────┼──────────┼─────────┘
-    │        │          │
-┌───▼──┐ ┌──▼──┐ ┌────▼───┐ ┌─────┐
-│ osd/ │ │mon/ │ │  mds/  │ │mgr/ │
-└──┬───┘ └─────┘ └────────┘ └─────┘
-   │
-   │  ┌──────────┐  ┌──────────┐  ┌──────┐
-   └──│erasure-  │  │librados/ │  │ rgw/ │
-      │code/     │  └────┬─────┘  └──┬───┘
-      └──────────┘       │           │
-                    ┌────▼─────┐     │
-                    │ librbd/  │◄────┘
-                    └──────────┘
-```
-
-Note: `rgw/` depends on `librados/` (not on `os/` or `crush/` directly). `librados/` depends on `msg/`, `os/`, and `crush/` transitively, but `rgw/` does not.
+- **`common/`, `include/`** — foundational libraries used by everything
+- **`msg/`**, **`os/`**, **`crush/`** — infrastructure layer; depends on `common/`/`include/`
+- **`osd/`** — depends on `msg/`, `os/`, `crush/`, `erasure-code/`
+- **`mon/`** — depends on `msg/`, `os/`, `crush/`
+- **`mds/`** — depends on `msg/`, `os/`, `crush/`
+- **`mgr/`** — depends on `msg/`, `common/`
+- **`librados/`** — RADOS client library; depends on `msg/`, `common/` (talks to OSDs/MONs over the network, does not link `os/` or `crush/` directly)
+- **`rgw/`** — depends on `librados/` (not on `os/` or `crush/` directly)
+- **`librbd/`** — depends on `librados/`
+- **`erasure-code/`** — plugin framework used by `osd/`
