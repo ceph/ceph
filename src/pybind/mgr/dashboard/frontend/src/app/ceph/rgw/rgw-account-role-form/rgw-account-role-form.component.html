@@ -105,8 +105,6 @@
             placeholder="Placeholder text"
             rows="8"
             cols="200"
-            [invalid]="policyDoc.isInvalid"
-            [invalidText]="policyError"
           ></textarea>
         </cds-textarea-label>
         <ng-template #policyError>
@@ -166,7 +164,7 @@
       (submitActionEvent)="onSubmit()"
       [form]="form"
       [submitText]="mode"
-      [modalForm]="true"
-    ></cd-form-button-panel>
+    >
+    </cd-form-button-panel>
   </form>
 </cds-modal>
