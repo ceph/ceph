@@ -103,17 +103,9 @@ Read and follow the `CodingStyle` file in the repository root — it is the sing
 ## Rules for AI Coding Agents
 
 ### Code Formatting
-The repository has a `.clang-format` file at the project root. **All new and modified C++ code must conform to this format.** Key points from the config:
-- Based on Google style with Ceph-specific overrides
-- C++23 standard
-- 2-space indentation, no tabs
-- Column limit: 80 (soft), penalty-based line breaking
-- Braces: opening brace on same line for classes/structs/control, but **after newline for function definitions**
-- Pointer/reference alignment: left (`int* p`, not `int *p`)
-- Constructor initializer lists: break after colon, one per line if they don't fit
-- Includes are sorted and regrouped by category (local, project, boost, system)
+The repository has a `.clang-format` file at the project root. **All new and modified C++ code must conform to this format.** Read the `.clang-format` file directly for the authoritative formatting rules — do not rely on summaries, which can drift out of date.
 
-When writing new code, follow these formatting rules. When editing existing code, format only the lines you change.
+When writing new code, follow `.clang-format`. When editing existing code, format only the lines you change.
 
 ### Do Not Reformat Existing Code
 **Never make whitespace-only or style-only changes to code you are not otherwise modifying.** Reformatting untouched code causes unnecessary git conflicts with other developers' branches. If you see poorly formatted existing code, leave it alone unless you are already making functional changes to those specific lines.

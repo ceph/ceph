@@ -37,3 +37,9 @@
 - **Action**: Replaced duplicated coding style bullet list with a directive to read CodingStyle directly. Fixed C++20 → C++23 throughout.
 - **Commit**: `doc: AGENTS.md: reference CodingStyle file instead of duplicating rules`
 - **Status**: Done
+
+### 7. Reference .clang-format instead of duplicating (JonBailey1993)
+- **Comment ID**: 3472990076
+- **Action**: Replaced duplicated .clang-format summary with directive to read the file directly.
+- **Commit**: `doc: AGENTS.md: reference .clang-format instead of duplicating rules`
+- **Status**: Done
