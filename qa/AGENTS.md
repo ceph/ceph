@@ -4,6 +4,11 @@
 
 The `qa/` directory contains Ceph's integration testing infrastructure. There are two main approaches: **Teuthology** (distributed cluster testing on real or virtual machines) and **standalone tests** (shell scripts that run on a single node using vstart clusters). Unit tests are separate — see [../src/test/AGENTS.md](../src/test/AGENTS.md).
 
+**Important notes on test locations:**
+- `src/test/rgw/` contains both unit tests and standalone tests. The standalone tests there are also the tests run in Teuthology — the code under `qa/` for RGW is setup/orchestration code, not the test logic itself.
+- The majority of RGW tests live in the separate **[s3-tests](https://github.com/ceph/s3-tests)** repository under the Ceph GitHub org.
+- Other subsystems may have similar splits — check subsystem-specific AGENTS.md files for details.
+
 ## Key Files and Directories
 
 ### Standalone Tests
