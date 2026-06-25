@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "lancedb-c",
+    "lancedb-rgw-store",
+]
+resolver = "2"

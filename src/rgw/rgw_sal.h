@@ -833,6 +833,7 @@ class User {
 
     /* dang temporary; will be removed when User is complete */
     virtual RGWUserInfo& get_info() = 0;
+    virtual const RGWUserInfo& get_info() const = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;
