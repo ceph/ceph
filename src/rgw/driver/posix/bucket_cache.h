@@ -151,33 +151,37 @@ public:
     if (factory == nullptr) {
         return false;
     }
-    { /* anon block */
-      /* in this case, we are being called from a context which holds
-       * A partition lock, and this may be still in use */
+
+    /* Two locks are involved: this entry's mtx and the TreeX partition
+     * lock.  get_bucket() acquires them partition→mtx; reclaim must not
+     * do mtx→partition or we deadlock.  So we mark the entry deleted
+     * under mtx (short critical section), release mtx, then do the
+     * cross-partition tree remove outside. */
+    bool need_cross_remove = false;
+    {
       auto lock = lock_guard{mtx};
       if (! deleted()) {
-	flags |= FLAG_DELETED;
-	bc->recycle_count++;
-
-	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
-	bc->un->remove_watch(name);
-
-	// XXX depends on safe_link
 	if (! name_hook.is_linked()) {
-	  // this should not happen!
 	  abort();
 	}
 
-	/* remove from AVL tree; if the evicted entry is in the same
-	 * partition as the incoming insert, the latch is already held */
+	flags |= FLAG_DELETED;
+	bc->recycle_count++;
+	bc->un->remove_watch(name);
+	env.reset();
+
 	if (bc->cache.is_same_partition(hk, factory->hk)) {
 	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
 	} else {
-	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+	  need_cross_remove = true;
 	}
+      }
+    } /* mtx released */
 
-	env.reset();
-      } /* ! deleted */
+    if (need_cross_remove) {
+      bc->cache.unlock_for(factory->hk);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+      bc->cache.lock_for(factory->hk);
     }
     return true;
 } /* reclaim */
@@ -412,6 +416,18 @@ public:
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
+#ifndef NDEBUG
+	  /* total = q + active;
+	   * q holds idle entries eligible for eviction,
+	   * active holds entries with an outstanding ref (in-flight request).
+	   * A stable total with "recycled" entries means the LRU is healthy. */
+	  ldpp_dout(dpp, 21) << "BucketCache: "
+	    << (iflags & cohort::lru::FLAG_RECYCLE ? "recycled" : "allocated new")
+	    << " entry, LRU total=" << lru.get_size()
+	    << " (q=" << lru.get_q_size()
+	    << " active=" << lru.get_active_size() << ")"
+	    << ", bucket=" << name << dendl;
+#endif
 	  b->mtx.lock();
 
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
