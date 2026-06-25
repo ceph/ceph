@@ -555,6 +555,8 @@ public:
     }
     get_handle().exit();
     views.clear();
+    copied_lba_keys.clear();
+    update_copied_lba_key = nullptr;
   }
 
   bool did_reset() const {
