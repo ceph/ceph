@@ -23,9 +23,19 @@ class HardwareService(object):
             }
         }
 
+        def _get_health(component: Any) -> str:
+            if not isinstance(component, dict):
+                return 'Unknown'
+            status_val = component.get("status", {})
+            if isinstance(status_val, dict):
+                return status_val.get("health", "Unknown")
+            if isinstance(status_val, str):
+                return status_val
+            return 'Unknown'
+
         def count_ok(data: dict) -> int:
             return sum(
-                component.get("status", {}).get("health") == "OK"
+                _get_health(component) == "OK"
                 for node in data.values()
                 for system in node.values()
                 for component in system.values()
@@ -53,7 +63,8 @@ class HardwareService(object):
                 output['host'].setdefault(host, {'flawed': False})
                 if not output['host'][host]['flawed']:
                     for system in systems.values():
-                        if any(dimm['status']['health'] != 'OK' for dimm in system.values()):
+                        if any(_get_health(comp) != 'OK'
+                              for comp in system.values()):
                             output['host'][host]['flawed'] = True
                             break
 
