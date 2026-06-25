@@ -154,6 +154,8 @@ Assisted-by: AI-tool-or-model [optional-tooling]
 ```
 
 ### Commit Structure and PR Preparation
+Read `SubmittingPatches.rst` in the repository root for the full guide on commit titles, commit messages, PR format, and backport procedures. **Exception**: the `Signed-off-by` instructions in that document apply to human developers only — AI agents MUST NOT add S-o-b tags (see above).
+
 During development, commit regularly so progress is preserved. Working commits do not need to be polished.
 
 When asked to prepare for a PR, restructure commits to tell a **story for human reviewers**: preparatory refactoring first, then tests/reproducers, then the main fix, then cleanup. Each commit should be reviewable in isolation. Never mix unrelated changes. A simple fix can be one commit; a complex feature may need several. Pushing a PR is always a human decision.

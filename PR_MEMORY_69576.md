@@ -43,3 +43,9 @@
 - **Action**: Replaced duplicated .clang-format summary with directive to read the file directly.
 - **Commit**: `doc: AGENTS.md: reference .clang-format instead of duplicating rules`
 - **Status**: Done
+
+### 8. Reference SubmittingPatches.rst for commit format (JonBailey1993)
+- **Comment ID**: 3473082793
+- **Action**: Added reference to SubmittingPatches.rst for commit/PR formatting, with explicit exception that S-o-b instructions apply to humans only.
+- **Commit**: `doc: AGENTS.md: reference SubmittingPatches.rst for commit format`
+- **Status**: Done
