@@ -1,0 +1,35 @@
+[package]
+name = "lancedb-rgw-store"
+version = "0.1.0"
+edition = "2021"
+description = "LanceDB RGW backend integration"
+license = "Apache-2.0"
+repository = "https://github.com/ceph/ceph"
+keywords = ["ceph", "rgw", "lancedb", "vector", "storage", "sal"]
+categories = ["database", "api-bindings"]
+
+[lib]
+name = "lancedb_rgw_store"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+# Both crates are in a Cargo workspace (src/rgw/Cargo.toml) sharing one
+# Cargo.lock — versions are unified automatically.  No pins needed.
+lance-io = { version = "7.0", default-features = false }
+lance-core = { version = "7.0", default-features = false }
+object_store = "0.13"
+bytes = "1"
+async-trait = "0.1"
+futures = "0.3"
+url = "2"
+chrono = "0.4"
+libc = "0.2"
+
+[build-dependencies]
+# For linking to Ceph libraries
+cc = "1.0"
+pkg-config = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+lazy_static = "1.4"

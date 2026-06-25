@@ -107,7 +107,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_index(configuration, this, y, validation_errors);
+    op_ret = rgw::s3vector::create_index(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, validation_errors);
   }
 
   void send_response() override {
@@ -219,7 +219,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_vector_bucket(configuration, this, y);
+    op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       return;
@@ -307,7 +307,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_index(configuration, this, y);
+    op_ret = rgw::s3vector::delete_index(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
   }
 };
 
@@ -372,7 +372,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to delete s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vector_bucket(configuration, this, y);
+    op_ret = rgw::s3vector::delete_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
   }
 };
 
@@ -448,7 +448,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vectors(configuration, this, y, validation_errors);
+    op_ret = rgw::s3vector::put_vectors(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, validation_errors);
   }
 
   void send_response() override {
@@ -499,7 +499,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_vectors(configuration, this, y, reply);
+    op_ret = rgw::s3vector::get_vectors(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
   }
 
   void send_response() override {
@@ -556,7 +556,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::list_vectors(configuration, this, y, reply);
+    op_ret = rgw::s3vector::list_vectors(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
   }
 
   void send_response() override {
@@ -776,7 +776,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, this, y, reply);
+    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
   }
 
   void send_response() override {
@@ -840,7 +840,7 @@ private:
         configuration.vector_bucket_name
       );
     }
-    op_ret = rgw::s3vector::list_indexes(configuration, this, y, reply);
+    op_ret = rgw::s3vector::list_indexes(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
   }
 
   void send_response() override {
@@ -972,7 +972,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::delete_vectors(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
   }
 };
 
@@ -1023,7 +1023,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, this, y, reply, validation_errors);
+    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, driver, s->user.get(), &s->bucket_tenant, this, y, reply, validation_errors);
   }
 
   void send_response() override {

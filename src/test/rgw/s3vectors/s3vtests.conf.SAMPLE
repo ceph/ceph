@@ -2,6 +2,10 @@
 port = 8000
 host = localhost
 zonegroup = default
+# s3vector_backend: Storage backend for s3vector data. Options: local, s3, or rgw (default)
+# When set to 's3' or 'rgw', tests will create a regular S3 bucket with the same name
+# as the vector bucket before vector operations.
+# s3vector_backend = s3
 
 [s3 main]
 access_key = 0555b35654ad1656d804

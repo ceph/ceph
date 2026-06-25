@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include "rgw_sal.h"
+#include "rgw_s3vector.h"
 #include "lancedb.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -181,20 +182,34 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
-              if (sessions.find(table_name.first) == sessions.end()) {
-                //create session if not exist, otherwise just ignore
-                //Can define session options in the future if needed, for now just create with default options for cache sizes
-                LanceDBSession* session = lancedb_session_new(nullptr);
-                if (session) {
-                  sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
-                  ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
-                }
-                else {
-                  ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
-                }
+              if (sessions.find(table_name.first) != sessions.end()) {
+                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
                 return;
               }
-              ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
+
+              const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
+              BackendType backend_type;
+              if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+                ldpp_dout(this, 1) << "ERROR: unrecognized backend type: " << backend_str << dendl;
+                return;
+              }
+              LanceDBSession* session = nullptr;
+
+              // To pass custom LanceDBSessionOptions for cache sizes etc.
+              const LanceDBSessionOptions* options = nullptr;
+
+              if (is_rgw_backend(backend_type)) {
+                session = create_rgw_session(this, driver, options);
+              } else {
+                session = lancedb_session_new(options);
+              }
+              if (!session) {
+                ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
+                return;
+              }
+              ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
+
+              sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
               return;
             }
           case message_t::Op::SESSION_DELETE:
@@ -408,6 +423,8 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& buc
   }
   return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_DELETE);
 }
+
+
 
 } // namespace rgw::s3vector
 
