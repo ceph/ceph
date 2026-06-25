@@ -4570,6 +4570,78 @@ Then run the following:
             and bool(nvmeof_spec.group)
         )
 
+    def _check_and_migrate_legacy_rgw_frontend_ssl_field(self, spec: ServiceSpec) -> None:
+        """
+        Strictly validate and migrate RGW's legacy ``rgw_frontend_ssl_certificate``
+        field when a spec is applied through cephadm.
+
+        ``RGWSpec.validate()`` already attempts a best-effort, non-destructive
+        migration of this legacy field during spec deserialization. That path must
+        not raise on parsing failures because it is also used when loading stored
+        specs from the config-key store during mgr restart, failover, or upgrade.
+        Failing there could prevent an existing RGW spec from being loaded.
+
+        This helper is intentionally stricter and is meant for the user-facing apply
+        path only, before the spec is persisted. If a newly applied RGW spec still
+        uses ``rgw_frontend_ssl_certificate``, require it to contain a valid combined
+        PEM bundle with one unencrypted private key and at least one certificate. On
+        success, migrate it to ``ssl_cert`` / ``ssl_key`` and clear the legacy field.
+        On failure, raise ``OrchestratorError`` so bad new input is rejected instead
+        of being stored.
+        """
+
+        if spec.service_type != 'rgw':
+            return
+
+        from ceph.deployment.service_spec import RGWSpec
+        if not isinstance(spec, RGWSpec):
+            return
+
+        if not spec.ssl:
+            return
+
+        # If ssl_cert is already set, do not touch the legacy field. The new
+        # ssl_cert/ssl_key fields take precedence.
+        if spec.ssl_cert:
+            return
+
+        legacy_cert = spec.rgw_frontend_ssl_certificate
+        if legacy_cert is None:
+            return
+
+        from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
+
+        if isinstance(legacy_cert, list):
+            combined_cert = '\n'.join(legacy_cert)
+        else:
+            combined_cert = legacy_cert
+
+        try:
+            ssl_cert, ssl_key = parse_tls_pem_bundle(combined_cert)
+        except SSLConfigException as e:
+            raise OrchestratorError(
+                'Failed to parse rgw_frontend_ssl_certificate field. '
+                'Expected a PEM bundle containing an unencrypted private key '
+                'and at least one certificate: private key + leaf certificate '
+                '+ optional intermediate CA certificates. '
+                f'Parser error: {e}'
+            ) from e
+
+        if not (ssl_cert and ssl_key):
+            raise OrchestratorError(
+                'Invalid rgw_frontend_ssl_certificate field. '
+                'Expected a combined PEM bundle containing both an unencrypted '
+                'private key and at least one certificate: private key + leaf '
+                'certificate + optional intermediate CA certificates. '
+                'A certificate chain without the private key is not valid for '
+                'this field.'
+            )
+
+        spec.ssl_cert = ssl_cert
+        spec.ssl_key = ssl_key
+        spec.certificate_source = CertificateSource.INLINE.value
+        spec.rgw_frontend_ssl_certificate = None
+
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
@@ -4614,6 +4686,7 @@ Then run the following:
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
 
+        self._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
         cert_warning = self._check_cert_source(spec)
 
         if spec.service_type == 'nvmeof':
