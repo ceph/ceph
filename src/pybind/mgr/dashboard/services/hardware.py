@@ -5,6 +5,9 @@ from typing import Any, Dict, List, Optional
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
 
+STATUS_OK = 'OK'
+STATUS_UNKNOWN = 'Unknown'
+
 
 class HardwareService(object):
 
@@ -25,17 +28,17 @@ class HardwareService(object):
 
         def _get_health(component: Any) -> str:
             if not isinstance(component, dict):
-                return 'Unknown'
-            status_val = component.get("status", {})
+                return STATUS_UNKNOWN
+            status_val = component.get('status', {})
             if isinstance(status_val, dict):
-                return status_val.get("health", "Unknown")
+                return status_val.get('health', STATUS_UNKNOWN)
             if isinstance(status_val, str):
                 return status_val
-            return 'Unknown'
+            return STATUS_UNKNOWN
 
         def count_ok(data: dict) -> int:
             return sum(
-                _get_health(component) == "OK"
+                _get_health(component) == STATUS_OK
                 for node in data.values()
                 for system in node.values()
                 for component in system.values()
@@ -63,7 +66,7 @@ class HardwareService(object):
                 output['host'].setdefault(host, {'flawed': False})
                 if not output['host'][host]['flawed']:
                     for system in systems.values():
-                        if any(_get_health(comp) != 'OK'
+                        if any(_get_health(comp) != STATUS_OK
                               for comp in system.values()):
                             output['host'][host]['flawed'] = True
                             break
