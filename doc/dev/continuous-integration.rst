@@ -206,9 +206,7 @@ libzbd
     packages `libzbd`_ . The upstream libzbd includes debian packaging already.
 
 libpmem
-    packages `pmdk`_ . Please note, ``ndctl`` is one of the build dependencies of
-    pmdk, for an updated debian packaging, please see
-    https://github.com/ceph/ceph-ndctl .
+    packages `pmdk`_ .
 
 .. note::
 

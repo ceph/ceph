@@ -165,9 +165,6 @@ private:
 #if defined(HAVE_SPDK)
     spdk,
 #endif
-#if defined(HAVE_BLUESTORE_PMEM)
-    pmem,
-#endif
   };
   std::queue <ceph::mono_clock::time_point> stalled_read_event_queue;
   ceph::mutex stalled_read_event_queue_lock = ceph::make_mutex("BlockDevice::stalled_read_event_queue_lock");
