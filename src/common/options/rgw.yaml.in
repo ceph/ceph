@@ -522,10 +522,9 @@ options:
 - name: rgw_lc_ordered_list_threshold
   type: uint
   level: dev
-  desc: Threshold for enabling ordered listing in lifecycle processing.
-  long_desc: When bucket shard count is below this threshold, lifecycle processing will
-    use ordered listing for better performance. Above this threshold, unordered listing
-    is used to avoid excessive OSD requests. A value of 0 disables ordered listing entirely.
+  desc: Deprecated threshold for enabling ordered listing in lifecycle processing.
+  long_desc: This option has no effect. Lifecycle processing always uses unordered
+    object listing.
   default: 500
   min: 0
   services:

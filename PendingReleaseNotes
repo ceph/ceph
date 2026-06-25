@@ -1,3 +1,9 @@
+* RGW: The ``rgw_lc_ordered_list_threshold`` configuration option is
+  deprecated because ordered object listing is no longer needed to
+  improve performance when per-shard coroutines are used. This option
+  is now a no-op. For more details, see tracker:
+  https://tracker.ceph.com/issues/77719
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
