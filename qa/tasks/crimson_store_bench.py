@@ -26,7 +26,7 @@ def task(ctx,config):
     num_concurrent_io=config.get('num_concurrent_io',4)
     smp=config.get('smp',4)
     bench_cmd=' '.join([
-        os.path.join(testdir,'bin','crimson-store-bench'),
+        'crimson-store-bench',
         '--store-path',store_dir,
         '--work-load-type',work_load_type,
         '--duration',str(duration),
@@ -34,6 +34,8 @@ def task(ctx,config):
         '--smp',str(smp),
         '--seastore_device_size','10G',
     ])
+    if config.get('dump_metrics', False):
+        bench_cmd += ' --dump-metrics'
 
     if work_load_type=='pg_log':
         bench_cmd += ' --num-logs ' + str(config.get('num_logs', 4))
@@ -78,3 +80,5 @@ def task(ctx,config):
     finally:
         log.info("waiting for the process to finish")
         proc.wait()
+        log.info("cleaning up store_bench_dir")
+        remote.run(args=['rm', '-rf', store_dir])
