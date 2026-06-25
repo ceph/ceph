@@ -1152,10 +1152,11 @@ Effect eval_or_pass(const DoutPrefixProvider* dpp,
                     const uint64_t op,
                     const ARN& resource,
                     boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
-  if (!policy)
+  if (!policy) {
     return Effect::Pass;
-  else
-    return policy->eval(env, id, op, resource, princ_type);
+  } else {
+    return policy->eval(dpp, env, id, op, resource, princ_type);
+  }
 }
 
 Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
@@ -1376,7 +1377,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
   if (s->public_access_block.RestrictPublicBuckets &&
-      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      bucket_policy && rgw::IAM::is_public(dpp, *bucket_policy) &&
       !s->identity->is_owner_of(s->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
@@ -1543,7 +1544,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
   if (ps->public_access_block.RestrictPublicBuckets &&
-      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      bucket_policy && rgw::IAM::is_public(dpp, *bucket_policy) &&
       !ps->identity->is_owner_of(ps->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
