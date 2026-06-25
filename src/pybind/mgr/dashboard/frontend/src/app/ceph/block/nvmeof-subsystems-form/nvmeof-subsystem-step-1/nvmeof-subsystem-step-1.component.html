@@ -107,9 +107,7 @@
       <div cdsRow
            class="form-item">
         <cds-combo-box i18n
-                       cdValidate
-                       #listenersRef="cdValidate"
-                       [invalid]="listenersRef.isInvalid"
+                       [invalid]="formGroup.get('listeners')?.invalid && (formGroup.get('listeners')?.dirty || formGroup.get('listeners')?.touched)"
                        [invalidText]="listenersInvalidText"
                        [label]="listenersLabel"
                        [helperText]="listenersHelperText"

@@ -1,6 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -11,13 +10,11 @@ import { NvmeofGatewayNodeComponent } from '../nvmeof-gateway-node/nvmeof-gatewa
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Router } from '@angular/router';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-
-enum CertificateType {
-  internal = 'internal',
-  external = 'external'
-}
+import { Pool } from '../../pool/pool';
+import { CertificateType } from '~/app/shared/models/service.interface';
 
 @Component({
   selector: 'cd-nvmeof-group-form',
@@ -28,19 +25,16 @@ enum CertificateType {
 export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   @ViewChild(NvmeofGatewayNodeComponent) gatewayNodeComponent!: NvmeofGatewayNodeComponent;
 
+  readonly CertificateType = CertificateType;
   permission: Permission;
   groupForm!: CdFormGroup;
   action!: string;
   resource: string;
-  group: string;
-  pageURL: string;
-  hasAvailableNodes = true;
-  CertificateType = CertificateType;
-  editing = false;
-  gatewayGroupName = '';
-  existingServiceData: any = null;
-  pools: Array<{ pool_name: string }> = [{ pool_name: 'rbd' }];
+  group = '';
+  pageURL = '';
+  pools: Pool[] = [];
   poolsLoading = false;
+  hasAvailableNodes = true;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -48,8 +42,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     private taskWrapperService: TaskWrapperService,
     private cephServiceService: CephServiceService,
     private nvmeofService: NvmeofService,
-    private router: Router,
-    private route: ActivatedRoute
+    private router: Router
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().nvmeof;
@@ -57,155 +50,52 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.route.params.subscribe((params) => {
-      if (params['name']) {
-        this.editing = true;
-        this.gatewayGroupName = params['name'];
-        this.action = this.actionLabels.EDIT;
-        this.createForm();
-        this.loadGatewayGroupData(params['name']);
-      } else {
-        this.editing = false;
-        this.action = this.actionLabels.CREATE;
-        this.gatewayGroupName = '';
-        this.createForm();
-      }
-    });
+    this.action = this.actionLabels.CREATE;
+    this.createForm();
   }
 
   createForm() {
-    const groupNameValidators = this.editing
-      ? [
-          Validators.required,
-          (control) => {
-            const value = control.value;
-            return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
-          }
-        ]
-      : [
-          Validators.required,
-          (control) => {
-            const value = control.value;
-            return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
-          }
-        ];
-
-    const groupNameAsyncValidators = this.editing
-      ? []
-      : [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)];
-
     this.groupForm = new CdFormGroup({
-      groupName: new UntypedFormControl(null, groupNameValidators, groupNameAsyncValidators),
-      pool: new UntypedFormControl('rbd', {
-        validators: [Validators.required]
-      }),
+      groupName: new UntypedFormControl(
+        null,
+        [
+          Validators.required,
+          (control) => {
+            const value = control.value;
+            return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
+          }
+        ],
+        [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)]
+      ),
       unmanaged: new UntypedFormControl(false),
       enableEncryption: new UntypedFormControl(false),
+      encryptionConfig: new UntypedFormControl(null),
+      encryptionKey: new UntypedFormControl(null),
       enableMtls: new UntypedFormControl(false),
-      encryptionKey: new UntypedFormControl('', [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true
-          },
-          [Validators.required]
-        )
-      ]),
       certificateType: new UntypedFormControl(CertificateType.internal),
+      pool: new UntypedFormControl('rbd'),
       custom_sans: new UntypedFormControl([]),
-      rootCACert: new UntypedFormControl(null, [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true,
-            certificateType: 'external'
-          },
-          [Validators.required]
-        )
-      ]),
-      clientCert: new UntypedFormControl(null, [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true,
-            certificateType: 'external'
-          },
-          [Validators.required]
-        )
-      ]),
-      clientKey: new UntypedFormControl(null, [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true,
-            certificateType: 'external'
-          },
-          [Validators.required]
-        )
-      ]),
-      serverCert: new UntypedFormControl(null, [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true,
-            certificateType: 'external'
-          },
-          [Validators.required]
-        )
-      ]),
-      serverKey: new UntypedFormControl(null, [
-        CdValidators.composeIf(
-          {
-            enableEncryption: true,
-            certificateType: CertificateType.external
-          },
-          [Validators.required]
-        )
-      ])
+      rootCACert: new UntypedFormControl(null),
+      clientCert: new UntypedFormControl(null),
+      clientKey: new UntypedFormControl(null),
+      serverCert: new UntypedFormControl(null),
+      serverKey: new UntypedFormControl(null)
     });
 
-    // Disable group name field in edit mode
-    if (this.editing) {
-      this.groupForm.get('groupName')?.disable();
-    }
-  }
-
-  loadGatewayGroupData(groupName: string) {
-    this.nvmeofService.listGatewayGroups().subscribe(
-      (gatewayGroups: any) => {
-        const groups = gatewayGroups?.[0] ?? [];
-        const group = groups.find((g: any) => g.spec?.group === groupName);
-
-        if (group) {
-          this.existingServiceData = group;
-          const spec = group.spec || {};
-
-          // Prefill form with existing data
-          this.groupForm.patchValue({
-            groupName: groupName,
-            pool: spec.pool || 'rbd',
-            unmanaged: spec.unmanaged || false,
-            enableEncryption: spec.ssl || false,
-            enableMtls: spec.ssl || false,
-            certificateType:
-              spec.certificate_source === 'inline'
-                ? CertificateType.external
-                : CertificateType.internal,
-            encryptionKey: spec.encryption_key || '',
-            custom_sans: spec.custom_sans || []
-          });
-
-          // If external certificates, load them
-          if (spec.certificate_source === 'inline') {
-            this.groupForm.patchValue({
-              rootCACert: spec.root_ca_cert || null,
-              clientCert: spec.client_cert || null,
-              clientKey: spec.client_key || null,
-              serverCert: spec.server_cert || null,
-              serverKey: spec.server_key || null
-            });
-          }
-        }
-      },
-      (_error) => {
-        // Error loading gateway group data
+    this.groupForm.get('enableEncryption')?.valueChanges.subscribe((enabled) => {
+      // Keep both legacy and new encryption fields in sync.
+      if (!enabled) {
+        return;
       }
-    );
+      const encryptionConfigControl = this.groupForm.get('encryptionConfig');
+      const encryptionKeyControl = this.groupForm.get('encryptionKey');
+      if (!encryptionKeyControl?.value && encryptionConfigControl?.value) {
+        encryptionKeyControl.setValue(encryptionConfigControl.value, { emitEvent: false });
+      }
+      if (!encryptionConfigControl?.value && encryptionKeyControl?.value) {
+        encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
+      }
+    });
   }
 
   onHostsLoaded(count: number): void {
@@ -249,29 +139,31 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       return;
     }
 
-    const formValues = this.groupForm.getRawValue(); // Use getRawValue to get disabled fields too
+    const formValues = this.groupForm.value;
     const selectedHostnames = this.gatewayNodeComponent?.getSelectedHostnames() || [];
     if (selectedHostnames.length === 0) {
       this.groupForm.setErrors({ cdSubmitButton: true });
       return;
     }
-
-    const groupName = this.editing ? this.gatewayGroupName : formValues.groupName;
-    const pool = formValues.pool;
-    const serviceName = `${pool}.${groupName}`;
-
-    let taskUrl = this.editing ? `service/${URLVerbs.EDIT}` : `service/${URLVerbs.CREATE}`;
+    let taskUrl = `service/${URLVerbs.CREATE}`;
+    const serviceName = `${formValues.groupName}`;
 
     const serviceSpec: Record<string, any> = {
       service_type: 'nvmeof',
       service_id: serviceName,
-      pool: pool,
-      group: groupName,
+      group: formValues.groupName,
       placement: {
         hosts: selectedHostnames
       },
       unmanaged: formValues.unmanaged
     };
+
+    if (formValues.enableEncryption) {
+      const encryptionKey = formValues.encryptionKey || formValues.encryptionConfig;
+      if (encryptionKey) {
+        serviceSpec['encryption_key'] = encryptionKey;
+      }
+    }
 
     if (formValues.enableMtls) {
       serviceSpec['ssl'] = true;
@@ -279,11 +171,19 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       serviceSpec['certificate_source'] =
         formValues.certificateType === CertificateType.internal ? 'cephadm-signed' : 'inline';
 
-      if (formValues.certificateType === CertificateType.internal) {
-        if (formValues.custom_sans && formValues.custom_sans.length > 0) {
-          serviceSpec['custom_sans'] = formValues.custom_sans;
-        }
-      } else {
+      if (formValues.pool) {
+        serviceSpec['pool'] = formValues.pool;
+        serviceSpec['service_id'] = `${formValues.pool}.${serviceName}`;
+      }
+
+      if (
+        formValues.certificateType === CertificateType.internal &&
+        formValues.custom_sans?.length > 0
+      ) {
+        serviceSpec['custom_sans'] = formValues.custom_sans;
+      }
+
+      if (formValues.certificateType === CertificateType.external) {
         serviceSpec['root_ca_cert'] = formValues.rootCACert;
         serviceSpec['client_cert'] = formValues.clientCert;
         serviceSpec['client_key'] = formValues.clientKey;
@@ -292,16 +192,12 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       }
     }
 
-    const apiCall = this.editing
-      ? this.cephServiceService.update(serviceSpec)
-      : this.cephServiceService.create(serviceSpec);
-
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
           service_name: `nvmeof.${serviceName}`
         }),
-        call: apiCall
+        call: this.cephServiceService.create(serviceSpec)
       })
       .subscribe({
         complete: () => {
@@ -317,31 +213,20 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     this.router.navigateByUrl('/block/nvmeof/gateways');
   }
 
-  onFileUpload(event: any, controlName: string) {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e: any) => {
-        this.groupForm.get(controlName)?.setValue(e.target.result);
-      };
-      reader.readAsText(file);
-    }
+  onCertificateTypeChange(type: CertificateType): void {
+    this.groupForm.get('certificateType')?.setValue(type);
   }
 
-  onCertificateTypeChange(type: CertificateType) {
-    this.groupForm.get('certificateType')?.setValue(type);
-    if (type === CertificateType.internal) {
-      this.groupForm.patchValue({
-        rootCACert: null,
-        clientCert: null,
-        clientKey: null,
-        serverCert: null,
-        serverKey: null
-      });
-    } else {
-      this.groupForm.patchValue({
-        custom_sans: []
-      });
+  onFileUpload(event: Event, controlName: string): void {
+    const target = event.target as HTMLInputElement;
+    const file = target?.files?.[0];
+    const control = this.groupForm.get(controlName);
+    if (!file || !control) {
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => control.setValue(reader.result);
+    reader.readAsText(file, 'utf8');
   }
 }

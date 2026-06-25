@@ -1151,6 +1151,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
+        this.updateRgwControlStates();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1159,6 +1160,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
+        this.updateRgwControlStates();
       }
     );
   }
@@ -1229,6 +1231,33 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       case 'nvmeof':
         this.serviceForm.get('group').disable();
         break;
+      case 'grafana':
+        this.serviceForm.get('grafana_admin_password').disable();
+        break;
+    }
+  }
+
+  private updateRgwControlStates(): void {
+    const realmControl = this.serviceForm.get('realm_name');
+    const zonegroupControl = this.serviceForm.get('zonegroup_name');
+    const zoneControl = this.serviceForm.get('zone_name');
+
+    if (this.editing || this.realmList.length === 0) {
+      realmControl.disable({ emitEvent: false });
+    } else {
+      realmControl.enable({ emitEvent: false });
+    }
+
+    if (this.editing || this.zonegroupList.length === 0) {
+      zonegroupControl.disable({ emitEvent: false });
+    } else {
+      zonegroupControl.enable({ emitEvent: false });
+    }
+
+    if (this.editing || this.zoneList.length === 0) {
+      zoneControl.disable({ emitEvent: false });
+    } else {
+      zoneControl.enable({ emitEvent: false });
     }
   }
 

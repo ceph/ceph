@@ -1,15 +1,4 @@
 <ng-container *ngIf="gatewayGroup$ | async as gateways">
-  <!-- Details Card Section -->
-  <ng-container *ngIf="selection.hasSelection && showDetailsCard">
-    <cd-details-card
-      cardTitle="Details"
-      i18n-cardTitle
-      [details]="selectedGatewayDetails"
-      [showEditButton]="false"
-      [columns]="4">
-    </cd-details-card>
-  </ng-container>
-
   <cd-table
     #table
     [data]="gateways"
@@ -43,8 +32,8 @@
              let-value="data.value"
              let-row="data.row">
   <a cdsLink
-     href="#"
-     (click)="onNameClick(row, $event)">
+     [routerLink]="[viewUrl, value]"
+     (click)="$event.stopPropagation()">
     {{ value }}
   </a>
 </ng-template>
