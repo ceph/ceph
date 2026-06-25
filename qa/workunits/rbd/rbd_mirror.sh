@@ -355,6 +355,35 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   test "$(count_mirror_snaps ${CLUSTER2} ${POOL} ${image})" -le 3
 fi
 
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  testlog "TEST: demote and promote on same cluster in loop"
+  for i in `seq 1 20`; do
+    last_demote_snap_id=''
+    demote_image ${CLUSTER2} ${POOL} ${image}
+    wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+    wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
+    get_newest_complete_mirror_snapshot_id ${CLUSTER2} ${POOL} ${image} last_demote_snap_id
+    wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${last_demote_snap_id}
+
+    promote_image ${CLUSTER2} ${POOL} ${image}
+    wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+    wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+    # check non-primary demote snapshot is removed
+    wait_for_non_primary_snap_not_present ${CLUSTER1} ${POOL} ${image} ${last_demote_snap_id}
+  done
+  # expected snapshots on CLUSTER1: non-primary
+  SNAPS=$(get_snaps_json ${CLUSTER1} ${POOL} ${image})
+  jq -e 'length == 1' <<< ${SNAPS}
+  jq -e '.[0].namespace["type"] == "mirror" and .[0].namespace["state"] == "non-primary"' <<< ${SNAPS}
+  # expected snapshots on CLUSTER2: primary demoted, primary
+  SNAPS=$(get_snaps_json ${CLUSTER2} ${POOL} ${image})
+  jq -e 'length == 2' <<< ${SNAPS}
+  jq -e '.[0].namespace["type"] == "mirror" and .[0].namespace["state"] == "demoted" and (.[0]["name"] | startswith(".mirror.primary"))' <<< ${SNAPS}
+  jq -e '.[1].namespace["type"] == "mirror" and .[1].namespace["state"] == "primary"' <<< ${SNAPS}
+fi
+
 testlog "TEST: force promote"
 force_promote_image=test_force_promote
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${force_promote_image} ${RBD_MIRROR_MODE}
