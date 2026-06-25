@@ -31,3 +31,9 @@
 - **Action**: Added SPDX header guidance to Coding Conventions section. New files should include SPDX-License-Identifier with LGPL-2.1-only OR LGPL-3.0-only.
 - **Commit**: `doc: AGENTS.md: add SPDX-License-Identifier guidance for new files`
 - **Status**: Done
+
+### 6. Reference CodingStyle instead of duplicating + C++23 fix (JonBailey1993)
+- **Comment IDs**: 3472907006, 3472980119
+- **Action**: Replaced duplicated coding style bullet list with a directive to read CodingStyle directly. Fixed C++20 → C++23 throughout.
+- **Commit**: `doc: AGENTS.md: reference CodingStyle file instead of duplicating rules`
+- **Status**: Done

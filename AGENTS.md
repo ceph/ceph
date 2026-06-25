@@ -10,7 +10,7 @@ Ceph is a distributed storage system providing three storage interfaces on a sin
 - **RGW** (RADOS Gateway) — provides S3 and Swift-compatible HTTP object storage APIs
 - **MGR** (Manager) — hosts Python plugin modules for monitoring, orchestration, and management
 
-The codebase is primarily C++20 with Python for management tooling. The build system is CMake.
+The codebase is primarily C++23 with Python for management tooling. The build system is CMake.
 
 ## Repository Layout
 
@@ -96,18 +96,8 @@ cd build && ninja              # Build (or make -jN)
 ### Licensing Headers
 New source files must include an `SPDX-License-Identifier` header. Ceph is primarily licensed under LGPL-2.1 or LGPL-3 (see `COPYING`). Use: `// SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only`
 
-Based on the project's `CodingStyle` file:
+Read and follow the `CodingStyle` file in the repository root — it is the single source of truth for naming, indentation, braces, and parameter conventions. Do not rely on summaries; read the file directly so you pick up any updates.
 
-- **Indentation**: 2 spaces, no tabs
-- **Functions**: `snake_case()` (not CamelCase)
-- **Classes**: `CamelCase` for full classes; `lower_case_t` for simple structs
-- **Members**: `m_` prefix or no prefix (not trailing `_`)
-- **Constants/Enums**: `UPPER_CASE`
-- **Conditionals**: always use braces, body on next line
-- **Parameters**: inputs first, then outputs. Use `const&` for inputs, pointers for outputs
-- **Constructors**: mark single-arg constructors `explicit`
-- **Header guards**: `#pragma once` is acceptable
-- **Python**: PEP-8
 - **Commit messages**: `subsystem: imperative description` (e.g., `osd: fix PG creation race`). AI agents **MUST NOT** add `Signed-off-by` tags — only humans can certify DCO compliance.
 
 ## Rules for AI Coding Agents
@@ -115,7 +105,7 @@ Based on the project's `CodingStyle` file:
 ### Code Formatting
 The repository has a `.clang-format` file at the project root. **All new and modified C++ code must conform to this format.** Key points from the config:
 - Based on Google style with Ceph-specific overrides
-- C++20 standard
+- C++23 standard
 - 2-space indentation, no tabs
 - Column limit: 80 (soft), penalty-based line breaking
 - Braces: opening brace on same line for classes/structs/control, but **after newline for function definitions**
