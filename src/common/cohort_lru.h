@@ -130,6 +130,7 @@ namespace cohort {
       int n_lanes;
       std::atomic<uint32_t> evict_lane;
       const uint32_t lane_hiwat;
+      std::atomic<bool> last_evict_recycled{false};
 
       static constexpr uint32_t SENTINEL_REFCNT = 1;
 
@@ -150,17 +151,21 @@ namespace cohort {
 
       Object* evict_block(const ObjectFactory* newobj_fac) {
 	uint32_t lane_ix = next_evict_lane();
-	for (int ix = 0; ix < n_lanes; ++ix,
-	       lane_ix = next_evict_lane()) {
-	  Lane& lane = qlane[lane_ix];
+	for (int ix = 0; ix < n_lanes; ++ix, ++lane_ix) {
+	  Lane& lane = qlane[lane_ix % n_lanes];
           std::unique_lock lane_lock{lane.lock};
-          /* back() on empty intrusive list is undefined */
           if (lane.q.empty()) {
             continue;
           }
-          Object* o = &(lane.q.back());
-	  /* if object at LRU has refcnt==1, it may be reclaimable */
-	  if (can_reclaim(o)) {
+	  /* walk from LRU (back) toward MRU looking for a reclaimable
+	   * entry — the tail entry may be mid-eviction by another thread */
+	  auto it = lane.q.end();
+	  while (it != lane.q.begin()) {
+	    --it;
+	    Object* o = &(*it);
+	    if (! can_reclaim(o)) {
+	      continue;
+	    }
 	    ++(o->lru_refcnt);
 	    (void) o->evicting.test_and_set();
 	    lane_lock.unlock();
@@ -168,22 +173,23 @@ namespace cohort {
 	      lane_lock.lock();
 	      --(o->lru_refcnt);
 	      if (o->lru_refcnt != SENTINEL_REFCNT) {
-		/* concurrent ref while we were unlocked -- put it back */
 		lane.q.push_front(*o);
 		o->evicting.clear();
-		continue;
+		break; /* try next lane */
 	      }
-	      Object::Queue::iterator it =
+	      Object::Queue::iterator eit =
 		Object::Queue::s_iterator_to(*o);
-	      lane.q.erase(it);
+	      lane.q.erase(eit);
+	      last_evict_recycled.store(true, std::memory_order_relaxed);
 	      return o;
 	    } else {
               --(o->lru_refcnt);
               o->evicting.clear();
-	      /* unlock in next block */
+	      lane_lock.lock();
 	    }
-	  } /* can_reclaim(o) */
+	  } /* each entry in lane */
 	} /* each lane */
+	last_evict_recycled.store(false, std::memory_order_relaxed);
 	return nullptr;
       } /* evict_block */
 
@@ -197,6 +203,36 @@ namespace cohort {
 	  }
 
       ~LRU() { delete[] qlane; }
+
+#ifndef NDEBUG
+      bool get_last_evict_recycled() const {
+	return last_evict_recycled.load(std::memory_order_relaxed);
+      }
+
+      uint64_t get_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].q.size() + qlane[i].active.size();
+	}
+	return total;
+      }
+
+      uint64_t get_q_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].q.size();
+	}
+	return total;
+      }
+
+      uint64_t get_active_size() const {
+	uint64_t total = 0;
+	for (int i = 0; i < n_lanes; ++i) {
+	  total += qlane[i].active.size();
+	}
+	return total;
+      }
+#endif
 
       bool ref(Object* o, uint32_t flags) {
 	if (o->evicting.test()) {
@@ -466,6 +502,12 @@ namespace cohort {
       bool is_same_partition(uint64_t lhs, uint64_t rhs) {
         return ((lhs % n_part) == (rhs % n_part));
       }
+      void lock_for(uint64_t hk) {
+	partition_of_scalar(hk).lock.lock();
+      }
+      void unlock_for(uint64_t hk) {
+	partition_of_scalar(hk).lock.unlock();
+      }
       void insert_latched(T* v, Latch& lat, uint32_t flags) {
 	(void) lat.p->tr.insert_unique_commit(*v, lat.commit_data);
 	if (flags & FLAG_UNLOCK)
@@ -483,9 +525,9 @@ namespace cohort {
 
       void remove(uint64_t hk, T* v, uint32_t flags) {
 	Partition& p = partition_of_scalar(hk);
-	iterator it = TTree::s_iterator_to(*v);
 	if (flags & FLAG_LOCK)
 	  p.lock.lock();
+	iterator it = TTree::s_iterator_to(*v);
 	p.tr.erase(it);
 	if (csz) { /* template specialize? */
 	  uint32_t slot = hk % csz;
