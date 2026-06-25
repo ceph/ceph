@@ -2022,112 +2022,99 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     @profile_method(True)
     def get_hardware_metrics(self) -> None:
-        """Collect hardware metrics from node-proxy KV store"""
-        NODE_PROXY_CACHE_PREFIX = 'mgr/cephadm/node_proxy'
+        if not self.orch_is_available():
+            return
 
         try:
-            for key, value in self.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
-                host = key.split('/')[-1]
-                try:
-                    data = json.loads(value)
-                except json.JSONDecodeError:
-                    self.log.error(f"Failed to decode node-proxy data for host {host}")
-                    continue
-
-                status = data.get('status', {})
-
-                # Storage metrics
-                for sys_id, devices in status.get('storage', {}).items():
-                    for device_id, device in devices.items():
-                        capacity = device.get('capacity_bytes', 0)
-                        labels = (
-                            host,
-                            device_id,
-                            device.get('model', 'unknown'),
-                            device.get('protocol', 'unknown')
-                        )
-                        self.metrics['node_proxy_storage_capacity_bytes'].set(capacity, labels)
-
-                # CPU metrics
-                for sys_id, cpus in status.get('processors', {}).items():
-                    for cpu_id, cpu in cpus.items():
-                        cores = cpu.get('total_cores', 0)
-                        labels = (
-                            host,
-                            cpu_id,
-                            cpu.get('manufacturer', 'unknown'),
-                            cpu.get('model', 'unknown')
-                        )
-                        self.metrics['node_proxy_cpu_cores'].set(cores, labels)
-
-                # Memory metrics
-                for sys_id, dimms in status.get('memory', {}).items():
-                    for dimm_id, dimm in dimms.items():
-                        capacity = dimm.get('capacity_mi_b', 0)
-                        labels = (
-                            host,
-                            dimm_id,
-                            dimm.get('memory_device_type', 'unknown'),
-                            dimm.get('manufacturer', 'unknown')
-                        )
-                        self.metrics['node_proxy_memory_capacity_mib'].set(capacity, labels)
-
-                # Health metrics for all component types
-                for category in ['storage', 'processors', 'memory', 'power', 'fans', 'network']:
-                    for sys_id, components in status.get(category, {}).items():
-                        for comp_id, comp in components.items():
-                            health_str = comp.get('status', {}).get('health', 'Unknown')
-                            if health_str == 'OK':
-                                health_value = 0
-                            elif health_str in ['Warning', 'Degraded']:
-                                health_value = 1
-                            else:
-                                health_value = 2
-
-                            labels = (host, comp_id, category)
-                            self.metrics['node_proxy_health'].set(health_value, labels)
-
-                # Temperature metrics
-                for sys_id, sensors in status.get('temperatures', {}).items():
-                    for sensor_id, sensor in sensors.items():
-                        reading = sensor.get('reading')
-                        sensor_name = sensor.get('name', sensor_id)
-                        # Skip absent/unknown sensors
-                        if reading is None or reading == 'unknown':
-                            continue
-                        try:
-                            temp_value = float(reading)
-                            labels = (host, sensor_name)
-                            self.metrics['node_proxy_temperature_celsius'].set(temp_value, labels)
-                        except (ValueError, TypeError):
-                            continue
-
-                # Fan RPM metrics
-                for sys_id, fans_data in status.get('fans', {}).items():
-                    for fan_id, fan in fans_data.items():
-                        # Redfish uses 'Reading' field per Thermal schema
-                        # node-proxy normalizes it to lowercase 'reading'
-                        rpm = fan.get('reading')
-                        fan_name = fan.get('name', fan_id)
-                        if rpm is None or rpm == 'unknown':
-                            continue
-                        try:
-                            rpm_value = float(rpm)
-                            labels = (host, fan_name)
-                            self.metrics['node_proxy_fan_rpm'].set(rpm_value, labels)
-                        except (ValueError, TypeError):
-                            continue
-
-                # Firmware version metrics
-                firmwares = data.get('firmwares', {})
-                for fw_id, fw_info in firmwares.items():
-                    component = fw_info.get('name', fw_id)
-                    version = fw_info.get('version', 'unknown')
-                    if version and version != 'unknown':
-                        labels = (host, component, str(version))
-                        self.metrics['node_proxy_firmware_info'].set(1, labels)
+            report = raise_if_exception(self.node_proxy_fullreport())
+            firmware_report = raise_if_exception(self.node_proxy_firmware())
         except Exception as e:
-            self.log.error(f"Failed to collect hardware metrics: {str(e)}")
+            self.log.debug(f"node-proxy data not available: {e}")
+            return
+
+        for host, data in report.items():
+            status = data.get('status', {})
+
+            for sys_id, devices in status.get('storage', {}).items():
+                for device_id, device in devices.items():
+                    capacity = device.get('capacity_bytes', 0)
+                    labels = (
+                        host,
+                        device_id,
+                        device.get('model', 'unknown'),
+                        device.get('protocol', 'unknown')
+                    )
+                    self.metrics['node_proxy_storage_capacity_bytes'].set(capacity, labels)
+
+            for sys_id, cpus in status.get('processors', {}).items():
+                for cpu_id, cpu in cpus.items():
+                    cores = cpu.get('total_cores', 0)
+                    labels = (
+                        host,
+                        cpu_id,
+                        cpu.get('manufacturer', 'unknown'),
+                        cpu.get('model', 'unknown')
+                    )
+                    self.metrics['node_proxy_cpu_cores'].set(cores, labels)
+
+            for sys_id, dimms in status.get('memory', {}).items():
+                for dimm_id, dimm in dimms.items():
+                    capacity = dimm.get('capacity_mi_b', 0)
+                    labels = (
+                        host,
+                        dimm_id,
+                        dimm.get('memory_device_type', 'unknown'),
+                        dimm.get('manufacturer', 'unknown')
+                    )
+                    self.metrics['node_proxy_memory_capacity_mib'].set(capacity, labels)
+
+            for category in ['storage', 'processors', 'memory', 'power', 'fans', 'network']:
+                for sys_id, components in status.get(category, {}).items():
+                    for comp_id, comp in components.items():
+                        health_str = comp.get('status', {}).get('health', 'Unknown')
+                        if health_str == 'OK':
+                            health_value = 0
+                        elif health_str in ['Warning', 'Degraded']:
+                            health_value = 1
+                        else:
+                            health_value = 2
+
+                        labels = (host, comp_id, category)
+                        self.metrics['node_proxy_health'].set(health_value, labels)
+
+            for sys_id, sensors in status.get('temperatures', {}).items():
+                for sensor_id, sensor in sensors.items():
+                    reading = sensor.get('reading')
+                    sensor_name = sensor.get('name', sensor_id)
+                    if reading is None or reading == 'unknown':
+                        continue
+                    try:
+                        temp_value = float(reading)
+                        labels = (host, sensor_name)
+                        self.metrics['node_proxy_temperature_celsius'].set(temp_value, labels)
+                    except (ValueError, TypeError):
+                        continue
+
+            for sys_id, fans_data in status.get('fans', {}).items():
+                for fan_id, fan in fans_data.items():
+                    rpm = fan.get('reading')
+                    fan_name = fan.get('name', fan_id)
+                    if rpm is None or rpm == 'unknown':
+                        continue
+                    try:
+                        rpm_value = float(rpm)
+                        labels = (host, fan_name)
+                        self.metrics['node_proxy_fan_rpm'].set(rpm_value, labels)
+                    except (ValueError, TypeError):
+                        continue
+
+        for host, fw_data in firmware_report.items():
+            for fw_id, fw_info in fw_data.items():
+                component = fw_info.get('name', fw_id)
+                version = fw_info.get('version', 'unknown')
+                if version and version != 'unknown':
+                    labels = (host, component, str(version))
+                    self.metrics['node_proxy_firmware_info'].set(1, labels)
 
     @profile_method(True)
     def collect(self) -> str:
