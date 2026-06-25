@@ -46,13 +46,16 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
 
 void LBALeafNode::update(
   internal_const_iterator_t iter,
-  lba_map_val_t val)
+  lba_map_val_t val,
+  modification_t mod)
 {
   LOG_PREFIX(LBALeafNode::update);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
     this->pending_for_transaction,
     iter.get_offset());
-  this->on_modify();
+  if (likely(mod == modification_t::USER_MODIFY)) {
+    this->on_modify();
+  }
   if (val.pladdr.is_paddr()) {
     val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
   }

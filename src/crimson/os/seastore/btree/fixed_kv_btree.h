@@ -20,6 +20,16 @@
 
 namespace crimson::os::seastore {
 
+enum modification_t {
+  USER_MODIFY,  // logical update (affects node state)
+  TRANS_SYNC    // synchronization-only update (should NOT count
+                // as modification and should avoid on_modify(),
+                // for example, BtreeLBAManager::update_paddr_sync
+                // does not change the logical mapping, only the
+                // physical location (paddr) of the same data, so
+                // TRANS_SYNC is used.
+};
+
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t& r);
 
@@ -1108,7 +1118,8 @@ public:
     op_context_t c,
     iterator iter,
     node_val_t val,
-    BaseChildNode<leaf_node_t, node_key_t> *child)
+    BaseChildNode<leaf_node_t, node_key_t> *child,
+    modification_t mod = modification_t::USER_MODIFY)
   {
     LOG_PREFIX(FixedKVBtree::update);
     SUBTRACET(
@@ -1116,6 +1127,9 @@ public:
       "update element at {}",
       c.trans,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+    if (mod == modification_t::TRANS_SYNC) {
+      assert(child == nullptr);
+    }
     if (!iter.leaf.node->is_mutable()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
@@ -1125,7 +1139,8 @@ public:
     ++(get_tree_stats<self_type>(c.trans).num_updates);
     iter.leaf.node->update(
       iter.leaf.node->iter_idx(iter.leaf.pos),
-      val);
+      val,
+      mod);
     if constexpr (std::is_base_of_v<
         ParentNode<leaf_node_t, node_key_t>, leaf_node_t>) {
       if (child) {
