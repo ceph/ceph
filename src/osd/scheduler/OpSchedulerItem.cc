@@ -214,16 +214,22 @@ void PGRecoveryMsg::run(
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
     osd->logger->tinc(l_osd_recovery_push_queue_lat, latency);
+    break;
   case MSG_OSD_PG_PUSH_REPLY:
     osd->logger->tinc(l_osd_recovery_push_reply_queue_lat, latency);
+    break;
   case MSG_OSD_PG_PULL:
     osd->logger->tinc(l_osd_recovery_pull_queue_lat, latency);
+    break;
   case MSG_OSD_PG_BACKFILL:
     osd->logger->tinc(l_osd_recovery_backfill_queue_lat, latency);
+    break;
   case MSG_OSD_PG_BACKFILL_REMOVE:
     osd->logger->tinc(l_osd_recovery_backfill_remove_queue_lat, latency);
+    break;
   case MSG_OSD_PG_SCAN:
     osd->logger->tinc(l_osd_recovery_scan_queue_lat, latency);
+    break;
   }
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
