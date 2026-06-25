@@ -59,14 +59,14 @@ local g = import 'grafonnet/grafana.libsonnet';
       g.template.new(
         'fan_speeds',
         '$datasource',
-        'label_values(ceph_node_proxy_fan_rpm{hostname="$hostname"},fan_name)',
+        'label_values(ceph_node_proxy_fan_rpm{hostname=~"$hostname"},fan_name)',
         label='',
         refresh='load',
         includeAll=true,
-        multi=false,
+        multi=true,
         allValues='',
         sort=0,
-        regex='/.*TACH.*/',
+        regex='',
         hide=2
       )
     )
@@ -275,7 +275,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 2 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname="$hostname",category="power"}',
+          'ceph_node_proxy_health{hostname=~"$hostname",category="power"}',
           legendFormat='__auto'
         ))
         + {
@@ -353,7 +353,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 4, w: 3, x: 17, y: 2 }
         ).addTarget($.addTargetSchema(
-          'count(ceph_node_proxy_temperature_celsius{hostname=~"$hostname", sensor_name=~"NVME.*"})',
+          'count(ceph_node_proxy_storage_capacity_bytes{hostname=~"$hostname", protocol="NVMe"})',
           legendFormat='__auto'
         )),
 
@@ -368,14 +368,14 @@ local g = import 'grafonnet/grafana.libsonnet';
           legendFormat='__auto'
         )),
 
-        // Power Control
+        // Network
         $.addStatPanel(
-          title='Power Control',
+          title='Network',
           unit='short',
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 5 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname="$hostname",category="power"}',
+          'ceph_node_proxy_health{hostname=~"$hostname",category="network"}',
           legendFormat='__auto'
         ))
         + {
@@ -398,7 +398,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 8 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname="$hostname",category="fans"}',
+          'ceph_node_proxy_health{hostname=~"$hostname",category="fans"}',
           legendFormat='__auto'
         ))
         + {
@@ -421,7 +421,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 11 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname="$hostname",category="storage"}',
+          'ceph_node_proxy_health{hostname=~"$hostname",category="storage"}',
           legendFormat='__auto'
         ))
         + {
@@ -591,7 +591,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           format='short',
         ).addTarget(
           g.prometheus.target(
-            'avg(ceph_node_proxy_fan_rpm{hostname=~"$hostname", fan_name=~".*TACH.*"})',
+            'avg(ceph_node_proxy_fan_rpm{hostname=~"$hostname", fan_name!~"PSU.*"})',
             legendFormat='System Fans'
           )
         )
