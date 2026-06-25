@@ -105,7 +105,7 @@ Based on the project's `CodingStyle` file:
 - **Constructors**: mark single-arg constructors `explicit`
 - **Header guards**: `#pragma once` is acceptable
 - **Python**: PEP-8
-- **Commit messages**: `subsystem: imperative description` (e.g., `osd: fix PG creation race`). The human developer must add a `Signed-off-by:` line — never generate one as an AI.
+- **Commit messages**: `subsystem: imperative description` (e.g., `osd: fix PG creation race`). AI agents **MUST NOT** add `Signed-off-by` tags — only humans can certify DCO compliance.
 
 ## Rules for AI Coding Agents
 
@@ -155,16 +155,18 @@ However, once implementation begins, the design document becomes the agreed spec
 ### Git Commit Standards
 
 #### Sign-off
-All commits must include a `Signed-off-by` line. **Only the human developer may add this line — never generate or insert a `Signed-off-by` line as an AI.** The sign-off is the developer's personal assertion of DCO compliance and cannot be delegated to or fabricated by a tool.
+All commits must include a `Signed-off-by` line, but **AI agents MUST NOT add `Signed-off-by` tags.** Only humans can legally certify the Developer Certificate of Origin (DCO). The human submitter is responsible for:
+- Reviewing all AI-generated code
+- Ensuring compliance with licensing requirements
+- Adding their own `Signed-off-by` tag to certify the DCO
+- Taking full responsibility for the contribution
 
 #### AI Attribution
-All AI-generated or AI-assisted code must include an `Assisted-by` tag so human reviewers know which parts of the change need careful scrutiny. Include the AI tool or model used, and any automated tooling that contributed to the change.
+All AI-generated or AI-assisted code must include an `Assisted-by` tag so human reviewers know which parts of the change need careful scrutiny.
 
 ```
 Assisted-by: AI-tool-or-model [optional-tooling]
 ```
-
-The human developer takes full responsibility for DCO compliance, licensing, and correctness, and must add their own `Signed-off-by: Developer Name <developer@example.com>` line before committing.
 
 ### Commit Structure and PR Preparation
 During development, commit regularly so progress is preserved. Working commits do not need to be polished.
@@ -179,7 +181,7 @@ When asked to prepare for a PR, restructure commits to tell a **story for human 
 1. Understand the code before modifying it — use `compile_commands.json` with clangd if available
 2. Write code following `.clang-format` and `CodingStyle` — format only lines you change
 3. Build with `ninja`, run `osd_unittests`, never clean without permission
-4. Add an `Assisted-by` tag to commit messages — the human developer must add their own `Signed-off-by`; never generate one
+4. Add an `Assisted-by` tag to commit messages — **never** add a `Signed-off-by` tag; only the human developer may do so
 
 ## Navigation Quick Reference
 
