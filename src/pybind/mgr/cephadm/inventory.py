@@ -24,7 +24,7 @@ from ceph.deployment.service_spec import (
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.ssl_cert_utils import SSLConfigException, parse_tls_pem_bundle
+from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
 
 from .utils import get_node_proxy_status_value, resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec

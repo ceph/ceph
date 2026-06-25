@@ -3,14 +3,15 @@ import logging
 from fnmatch import fnmatch
 from enum import Enum
 
-from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
+from cephadm.ssl_certs import SSLCerts
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
-from cephadm.ssl_cert_utils import (
+from ceph.deployment.tls_utils import (
     get_certificate_info,
     get_private_key_info,
     parse_tls_pem_bundle,
     contains_private_key,
     is_fullchain_pem,
+    SSLConfigException
 )
 from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
