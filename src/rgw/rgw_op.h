@@ -262,6 +262,8 @@ public:
   virtual ~RGWOp() override;
 
   int get_ret() const { return op_ret; }
+  req_state* get_req_state() const { return s; }
+  rgw::sal::User* get_user() const { return s ? s->user.get() : nullptr; }
 
   virtual int init_processing(optional_yield y) {
     if (dialect_handler->supports_quota()) {
