@@ -109,16 +109,7 @@ protected:
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
   
-  class TestDpp : public NoDoutPrefix {
-  public:
-    TestDpp(CephContext *cct) : NoDoutPrefix(cct, ceph_subsys_osd) {}
-    
-    std::ostream& gen_prefix(std::ostream& out) const override {
-      out << "PGBackendTest: ";
-      return out;
-    }
-  };
-  std::unique_ptr<TestDpp> dpp;
+  std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
@@ -142,6 +133,7 @@ public:
   }
   
   void SetUp() override {
+    ceph::logging::Log::set_prefix_hook(&EventLoop::get_log_prefix);
     int r = ::mkdir(data_dir.c_str(), 0777);
     if (r < 0) {
       r = -errno;
@@ -158,8 +150,14 @@ public:
     g_conf().set_safe_to_start_threads();
     
     CephContext *cct = g_ceph_context;
-    dpp = std::make_unique<TestDpp>(cct);
-    event_loop = std::make_unique<EventLoop>(false);
+    
+    // Make dout statements flush immediately - we don't care about performance in tests
+    if (cct->_log) {
+      cct->_log->set_max_new(1);
+    }
+    
+    dpp = std::make_unique<NoDoutPrefix>(cct, ceph_subsys_osd);
+    event_loop = std::make_unique<EventLoop>(dpp.get());
     
     if (pool_type == EC) {
       setup_ec_pool();
@@ -208,6 +206,7 @@ public:
     }
 
     cleanup_data_dir();
+    ceph::logging::Log::set_prefix_hook(nullptr);
   }
   
 private:
