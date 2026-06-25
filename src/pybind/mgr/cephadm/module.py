@@ -18,6 +18,7 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
+from cephadm.ssl_cert_utils import SSLConfigException, contains_private_key, is_fullchain_pem, parse_tls_pem_bundle
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -4126,6 +4127,36 @@ Then run the following:
         if consumer not in self.cert_mgr.list_consumers():
             raise OrchestratorError(f"Invalid service: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid bindings.")
 
+        # --- Fullchain PEM auto-detection -----------------------------------
+        # When the user passes a fullchain PEM (private key + cert chain bundled
+        # in a single blob) as the ``cert`` argument the key is extracted here so
+        # the rest of the function always operates on a clean cert-only PEM and an
+        # explicit key string. A cert blob with multiple CERTIFICATE blocks but no
+        # embedded key (e.g. leaf + intermediates) is also normalised here, even
+        # when a separate --key argument was supplied.
+        if contains_private_key(cert) and key:
+            raise OrchestratorError(
+                'Received a fullchain PEM (cert blob contains an embedded private key) '
+                'but a separate --key argument was also provided. '
+                'Please either supply the fullchain PEM without a separate key, '
+                'or supply a plain certificate PEM with the key separately.'
+            )
+        if contains_private_key(cert) or is_fullchain_pem(cert):
+            try:
+                cert, split_key = parse_tls_pem_bundle(cert)
+            except SSLConfigException as exc:
+                raise OrchestratorError(f'Failed to parse fullchain PEM: {exc}') from exc
+            if split_key:
+                key = split_key
+        # --------------------------------------------------------------------
+
+        if not cert or not key:
+            raise OrchestratorError(
+                'A certificate and a private key are both required to set a cert/key pair. '
+                'Provide a fullchain PEM (certificate with an embedded private key) or supply '
+                'the private key separately.'
+            )
+
         # Check the certificate validity status
         target = service_name or hostname
         cert_info = self.cert_mgr.check_certificate_state(consumer, target, cert, key)
@@ -4168,6 +4199,25 @@ Then run the following:
         hostname: str = "",
         force: bool = False
     ) -> str:
+
+        # --- Reject embedded key material on the cert-only path -------------
+        # This endpoint has no key parameter to redirect a key to, so a cert
+        # blob with an embedded private key must be rejected outright rather
+        # than silently persisted under the cert object. A multi-block,
+        # key-free cert chain is still normalised via parse_tls_pem_bundle.
+        if contains_private_key(cert):
+            raise OrchestratorError(
+                'The certificate PEM contains private key material. '
+                "Use 'ceph orch certmgr cert-key set' instead of "
+                "'ceph orch certmgr cert set', or provide the bundle through a "
+                'service spec field that supports fullchain PEM input.'
+            )
+        if is_fullchain_pem(cert):
+            try:
+                cert, _ = parse_tls_pem_bundle(cert)
+            except SSLConfigException as exc:
+                raise OrchestratorError(f'Failed to parse certificate PEM: {exc}') from exc
+        # ----------------------------------------------------------------------
 
         debug_mode = self.certificate_check_debug_mode and force
         if not debug_mode:
