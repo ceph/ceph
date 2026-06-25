@@ -36,6 +36,8 @@ def task(ctx,config):
     ])
     if config.get('dump_metrics', False):
         bench_cmd += ' --dump-metrics'
+    if config.get('track_metrics'):
+        bench_cmd += ' --track-metrics ' + config.get('track_metrics')
 
     if work_load_type=='pg_log':
         bench_cmd += ' --num-logs ' + str(config.get('num_logs', 4))

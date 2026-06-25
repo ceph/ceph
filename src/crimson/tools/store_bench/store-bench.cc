@@ -967,8 +967,8 @@ int main(int argc, char **argv) {
           crimson::metrics::dump_metric_value_map(
             seastar::scollectd::get_value_map(),
             &f,
-            [&requested_metrics](const std::string& full_name) { 
-              return requested_metrics.empty() || requested_metrics.count(full_name)>0;
+            [&requested_metrics](const std::string& metric_name) { 
+              return requested_metrics.empty() || requested_metrics.count(metric_name)>0;
             });
           f.close_section();
         }
