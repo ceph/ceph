@@ -14,4 +14,14 @@ cd-page-header {
   .border-top {
     border-top: 1px solid var(--cds-border-subtle-01);
   }
+
+  // Remove tile bottom padding so tabs sit on the tile edge
+  .cd-page-header__tile--tabs {
+    padding-bottom: 0;
+  }
+
+  // Align tabs with the title
+  .cd-page-header__tabs {
+    margin-inline-start: calc(-1 * var(--cds-layout-density-padding-inline-local, 1rem));
+  }
 }
