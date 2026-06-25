@@ -1170,6 +1170,10 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
     return crimson::ct_error::enodata::make();
   };
+  if (is_erasure() && !os.exists) {
+    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
