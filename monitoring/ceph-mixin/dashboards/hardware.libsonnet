@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'hardware.json':
     $.dashboardSchema(
-      'Ceph Hardware - Platform Monitoring',
+      'Ceph Hardware - Overview',
       'Comprehensive hardware monitoring with temperatures, fans, storage, and firmware from node-proxy',
       'hardware001',
       'now-1h',
@@ -31,7 +31,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         keepTime=true,
         tags=[],
         targetBlank=false,
-        title='Browse Dashboards',
+        title='Ceph Hardware - Overview',
         tooltip='',
         type='dashboards',
         url=''
@@ -101,27 +101,23 @@ local g = import 'grafonnet/grafana.libsonnet';
         },
 
         // CPU Temp
-        $.addStatPanel(
+        $.addGaugePanel(
           title='CPU Temp',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 4, y: 1 }
-        ).addTarget($.addTargetSchema(
+          gridPosition={ h: 4, w: 3, x: 4, y: 1 },
+          min=0,
+          max=100,
+        )
+        .addThresholds([
+          { color: 'green' },
+          { color: '#EAB839', value: 75 },
+          { color: 'red', value: 85 },
+        ])
+        .addTarget($.addTargetSchema(
           'max(ceph_node_proxy_temperature_celsius{sensor_name=~".*CPU_TEMP"})',
           legendFormat='__auto'
-        ))
-        + {
-          fieldConfig: {
-            defaults: {
-              min: 0,
-              max: 100,
-              thresholds: {
-                mode: 'absolute',
-                steps: [{ color: 'green' }, { color: '#EAB839', value: 75 }, { color: 'red', value: 85 }],
-              },
-            },
-          },
-        },
+        )),
 
         // BMC Versions
         $.pieChartPanel(
@@ -136,14 +132,13 @@ local g = import 'grafonnet/grafana.libsonnet';
         + {
           fieldConfig+: {
             defaults+: {
-              color+: {
-                mode: 'palette-classic',
-              },
+              color+: { mode: 'palette-classic' },
             },
           },
           options+: {
-            legend+: { showLegend: false },
-            displayLabels: ['name'],
+            pieType: 'donut',
+            legend+: { showLegend: true, placement: 'bottom' },
+            displayLabels: ['name', 'value'],
           },
         },
 
@@ -160,14 +155,13 @@ local g = import 'grafonnet/grafana.libsonnet';
         + {
           fieldConfig+: {
             defaults+: {
-              color+: {
-                mode: 'palette-classic',
-              },
+              color+: { mode: 'palette-classic' },
             },
           },
           options+: {
-            legend+: { showLegend: false },
-            displayLabels: ['name'],
+            pieType: 'donut',
+            legend+: { showLegend: true, placement: 'bottom' },
+            displayLabels: ['name', 'value'],
           },
         },
 
@@ -184,12 +178,11 @@ local g = import 'grafonnet/grafana.libsonnet';
         + {
           fieldConfig+: {
             defaults+: {
-              color+: {
-                mode: 'palette-classic',
-              },
+              color+: { mode: 'palette-classic' },
             },
           },
           options+: {
+            pieType: 'donut',
             legend+: { showLegend: true, placement: 'right' },
             displayLabels: ['value'],
           },
@@ -209,12 +202,11 @@ local g = import 'grafonnet/grafana.libsonnet';
         + {
           fieldConfig+: {
             defaults+: {
-              color+: {
-                mode: 'palette-classic',
-              },
+              color+: { mode: 'palette-classic' },
             },
           },
           options+: {
+            pieType: 'donut',
             legend+: { showLegend: true, placement: 'right' },
             displayLabels: ['value'],
           },
@@ -243,27 +235,23 @@ local g = import 'grafonnet/grafana.libsonnet';
         )),
 
         // NVMe Temp
-        $.addStatPanel(
+        $.addGaugePanel(
           title='NVMe Temp',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 4, y: 5 }
-        ).addTarget($.addTargetSchema(
+          gridPosition={ h: 4, w: 3, x: 4, y: 5 },
+          min=0,
+          max=85,
+        )
+        .addThresholds([
+          { color: 'green' },
+          { color: 'yellow', value: 75 },
+          { color: 'red', value: 80 },
+        ])
+        .addTarget($.addTargetSchema(
           'max(ceph_node_proxy_temperature_celsius{sensor_name=~"NVME.*_TEMP"})',
           legendFormat='__auto'
-        ))
-        + {
-          fieldConfig: {
-            defaults: {
-              min: 0,
-              max: 85,
-              thresholds: {
-                mode: 'absolute',
-                steps: [{ color: 'green' }, { color: 'yellow', value: 75 }, { color: 'red', value: 80 }],
-              },
-            },
-          },
-        },
+        )),
       ] },
 
       // Row 2: Host Overview
@@ -275,7 +263,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 2 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname=~"$hostname",category="power"}',
+          'max(ceph_node_proxy_health{hostname=~"$hostname",category="power"})',
           legendFormat='__auto'
         ))
         + {
@@ -375,7 +363,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 5 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname=~"$hostname",category="network"}',
+          'max(ceph_node_proxy_health{hostname=~"$hostname",category="network"})',
           legendFormat='__auto'
         ))
         + {
@@ -398,7 +386,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 8 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname=~"$hostname",category="fans"}',
+          'max(ceph_node_proxy_health{hostname=~"$hostname",category="fans"})',
           legendFormat='__auto'
         ))
         + {
@@ -421,7 +409,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           datasource='$datasource',
           gridPosition={ h: 3, w: 2, x: 0, y: 11 }
         ).addTarget($.addTargetSchema(
-          'ceph_node_proxy_health{hostname=~"$hostname",category="storage"}',
+          'max(ceph_node_proxy_health{hostname=~"$hostname",category="storage"})',
           legendFormat='__auto'
         ))
         + {
@@ -436,6 +424,89 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
           options+: { colorMode: 'background_solid' },
         },
+
+        // Device List
+        $.addTableExtended(
+          title='Device List',
+          datasource='$datasource',
+          gridPosition={ h: 8, w: 11, x: 2, y: 6 },
+          options={
+            footer: { show: false },
+            showHeader: true,
+          },
+          custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
+          thresholds={
+            mode: 'absolute',
+            steps: [{ color: 'green', value: null }],
+          },
+        )
+        .addTarget($.addTargetSchema(
+          'ceph_node_proxy_storage_capacity_bytes{hostname=~"$hostname"}',
+          legendFormat='__auto',
+          instant=true
+        ) + { format: 'table' })
+        .addTransformations([
+          {
+            id: 'organize',
+            options: {
+              excludeByName: {
+                Time: true,
+                Value: true,
+                __name__: true,
+                cluster: true,
+                hostname: true,
+                job: true,
+                instance: true,
+              },
+              renameByName: {
+                device: 'Device Name',
+                model: 'Drive Model',
+                protocol: 'Protocol',
+              },
+            },
+          },
+        ]),
+
+        // Platform Firmware
+        $.addTableExtended(
+          title='Platform Firmware',
+          datasource='$datasource',
+          gridPosition={ h: 8, w: 11, x: 13, y: 6 },
+          options={
+            footer: { show: false },
+            showHeader: true,
+          },
+          custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
+          thresholds={
+            mode: 'absolute',
+            steps: [{ color: 'green', value: null }],
+          },
+        )
+        .addTarget($.addTargetSchema(
+          'ceph_node_proxy_firmware_info{hostname=~"$hostname"}',
+          legendFormat='__auto',
+          instant=true
+        ) + { format: 'table' })
+        .addTransformations([
+          {
+            id: 'organize',
+            options: {
+              excludeByName: {
+                Time: true,
+                Value: true,
+                __name__: true,
+                cluster: true,
+                hostname: true,
+                job: true,
+                instance: true,
+              },
+              renameByName: {
+                component: 'Component',
+                version: 'Version',
+              },
+            },
+          },
+        ]),
       ] },
 
       // Row 3: FAN Speeds
@@ -443,7 +514,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         // Repeating panel
         $.addStatPanel(
           title='FAN: $fan_speeds (RPM)',
-          unit='short',
+          unit='locale',
           datasource='$datasource',
           gridPosition={ h: 5, w: 4, x: 0, y: 3 }
         ).addTarget($.addTargetSchema(
@@ -459,7 +530,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         // PSU1
         $.addStatPanel(
           title='PSU1 Fan Speed (RPM)',
-          unit='short',
+          unit='locale',
           datasource='$datasource',
           gridPosition={ h: 5, w: 4, x: 0, y: 8 }
         ).addTarget($.addTargetSchema(
@@ -470,7 +541,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         // PSU2
         $.addStatPanel(
           title='PSU2 Fan Speed (RPM)',
-          unit='short',
+          unit='locale',
           datasource='$datasource',
           gridPosition={ h: 5, w: 4, x: 4, y: 8 }
         ).addTarget($.addTargetSchema(
@@ -572,7 +643,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         g.graphPanel.new(
           title='AVG PSU Fan Speed',
           datasource='$datasource',
-          format='short',
+          format='none',
         ).addTarget(
           g.prometheus.target(
             'avg(ceph_node_proxy_fan_rpm{hostname=~"$hostname", fan_name=~"PSU.*"})',
@@ -588,7 +659,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         g.graphPanel.new(
           title='AVG Cooling Fan Speed',
           datasource='$datasource',
-          format='short',
+          format='none',
         ).addTarget(
           g.prometheus.target(
             'avg(ceph_node_proxy_fan_rpm{hostname=~"$hostname", fan_name!~"PSU.*"})',
