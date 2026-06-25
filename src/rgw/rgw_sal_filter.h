@@ -566,6 +566,7 @@ public:
                   GroupList& listing) override;
 
   RGWUserInfo& get_info() override { return next->get_info(); }
+  const RGWUserInfo& get_info() const override { return next->get_info(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
   /* Internal to Filters */
