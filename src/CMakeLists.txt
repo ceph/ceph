@@ -1028,10 +1028,12 @@ option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" 
 
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
-  # Find Protobuf installation
-  # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
-  option(protobuf_MODULE_COMPATIBLE TRUE)
-  find_package(Protobuf REQUIRED)
+  # Prefer config mode so gRPC sees protobuf's full target set
+  # (incl. upb); fall back to module mode.
+  find_package(Protobuf CONFIG)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+  endif()
 
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)
