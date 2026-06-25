@@ -1,9 +1,8 @@
-import { Component, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 import { Subject, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -17,8 +16,6 @@ import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/ceph
   encapsulation: ViewEncapsulation.None
 })
 export class CephfsMirroringListComponent implements OnInit {
-  @ViewChild('table', { static: true }) table: TableComponent;
-
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
@@ -30,6 +27,8 @@ export class CephfsMirroringListComponent implements OnInit {
     ),
     map((daemons) => this.buildRows(daemons))
   );
+
+  isPrepareModalOpen = false;
 
   constructor(private cephfsService: CephfsService) {}
 
@@ -56,8 +55,17 @@ export class CephfsMirroringListComponent implements OnInit {
     this.subject$.next();
   }
 
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
+  openPrepareToReceive() {
+    this.isPrepareModalOpen = true;
+  }
+
+  closePrepareModal() {
+    this.isPrepareModalOpen = false;
+    this.loadDaemonStatus();
+  }
+
+  onTokenGenerated(_response: any) {
+    this.loadDaemonStatus();
   }
 
   private buildRows(daemons: Daemon[]): MirroringRow[] {
