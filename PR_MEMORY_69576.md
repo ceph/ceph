@@ -25,3 +25,9 @@
 - **Action**: Added brief mention of radosgw-admin and librgw to the Purpose section of src/rgw/AGENTS.md. They were already in the Key Files table but not immediately visible.
 - **Commit**: `doc: src/rgw/AGENTS.md: mention radosgw-admin and librgw in Purpose`
 - **Status**: Done
+
+### 5. SPDX-License-Identifier guidance (mmgaggle)
+- **Comment ID**: 3443367898
+- **Action**: Added SPDX header guidance to Coding Conventions section. New files should include SPDX-License-Identifier with LGPL-2.1-only OR LGPL-3.0-only.
+- **Commit**: `doc: AGENTS.md: add SPDX-License-Identifier guidance for new files`
+- **Status**: Done

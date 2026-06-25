@@ -93,6 +93,9 @@ cd build && ninja              # Build (or make -jN)
 
 ## Coding Conventions
 
+### Licensing Headers
+New source files must include an `SPDX-License-Identifier` header. Ceph is primarily licensed under LGPL-2.1 or LGPL-3 (see `COPYING`). Use: `// SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only`
+
 Based on the project's `CodingStyle` file:
 
 - **Indentation**: 2 spaces, no tabs
