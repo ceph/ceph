@@ -19,3 +19,9 @@
 - **Action**: Replaced ASCII box diagram with text-based dependency list. Fixed incorrect dependencies: rgw depends on librados (not os/crush directly, not librbd). ASCII diagrams are unreliable for LLM parsing.
 - **Commit**: `doc: AGENTS.md: replace ASCII diagram with text dependency list`
 - **Status**: Done
+
+### 4. Mention radosgw-admin and librgw in Purpose (yuvalif)
+- **Comment ID**: 3436356957
+- **Action**: Added brief mention of radosgw-admin and librgw to the Purpose section of src/rgw/AGENTS.md. They were already in the Key Files table but not immediately visible.
+- **Commit**: `doc: src/rgw/AGENTS.md: mention radosgw-admin and librgw in Purpose`
+- **Status**: Done

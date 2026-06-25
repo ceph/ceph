@@ -6,6 +6,8 @@ The RADOS Gateway (RGW) provides S3-compatible and Swift-compatible HTTP object 
 
 RGW supports multisite replication, IAM policies, server-side encryption, lifecycle management, bucket notifications (Kafka, AMQP), and many S3 features. The SAL abstraction allows pluggable storage backends beyond RADOS.
 
+The subsystem also includes **`radosgw-admin`** (CLI tool for bucket, user, zone, and key management) and **`librgw`** (embeddable C API for embedding RGW in other processes).
+
 ## Key Files
 
 ### Core
