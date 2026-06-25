@@ -5,6 +5,7 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/dout.h"
+#include "common/ceph_context.h"
 #include <arrow/type_fwd.h>
 #include <fmt/format.h>
 #include "lancedb.h"
@@ -80,11 +81,96 @@ namespace rgw::s3vector {
   // utility functions for connection creation and opening table
 
   LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name) {
-    const auto dbname = fmt::format("/tmp/lancedb/{}", vector_bucket_name);
-    LanceDBConnectBuilder* builder = lancedb_connect(dbname.c_str());
+    CephContext* cct = dpp->get_cct();
+    const auto& conf = cct->_conf;
+    const std::string backend_str = conf.get_val<std::string>("rgw_s3vector_backend");
+    BackendType backend_type;
+    if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      return nullptr;
+    }
+
+    std::string uri;
+    LanceDBConnectBuilder* builder = nullptr;
+
+    if (is_local_backend(backend_type)) {
+      // Local filesystem backend (default)
+      const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
+      if (local_path.empty()) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector local backend requires "
+                          << "rgw_s3vector_local_path to be configured" << dendl;
+        return nullptr;
+      }
+      uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+      builder = lancedb_connect(uri.c_str());
+      if (!builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
+        return nullptr;
+      }
+      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to local backend: " << uri << dendl;
+    } else if (is_sal_backend(backend_type)) {
+      // XXX: SAL backend - uses RGW's Storage Abstraction Layer
+      ldpp_dout(dpp, 1) << "ERROR: s3vector SAL backend is not yet implemented" << dendl;
+      return nullptr;
+    } else { // S3 backend
+
+      // Use vector bucket name directly as the S3 bucket name.
+      // A regular S3 bucket with the same name as the vector bucket must exist
+      // at the backend.
+      uri = fmt::format("s3://{}/", vector_bucket_name);
+      builder = lancedb_connect(uri.c_str());
+      if (!builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
+        return nullptr;
+      }
+
+      const std::string s3_endpoint = conf.get_val<std::string>("rgw_s3vector_s3_endpoint");
+      const std::string s3_region = conf.get_val<std::string>("rgw_s3vector_s3_region");
+      const bool s3_allow_http = conf.get_val<bool>("rgw_s3vector_s3_allow_http");
+
+      // set storage options
+      auto set_storage_option = [&](const char* key, const char* value) -> bool {
+        LanceDBConnectBuilder* new_builder = lancedb_connect_builder_storage_option(builder, key, value);
+        if (!new_builder) {
+          ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set storage option: " << key << dendl;
+          lancedb_connect_builder_free(builder);
+          builder = nullptr;
+          return false;
+        }
+        builder = new_builder;
+        return true;
+      };
+
+      if (!s3_endpoint.empty()) {
+        if (!set_storage_option("endpoint", s3_endpoint.c_str())) {
+          return nullptr;
+        }
+      }
+
+      if (!s3_region.empty()) {
+        if (!set_storage_option("aws_region", s3_region.c_str())) {
+          return nullptr;
+        }
+      }
+
+      // TODO: get credentials..
+      // for now, when credentials are not set, underlying LanceDB S3_ObjectStore
+      // provider falls back to the standard AWS credential provider chain
+      // (env vars, instance profile, ~/.aws/credentials, etc.)
+
+      if (s3_allow_http) {
+        if (!set_storage_option("allow_http", "true")) {
+          return nullptr;
+        }
+      }
+
+      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to S3 backend: " << uri
+                         << " endpoint=" << s3_endpoint << " region=" << s3_region << dendl;
+    }
+
     LanceDBConnection* conn = lancedb_connect_builder_execute(builder);
     if (!conn) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << dbname << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << uri << dendl;
     }
     return conn;
   }
