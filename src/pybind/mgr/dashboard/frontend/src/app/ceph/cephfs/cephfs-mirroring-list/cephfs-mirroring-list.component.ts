@@ -1,12 +1,19 @@
-import { Component, OnInit, ViewEncapsulation } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import { NavigationEnd, Router } from '@angular/router';
 import { Subject, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { catchError, filter, map, switchMap, takeUntil } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/cephfs.model';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { MirroringJumpInTile } from './cephfs-mirroring-list.model';
 
 @Component({
   selector: 'cd-cephfs-mirroring-list',
@@ -15,12 +22,24 @@ import { Daemon, Filesystem, MirroringRow, Peer } from '~/app/shared/models/ceph
   standalone: false,
   encapsulation: ViewEncapsulation.None
 })
-export class CephfsMirroringListComponent implements OnInit {
+export class CephfsMirroringListComponent implements OnInit, OnDestroy {
+  @ViewChild('table', { static: true }) table: TableComponent;
+
+  private cephfsService = inject(CephfsService);
+  private authStorageService = inject(AuthStorageService);
+  private router = inject(Router);
+
   columns: CdTableColumn[];
+  tableActions: CdTableAction[];
   isSetupModalOpen = false;
   selection = new CdTableSelection();
+  permission = this.authStorageService.getPermissions().cephfs;
+  isPrepareModalOpen = false;
+  jumpInTiles: MirroringJumpInTile[] = [];
 
   private subject$ = new Subject<void>();
+  private destroy$ = new Subject<void>();
+  private previousUrl = '';
 
   daemonStatus$ = this.subject$.pipe(
     switchMap(() =>
@@ -29,11 +48,8 @@ export class CephfsMirroringListComponent implements OnInit {
     map((daemons) => this.buildRows(daemons))
   );
 
-  isPrepareModalOpen = false;
-
-  constructor(private cephfsService: CephfsService) {}
-
-  ngOnInit() {
+  ngOnInit(): void {
+    this.jumpInTiles = this.buildJumpInTiles();
     this.columns = [
       {
         name: $localize`Filesystem`,
@@ -41,7 +57,7 @@ export class CephfsMirroringListComponent implements OnInit {
         flexGrow: 2,
         cellTransformation: CellTemplate.redirect,
         customTemplateConfig: {
-          redirectLink: ['/cephfs/mirroring', '::prop', 'overview']
+          redirectLink: [CEPHFS_MIRRORING_URL, '::prop', 'overview']
         }
       },
       { name: $localize`Destination cluster`, prop: 'remote_cluster_name', flexGrow: 2 },
@@ -50,33 +66,98 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
       { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
     ];
+    this.tableActions = [
+      {
+        name: $localize`Add mirror path`,
+        permission: 'update',
+        icon: Icons.add,
+        click: () => this.openAddPath(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+      }
+    ];
+    this.previousUrl = this.router.url;
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((event) => {
+        const hadModal = this.previousUrl.includes('(modal:');
+        const hasModal = event.urlAfterRedirects.includes('(modal:');
+        if (hadModal && !hasModal) {
+          this.loadDaemonStatus();
+        }
+        this.previousUrl = event.urlAfterRedirects;
+      });
     this.loadDaemonStatus();
   }
 
-  loadDaemonStatus() {
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  updateSelection(selection: CdTableSelection): void {
+    this.selection = selection;
+  }
+
+  loadDaemonStatus(): void {
     this.subject$.next();
   }
 
-  openPrepareToReceive() {
+  openPrepareToReceive(): void {
     this.isPrepareModalOpen = true;
   }
 
-  closePrepareModal() {
+  closePrepareModal(): void {
     this.isPrepareModalOpen = false;
     this.loadDaemonStatus();
   }
 
-  onTokenGenerated(_response: any) {
+  onTokenGenerated(): void {
     this.loadDaemonStatus();
   }
 
-  openSetupMirroring() {
+  openSetupMirroring(): void {
     this.isSetupModalOpen = true;
   }
 
-  closeSetupModal() {
+  closeSetupModal(): void {
     this.isSetupModalOpen = false;
     this.loadDaemonStatus();
+  }
+
+  openAddPath(): void {
+    const selected = this.selection.first();
+    if (!selected?.filesystem_id || !selected?.local_fs_name) {
+      return;
+    }
+
+    this.router.navigate([
+      CEPHFS_MIRRORING_URL,
+      {
+        outlets: {
+          modal: ['add-path', selected.filesystem_id, encodeURIComponent(selected.local_fs_name)]
+        }
+      }
+    ]);
+  }
+
+  private buildJumpInTiles(): MirroringJumpInTile[] {
+    return [
+      {
+        title: $localize`Set up mirroring`,
+        description: $localize`Configure mirroring for a filesystem by importing a token from a peer cluster and adding paths to replicate.`,
+        icon: 'replicate',
+        action: () => this.openSetupMirroring()
+      },
+      {
+        title: $localize`Prepare to receive`,
+        description: $localize`Generate a bootstrap token for a filesystem to allow a peer cluster to replicate data to it.`,
+        icon: 'share',
+        action: () => this.openPrepareToReceive()
+      }
+    ];
   }
 
   private buildRows(daemons: Daemon[]): MirroringRow[] {
@@ -86,7 +167,9 @@ export class CephfsMirroringListComponent implements OnInit {
     }
 
     for (const daemon of daemons) {
-      if (!daemon?.filesystems) continue;
+      if (!daemon?.filesystems) {
+        continue;
+      }
       for (const fs of daemon.filesystems) {
         if (fs.peers?.length) {
           for (const peer of fs.peers) {
@@ -107,6 +190,7 @@ export class CephfsMirroringListComponent implements OnInit {
       fs_name: peer.remote?.fs_name ?? '-',
       client_name: peer.remote?.client_name ?? '-',
       directory_count: fs.directory_count ?? 0,
+      filesystem_id: fs.filesystem_id,
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };
   }
@@ -118,6 +202,7 @@ export class CephfsMirroringListComponent implements OnInit {
       fs_name: fs.name,
       client_name: '-',
       directory_count: fs.directory_count ?? 0,
+      filesystem_id: fs.filesystem_id,
       peerId: '-',
       id: `${daemon.daemon_id}-${fs.filesystem_id}`
     };

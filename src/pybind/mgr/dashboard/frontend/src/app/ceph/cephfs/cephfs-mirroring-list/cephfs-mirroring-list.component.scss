@@ -1,11 +1,5 @@
-.cds--grid.cds--grid--narrow {
-  margin-left: 20px;
-  padding-left: 0;
-}
-
-.jump-in-row {
-  align-items: stretch;
-
+.jump-in-grid {
+  cd-clickable-tile,
   cds-clickable-tile,
   .cds--tile {
     height: 100%;

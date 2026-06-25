@@ -1,0 +1,17 @@
+<ng-template #descTpl>Filesystem: <strong>{{fsName}}</strong></ng-template>
+
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [modalHeaderLabel]="modalHeaderLabel"
+  [descriptionTemplate]="descTpl"
+  [isSubmitLoading]="isSubmitLoading"
+  progressPosition="top"
+  submitButtonLabel="Add mirror path"
+  i18n-submitButtonLabel
+  (submitRequested)="onSubmit()"
+  (closeRequested)="onCancel()">
+  <cd-tearsheet-step></cd-tearsheet-step>
+  <cd-tearsheet-step></cd-tearsheet-step>
+  <cd-tearsheet-step></cd-tearsheet-step>
+</cd-tearsheet>
