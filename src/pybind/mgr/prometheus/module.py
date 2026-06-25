@@ -145,6 +145,7 @@ NODE_PROXY_STORAGE_LABELS = ('hostname', 'device', 'model', 'protocol')
 NODE_PROXY_CPU_LABELS = ('hostname', 'cpu', 'manufacturer', 'model')
 
 NODE_PROXY_MEMORY_LABELS = ('hostname', 'dimm', 'type', 'manufacturer')
+MIB_TO_BYTES = 1048576
 
 NODE_PROXY_HEALTH_LABELS = ('hostname', 'component', 'category')
 
@@ -1026,10 +1027,10 @@ class Module(MgrModule, OrchestratorClientMixin):
             NODE_PROXY_CPU_LABELS
         )
 
-        metrics['node_proxy_memory_capacity_mib'] = Metric(
+        metrics['node_proxy_memory_capacity_bytes'] = Metric(
             'gauge',
-            'node_proxy_memory_capacity_mib',
-            'Memory capacity in MiB',
+            'node_proxy_memory_capacity_bytes',
+            'Memory capacity in bytes',
             NODE_PROXY_MEMORY_LABELS
         )
 
@@ -2059,19 +2060,29 @@ class Module(MgrModule, OrchestratorClientMixin):
 
             for sys_id, dimms in status.get('memory', {}).items():
                 for dimm_id, dimm in dimms.items():
-                    capacity = dimm.get('capacity_mi_b', 0)
+                    capacity_mib = dimm.get('capacity_mi_b', 0)
+                    capacity_bytes = capacity_mib * MIB_TO_BYTES
                     labels = (
                         host,
                         dimm_id,
                         dimm.get('memory_device_type', 'unknown'),
                         dimm.get('manufacturer', 'unknown')
                     )
-                    self.metrics['node_proxy_memory_capacity_mib'].set(capacity, labels)
+                    self.metrics['node_proxy_memory_capacity_bytes'].set(capacity_bytes, labels)
 
             for category in ['storage', 'processors', 'memory', 'power', 'fans', 'network', 'temperatures']:
                 for sys_id, components in status.get(category, {}).items():
                     for comp_id, comp in components.items():
-                        health_str = comp.get('status', {}).get('health', 'Unknown')
+                        if not isinstance(comp, dict):
+                            continue
+                        status_val = comp.get('status', {})
+                        if isinstance(status_val, dict):
+                            health_str = status_val.get('health', 'Unknown')
+                        elif isinstance(status_val, str):
+                            health_str = status_val
+                        else:
+                            health_str = 'Unknown'
+
                         if health_str == 'OK':
                             health_value = 0
                         elif health_str in ['Warning', 'Degraded']:
