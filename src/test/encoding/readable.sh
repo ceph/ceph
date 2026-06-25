@@ -34,6 +34,10 @@ if ldd $(command -v $CEPH_DENCODER) 2>/dev/null | grep -q libasan; then
   else
     echo "ASAN build detected but 'setarch -R' is unavailable; running ceph-dencoder without ASLR disable"
   fi
+
+  # Per-object leak checks dominate runtime here (~10s vs ~1s each on riscv64)
+  # and this test only checks encode/decode, so disable them; keep other checks.
+  export ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 fi
 
 myversion=$($CEPH_DENCODER version)
