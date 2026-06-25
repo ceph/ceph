@@ -23,6 +23,7 @@ import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject } from 'rxjs';
+import { ActionLabelsI18n } from '../../constants/app.constants';
 
 export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
@@ -32,6 +33,9 @@ export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
     [title]="title"
     [isSubmitLoading]="isSubmitLoading"
     [description]="description"
+    modalHeaderLabel="Top label header"
+    progressPosition="top"
+    previousButtonLabel="back"
     (submitRequested)="onSubmit()">
   <cd-tearsheet-step>
       <cd-step #tearsheetStep>
@@ -46,11 +50,11 @@ export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
 @Component({
   selector: 'cd-step',
-  template: `<form></form>,
+  template: `<form></form>`,
   standalone: false
 })
 export class StepComponent implements TearsheetStep {
-formgroup: CdFormGroup;
+  formGroup: CdFormGroup;
 }
 **/
 @Component({
@@ -63,12 +67,16 @@ formgroup: CdFormGroup;
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
+  @Input() modalHeaderLabel: string;
   @Input() steps!: Array<Step>;
   @Input() description!: string;
+  @Input() descriptionTemplate: TemplateRef<any>;
   @Input() type: 'full' | 'wide' = 'wide';
   @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
-  @Input() submitButtonLabel: string = $localize`Create`;
-  @Input() submitButtonLoadingLabel: string = $localize`Creating`;
+  @Input() progressPosition: 'left' | 'top' = 'left';
+  @Input() submitButtonLabel: string;
+  @Input() submitButtonLoadingLabel: string;
+  @Input() previousButtonLabel: string;
   @Input() isSubmitLoading: boolean = false;
   /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
   @Input() overflowScroll?: TearsheetOverflowScroll;
@@ -126,10 +134,14 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     private route: ActivatedRoute,
     private location: Location,
     private destroyRef: DestroyRef,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private actionLabels: ActionLabelsI18n
   ) {}
 
   ngOnInit() {
+    this.submitButtonLabel ??= this.actionLabels.CREATE;
+    this.submitButtonLoadingLabel ??= this.actionLabels.CREATING;
+    this.previousButtonLabel ??= this.actionLabels.PREVIOUS;
     this.lastStep = this.steps.length - 1;
     this.hasModalOutlet = this.route.outlet === 'modal';
   }

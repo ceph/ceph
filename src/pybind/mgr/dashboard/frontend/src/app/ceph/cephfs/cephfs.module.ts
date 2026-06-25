@@ -33,6 +33,7 @@ import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
 import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
@@ -142,7 +143,8 @@ import ShareIcon24 from '@carbon/icons/es/share/24';
     CephfsMirroringFsSchedulesComponent,
     CephfsGenerateTokenComponent,
     CephfsDownloadTokenComponent,
-    CephfsSetupMirroringComponent
+    CephfsSetupMirroringComponent,
+    CephfsAddMirroringPathComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
