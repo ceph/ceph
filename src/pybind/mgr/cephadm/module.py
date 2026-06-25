@@ -18,7 +18,12 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
-from cephadm.ssl_cert_utils import SSLConfigException, contains_private_key, is_fullchain_pem, parse_tls_pem_bundle
+from ceph.deployment.tls_utils import (
+    SSLConfigException,
+    contains_private_key,
+    is_fullchain_pem,
+    parse_tls_pem_bundle
+)
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \

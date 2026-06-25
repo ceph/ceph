@@ -43,7 +43,7 @@ from ceph.cephadm.d3n_types import (
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
-from cephadm.ssl_cert_utils import (
+from ceph.deployment.tls_utils import (
     extract_ips_and_fqdns_from_cert,
     parse_tls_pem_bundle,
     contains_private_key,
