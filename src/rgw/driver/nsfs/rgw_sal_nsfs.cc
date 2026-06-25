@@ -780,6 +780,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname
                       << " for listing: " << cpp_strerror(ret) << dendl;
+    ::close(dir_fd);
     return -ret;
   }
 
@@ -798,6 +799,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     std::string_view d_name = entry->d_name;
     bool is_mp = d_name.starts_with("." + mp_ns);
     if (!is_mp && !delete_children) {
+      closedir(dir);
       return -ENOTEMPTY;
     }
 
@@ -806,6 +808,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
+      closedir(dir);
       return -ret;
     }
 
@@ -813,6 +816,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       /* Recurse */
       ret = delete_directory(dir_fd, entry->d_name, true, dpp);
       if (ret < 0) {
+        closedir(dir);
         return ret;
       }
 
@@ -825,6 +829,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
+      closedir(dir);
       return -ret;
     }
   }
