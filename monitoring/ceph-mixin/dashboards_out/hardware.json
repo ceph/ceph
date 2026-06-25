@@ -2080,6 +2080,93 @@
                   },
                   { }
                ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "fillGradient": 0,
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 20
+               },
+               "id": 35,
+               "legend": {
+                  "alignAsTable": false,
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "rightSide": false,
+                  "show": true,
+                  "sideWidth": null,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "repeat": null,
+               "seriesOverrides": [
+                  {
+                     "alias": "Critical",
+                     "color": "dark-red",
+                     "dashes": true,
+                     "fill": 0
+                  }
+               ],
+               "spaceLength": 10,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{sensor_name}}",
+                     "refId": "A"
+                  },
+                  {
+                     "expr": "vector(65)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Critical",
+                     "refId": "B"
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "PSU Temperatures",
+               "tooltip": {
+                  "shared": true,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "min": 0
+                  },
+                  { }
+               ]
             }
          ],
          "repeat": null,
@@ -2099,7 +2186,7 @@
             "x": 0,
             "y": 4
          },
-         "id": 35,
+         "id": 36,
          "panels": [
             {
                "aliasColors": { },
@@ -2116,7 +2203,7 @@
                   "x": 0,
                   "y": 5
                },
-               "id": 36,
+               "id": 37,
                "legend": {
                   "alignAsTable": false,
                   "avg": false,
@@ -2201,7 +2288,7 @@
                   "x": 12,
                   "y": 5
                },
-               "id": 37,
+               "id": 38,
                "legend": {
                   "alignAsTable": false,
                   "avg": false,
