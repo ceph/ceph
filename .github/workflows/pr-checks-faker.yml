@@ -1,0 +1,43 @@
+name: PR Status Check Faker POC
+
+on:
+  workflow_call:
+    inputs:
+      pr_sha:
+        description: "Pull Request head SHA"
+        required: true
+        type: string
+      triggered_by:
+        description: "URL of workflow that triggered the fake checks"
+        required: true
+        type: string
+
+permissions:
+  statuses: write
+
+jobs:
+  send-status-checks:
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      SHA: ${{ inputs.pr_sha }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TRIGGERED_BY: ${{ inputs.triggered_by }}
+    steps:
+      - name: Post fake success status for POC
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(jq -n \
+            --arg state "success" \
+            --arg context "jenkins poc test" \
+            --arg description "Skipped: docs/container-only PR (POC)" \
+            --arg target_url "$TRIGGERED_BY" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}')
+
+          curl --fail --retry 4 --retry-delay 3 --retry-connrefused \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/statuses/$SHA" \
+            -d "$payload"

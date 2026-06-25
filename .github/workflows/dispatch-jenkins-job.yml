@@ -1,0 +1,218 @@
+name: Dispatch Jenkins Job
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Pull request number"
+        required: true
+        type: string
+      pr_sha:
+        description: "Head SHA of the pull request"
+        required: true
+        type: string
+      jenkins_job:
+        description: "Jenkins job name"
+        required: true
+        type: string
+      status_context:
+        description: "GitHub commit status context"
+        required: true
+        type: string
+      trigger_method:
+        description: "Human-readable trigger source"
+        required: true
+        type: string
+      triggered_by:
+        description: "URL of the workflow run or comment that triggered this dispatch"
+        required: true
+        type: string
+      dry_run:
+        description: "If true, do not stop/cancel/trigger Jenkins"
+        required: false
+        default: true
+        type: boolean
+      post_pending_status:
+        description: "If true, post pending status to GitHub"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: jenkins-dispatch-${{ inputs.pr_number }}-${{ inputs.jenkins_job }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    env:
+      JENKINS_BASE_URL: https://jenkins.ceph.com
+      PR_NUMBER: ${{ inputs.pr_number }}
+      PR_SHA: ${{ inputs.pr_sha }}
+      JENKINS_JOB: ${{ inputs.jenkins_job }}
+      STATUS_CONTEXT: ${{ inputs.status_context }}
+      TRIGGER_METHOD: ${{ inputs.trigger_method }}
+      TRIGGERED_BY: ${{ inputs.triggered_by }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JENKINS_USER: ${{ secrets.JENKINS_USER }}
+      JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+
+    steps:
+      - name: Validate required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v curl >/dev/null 2>&1
+          command -v jq >/dev/null 2>&1
+
+      - name: Post pending GitHub status
+        if: inputs.post_pending_status == true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          payload=$(jq -n \
+            --arg state "pending" \
+            --arg context "$STATUS_CONTEXT" \
+            --arg description "Jenkins POC job dispatched" \
+            --arg target_url "$TRIGGERED_BY" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}')
+
+          curl --fail --retry 4 --retry-delay 3 --retry-connrefused \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/statuses/$PR_SHA" \
+            -d "$payload"
+
+      - name: Dry-run summary
+        if: inputs.dry_run == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DRY RUN ENABLED"
+          echo "Would inspect Jenkins job: $JENKINS_JOB"
+          echo "Would stop stale running builds for PR #$PR_NUMBER not matching SHA $PR_SHA"
+          echo "Would cancel stale queued items for PR #$PR_NUMBER not matching SHA $PR_SHA"
+          echo "Would trigger Jenkins build for job '$JENKINS_JOB'"
+
+      - name: Abort stale running Jenkins builds for same PR/job
+        if: inputs.dry_run != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=(--user "$JENKINS_USER:$JENKINS_API_TOKEN")
+
+          builds_json=$(curl -g --fail --silent --show-error --retry 4 --retry-delay 3 --retry-connrefused \
+            "${auth_args[@]}" \
+            "$JENKINS_BASE_URL/job/$JENKINS_JOB/api/json?tree=builds[number,url,building]")
+
+          echo "$builds_json" | jq -c '.builds[:50][]?' | while read -r build; do
+            build_number=$(echo "$build" | jq -r '.number')
+            build_url=$(echo "$build" | jq -r '.url')
+            building=$(echo "$build" | jq -r '.building')
+
+            if [[ "$building" != "true" ]]; then
+              continue
+            fi
+
+            build_detail=$(curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-connrefused \
+              "${auth_args[@]}" \
+              "${build_url}api/json")
+
+            build_pr=$(echo "$build_detail" | jq -r '
+              [
+                .actions[]?
+                | .parameters[]?
+                | select(.name == "GH_PULL_REQUEST_ID")
+                | .value
+              ][0] // empty
+            ')
+
+            build_sha=$(echo "$build_detail" | jq -r '
+              [
+                .actions[]?
+                | .parameters[]?
+                | select(.name == "GH_PULL_REQUEST_SHA")
+                | .value
+              ][0] // empty
+            ')
+
+            if [[ -z "$build_pr" || -z "$build_sha" ]]; then
+              continue
+            fi
+
+            if [[ "$build_pr" == "$PR_NUMBER" && "$build_sha" != "$PR_SHA" ]]; then
+              echo "Stopping stale running build #$build_number for PR #$build_pr (old SHA: $build_sha)"
+              curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-connrefused \
+                "${auth_args[@]}" \
+                -X POST \
+                "${build_url}stop"
+            fi
+          done
+
+      - name: Cancel stale queued Jenkins items for same PR/job
+        if: inputs.dry_run != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=(--user "$JENKINS_USER:$JENKINS_API_TOKEN")
+
+          queue_json=$(curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-connrefused \
+            "${auth_args[@]}" \
+            "$JENKINS_BASE_URL/queue/api/json")
+
+          echo "$queue_json" | jq -c '.items[]?' | while read -r item; do
+            queue_id=$(echo "$item" | jq -r '.id')
+            task_name=$(echo "$item" | jq -r '.task.name // empty')
+            params_text=$(echo "$item" | jq -r '.params // empty')
+
+            if [[ "$task_name" != "$JENKINS_JOB" ]]; then
+              continue
+            fi
+
+            if echo "$params_text" | grep -q "GH_PULL_REQUEST_ID=$PR_NUMBER"; then
+              if ! echo "$params_text" | grep -q "GH_PULL_REQUEST_SHA=$PR_SHA"; then
+                echo "Cancelling stale queued item id=$queue_id for PR #$PR_NUMBER"
+                curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-connrefused \
+                  "${auth_args[@]}" \
+                  -X POST \
+                  "$JENKINS_BASE_URL/queue/cancelItem?id=$queue_id"
+              fi
+            fi
+          done
+
+      - name: Trigger Jenkins build with retries
+        if: inputs.dry_run != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=(--user "$JENKINS_USER:$JENKINS_API_TOKEN")
+          success=false
+
+          for attempt in 1 2 3 4 5; do
+            echo "Triggering Jenkins job '$JENKINS_JOB' (attempt $attempt)..."
+            if curl --fail --silent --show-error --retry 4 --retry-delay 5 --retry-connrefused \
+              "${auth_args[@]}" \
+              -X POST \
+              "$JENKINS_BASE_URL/job/$JENKINS_JOB/buildWithParameters" \
+              --data-urlencode "GH_PULL_REQUEST_ID=$PR_NUMBER" \
+              --data-urlencode "GH_PULL_REQUEST_SHA=$PR_SHA" \
+              --data-urlencode "TRIGGER_METHOD=$TRIGGER_METHOD" \
+              --data-urlencode "TRIGGERED_BY=$TRIGGERED_BY"; then
+              success=true
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ "$success" != "true" ]]; then
+            echo "All attempts to trigger Jenkins job '$JENKINS_JOB' failed."
+            exit 1
+          fi

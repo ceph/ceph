@@ -1,0 +1,46 @@
+name: Test Dispatch Jenkins Job POC
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to simulate"
+        required: false
+        type: string
+      pr_sha:
+        description: "Pull request head SHA to simulate"
+        required: false
+        type: string
+      dry_run:
+        description: "Do not stop/cancel/trigger Jenkins"
+        required: false
+        default: true
+        type: boolean
+      post_pending_status:
+        description: "Post a pending status to GitHub"
+        required: false
+        default: false
+        type: boolean
+
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  call-reusable-dispatcher:
+    uses: ./.github/workflows/dispatch-jenkins-job.yml
+    secrets: inherit
+    with:
+      pr_number: ${{ github.event_name == 'push' && '99999' || inputs.pr_number }}
+      pr_sha: ${{ github.event_name == 'push' && github.sha || inputs.pr_sha }}
+      jenkins_job: preserve-ceph-pr-trigger-poc
+      status_context: jenkins poc test
+      trigger_method: ${{ github.event_name == 'push' && format('Push test by {0}', github.actor) || format('Manual test via workflow_dispatch by {0}', github.actor) }}
+      triggered_by: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      dry_run: ${{ github.event_name == 'push' && true || inputs.dry_run }}
+      post_pending_status: ${{ github.event_name == 'push' && false || inputs.post_pending_status }}

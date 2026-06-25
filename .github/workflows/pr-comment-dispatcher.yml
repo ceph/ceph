@@ -1,0 +1,84 @@
+name: PR Comment Dispatcher POC
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-comment-poc-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  parse-comment:
+    if: github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.auth.outputs.authorized }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      pr_sha: ${{ steps.pr.outputs.pr_sha }}
+      trigger_poc: ${{ steps.parse.outputs.trigger_poc }}
+    steps:
+      - name: Parse comment
+        id: parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          body='${{ github.event.comment.body }}'
+          normalized=$(printf '%s' "$body" | tr '[:upper:]' '[:lower:]' | xargs)
+          if [[ "$normalized" == "jenkins test poc" ]]; then
+            echo "trigger_poc=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trigger_poc=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check collaborator authorization
+        id: auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          user='${{ github.event.comment.user.login }}'
+          repo='${{ github.repository }}'
+          status=$(curl --retry 3 --retry-connrefused --fail -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$repo/collaborators/$user")
+          if [[ "$status" == "204" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve PR number and SHA
+        id: pr
+        if: steps.auth.outputs.authorized == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_number='${{ github.event.issue.number }}'
+          pr_url='${{ github.event.issue.pull_request.url }}'
+          pr_json=$(curl --retry 3 --retry-connrefused --fail -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "$pr_url")
+          pr_sha=$(echo "$pr_json" | jq -r '.head.sha')
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "pr_sha=$pr_sha" >> "$GITHUB_OUTPUT"
+
+  trigger-poc:
+    needs: parse-comment
+    if: needs.parse-comment.outputs.authorized == 'true' && needs.parse-comment.outputs.trigger_poc == 'true'
+    uses: ./.github/workflows/dispatch-jenkins-job.yml
+    secrets: inherit
+    with:
+      pr_number: ${{ needs.parse-comment.outputs.pr_number }}
+      pr_sha: ${{ needs.parse-comment.outputs.pr_sha }}
+      jenkins_job: preserve-ceph-pr-trigger-poc
+      status_context: jenkins poc test
+      trigger_method: Comment by ${{ github.event.comment.user.login }}
+      triggered_by: https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}#issuecomment-${{ github.event.comment.id }}
+      dry_run: false
+      post_pending_status: true
