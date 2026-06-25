@@ -15,6 +15,8 @@ class UserPersonaDistribution(TypedDict):
     file_system_operator: int
     object_storage_operator: int
     monitoring: int
+    primary_usage_persona: str
+    persona_diversity: int
 
 class TelemetryMetricsResponse(TypedDict):
     user_persona_distribution: UserPersonaDistribution
@@ -53,6 +55,24 @@ class DashboardTelemetryService:
             return cls._detect_and_cache_user_personas()
     
     @classmethod
+    def _derive_persona_insights(cls, persona_counts):
+        active_personas = {
+            key: value
+            for key, value in persona_counts.items()
+            if value > 0
+        }
+
+        if active_personas:
+            primary_persona = max(active_personas, key=lambda k: active_personas[k])
+        else:
+            primary_persona = "none"
+
+        return {
+            "primary_usage_persona": primary_persona,
+            "persona_diversity": len(active_personas),
+        }
+    
+    @classmethod
     def _detect_and_cache_user_personas(cls) -> UserPersonaDistribution:
         try:
             access_db = mgr.ACCESS_CTRL_DB
@@ -65,7 +85,9 @@ class DashboardTelemetryService:
                 'block_storage_operator': 0,
                 'file_system_operator': 0,
                 'object_storage_operator': 0,
-                'monitoring': 0
+                'monitoring': 0,
+                'primary_usage_persona': 'none',
+                'persona_diversity': 0
             }
         
         persona_counts = {
@@ -96,13 +118,17 @@ class DashboardTelemetryService:
                         persona_counts[persona] += 1
                         break
         
+        insights = cls._derive_persona_insights(persona_counts)
+        
         result: UserPersonaDistribution = {
             'admin': persona_counts['admin'],
             'read_only': persona_counts['read_only'],
             'block_storage_operator': persona_counts['block_storage_operator'],
             'file_system_operator': persona_counts['file_system_operator'],
             'object_storage_operator': persona_counts['object_storage_operator'],
-            'monitoring': persona_counts['monitoring']
+            'monitoring': persona_counts['monitoring'],
+            'primary_usage_persona': insights['primary_usage_persona'],
+            'persona_diversity': insights['persona_diversity']
         }
         
         mgr.set_store(cls.KV_USER_PERSONA, json.dumps(result))
