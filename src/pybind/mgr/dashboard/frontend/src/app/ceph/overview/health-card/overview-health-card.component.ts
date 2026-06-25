@@ -52,8 +52,18 @@ type HwKey = keyof typeof HardwareNameMapping;
 type HwRowVM = {
   key: HwKey;
   label: string;
+  icon: string;
   ok: number;
   error: number;
+};
+
+const HW_ICON_MAP: Record<HwKey, string> = {
+  memory: 'dataEnrichment',
+  storage: 'vmdkDisk',
+  processors: 'chip',
+  network: 'network1',
+  power: 'plug',
+  fans: 'ibmStreamSets',
 };
 
 @Component({
@@ -154,6 +164,7 @@ export class OverviewHealthCardComponent {
       return (Object.keys(HardwareNameMapping) as HwKey[]).map((key) => ({
         key,
         label: HardwareNameMapping[key],
+        icon: HW_ICON_MAP[key],
         ok: Number(category?.[key]?.ok ?? 0),
         error: Number(category?.[key]?.error ?? 0)
       }));
