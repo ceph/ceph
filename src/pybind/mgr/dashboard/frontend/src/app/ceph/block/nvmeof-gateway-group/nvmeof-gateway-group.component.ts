@@ -33,6 +33,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -74,6 +75,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   subsystemCount = 0;
   gatewayCount = 0;
   private lastGroupCount = 0;
+  selectedGatewayDetails: DetailItem[] = [];
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
@@ -126,6 +128,14 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
 
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(this.selection.first()?.name),
+      name: this.actionLabels.EDIT,
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
+    };
+
     const viewAction: CdTableAction = {
       permission: 'read',
       icon: Icons.eye,
@@ -142,7 +152,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
 
-    this.tableActions = [createAction, viewAction, deleteAction];
+    this.tableActions = [createAction, editAction, viewAction, deleteAction];
 
     this.gatewayGroup$ = this.subject.pipe(
       switchMap(() =>
@@ -213,6 +223,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
+    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {
@@ -334,5 +345,44 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  editSelectedGatewayGroup(): void {
+    const selectedGroup = this.selection.first();
+    if (!selectedGroup) {
+      return;
+    }
+    this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
+  }
+
+  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
+    if (!selectedGroup) {
+      return [];
+    }
+
+    const runningGateways = selectedGroup.statusCount?.running ?? 0;
+    const errorGateways = selectedGroup.statusCount?.error ?? 0;
+    const totalGateways = runningGateways + errorGateways;
+
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: selectedGroup.name
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: totalGateways
+      },
+      {
+        label: $localize`Encryption`,
+        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      },
+      {
+        label: $localize`mTLS`,
+        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      }
+    ];
   }
 }

@@ -531,6 +531,22 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           server_key: 'server_key'
         });
       });
+
+      it('should submit nvmeof with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: true,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
+        });
+      });
     });
 
     describe('should test service smb', () => {
