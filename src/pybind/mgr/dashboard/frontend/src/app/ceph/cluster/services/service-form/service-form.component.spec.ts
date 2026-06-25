@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -55,7 +55,6 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       InputModule,
       SelectModule,
       NumberModule,
@@ -109,7 +108,7 @@ describe('ServiceFormComponent', () => {
       // placement labels take only single value
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('placement', 'label');
-      formHelper.setValue('label', "{content: 'foo', selected:  true}");
+      formHelper.setValue('label', { content: 'foo', selected: true });
 
       component.onSubmit();
 
@@ -261,6 +260,64 @@ describe('ServiceFormComponent', () => {
           rgw_frontend_port: 1234,
           ssl: true,
           certificate_source: 'cephadm-signed'
+        });
+      });
+
+      it('should submit rgw with virtual-host style bucket access and SSL', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: true
+        });
+      });
+
+      it('should submit rgw with SSL and without virtual-host style bucket access', () => {
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
+        });
+      });
+
+      it('should submit rgw with virtual-host style bucket access and SSL without wildcard certificate', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', false);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: false
         });
       });
 
@@ -501,6 +558,22 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(server_key).toBeNull();
       });
 
+      it('should not show certs and keys field with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        fixture.detectChanges();
+        const root_ca_cert = fixture.debugElement.query(By.css('#root_ca_cert'));
+        const client_cert = fixture.debugElement.query(By.css('#client_cert'));
+        const client_key = fixture.debugElement.query(By.css('#client_key'));
+        const server_cert = fixture.debugElement.query(By.css('#server_cert'));
+        const server_key = fixture.debugElement.query(By.css('#server_key'));
+        expect(root_ca_cert).toBeNull();
+        expect(client_cert).toBeNull();
+        expect(client_key).toBeNull();
+        expect(server_cert).toBeNull();
+        expect(server_key).toBeNull();
+      });
+
       it('should submit nvmeof without mTLS', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
@@ -515,6 +588,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'external');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');
@@ -528,11 +602,29 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           unmanaged: false,
           group: 'default',
           enable_auth: true,
+          ssl: true,
+          certificate_source: 'inline',
           root_ca_cert: 'root_ca_cert',
           client_cert: 'client_cert',
           client_key: 'client_key',
           server_cert: 'server_cert',
           server_key: 'server_key'
+        });
+      });
+
+      it('should submit nvmeof with internal mTLS', () => {
+        formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'internal');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: true,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
     });
