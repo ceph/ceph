@@ -1963,7 +1963,7 @@ public:
   }
 
   int get_num_zone() const {
-    int64_t num_zones;
+    int64_t num_zones = 1;  // default: single-zone pool
     opts.get(pool_opts_t::NUM_ZONES, &num_zones);
 
     return static_cast<int>(num_zones);
