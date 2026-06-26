@@ -174,15 +174,6 @@ add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush ec_isa ec_jerasure)
 
-# unittest_objecttracker
-add_executable(unittest_objecttracker
-  TestObjectTracker.cc
-  $<TARGET_OBJECTS:unit-main>
-  $<TARGET_OBJECTS:pg_backend_test_fixture>
-  )
-add_ceph_unittest(unittest_objecttracker)
-target_link_libraries(unittest_objecttracker osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc

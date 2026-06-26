@@ -942,26 +942,19 @@ int PGBackendTestFixture::read_attribute(
 
 void PGBackendTestFixture::verify_attribute(
   const std::string& obj_name,
-  const std::string& attr_name,
-  const std::string& expected_value)
+  const std::string& attr_name)
 {
-  // Verify against tracked state first
   ceph_assert(object_tracker);
-  auto tracked_value = object_tracker->get_expected_attribute(obj_name, attr_name);
-  ASSERT_TRUE(tracked_value.has_value())
+  auto expected_value = object_tracker->get_expected_attribute(obj_name, attr_name);
+  ASSERT_TRUE(expected_value.has_value())
     << "ObjectTracker has no record of attribute " << attr_name << " for " << obj_name;
-  ASSERT_EQ(*tracked_value, expected_value)
-      << "Provided expected_value doesn't match ObjectTracker's tracked state for attribute "
-      << attr_name << " on " << obj_name;
-  
-  // Read the actual attribute
+
   bufferlist attr_bl;
   int result = read_attribute(obj_name, attr_name, attr_bl);
-  
   ASSERT_EQ(result, 0) << "Failed to read attribute " << attr_name << " from " << obj_name;
-  
+
   std::string actual_value(attr_bl.c_str(), attr_bl.length());
-  ASSERT_EQ(actual_value, expected_value)
+  ASSERT_EQ(actual_value, *expected_value)
     << "Attribute " << attr_name << " on " << obj_name << " doesn't match expected value";
 }
 
@@ -989,8 +982,8 @@ void PGBackendTestFixture::verify_object(const std::string& obj_name)
     << "ObjectTracker has no record of object " << obj_name;
 
   // Verify expected attributes exist with correct values
-  for (const auto& [attr_name, attr_write] : tracked_object->attributes) {
-    verify_attribute(obj_name, attr_name, attr_write.value);
+  for (const auto& [attr_name, _] : tracked_object->attributes) {
+    verify_attribute(obj_name, attr_name);
   }
   
   // List all actual attributes and verify no unexpected ones exist

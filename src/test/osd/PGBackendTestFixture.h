@@ -536,19 +536,18 @@ public:
     bufferlist& out_value);
 
   /**
-   * Verify an attribute matches expected value.
+   * Verify an attribute matches the value tracked by ObjectTracker.
    *
-   * This helper function reads an attribute and verifies it matches the expected value.
-   * If ObjectTracker is enabled, it also verifies against the tracked state.
+   * Reads the attribute from the store and asserts it equals the value that
+   * was recorded when the attribute was written.  ObjectTracker must be
+   * enabled when this is called.
    *
    * @param obj_name Name of the object
    * @param attr_name Name of the attribute
-   * @param expected_value Expected attribute value
    */
   void verify_attribute(
     const std::string& obj_name,
-    const std::string& attr_name,
-    const std::string& expected_value);
+    const std::string& attr_name);
 
   /**
    * Read an object and verify that its contents match tracked data.

@@ -34,7 +34,11 @@
  * and can be used to verify object consistency after peering, recovery,
  * and failover scenarios.
  */
+class PGBackendTestFixture;
+
 class ObjectTracker {
+  friend class PGBackendTestFixture;
+
 public:
   /**
    * Information about a data write operation
@@ -103,71 +107,7 @@ private:
 
 public:
   ObjectTracker() = default;
-  
-  /**
-   * Record a data write operation
-   *
-   * @param obj_name Name of the object
-   * @param offset Offset of the write
-   * @param data Data written
-   * @param version Version of this write
-   */
-  void record_data_write(
-    const std::string& obj_name,
-    uint64_t offset,
-    const std::string& data,
-    const eversion_t& version);
-  
-  /**
-   * Record an object creation with initial data
-   *
-   * @param obj_name Name of the object
-   * @param data Initial data
-   * @param version Version of this write
-   */
-  void record_create(
-    const std::string& obj_name,
-    const std::string& data,
-    const eversion_t& version);
-  
-  /**
-   * Record an attribute write operation
-   *
-   * @param obj_name Name of the object
-   * @param attr_name Name of the attribute
-   * @param attr_value Value of the attribute
-   * @param version Version of this write
-   */
-  void record_attribute_write(
-    const std::string& obj_name,
-    const std::string& attr_name,
-    const std::string& attr_value,
-    const eversion_t& version);
-  
-  /**
-   * Record an omap write operation
-   *
-   * @param obj_name Name of the object
-   * @param key OMap key
-   * @param value OMap value
-   * @param version Version of this write
-   */
-  void record_omap_write(
-    const std::string& obj_name,
-    const std::string& key,
-    const std::string& value,
-    const eversion_t& version);
-  
-  /**
-   * Record an object deletion
-   *
-   * @param obj_name Name of the object
-   * @param version Version of this deletion
-   */
-  void record_delete(
-    const std::string& obj_name,
-    const eversion_t& version);
-  
+
   /**
    * Get the tracked state for an object
    *
@@ -255,6 +195,36 @@ public:
    * @return String with statistics
    */
   std::string get_stats() const;
+
+private:
+  // These methods are called exclusively by PGBackendTestFixture completion
+  // callbacks after a transaction commits.  Tests must not supply data directly.
+  void record_data_write(
+    const std::string& obj_name,
+    uint64_t offset,
+    const std::string& data,
+    const eversion_t& version);
+
+  void record_create(
+    const std::string& obj_name,
+    const std::string& data,
+    const eversion_t& version);
+
+  void record_attribute_write(
+    const std::string& obj_name,
+    const std::string& attr_name,
+    const std::string& attr_value,
+    const eversion_t& version);
+
+  void record_omap_write(
+    const std::string& obj_name,
+    const std::string& key,
+    const std::string& value,
+    const eversion_t& version);
+
+  void record_delete(
+    const std::string& obj_name,
+    const eversion_t& version);
 };
 
 // Made with Bob
