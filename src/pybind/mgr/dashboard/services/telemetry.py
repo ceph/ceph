@@ -8,6 +8,7 @@ from ..plugins.ttl_cache import ttl_cache
 
 logger = logging.getLogger('services.telemetry')
 
+
 class UserPersonaDistribution(TypedDict):
     admin: int
     read_only: int
@@ -18,12 +19,14 @@ class UserPersonaDistribution(TypedDict):
     primary_usage_persona: str
     persona_diversity: int
 
+
 class TelemetryMetricsResponse(TypedDict):
     user_persona_distribution: UserPersonaDistribution
 
+
 class DashboardTelemetryService:
     KV_USER_PERSONA = 'telemetry/metrics/user_persona_distribution'
-    
+
     ROLE_TO_PERSONA = {
         'administrator': 'admin',
         'read-only': 'read_only',
@@ -32,7 +35,7 @@ class DashboardTelemetryService:
         'rgw-manager': 'object_storage_operator',
         'cluster-manager': 'monitoring',
     }
-    
+
     PERSONA_PRIORITY = [
         'administrator',
         'cluster-manager',
@@ -41,7 +44,7 @@ class DashboardTelemetryService:
         'rgw-manager',
         'read-only',
     ]
-    
+
     @classmethod
     @ttl_cache(300, label='user_persona_distribution')
     def get_user_persona_distribution(cls) -> UserPersonaDistribution:
@@ -51,9 +54,10 @@ class DashboardTelemetryService:
         try:
             return json.loads(persona_raw)
         except (TypeError, json.JSONDecodeError):
-            logger.warning('telemetry: invalid cached persona data; recomputing')
+            logger.warning(
+                'telemetry: invalid cached persona data; recomputing')
             return cls._detect_and_cache_user_personas()
-    
+
     @classmethod
     def _derive_persona_insights(cls, persona_counts):
         active_personas = {
@@ -63,7 +67,8 @@ class DashboardTelemetryService:
         }
 
         if active_personas:
-            primary_persona = max(active_personas, key=lambda k: active_personas[k])
+            primary_persona = max(
+                active_personas, key=lambda k: active_personas[k])
         else:
             primary_persona = "none"
 
@@ -71,13 +76,13 @@ class DashboardTelemetryService:
             "primary_usage_persona": primary_persona,
             "persona_diversity": len(active_personas),
         }
-    
+
     @classmethod
     def _detect_and_cache_user_personas(cls) -> UserPersonaDistribution:
         try:
             access_db = mgr.ACCESS_CTRL_DB
             users = access_db.users
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             logger.error('telemetry: failed to read access control DB: %s', e)
             return {
                 'admin': 0,
@@ -89,7 +94,7 @@ class DashboardTelemetryService:
                 'primary_usage_persona': 'none',
                 'persona_diversity': 0
             }
-        
+
         persona_counts = {
             'admin': 0,
             'read_only': 0,
@@ -98,10 +103,13 @@ class DashboardTelemetryService:
             'object_storage_operator': 0,
             'monitoring': 0
         }
-        
+
         for user in users.values():
-            user_role_names = [role.name if hasattr(role, 'name') else str(role) for role in user.roles]
-            
+            user_role_names = [
+                role.name if hasattr(role, 'name') else str(role)
+                for role in user.roles
+            ]
+
             classified = False
             for priority_role in cls.PERSONA_PRIORITY:
                 if priority_role in user_role_names:
@@ -110,16 +118,16 @@ class DashboardTelemetryService:
                         persona_counts[persona] += 1
                         classified = True
                         break
-            
+
             if not classified:
                 for role_name in user_role_names:
                     persona = cls.ROLE_TO_PERSONA.get(role_name)
                     if persona:
                         persona_counts[persona] += 1
                         break
-        
+
         insights = cls._derive_persona_insights(persona_counts)
-        
+
         result: UserPersonaDistribution = {
             'admin': persona_counts['admin'],
             'read_only': persona_counts['read_only'],
@@ -130,18 +138,16 @@ class DashboardTelemetryService:
             'primary_usage_persona': insights['primary_usage_persona'],
             'persona_diversity': insights['persona_diversity']
         }
-        
+
         mgr.set_store(cls.KV_USER_PERSONA, json.dumps(result))
         return result
-    
+
     @classmethod
     def refresh_user_personas(cls) -> UserPersonaDistribution:
         return cls._detect_and_cache_user_personas()
-    
+
     @classmethod
     def get_metrics(cls) -> TelemetryMetricsResponse:
         return {
             'user_persona_distribution': cls.get_user_persona_distribution()
         }
-
-
