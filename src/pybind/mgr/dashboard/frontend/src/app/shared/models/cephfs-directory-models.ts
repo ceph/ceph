@@ -9,6 +9,12 @@ export class CephfsQuotas {
   max_files?: number;
 }
 
+export class CephfsDirStatfs {
+  bytes: number;
+  files: number;
+  subdirs: number;
+}
+
 export class CephfsDir {
   name: string;
   path: string;

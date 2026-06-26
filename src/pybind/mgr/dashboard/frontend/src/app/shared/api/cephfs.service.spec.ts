@@ -64,6 +64,12 @@ describe('CephfsService', () => {
     httpTesting.expectOne('ui-api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
   });
 
+  it('should call statfs', () => {
+    service.statfs(1, '/volumes/g1/sv1').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/1/statfs?path=%252Fvolumes%252Fg1%252Fsv1');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call mkSnapshot', () => {
     service.mkSnapshot(3, '/some/path').subscribe();
     const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=%252Fsome%252Fpath');
@@ -120,5 +126,19 @@ describe('CephfsService', () => {
       fs_name: 'my fs',
       token: 'token/with/special=chars'
     });
+  });
+
+  it('should add mirror directory without encoding path in request body', () => {
+    const path = '/volumes/Group1/A1/64446b51-d39b-436b-991f-0f8e713067ff';
+    service.addMirrorDirectory('testfs', path).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/directory');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ fs_name: 'testfs', path });
+  });
+
+  it('should list mirror directories for a filesystem', () => {
+    service.listMirrorDirectories('testfs').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/directory/testfs');
+    expect(req.request.method).toBe('GET');
   });
 });

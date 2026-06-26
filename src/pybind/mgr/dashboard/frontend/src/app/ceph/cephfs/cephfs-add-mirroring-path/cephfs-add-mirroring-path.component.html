@@ -11,7 +11,14 @@
   i18n-submitButtonLabel
   (submitRequested)="onSubmit()"
   (closeRequested)="onCancel()">
-  <cd-tearsheet-step></cd-tearsheet-step>
+  <cd-tearsheet-step>
+    <cd-mirroring-paths-step
+      #pathsStep
+      #tearsheetStep
+      [fsName]="fsName"
+      [fsId]="fsId">
+    </cd-mirroring-paths-step>
+  </cd-tearsheet-step>
   <cd-tearsheet-step></cd-tearsheet-step>
   <cd-tearsheet-step></cd-tearsheet-step>
 </cd-tearsheet>
