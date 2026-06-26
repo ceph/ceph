@@ -146,9 +146,11 @@ function(do_build_boost root_dir version)
   endif()
   set(b2_targets headers stage)
   set(b2_install_targets install)
-  # Except riscv64: its ASan mis-handles ucontext, so it keeps fcontext.
-  if(WITH_ASAN AND NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv"))
+  if(WITH_ASAN)
     list(APPEND b2 context-impl=ucontext)
+    # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
+    # so fiber_activation_record has one layout (else heap-buffer-overflow)
+    list(APPEND b2 define=BOOST_USE_ASAN)
     # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
     # and install targets never load it, so b2 aborts with `unknown feature
     # "<context-impl>"`. Name the context project as a target so its Jamfile loads
