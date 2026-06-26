@@ -83,8 +83,7 @@ class ErasureCode : public ErasureCodeInterface {
 
   int minimum_to_decode(const shard_id_set &want_to_read,
                         const shard_id_set &available,
-                        shard_id_set &minimum_set,
-                        mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>> *minimum_sub_chunks) override;
+                        shard_id_set &minimum_set) override;
 
   [[deprecated]]
   int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
