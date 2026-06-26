@@ -34,6 +34,7 @@ import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
 import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
@@ -65,13 +66,15 @@ import {
   TreeviewModule,
   TabsModule,
   NotificationModule,
-  ProgressBarModule
+  ProgressBarModule,
+  FileUploaderModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
+import TrashIcon16 from '@carbon/icons/es/trash-can/16';
 import Renew16 from '@carbon/icons/es/renew/16';
 import ReplicateIcon from '@carbon/icons/es/replicate/32';
 import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
@@ -79,6 +82,10 @@ import ShareIcon from '@carbon/icons/es/share/32';
 import ShareIcon24 from '@carbon/icons/es/share/24';
 import PendingFilled from '@carbon/icons/es/pending--filled/16';
 import DotMark from '@carbon/icons/es/dot-mark/16';
+import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
+import ChevronUp16 from '@carbon/icons/es/chevron--up/16';
+import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import FolderIcon16 from '@carbon/icons/es/folder/16';
 
 @NgModule({
   imports: [
@@ -118,7 +125,8 @@ import DotMark from '@carbon/icons/es/dot-mark/16';
     TilesModule,
     TagModule,
     NotificationModule,
-    ProgressBarModule
+    ProgressBarModule,
+    FileUploaderModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -148,7 +156,8 @@ import DotMark from '@carbon/icons/es/dot-mark/16';
     CephfsGenerateTokenComponent,
     CephfsDownloadTokenComponent,
     CephfsSetupMirroringComponent,
-    CephfsAddMirroringPathComponent
+    CephfsAddMirroringPathComponent,
+    MirroringPathsStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -160,13 +169,18 @@ export class CephfsModule {
       LaunchIcon,
       Close,
       Trash,
+      TrashIcon16,
       Renew16,
       ReplicateIcon,
       ReplicateIcon24,
       ShareIcon,
       ShareIcon24,
       PendingFilled,
-      DotMark
+      DotMark,
+      ChevronDown16,
+      ChevronUp16,
+      WarningAltFilled16,
+      FolderIcon16
     ]);
   }
 }

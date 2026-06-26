@@ -1395,6 +1395,41 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
 
+    @EndpointDoc("Add a directory path for snapshot mirroring",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Directory path to mirror'),
+                 })
+    @Endpoint('POST', path='/directory')
+    @CreatePermission
+    def add_directory(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_add_dir', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to add mirroring path {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("List snapshot mirrored directories",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 })
+    @Endpoint('GET', path='/directory')
+    @ReadPermission
+    def list_directories(self, fs_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_ls', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to list mirroring directories: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else []
+
     @EndpointDoc("Get mirror daemon and peers information",
                  responses={200: DAEMON_STATUS_SCHEMA})
     @Endpoint('GET', path='/daemon-status')

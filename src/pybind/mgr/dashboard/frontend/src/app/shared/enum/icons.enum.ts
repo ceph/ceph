@@ -89,6 +89,7 @@ export enum Icons {
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
+  chevronUp = 'chevron--up',
   connect = 'connect',
   checkmarkOutline = 'checkmark--outline',
   circleDash = 'circle-dash',
@@ -126,7 +127,8 @@ export enum Icons {
   arrowDown = 'arrow--down',
   locked = 'locked', // Access denied, locked state
   cloudMonitoring = 'cloud--monitoring',
-  pendingFilled = 'pending--filled'
+  pendingFilled = 'pending--filled',
+  folder = 'folder'
 }
 
 export enum IconSize {
@@ -180,7 +182,10 @@ export const ICON_TYPE = {
   trash: 'trash-can',
   replicate: 'replicate',
   share: 'share',
-  pendingFilled: 'pending--filled'
+  pendingFilled: 'pending--filled',
+  chevronDown: 'chevron--down',
+  chevronUp: 'chevron--up',
+  folder: 'folder'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

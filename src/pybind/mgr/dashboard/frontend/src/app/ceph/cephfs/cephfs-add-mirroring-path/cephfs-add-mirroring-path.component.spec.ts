@@ -1,15 +1,29 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { asyncScheduler, defer, of, throwError } from 'rxjs';
+import { observeOn } from 'rxjs/operators';
 
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path.component';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 describe('CephfsAddMirroringPathComponent', () => {
   let component: CephfsAddMirroringPathComponent;
   let fixture: ComponentFixture<CephfsAddMirroringPathComponent>;
   let routerNavigateSpy: jest.Mock;
 
+  const cephfsServiceMock = {
+    addMirrorDirectory: jest.fn()
+  };
+
+  const notificationServiceMock = {
+    show: jest.fn()
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
     routerNavigateSpy = jest.fn();
 
     await TestBed.configureTestingModule({
@@ -26,7 +40,9 @@ describe('CephfsAddMirroringPathComponent', () => {
         {
           provide: Router,
           useValue: { navigate: routerNavigateSpy }
-        }
+        },
+        { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
     })
@@ -57,15 +73,138 @@ describe('CephfsAddMirroringPathComponent', () => {
     expect(component.steps.map((step) => step.label)).toEqual(['Paths', 'Schedule', 'Review']);
   });
 
-  it('should close modal outlet on submit', () => {
-    component.ngOnInit();
+  it('should skip API calls when the paths step form is invalid', () => {
+    const refreshTrackedPaths = jest.fn();
+    component.pathsStep = {
+      formGroup: {
+        markAllAsTouched: jest.fn(),
+        updateValueAndValidity: jest.fn(),
+        invalid: true
+      },
+      refreshTrackedPaths,
+      getSubmitPaths: () => ({ toAdd: [], alreadyMirrored: [] })
+    } as any;
+
     component.onSubmit();
 
+    expect(component.pathsStep.formGroup.markAllAsTouched).toHaveBeenCalled();
+    expect(refreshTrackedPaths).not.toHaveBeenCalled();
+    expect(notificationServiceMock.show).not.toHaveBeenCalled();
+    expect(cephfsServiceMock.addMirrorDirectory).not.toHaveBeenCalled();
+    expect(component.isSubmitLoading).toBe(false);
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+  });
+
+  function mockValidPathsStep(overrides: Record<string, unknown> = {}): void {
+    component.pathsStep = {
+      formGroup: {
+        markAllAsTouched: jest.fn(),
+        updateValueAndValidity: jest.fn(),
+        invalid: false
+      },
+      refreshTrackedPaths: () => of(undefined),
+      getSubmitPaths: () => ({ toAdd: [], alreadyMirrored: [] }),
+      addTrackedPath: jest.fn(),
+      ...overrides
+    } as any;
+  }
+
+  it('should add mirror directories and close modal on success', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'], alreadyMirrored: [] })
+    });
+
+    cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
+      defer(() => of({ path }).pipe(observeOn(asyncScheduler)))
+    );
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledTimes(2);
+    expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv1');
+    expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv2');
+    expect(
+      notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.success)
+        .length
+    ).toBe(1);
+    expect(notificationServiceMock.show).toHaveBeenCalledWith(
+      NotificationType.success,
+      expect.stringContaining('2'),
+      expect.stringMatching(/\/volumes\/g1\/sv1[\s\S]*\/volumes\/g1\/sv2/)
+    );
     expect(routerNavigateSpy).toHaveBeenCalledWith(
       ['/cephfs/mirroring', { outlets: { modal: null } }],
       { state: { reload: true } }
     );
-  });
+  }));
+
+  it('should show a single aggregated error notification when paths fail', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
+        alreadyMirrored: []
+      })
+    });
+
+    cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
+      throwError(() => ({
+        error: { detail: `failed for ${path}` }
+      }))
+    );
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledTimes(2);
+    expect(
+      notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.error)
+        .length
+    ).toBe(1);
+    expect(notificationServiceMock.show).toHaveBeenCalledWith(
+      NotificationType.error,
+      expect.stringContaining('2'),
+      expect.stringContaining('/volumes/g1/sv1')
+    );
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+  }));
+
+  it('should show aggregated success and error notifications for partial failures', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
+        alreadyMirrored: []
+      })
+    });
+
+    cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
+      path === '/volumes/g1/sv1'
+        ? of({ path })
+        : throwError(() => ({ error: { detail: `failed for ${path}` } }))
+    );
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(
+      notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.success)
+        .length
+    ).toBe(1);
+    expect(
+      notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.error)
+        .length
+    ).toBe(1);
+    expect(routerNavigateSpy).toHaveBeenCalledWith(
+      ['/cephfs/mirroring', { outlets: { modal: null } }],
+      { state: { reload: true } }
+    );
+  }));
 
   it('should close modal outlet on cancel without reload', () => {
     component.ngOnInit();
@@ -93,7 +232,9 @@ describe('CephfsAddMirroringPathComponent', () => {
         {
           provide: Router,
           useValue: { navigate: routerNavigateSpy }
-        }
+        },
+        { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
     })
