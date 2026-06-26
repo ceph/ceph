@@ -11,8 +11,15 @@
 #include "Types.h"
 #include "json_spirit/json_spirit.h"
 
+#include <deque>
+#include <functional>
+#include <map>
+#include <queue>
 #include <set>
 #include <stack>
+#include <string>
+#include <vector>
+
 #include <boost/optional.hpp>
 
 namespace cephfs {
