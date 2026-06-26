@@ -932,7 +932,7 @@ int main(int argc, char **argv) {
             co_return results_t{};
           }
         };
-        for (unsigned i = 0; i < seastar::smp::count; ++i) {
+        for (unsigned i = 0; i < seastar::this_smp_shard_count(); ++i) {
           per_shard_futures.push_back(
               seastar::smp::submit_to(i, std::move(named_lambda)));
         }

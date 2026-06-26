@@ -54,7 +54,7 @@ void device_superblock_t::validate() const
   ceph_assert(version == CRIMSON_DEVICE_SUPERBLOCK_VERSION);
   if (crimson::common::get_conf<bool>(
           "seastore_require_partition_count_match_reactor_count")) {
-    ceph_assert(shard_num == seastar::smp::count);
+    ceph_assert(shard_num == seastar::this_smp_shard_count());
   }
   ceph_assert(block_size > 0);
   ceph_assert(config.spec.magic != 0);

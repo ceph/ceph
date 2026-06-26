@@ -45,7 +45,7 @@ public:
     const Shard& operator=(const Shard& o) = delete;
 
     bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
-      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= store_shard_nums) {
         // store_index is out of range {} - inactivating this store shard
         return false;
       }

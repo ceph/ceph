@@ -14,7 +14,7 @@ namespace crimson::osd {
 
 seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
   f->dump_int("this shard id", seastar::this_shard_id());
-  f->dump_int("osd shard nums", seastar::smp::count);
+  f->dump_int("osd shard nums", seastar::this_smp_shard_count());
   f->dump_int("store_shard_nums", store_shard_nums);
 
   for (const auto &i : core_to_num_pgs) {
@@ -24,7 +24,7 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
     f->close_section();
   }
 
-  if (seastar::smp::count < store_shard_nums) {
+  if (seastar::this_smp_shard_count() < store_shard_nums) {
     for (auto i = core_shard_to_num_pgs.begin();
          i != core_shard_to_num_pgs.end(); ++i) {
       f->open_object_section("core_store");
@@ -39,7 +39,7 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
       f->close_section();
     }
   }
-  if(seastar::smp::count > store_shard_nums) {
+  if(seastar::this_smp_shard_count() > store_shard_nums) {
     for (auto i = core_alien_to_num_pgs.begin();
          i != core_alien_to_num_pgs.end(); ++i) {
       f->open_object_section("core_alien");
@@ -130,7 +130,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
           shard_index_update = 0;
         } else {
-          if (seastar::smp::count > store_shard_nums ) {
+          if (seastar::this_smp_shard_count() > store_shard_nums ) {
             auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(core_to_update);
             auto core_iter = std::min_element(
               alien_iter->second.begin(),
@@ -142,7 +142,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
             core_iter->second++;
             core_to_update = core_iter->first;
           }
-          if (seastar::smp::count >= store_shard_nums) {
+          if (seastar::this_smp_shard_count() >= store_shard_nums) {
             shard_index_update = 0; // use the first store shard index on this core
           } else {
             core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(core_to_update);
@@ -201,7 +201,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
       }
       auto core_found = find_iter->second.first;
       auto shard_index_found = find_iter->second.second;
-      if (seastar::smp::count <= store_shard_nums) {
+      if (seastar::this_smp_shard_count() <= store_shard_nums) {
         if ((core_expected != NULL_CORE && core_found != core_expected) ||
           (store_index != NULL_STORE_INDEX && shard_index_found != store_index)) {
           ERROR("the mapping is inconsistent for pg {}: core {}, expected {}",
@@ -240,7 +240,7 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(find_iter->second.first);
     auto shard_iter = core_shard_iter->second.find(find_iter->second.second);
     assert(shard_iter != core_shard_iter->second.end());
-    if (seastar::smp::count < primary_mapping.store_shard_nums) {
+    if (seastar::this_smp_shard_count() < primary_mapping.store_shard_nums) {
       assert(shard_iter->second > 0);
       --(shard_iter->second);
     }
