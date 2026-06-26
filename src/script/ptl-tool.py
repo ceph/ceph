@@ -207,7 +207,7 @@ class AuditReport:
 
     def _get_active_issues(self):
         if self.redmine_linkage_correct:
-            return [i for i in self.issues if i != "Multiple Source PRs"]
+            return [(cat, text) for cat, text in self.issues if cat != "Multiple Source PRs"]
         return self.issues
 
     def has_errors(self) -> bool:
