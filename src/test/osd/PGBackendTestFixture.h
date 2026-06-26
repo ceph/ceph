@@ -37,6 +37,7 @@
 #include "osd/osd_types.h"
 #include "osd/PGTransaction.h"
 #include "common/ceph_context.h"
+#include "log/Log.h"
 #include "os/ObjectStore.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "test/osd/OSDMapTestHelpers.h"
