@@ -591,15 +591,15 @@ class TestNFS:
 
 def test_nfs_colocation_ports_validation():
     """Test validation of colocation_ports in NFSServiceSpec"""
-    # Valid case: correct number of colocation_ports (count=3, need 2 additional)
+    # Valid case: correct number of colocation_ports (count=3, need 2 additional) without QoS
     spec = NFSServiceSpec(
         service_id='mynfs',
         placement=PlacementSpec(count=3),
         port=2049,
         monitoring_port=9587,
         colocation_ports=[
-            {'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31312},
-            {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31313}
+            {'data_port': 3049, 'monitoring_port': 9588},
+            {'data_port': 4049, 'monitoring_port': 9589}
         ]
     )
     spec.validate()  # Should not raise
@@ -611,7 +611,7 @@ def test_nfs_colocation_ports_validation():
             placement=PlacementSpec(count=4),
             port=2049,
             monitoring_port=9587,
-            colocation_ports=[{'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31312}]
+            colocation_ports=[{'data_port': 3049, 'monitoring_port': 9588}]
         )
         spec.validate()
     assert "colocation_ports requires 3 entries for count=4 (got 1)" in str(e.value)
@@ -625,7 +625,7 @@ def test_nfs_colocation_ports_validation():
             monitoring_port=9587,
             colocation_ports=[
                 {'data_port': 3049},  # Missing monitoring_port
-                {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31312}
+                {'data_port': 4049, 'monitoring_port': 9589}
             ]
         )
         spec.validate()
@@ -643,8 +643,8 @@ def test_nfs_colocation_ports_validation_with_rdma():
         enable_rdma=True,
         rdma_port=20049,
         colocation_ports=[
-            {'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31312, 'rdma_port': 20050},
-            {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31313, 'rdma_port': 20051},
+            {'data_port': 3049, 'monitoring_port': 9588, 'rdma_port': 20050},
+            {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
         ]
     )
     spec.validate()
@@ -658,12 +658,47 @@ def test_nfs_colocation_ports_validation_with_rdma():
             monitoring_port=9587,
             enable_rdma=True,
             colocation_ports=[
-                {'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31312},  # missing rdma_port
-                {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31313, 'rdma_port': 20051},
+                {'data_port': 3049, 'monitoring_port': 9588},  # missing rdma_port
+                {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
             ]
         )
         spec.validate()
     assert "missing required fields: rdma_port" in str(e.value)
+
+
+def test_nfs_colocation_ports_validation_with_qos():
+    """Test colocation_ports with QoS requires cluster_qos_port in each entry."""
+    # Valid: QoS enabled, count=3, 2 colocation entries with data_port, monitoring_port, cluster_qos_port
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        port=2049,
+        monitoring_port=9587,
+        cluster_qos_config={'enable_qos': True, 'enable_bw_control': True, 'qos_type': 'PerShare'},
+        cluster_qos_port=31311,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31312},
+            {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31313},
+        ]
+    )
+    spec.validate()
+
+    # Invalid: QoS enabled but colocation entry missing cluster_qos_port
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=3),
+            port=2049,
+            monitoring_port=9587,
+            cluster_qos_config={'enable_qos': True, 'enable_bw_control': True, 'qos_type': 'PerShare'},
+            cluster_qos_port=31311,
+            colocation_ports=[
+                {'data_port': 3049, 'monitoring_port': 9588},  # missing cluster_qos_port
+                {'data_port': 4049, 'monitoring_port': 9589, 'cluster_qos_port': 31313},
+            ]
+        )
+        spec.validate()
+    assert "missing required fields: cluster_qos_port" in str(e.value)
 
 
 @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
