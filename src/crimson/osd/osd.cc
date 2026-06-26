@@ -1293,6 +1293,8 @@ seastar::future<> OSD::committed_osd_maps(
     }
     co_await update_heartbeat_peers();
     co_await check_osdmap_features();
+    // Before broadcast: create any missing merge participants
+    co_await pg_shard_manager.prime_merges(first, last);
     // yay!
     INFO("osd.{}: committed_osd_maps: broadcasting osdmaps up"
          " to {} epoch to pgs", whoami, osdmap->get_epoch());
