@@ -25,6 +25,7 @@ from . import (
     rados_store,
     resources,
     results,
+    rgw,
     sqlite_store,
     utils,
 )
@@ -99,8 +100,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_store=self._public_store,
             path_resolver=path_resolver,
             authorizer=authorizer,
+            mon_cmd_issuer=self,
             orch=self._orch_backend(enable_orch=uo),
             earmark_resolver=earmark_resolver,
+            tool_execer=self,
         )
 
     def _backend_store(self, store_conf: str = '') -> ConfigStore:
@@ -614,6 +617,48 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for cid, shid in self._handler.share_ids()
             if cid == cluster_id
         ]
+
+    @SMBCLICommand('share create rgw', perm='rw')
+    def share_create_rgw(
+        self,
+        cluster_id: str,
+        share_id: str,
+        bucket: str,
+        share_name: str = '',
+        user_id: str = '',
+        readonly: bool = False,
+    ) -> results.Result:
+        """Create an SMB share backed by RGW"""
+        try:
+            # Pass 'self' which conforms to ToolExecer protocol
+            fetched_user_id = rgw.fetch_rgw_credentials(
+                self, bucket, user_id
+            )[0]
+
+            # Create share with user credentials
+            # The staging layer will auto-create the credential if needed
+            share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                readonly=readonly,
+                rgw=resources.RGWStorage(
+                    bucket=bucket,
+                    user_id=fetched_user_id,
+                ),
+            )
+
+            # Apply share resource (staging may create credential too)
+            return self._apply_res([share], create_only=True).squash(share)
+        except ValueError as e:
+            # Create a minimal share resource for error reporting
+            error_share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                rgw=resources.RGWStorage(bucket='error'),
+            )
+            return results.ErrorResult(error_share, msg=str(e))
 
     @SMBCLICommand('share create', perm='rw')
     def share_create(

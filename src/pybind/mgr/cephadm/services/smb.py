@@ -206,6 +206,16 @@ class SMBService(CephService):
             ca_cert=ssl_params.ssl_ca_cert or '',
         )
 
+    def _rgw_creds_uri(self, cluster_id: str) -> Optional[str]:
+        from smb.external import rgw_config_key as _smb_rgw_config_key
+        from smb.mon_store import MonKeyConfigStore
+        _rgw_entry = MonKeyConfigStore(self.mgr)[
+            _smb_rgw_config_key(cluster_id)
+        ]
+        if _rgw_entry.exists():
+            return _rgw_entry.uri
+        return None
+
     def generate_config(
         self, daemon_spec: CephadmDaemonDeploySpec
     ) -> Tuple[Dict[str, Any], List[str]]:
@@ -220,6 +230,14 @@ class SMBService(CephService):
         config_blobs['cluster_id'] = smb_spec.cluster_id
         config_blobs['features'] = smb_spec.features
         config_blobs['config_uri'] = smb_spec.config_uri
+        # For RGW clusters, append the private-store config as an extra URI
+        # loaded after the public config.  sambacc's config:merge is a general
+        # merge mechanism; here the mgr populates it with only the RGW
+        # credential fields, keeping the public config the primary source of
+        # truth.
+        rgw_creds_uri = self._rgw_creds_uri(smb_spec.cluster_id)
+        if rgw_creds_uri:
+            config_blobs['extra_config_uris'] = [rgw_creds_uri]
         _add_cfg(config_blobs, 'join_sources', smb_spec.join_sources)
         _add_cfg(config_blobs, 'user_sources', smb_spec.user_sources)
         _add_cfg(config_blobs, 'custom_dns', smb_spec.custom_dns)
@@ -228,6 +246,7 @@ class SMBService(CephService):
         cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
         _add_cfg(config_blobs, 'cluster_public_addrs', cluster_public_addrs)
         ceph_users = smb_spec.include_ceph_users or []
+
         config_blobs.update(
             self._ceph_config_and_keyring_for(
                 smb_spec, daemon_spec.daemon_id, ceph_users

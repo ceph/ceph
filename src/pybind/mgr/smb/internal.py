@@ -223,6 +223,23 @@ class TLSCredentialEntry(CommonResourceEntry):
         return self.get_resource_type(resources.TLSCredential)
 
 
+class RGWCredentialEntry(CommonResourceEntry):
+    """RGWCredentialEntry resource getter/setter for the smb internal data
+    store(s).
+    """
+
+    namespace = ConfigNS.RGW_CREDENTIALS
+    _for_resource = resources.RGWCredential
+
+    @classmethod
+    def to_key(cls, resource: SMBResource) -> ResourceKey:
+        assert isinstance(resource, cls._for_resource)
+        return ResourceIDKey(resource.rgw_credential_id)
+
+    def get_rgw_credential(self) -> resources.RGWCredential:
+        return self.get_resource_type(resources.RGWCredential)
+
+
 class ExternalCephClusterEntry(CommonResourceEntry):
     """ExternalCephCluster resource getter/setter for internal store."""
 
@@ -251,6 +268,7 @@ def map_resource_entry(
         resources.JoinAuth: JoinAuthEntry,
         resources.UsersAndGroups: UsersAndGroupsEntry,
         resources.TLSCredential: TLSCredentialEntry,
+        resources.RGWCredential: RGWCredentialEntry,
         resources.ExternalCephCluster: ExternalCephClusterEntry,
     }
     try:

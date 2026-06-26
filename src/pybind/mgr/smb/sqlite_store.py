@@ -535,6 +535,22 @@ class MirrorExternalCephCluster(Mirror):
         return filtered
 
 
+class MirrorRGWCredentials(Mirror):
+    """Mirroring configuration for objects in the rgw_credentials namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('rgw_credentials', store)
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter rgw_credential for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        if filtered.get('access_key_id'):
+            filtered.pop('access_key_id', None)
+        if filtered.get('secret_access_key'):
+            filtered.pop('secret_access_key', None)
+        return filtered
+
+
 def _tables(
     *,
     specialize: bool = True,
@@ -556,6 +572,7 @@ def _tables(
         SimpleTable('join_auths', 'join_auths'),
         SimpleTable('users_and_groups', 'users_and_groups'),
         SimpleTable('tls_creds', 'tls_creds'),
+        SimpleTable('rgw_creds', 'rgw_creds'),
         SimpleTable('ext_ceph_clusters', 'ext_ceph_clusters'),
     ]
 
@@ -580,6 +597,10 @@ def _mirror_external_ceph_clusters(
     opts: Optional[Dict[str, str]] = None
 ) -> bool:
     return (opts or {}).get('mirror_external_ceph_clusters') != 'no'
+
+
+def _mirror_rgw_credentials(opts: Optional[Dict[str, str]] = None) -> bool:
+    return (opts or {}).get('mirror_rgw_credentials') != 'no'
 
 
 def mgr_sqlite3_db(
@@ -611,6 +632,8 @@ def mgr_sqlite3_db_with_mirroring(
         mirrors.append(MirrorTLSCredentials(mirror_store))
     if _mirror_external_ceph_clusters(opts):
         mirrors.append(MirrorExternalCephCluster(mirror_store))
+    if _mirror_rgw_credentials(opts):
+        mirrors.append(MirrorRGWCredentials(mirror_store))
     return SqliteMirroringStore(mgr, tables, mirrors)
 
 
