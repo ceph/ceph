@@ -1377,12 +1377,6 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 class NFSServiceSpec(ServiceSpec):
     COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port', 'cluster_qos_port']
-    COLOCATION_PORT_FIELDS_WITH_RDMA = [
-        'data_port',
-        'monitoring_port',
-        'cluster_qos_port',
-        'rdma_port'
-    ]
 
     def __init__(self,
                  service_type: str = 'nfs',
@@ -1460,10 +1454,11 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_min_version = tls_min_version
 
     def get_colocation_port_fields(self) -> List[str]:
-        """Return port fields for colocation; include rdma_port when RDMA is enabled."""
+        """Return port fields for colocation; rdma_port added when RDMA is enabled."""
+        fields = list(self.COLOCATION_PORT_FIELDS)
         if self.enable_rdma:
-            return self.COLOCATION_PORT_FIELDS_WITH_RDMA
-        return self.COLOCATION_PORT_FIELDS
+            fields.append('rdma_port')
+        return fields
 
     def get_port_start(self) -> List[int]:
         ports = [self.port or 2049, self.monitoring_port or 9587, self.cluster_qos_port or 31311]
@@ -1474,13 +1469,23 @@ class NFSServiceSpec(ServiceSpec):
     def get_colocation_ports_list(self) -> List[List[int]]:
         """
         Convert the colocation_ports dictionary into a list of port lists
-        so the scheduler can handle port assignment in a generic way
+        Auto-assigns cluster_qos_port by incrementing from the base QoS port
+        when not explicitly specified, to avoid port conflicts on the same host.
         """
         if not self.colocation_ports:
             return []
         fields = self.get_colocation_port_fields()
-        return [[port_dict[field] for field in fields]
-                for port_dict in self.colocation_ports]
+        base_qos_port = self.cluster_qos_port or 31311
+        result = []
+        for idx, port_dict in enumerate(self.colocation_ports):
+            ports = []
+            for field in fields:
+                if field == 'cluster_qos_port' and field not in port_dict:
+                    ports.append(base_qos_port + idx + 1)
+                else:
+                    ports.append(port_dict.get(field, 0))
+            result.append(ports)
+        return result
 
     def rados_config_name(self):
         # type: () -> str
@@ -1509,18 +1514,20 @@ class NFSServiceSpec(ServiceSpec):
                         f"count={self.placement.count} (got {actual}). First daemon uses base "
                         "ports, remaining need custom ports."
                     )
-        # Validate that each entry has the required port fields
+        # cluster_qos_port is required per colocation entry only when QoS is configured.
         fields = self.get_colocation_port_fields()
+        required_fields = [f for f in fields
+                           if f != 'cluster_qos_port' or self.cluster_qos_config]
         for idx, port_dict in enumerate(self.colocation_ports):
             if not isinstance(port_dict, dict):
                 raise SpecValidationError(
                     f"colocation_ports[{idx}] must be a dict with "
-                    f"fields: {', '.join(fields)}"
+                    f"fields: {', '.join(required_fields)}"
                 )
-            missing = [f for f in fields if f not in port_dict]
+            missing = [f for f in required_fields if f not in port_dict]
             if missing:
                 missing_str = ', '.join(missing)
-                format_str = ', '.join(f'{f!r}: <port>' for f in fields)
+                format_str = ', '.join(f'{f!r}: <port>' for f in required_fields)
                 raise SpecValidationError(
                     f"Invalid NFS spec: colocation_ports[{idx}] missing required "
                     f"fields: {missing_str}. Expected format: {{{format_str}}}"
