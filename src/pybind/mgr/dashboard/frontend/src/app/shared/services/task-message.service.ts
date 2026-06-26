@@ -321,6 +321,15 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    // CephFS mirroring tasks
+    'cephfs/mirroring/setup': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Setting up`,
+        $localize`set up`,
+        $localize`Successfully set up`
+      ),
+      (metadata) => $localize`filesystem mirroring for '${metadata.fsName}'`
+    ),
     // RGW operations
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;

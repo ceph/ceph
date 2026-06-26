@@ -146,3 +146,7 @@ export interface BootstrapTokenResponse {
 export const CLIENT_PREFIX = 'client.';
 export const MAX_TYPEAHEAD_SUGGESTIONS = 10;
 export const VALID_USERNAME_PATTERN = /[^a-zA-Z0-9_-]/;
+
+export type CephfsMirroringSetupEvent = {
+  filesystem: string;
+};

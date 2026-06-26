@@ -949,5 +949,33 @@ describe('CdValidators', () => {
         expect(CdValidators.url(control)).toBeNull();
       });
     });
+
+    describe('base64Json', () => {
+      it('should return null for an empty value', () => {
+        const control = new UntypedFormControl('');
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should return null for valid base64-encoded JSON', () => {
+        const control = new UntypedFormControl(btoa(JSON.stringify({ key: 'value' })));
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should ignore surrounding whitespace', () => {
+        const token = btoa(JSON.stringify({ key: 'value' }));
+        const control = new UntypedFormControl(`  ${token}  `);
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should return invalidBase64Json for invalid base64', () => {
+        const control = new UntypedFormControl('not-a-valid-token');
+        expect(CdValidators.base64Json()(control)).toEqual({ invalidBase64Json: true });
+      });
+
+      it('should return invalidBase64Json when decoded value is not JSON', () => {
+        const control = new UntypedFormControl(btoa('not-json'));
+        expect(CdValidators.base64Json()(control)).toEqual({ invalidBase64Json: true });
+      });
+    });
   });
 });
