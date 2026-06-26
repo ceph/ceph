@@ -78,6 +78,8 @@ class Auth(RESTController, ControllerAuthMixin):
                 logger.info('Login successful: %s', username)
                 mgr.ACCESS_CTRL_DB.reset_attempt(username)
                 mgr.ACCESS_CTRL_DB.save()
+                from ..services.telemetry import DashboardTelemetryService
+                DashboardTelemetryService.increment_login_count()
                 token = JwtManager.gen_token(username, ttl=ttl)
 
                 # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
