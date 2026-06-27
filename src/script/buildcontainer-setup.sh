@@ -41,6 +41,12 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
         dnf_clean
     ;;
+    # openRuyi's minimal image lacks tar/gzip needed to unpack build tarballs
+    *~*openruyi*)
+        dnf install -y tar gzip /usr/bin/{rpmbuild,wget,curl}
+        install_container_deps
+        dnf_clean
+    ;;
     *~*ubuntu*|*~*debian*)
         apt-get update
         pkgs=(wget reprepro curl lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev)
