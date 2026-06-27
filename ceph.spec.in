@@ -2345,7 +2345,6 @@ fi
 
 %files mgr-dashboard
 %{_datadir}/ceph/mgr/dashboard
-%exclude %{_datadir}/ceph/mgr/dashboard/ci
 
 %ceph_mgr_module_scripts mgr-dashboard
 
@@ -2466,7 +2465,6 @@ fi
 
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
-%exclude %{_datadir}/ceph/mgr/rook/ci
 
 %ceph_mgr_module_scripts mgr-rook
 
@@ -2477,7 +2475,6 @@ fi
 
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
-%exclude %{_datadir}/ceph/mgr/cephadm/tests
 
 %ceph_mgr_module_scripts mgr-cephadm
 
