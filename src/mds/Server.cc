@@ -12347,6 +12347,7 @@ void Server::_readdir_diff(
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
 
+  bool waiting = false;
   bool end = build_snap_diff(
     mdr,
     dir,
@@ -12417,7 +12418,11 @@ void Server::_readdir_diff(
       mdcache->lru.lru_touch(dn);
       ++numfiles;
       return true;
-    });
+    },
+    &waiting);
+
+  if (waiting)
+    return;
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12438,7 +12443,8 @@ bool Server::build_snap_diff(
   snapid_t snapid_prev,
   snapid_t snapid,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  bool *waiting)
 {
   client_t client = mdr->client_request->get_source().num();
 
@@ -12451,6 +12457,21 @@ bool Server::build_snap_diff(
       *this = EntryInfo();
     }
   } before;
+
+  auto rdlock_file_mtime = [&](CInode *in, utime_t &mtime) -> bool {
+    if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
+      dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
+           << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      if (waiting)
+        *waiting = true;
+      return false;
+    }
+    mtime = in->get_inode()->mtime;
+    auto lit = mdr->locks.find(&in->filelock);
+    ceph_assert(lit != mdr->locks.end());
+    mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
+    return true;
+  };
 
   auto insert_deleted = [&](EntryInfo& ei) {
     dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
@@ -12518,7 +12539,6 @@ bool Server::build_snap_diff(
     }
     ceph_assert(in);
 
-    utime_t mtime = in->get_inode()->mtime;
     if (in->is_dir()) {
 
       // we need to maintain the order of entries (determined by their name hashes)
@@ -12565,31 +12585,43 @@ bool Server::build_snap_diff(
       if (snapid_prev >= dn->first && snapid_prev <= dn->last) {
 	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
-	before = EntryInfo {dn, in, mtime};
+	before = EntryInfo {dn, in, in->get_inode()->mtime};
 	continue;
       } else {
 	if (before.dn && dn->get_name() == name_before) {
 	  if (before.in->ino() != in->ino()) {
 	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
-		     << dn->first << "/" << dn->last
-		     << " " << before.mtime << " vs. " << mtime
-		     << dendl;
+		     << dn->first << "/" << dn->last << dendl;
 	    if (!insert_deleted(before)) {
 	      break;
 	    }
 	    before.reset();
 	  } else {
-	    if (mtime == before.mtime) {
-	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << mtime
-		       << dendl;
-	      before.reset();
-	      continue;
-	    } else {
+	    utime_t mtime = in->get_inode()->mtime;
+	    if (mtime != before.mtime) {
 	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
 		       << dn->first << "/" << dn->last
 		       << " " << before.mtime << " vs. " << mtime
+		       << dendl;
+	      before.reset();
+	    } else {
+          /*If mtime matches, rdlock the filelock which waits for pending snap flush
+           *so that latest mtime is fetched
+           */
+          if (!rdlock_file_mtime(in, mtime))
+            return false;
+          if (mtime == before.mtime) {
+            dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+                 << dn->first << "/" << dn->last
+                 << " " << mtime
+                 << dendl;
+            before.reset();
+            continue;
+          }
+	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+		       << dn->first << "/" << dn->last
+		       << " " << before.mtime << " vs. " << mtime
+		       << " (after snapflush)"
 		       << dendl;
 	      before.reset();
 	    }
