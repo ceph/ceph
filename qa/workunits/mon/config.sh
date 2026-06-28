@@ -73,6 +73,22 @@ ceph config rm client.foo debug_asok
 ceph config set client.foo debug_asok 66
 ceph config rm client.foo 'debug asok'
 
+# annotations
+ceph config set client.foo debug_asok 10 "set debug_asok to 10"
+ceph config set client.foo debug_client 10 "set debug_client to 10"
+ceph config get client.foo | grep debug_asok | grep "set debug_asok to 10"
+ceph config get client.foo | grep debug_client | grep "set debug_client to 10"
+
+ceph config set client.foo debug_asok 20 "set debug_asok to 20"
+ceph config set client.foo debug_client 20 "set debug_client to 20"
+ceph config get client.foo | grep debug_asok | grep "set debug_asok to 20"
+ceph config get client.foo | grep debug_client | grep "set debug_client to 20"
+
+ceph config set client.foo debug_asok 30
+ceph config rm client.foo debug_client
+ceph config get client.foo | grep debug_asok | expect_false grep "set debug_asok to 20"
+ceph config get client.foo | expect_false grep debug_client
+
 # help
 ceph config help debug_asok | grep debug_asok
 
