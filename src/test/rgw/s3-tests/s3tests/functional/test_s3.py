@@ -89,6 +89,7 @@ from . import (
     get_cloud_client,
     nuke_prefixed_buckets,
     configured_storage_classes,
+    configure,
     get_lc_debug_interval,
     get_restore_debug_interval,
     get_restore_processor_period,
@@ -117,7 +118,7 @@ def test_bucket_list_distinct():
     is_empty = _bucket_is_empty(bucket2)
     assert is_empty == True
 
-def _create_objects(bucket=None, bucket_name=None, keys=[]):
+def _create_objects(bucket=None, bucket_name=None, keys=[], put_object_args={}):
     """
     Populate a (specified or new) bucket with objects with
     specified names (and contents identical to their names).
@@ -128,7 +129,7 @@ def _create_objects(bucket=None, bucket_name=None, keys=[]):
         bucket = get_new_bucket_resource(name=bucket_name)
 
     for key in keys:
-        obj = bucket.put_object(Body=key, Key=key)
+        obj = bucket.put_object(Body=key, Key=key, **put_object_args)
 
     return bucket_name
 
@@ -6586,7 +6587,7 @@ def test_multipart_sse_c_get_part():
     assert status == 404
     assert error_code == 'NoSuchKey'
 
-    client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
+    client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts}, **get_args)
     assert len(parts) == part_count
 
     for part, size in zip(parts, part_sizes):
@@ -19296,3 +19297,421 @@ def test_delete_objects_version_if_match_size():
 
     response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': badsize}]})
     assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+
+#########################
+# COPY ENCRYPTION TESTS #
+#########################
+_copy_enc_source_modes = {
+    'unencrypted': {
+        'marks': [pytest.mark.fails_on_aws],
+    },
+    'sse-s3': {
+        'args': {'ServerSideEncryption': 'AES256'},
+        'assert': lambda r: r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256',
+        'marks': [pytest.mark.sse_s3],
+    },
+    'sse-c': {
+        'args': {
+            'SSECustomerAlgorithm': 'AES256',
+            'SSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+            'SSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+        },
+        'get_args': {
+            'SSECustomerAlgorithm': 'AES256',
+            'SSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+            'SSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+        },
+        'source_copy_args': {
+            'CopySourceSSECustomerAlgorithm': 'AES256',
+            'CopySourceSSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+            'CopySourceSSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+        },
+    },
+    'sse-kms': {
+        'args': {
+            'ServerSideEncryption': 'aws:kms',
+            'SSEKMSKeyId': lambda: get_main_kms_keyid()
+        },
+    }
+}
+_copy_enc_dest_modes = {
+    'unencrypted': {
+        'marks': [pytest.mark.fails_on_aws],
+    },
+    'sse-s3': {
+        'args': {'ServerSideEncryption': 'AES256'},
+        'assert': lambda r: r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256',
+        'marks': [pytest.mark.sse_s3],
+    },
+    'sse-c': {
+        'args': {
+            'SSECustomerAlgorithm': 'AES256',
+            'SSECustomerKey': '6b+WOZ1T3cqZMxgThRcXAQBrS5mXKdDUphvpxptl9/4=',
+            'SSECustomerKeyMD5': 'arxBvwY2V4SiOne6yppVPQ=='
+        },
+        'get_args': {
+            'SSECustomerAlgorithm': 'AES256',
+            'SSECustomerKey': '6b+WOZ1T3cqZMxgThRcXAQBrS5mXKdDUphvpxptl9/4=',
+            'SSECustomerKeyMD5': 'arxBvwY2V4SiOne6yppVPQ=='
+        },
+        'assert': lambda r: (
+            r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-customer-algorithm'] == 'AES256' and
+            r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-customer-key-md5'] == 'arxBvwY2V4SiOne6yppVPQ=='
+        )
+    },
+    'sse-kms': {
+        'args': {
+            'ServerSideEncryption': 'aws:kms',
+            'SSEKMSKeyId': lambda: get_secondary_kms_keyid()
+        },
+        'assert': lambda r: (
+            r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'aws:kms' and
+            r['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-aws-kms-key-id'] == get_secondary_kms_keyid()
+        )
+    }
+}
+
+def _test_copy_enc(file_size, source_mode_key, dest_mode_key, source_sc=None, dest_sc=None):
+    source_args = _copy_enc_source_modes[source_mode_key]
+    dest_args = _copy_enc_dest_modes[dest_mode_key]
+
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # upload original file with source encryption
+    data = 'A'*file_size
+    args = {key: value() if callable(value) else value for key, value in source_args.get('args', {}).items()}
+    if source_sc:
+        args['StorageClass'] = source_sc
+    response = client.put_object(Bucket=bucket_name, Key='testobj', Body=data, **args)
+    assert source_args.get('assert', lambda r: True)(response)
+
+    # copy the object to a new key, with destination encryption
+    dest_bucket_name = get_new_bucket()
+    copy_args = {key: value() if callable(value) else value for key, value in dest_args.get('args', {}).items()}
+    copy_args.update(source_args.get('source_copy_args', {}))
+    if dest_sc:
+        copy_args['StorageClass'] = dest_sc
+    response = client.copy_object(Bucket=dest_bucket_name, Key='testobj2', CopySource={'Bucket': bucket_name, 'Key': 'testobj'}, **copy_args)
+    assert dest_args.get('assert', lambda r: True)(response)
+
+    # verify the copy is encrypted
+    get_args = dest_args.get('get_args', {})
+    response = client.get_object(Bucket=dest_bucket_name, Key='testobj2', **get_args)
+    assert dest_args.get('assert', lambda r: True)(response)
+    body = _get_body(response)
+    assert body == data
+
+def _test_copy_part_enc(file_size, source_mode_key, dest_mode_key, source_sc=None, dest_sc=None):
+    source_args = _copy_enc_source_modes[source_mode_key]
+    dest_args = _copy_enc_dest_modes[dest_mode_key]
+
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # upload original file with source encryption
+    data = 'A'*file_size
+    args = {key: value() if callable(value) else value for key, value in source_args.get('args', {}).items()}
+    if source_sc:
+        args['StorageClass'] = source_sc
+    response = client.put_object(Bucket=bucket_name, Key='testobj', Body=data, **args)
+    assert source_args.get('assert', lambda r: True)(response)
+
+    # create a multipart upload with source encryption
+    dest_bucket_name = get_new_bucket()
+    upload_args = {key: value() if callable(value) else value for key, value in dest_args.get('args', {}).items()}
+    if dest_sc:
+        upload_args['StorageClass'] = dest_sc
+    response = client.create_multipart_upload(Bucket=dest_bucket_name, Key='testobj2', **upload_args)
+    assert dest_args.get('assert', lambda r: True)(response)
+    upload_id = response['UploadId']
+    assert len(upload_id)
+
+    parts = []
+
+    # copy the object as the part
+    copy_args = {key: value() if callable(value) else value for key, value in source_args.get('source_copy_args', {}).items()}
+
+    # verify sse-c headers
+    if dest_mode_key == 'sse-c':
+        # make sure api is verifying the SSE-C headers
+        e = assert_raises(ClientError, client.upload_part_copy,
+                            Bucket=dest_bucket_name, Key='testobj2',
+                            PartNumber=1, UploadId=upload_id,
+                            CopySource={'Bucket': bucket_name, 'Key': 'testobj'},
+                            **copy_args)
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+        # and use the source key to copy the part
+        source_sse_c_args = _copy_enc_source_modes['sse-c']['source_copy_args']
+        wrong_copy_args = copy_args.copy()
+        wrong_copy_args.update(source_sse_c_args)
+        wrong_copy_args.pop('StorageClass', None)  # StorageClass is not allowed in copy part
+        e = assert_raises(ClientError, client.upload_part_copy,
+                            Bucket=dest_bucket_name, Key='testobj2',
+                            PartNumber=1, UploadId=upload_id,
+                            CopySource={'Bucket': bucket_name, 'Key': 'testobj'},
+                            **wrong_copy_args)
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+    if dest_mode_key == 'sse-c':
+        copy_args.update(upload_args)
+    if dest_sc:
+        copy_args.pop('StorageClass', None)  # StorageClass is not allowed in copy part
+    response = client.upload_part_copy(
+        Bucket=dest_bucket_name,
+        Key='testobj2',
+        PartNumber=1,
+        UploadId=upload_id,
+        CopySource={'Bucket': bucket_name, 'Key': 'testobj'},
+        **copy_args
+    )
+    assert dest_args.get('assert', lambda r: True)(response)
+    parts.append({
+        'ETag': response['CopyPartResult']['ETag'],
+        'PartNumber': 1
+    })
+
+    # add another temporary part to the upload
+    complete_args = {}
+
+    # verify sse-c headers
+    if dest_mode_key == 'sse-c':
+        # make sure api is verifying the SSE-C headers
+        e = assert_raises(ClientError, client.upload_part,
+                            Bucket=dest_bucket_name, Key='testobj2',
+                            PartNumber=2, UploadId=upload_id,
+                            Body='B'*file_size,
+                            **complete_args)
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+        # and use the source key to upload the part
+        source_sse_c_args = _copy_enc_source_modes['sse-c']['args']
+        wrong_upload_args = complete_args.copy()
+        wrong_upload_args.update(source_sse_c_args)
+        wrong_upload_args.pop('StorageClass', None)  # StorageClass is not allowed in upload part
+        e = assert_raises(ClientError, client.upload_part,
+                            Bucket=dest_bucket_name, Key='testobj2',
+                            PartNumber=2, UploadId=upload_id,
+                            Body='B'*file_size,
+                            **wrong_upload_args)
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+    if dest_mode_key == 'sse-c':
+        complete_args.update(upload_args)
+    if dest_sc:
+        complete_args.pop('StorageClass', None)  # StorageClass is not allowed in complete multipart upload
+    temp_part = client.upload_part(
+        Bucket=dest_bucket_name,
+        Key='testobj2',
+        PartNumber=2,
+        UploadId=upload_id,
+        Body='B'*file_size,
+        **complete_args
+    )
+    assert dest_args.get('assert', lambda r: True)(temp_part)
+    parts.append({
+        'ETag': temp_part['ETag'],
+        'PartNumber': 2
+    })
+
+    if dest_mode_key == 'sse-c':
+        # make sure api is verifying the SSE-C headers
+        e = assert_raises(ClientError, client.complete_multipart_upload,
+                          Bucket=dest_bucket_name, Key='testobj2',
+                          UploadId=upload_id, MultipartUpload={'Parts': parts})
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+        # and the key would be the same as the one used in upload part
+        # use the source key to complete the upload
+        # this is not allowed, so we expect an error
+        source_sse_c_args = _copy_enc_source_modes['sse-c']['args']
+        e = assert_raises(ClientError, client.complete_multipart_upload,
+                          Bucket=dest_bucket_name, Key='testobj2',
+                          UploadId=upload_id, MultipartUpload={'Parts': parts},
+                          **source_sse_c_args)
+        status, _ = _get_status_and_error_code(e.response)
+        assert status == 400
+
+    # complete the multipart upload
+    response = client.complete_multipart_upload(
+        Bucket=dest_bucket_name,
+        Key='testobj2',
+        UploadId=upload_id,
+        MultipartUpload={'Parts': parts},
+        **complete_args
+    )
+    assert dest_args.get('assert', lambda r: True)(response)
+
+    # verify the copy is encrypted
+    get_args = dest_args.get('get_args', {})
+    response = client.get_object(Bucket=dest_bucket_name, Key='testobj2', **get_args)
+    assert dest_args.get('assert', lambda r: True)(response)
+    body = _get_body(response)
+    assert body == (data + 'B'*file_size)
+
+def generate_copy_part_enc_params():
+    configure()
+    sc = configured_storage_classes()
+    
+    obj_sizes = [8*1024*1024] # min multipart is 5MB
+    params = []
+    for source_key in _copy_enc_source_modes.keys():
+        for dest_key in _copy_enc_dest_modes.keys():
+            source_marks = _copy_enc_source_modes[source_key].get('marks', [])
+            dest_marks = _copy_enc_dest_modes[dest_key].get('marks', [])
+            for source_sc in sc:
+                for dest_sc in sc:
+                    additional_marks = []
+                    if source_sc != 'STANDARD' or dest_sc != 'STANDARD':
+                        # storage classes are not supported on AWS
+                        additional_marks.append(pytest.mark.fails_on_aws)
+                    for obj_size in obj_sizes:
+                        param = pytest.param(
+                            source_key,
+                            dest_key,
+                            source_sc,
+                            dest_sc,
+                            obj_size,
+                            marks=[*source_marks, *dest_marks, *additional_marks]
+                        )
+                        params.append(param)
+    return params
+
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize(
+    "source_mode_key, dest_mode_key, source_storage_class, dest_storage_class, obj_size",
+    generate_copy_part_enc_params()
+)
+def test_copy_part_enc(source_mode_key, dest_mode_key, source_storage_class, dest_storage_class, obj_size):
+    print(
+        f"Testing copy part from {source_mode_key} to {dest_mode_key} with storage class "
+        f"{source_storage_class} -> {dest_storage_class} and object size {obj_size}"
+    )
+    _test_copy_part_enc(obj_size, source_mode_key, dest_mode_key, source_storage_class, dest_storage_class)
+
+def generate_copy_enc_params():
+    configure()
+    sc = configured_storage_classes()
+
+    obj_sizes = [1, 1024, 1024*1024, 8*1024*1024]
+
+    params = []
+    for source_key in _copy_enc_source_modes.keys():
+        for dest_key in _copy_enc_dest_modes.keys():
+            source_marks = _copy_enc_source_modes[source_key].get('marks', [])
+            dest_marks = _copy_enc_dest_modes[dest_key].get('marks', [])
+
+            for source_sc in sc:
+                for dest_sc in sc:
+                    additional_marks = []
+                    if source_sc != 'STANDARD' or dest_sc != 'STANDARD':
+                        additional_marks.extend([
+                            pytest.mark.fails_on_aws, # storage classes are not supported on AWS
+                            pytest.mark.storage_class,
+                        ])
+                    for obj_size in obj_sizes:
+                        param = pytest.param(
+                            source_key,
+                            dest_key,
+                            source_sc,
+                            dest_sc,
+                            obj_size,
+                            marks=[*source_marks, *dest_marks, *additional_marks]
+                        )
+                        params.append(param)
+    return params
+
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize(
+    "source_mode_key, dest_mode_key, source_storage_class, dest_storage_class, obj_size",
+    generate_copy_enc_params()
+)
+def test_copy_enc(source_mode_key, dest_mode_key, source_storage_class, dest_storage_class, obj_size):
+    print(
+        f"Testing copy from {source_mode_key} to {dest_mode_key} with storage class "
+        f"{source_storage_class} -> {dest_storage_class} and object size {obj_size}"
+    )
+    _test_copy_enc(obj_size, source_mode_key, dest_mode_key, source_storage_class, dest_storage_class)
+
+def generate_lifecycle_transition_params():
+    configure()
+    sc = configured_storage_classes()
+    if len(sc) < 2:
+        return []
+
+    params = []
+    for source_key in _copy_enc_source_modes.keys():
+        source_marks = _copy_enc_source_modes[source_key].get('marks', [])
+
+        for source_sc in sc:
+            for dest_sc in sc:
+                if source_sc == dest_sc:
+                    continue
+
+                params.append(pytest.param(
+                    source_key,
+                    source_sc,
+                    dest_sc,
+                    marks=source_marks
+                ))
+
+    return params
+
+def _test_lifecycle_transition(source_mode_key, source_sc=None, dest_sc=None):
+    source_args = _copy_enc_source_modes[source_mode_key]
+    args = {key: value() if callable(value) else value for key, value in source_args.get('args', {}).items()}
+    if source_sc:
+        args['StorageClass'] = source_sc
+
+    bucket_name = _create_objects(keys=['expire1/foo', 'expire1/bar'], put_object_args=args)
+    client = get_client()
+    rules=[{'ID': 'rule1', 'Prefix': '', 'Transitions': [{'Days': 1, 'StorageClass': dest_sc}], 'Status': 'Enabled'}]
+    lifecycle = {'Rules': rules}
+    client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration=lifecycle)
+
+    # Get list of all keys
+    response = client.list_objects(Bucket=bucket_name)
+    init_keys = _get_keys(response)
+    assert len(init_keys) == 2
+
+    lc_interval = get_lc_debug_interval()
+
+    # Wait for expiration
+    time.sleep(4*lc_interval)
+    expire1_keys = list_bucket_storage_class(client, bucket_name)
+    assert len(expire1_keys[source_sc]) == 0
+    assert len(expire1_keys[dest_sc]) == 2
+
+    # retrieve the objects
+    get_args = source_args.get('get_args', {})
+    for key in init_keys:
+        response = client.get_object(Bucket=bucket_name, Key=key, **get_args)
+        body = _get_body(response)
+        assert body == key
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.fails_on_aws
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize(
+    "source_mode_key, source_storage_class, dest_storage_class",
+    generate_lifecycle_transition_params()
+)
+def test_lifecycle_transition_encrypted(source_mode_key, source_storage_class, dest_storage_class):
+    if len(configured_storage_classes()) < 2:
+        pytest.skip('need at least two storage classes to test lifecycle transition')
+
+    print(
+        f"Testing lifecycle transition of {source_mode_key} with storage class {source_storage_class} -> {dest_storage_class}"
+    )
+    _test_lifecycle_transition(source_mode_key, source_storage_class, dest_storage_class)
