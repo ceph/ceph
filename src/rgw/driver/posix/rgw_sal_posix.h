@@ -110,6 +110,7 @@ protected:
   std::string fname;
   Directory* parent;
   int fd{-1};
+  bool need_fsync{false};
   bool exist{false};
   struct statx stx;
   bool stat_done{false};
