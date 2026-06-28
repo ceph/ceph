@@ -62,7 +62,8 @@
             -- Select a service type --
           </option>
           @for (serviceType of serviceTypes; track serviceType) {
-          <option [value]="serviceType">
+          <option [value]="serviceType"
+                  [selected]="serviceForm.controls.service_type.value === serviceType">
             {{ serviceType }}
           </option>
           }
@@ -137,7 +138,8 @@
                   i18n>-- Select a pool --</option>
           }
           @for (pool of rbdPools; track pool) {
-          <option [value]="pool.pool_name">{{ pool.pool_name }}</option>
+          <option [value]="pool.pool_name"
+                  [selected]="serviceForm.controls.pool.value === pool.pool_name">{{ pool.pool_name }}</option>
           }
         </cds-select>
         <ng-template #requiredFieldPool>
@@ -323,7 +325,6 @@
       }
 
       <!-- Label -->
-      @if (hostsAndLabels$ | async; as data) {
       @if (!serviceForm.controls.unmanaged.value && serviceForm.controls.placement.value === 'label') {
       <div class="form-item">
         <cds-combo-box type="single"
@@ -333,7 +334,8 @@
                        formControlName="label"
                        id="label"
                        [appendInline]="true"
-                       [items]="data.labels"
+                       [items]="labelOptions"
+                       itemValueKey="content"
                        [invalid]="serviceForm.controls.label.invalid && serviceForm.controls.label.dirty"
                        [invalidText]="requiredFieldLabel">
           <cds-dropdown-list></cds-dropdown-list>
@@ -355,13 +357,13 @@
                        formControlName="hosts"
                        id="hosts"
                        [appendInline]="true"
-                       [items]="data.hosts"
+                       [items]="hostOptions"
+                       itemValueKey="content"
                        (selected)="multiSelector($event)"
                        i18n>
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
       </div>
-      }
       }
 
 
