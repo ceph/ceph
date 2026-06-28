@@ -391,6 +391,11 @@ def get_cloud_config(cfg):
         config.cloud_retain_head_object = None
 
     try:
+        config.cloud_retain_current_version = cfg.get('s3 cloud',"retain_current_version")
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        config.cloud_retain_current_version = None
+
+    try:
         config.allow_read_through = cfg.get('s3 cloud',"allow_read_through")
     except (configparser.NoSectionError, configparser.NoOptionError):
         config.allow_read_through = False
@@ -830,6 +835,9 @@ def get_cloud_storage_class():
 
 def get_cloud_retain_head_object():
     return config.cloud_retain_head_object
+
+def get_cloud_retain_current_version():
+    return config.cloud_retain_current_version
 
 def get_allow_read_through():
     return config.allow_read_through
