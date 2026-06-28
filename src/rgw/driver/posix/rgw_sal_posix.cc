@@ -427,6 +427,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     return ret;
   }
 
+  need_fsync = true;
+
   /* Set the type */
   bufferlist type_bl;
   ObjectType type{get_type()};
@@ -560,6 +562,7 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     }
 
   fd = ret;
+  need_fsync = true;
 
   return 0;
 }
@@ -589,12 +592,15 @@ int File::close()
     return 0;
   }
 
-  int ret = ::fsync(fd);
-  if(ret < 0) {
-    return ret;
+  if (need_fsync) {
+    int ret = ::fsync(fd);
+    if (ret < 0) {
+      return ret;
+    }
+    need_fsync = false;
   }
 
-  ret = ::close(fd);
+  int ret = ::close(fd);
   if(ret < 0) {
     return ret;
   }
@@ -623,6 +629,7 @@ int File::stat(const DoutPrefixProvider* dpp, bool force)
 int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 		       optional_yield y)
 {
+  need_fsync = true;
   int64_t left = bl.length();
   char* curp = bl.c_str();
   ssize_t ret;
