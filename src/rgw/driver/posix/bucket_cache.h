@@ -167,6 +167,7 @@ public:
 
 	flags |= FLAG_DELETED;
 	bc->recycle_count++;
+	lsubdout(bc->driver->ctx(), rgw, 21) << "BucketCache: reclaim evicting bucket=" << name << dendl;
 	bc->un->remove_watch(name);
 	env.reset();
 
@@ -535,6 +536,8 @@ public:
       unique_lock ulk{b->mtx, std::adopt_lock};
       if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
 	/* bulk load into lmdb cache */
+	ldpp_dout(dpp, 21) << "BucketCache: filling bucket=" << sal_bucket->get_name()
+	  << (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
 	rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
       }
       /* display them */
@@ -662,6 +665,8 @@ public:
 	[[unlikely]] case EventType::INVALIDATE:
 	{
 	  /* yikes, cache blown */
+	  lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
+	    << " bucket=" << b->name << dendl;
 	  ulk.lock();
 	  mdb_drop(*txn, b->dbi, 0);
 	  txn->commit();
@@ -742,6 +747,8 @@ public:
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
+
+      ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname << dendl;
 
       auto txn = b->env->getRWTransaction();
       mdb_drop(*txn, b->dbi, 0);

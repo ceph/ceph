@@ -154,6 +154,10 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix, ++lane_ix) {
 	  Lane& lane = qlane[lane_ix % n_lanes];
           std::unique_lock lane_lock{lane.lock};
+	  // only evict when this lane exceeds capacity (otherwise may evict an entry that is still in use)
+	  if (lane.q.size() <= lane_hiwat) {
+	    continue;
+	  }
           if (lane.q.empty()) {
             continue;
           }
