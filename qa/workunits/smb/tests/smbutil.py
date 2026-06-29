@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import os
 import pathlib
 import time
 
@@ -88,6 +89,10 @@ class SMBTestConf:
         # ideally we check that this is *our* ip or name, but we'll just wing
         # it for now until we really need to check
         return self.clients()[0]
+
+    @property
+    def testdir(self):
+        return self._data.get('testdir') or os.path.expanduser('~/cephtest')
 
 
 @contextlib.contextmanager
