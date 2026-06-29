@@ -466,6 +466,14 @@ Below is the object name format::
 
   s3://<target_path>/<source_bucket_name>/<source_object_name>(-<source_object_version_id>)
 
+The version id is appended for non-current versions. The ``null`` version is
+stored under the bare object name, without a suffix.
+
+Null versions transitioned by earlier releases are stored as
+``<source_object_name>-null``. A restore looks for the bare name and will not
+find them, so any such objects have to be copied back from the cloud service
+manually.
+
 .. _versioned_objects:
 
 Versioned Objects
