@@ -105,6 +105,7 @@ import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
+import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group/nvmeof-gateway-group-delete-guard-modal.component';
 
 @NgModule({
   imports: [
@@ -194,7 +195,8 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
     NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
-    NvmeofTabsComponent
+    NvmeofTabsComponent,
+    NvmeofGatewayGroupDeleteGuardModalComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
