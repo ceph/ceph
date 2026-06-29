@@ -4006,6 +4006,8 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     set_req_state_err(s, op_ret);
     dump_errno(s);
 
+    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+
     for (auto &it : crypt_http_responses)
       dump_header(s, it.first, it.second);
 

@@ -6631,7 +6631,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   RGWObjCategory::Main,
 	   olh_epoch,
 	   delete_at,
-	   (version_id.empty() ? NULL : &version_id),
+	   &version_id,
 	   &s->req_id, /* use req_id as tag */
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
