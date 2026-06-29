@@ -82,3 +82,101 @@
 }
 
 <router-outlet name="modal"></router-outlet>
+
+<ng-template
+  #disableMirroringTpl
+  let-row="row"
+  let-hasPendingReplication="hasPendingReplication"
+>
+  @if (hasPendingReplication) {
+    <cd-alert-panel
+      type="warning"
+      spacingClass="cds-mb-3"
+      i18n
+    >
+      <p class="cds--type-heading-compact-01 cds-mb-1">
+        <strong>Some changes are still pending replication.</strong>
+      </p>
+      <p class="cds--type-body-compact-01 cds-mb-0">
+        Recent updates may not yet be replicated to the destination cluster.
+      </p>
+    </cd-alert-panel>
+  }
+  <div
+    cdsGrid
+    class="cds-mb-3"
+  >
+    <div cdsRow>
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 8, md: 8, sm: 8 }"
+      >
+        <p
+          class="cds--type-label-01 cds-mb-2"
+          i18n
+        >
+          Source filesystem
+        </p>
+        <div class="cds--type-body-compact-01">{{ row.local_fs_name }}</div>
+      </div>
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 6, md: 6, sm: 6 }"
+      >
+        <p
+          class="cds--type-label-01 cds-mb-2"
+          i18n
+        >
+          Destination cluster
+        </p>
+        <div class="cds--type-body-compact-01">{{ row.remote_cluster_name }}</div>
+      </div>
+    </div>
+    <div
+      cdsRow
+      class="cds-mt-3 cds-mb-6"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 8, md: 8, sm: 8 }"
+      >
+        <p
+          class="cds--type-label-01 cds-mb-2"
+          i18n
+        >
+          Current sync status
+        </p>
+        <div class="cds--type-body-compact-01">
+          @if (row.sync_status === MirroringSyncStatus.SYNCING) {
+            <cd-icon
+              type="success"
+              class="cds-mr-1"
+            ></cd-icon>
+          }
+          @if (row.sync_status === MirroringSyncStatus.ERROR) {
+            <cd-icon
+              type="danger"
+              class="cds-mr-1"
+            ></cd-icon>
+          }
+          {{ row.sync_status_label }}
+        </div>
+      </div>
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 6, md: 6, sm: 6 }"
+      >
+        <p
+          class="cds--type-label-01 cds-mb-2"
+          i18n
+        >
+          Replication scope
+        </p>
+        <div class="cds--type-body-compact-01">
+          {{ row.directory_count }}
+          <ng-container i18n>{row.directory_count, plural, =1 {path} other {paths}}</ng-container>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-template>

@@ -1,19 +1,37 @@
-<p class="cds--type-heading-03 cds-mb-3"
-   i18n>Review</p>
-<p class="cds--type-body-compact-01 cds-mb-5"
-   i18n>Confirm the paths and snapshot schedule before adding the mirror path(s).</p>
+<p
+  class="cds--type-heading-03 cds-mb-3"
+  i18n
+>
+  Review
+</p>
+<p
+  class="cds--type-body-compact-01 cds-mb-5"
+  i18n
+>
+  Confirm the paths and snapshot schedule before adding the mirror path(s).
+</p>
 
-<div cdsStack="vertical"
-     [gap]="5">
+<div
+  cdsStack="vertical"
+  [gap]="5"
+>
   <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Filesystem</div>
+    <div
+      class="cds--type-label-01 cds-mb-2"
+      i18n
+    >
+      Filesystem
+    </div>
     <div class="cds--type-body-01">{{ fsName }}</div>
   </div>
 
   <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Paths</div>
+    <div
+      class="cds--type-label-01 cds-mb-2"
+      i18n
+    >
+      Paths
+    </div>
     @if (pathsToAdd.length) {
       @for (path of pathsToAdd; track path) {
         <div class="cds--type-body-01">{{ path }}</div>
@@ -24,8 +42,12 @@
   </div>
 
   <div>
-    <div class="cds--type-label-01 cds-mb-2"
-         i18n>Snapshot schedule</div>
+    <div
+      class="cds--type-label-01 cds-mb-2"
+      i18n
+    >
+      Snapshot schedule
+    </div>
     <div class="cds--type-body-01">{{ scheduleSummary || '—' }}</div>
   </div>
 </div>

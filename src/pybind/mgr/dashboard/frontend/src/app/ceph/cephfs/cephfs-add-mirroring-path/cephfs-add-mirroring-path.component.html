@@ -1,4 +1,6 @@
-<ng-template #descTpl>Filesystem: <strong>{{fsName}}</strong></ng-template>
+<ng-template #descTpl
+  >Filesystem: <strong>{{ fsName }}</strong></ng-template
+>
 
 <cd-tearsheet
   [steps]="steps"
@@ -10,20 +12,30 @@
   submitButtonLabel="Add mirror path"
   i18n-submitButtonLabel
   (submitRequested)="onSubmit()"
-  (closeRequested)="onCancel()">
+  (closeRequested)="onCancel()"
+>
   <cd-tearsheet-step>
     <cd-mirroring-paths-step
       #pathsStep
       #tearsheetStep
       [fsName]="fsName"
-      [fsId]="fsId">
+      [fsId]="fsId"
+    >
     </cd-mirroring-paths-step>
   </cd-tearsheet-step>
   <cd-tearsheet-step>
-    <p class="cds--type-heading-03 cds-mb-3"
-       i18n>Snapshot schedule</p>
-    <p class="cds--type-body-compact-01 cds-mb-5"
-       i18n>Define when snapshots are taken for the mirrored path(s).</p>
+    <p
+      class="cds--type-heading-03 cds-mb-3"
+      i18n
+    >
+      Snapshot schedule
+    </p>
+    <p
+      class="cds--type-body-compact-01 cds-mb-5"
+      i18n
+    >
+      Define when snapshots are taken for the mirrored path(s).
+    </p>
     <cd-cephfs-snapshotschedule-form
       #scheduleStep
       #tearsheetStep
@@ -31,7 +43,8 @@
       [hideDirectory]="true"
       [fsNameInput]="fsName"
       [fsIdInput]="fsId"
-      [schedulePath]="schedulePath">
+      [schedulePath]="schedulePath"
+    >
     </cd-cephfs-snapshotschedule-form>
   </cd-tearsheet-step>
   <cd-tearsheet-step>
@@ -39,7 +52,8 @@
       #tearsheetStep
       [fsName]="fsName"
       [pathsStep]="pathsStep"
-      [scheduleStep]="scheduleStep">
+      [scheduleStep]="scheduleStep"
+    >
     </cd-mirroring-review-step>
   </cd-tearsheet-step>
 </cd-tearsheet>

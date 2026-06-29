@@ -148,4 +148,11 @@ describe('CephfsService', () => {
     expect(req.request.method).toBe('DELETE');
     expect(req.request.body).toBeNull();
   });
+
+  it('should disable mirroring for a filesystem', () => {
+    service.disableMirror('my fs').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/disable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ fs_name: 'my fs' });
+  });
 });

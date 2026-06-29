@@ -156,7 +156,12 @@
         : !deletionForm.controls.confirmation.value)
     "
     [submitBtnType]="
-      actionDescription === 'delete' || actionDescription === 'remove' ? 'danger' : 'primary'
+      actionDescription === 'delete' ||
+      actionDescription === 'remove' ||
+      actionDescription === 'disable' ||
+      actionDescription === 'enable'
+        ? 'danger'
+        : 'primary'
     "
   ></cd-form-button-panel>
 </cds-modal>
@@ -171,9 +176,12 @@
     <h2
       class="cds--type-heading-03"
       cdsModalHeaderHeading
-      i18n
     >
-      Confirm {{ actionDescription }}
+      @if (bodyContext?.confirmHeading) {
+        {{ bodyContext.confirmHeading }}
+      } @else {
+        <ng-container i18n>Confirm {{ actionDescription }}</ng-container>
+      }
     </h2>
   } @else {
     <h3

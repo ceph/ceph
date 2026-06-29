@@ -5,10 +5,68 @@ import { of } from 'rxjs';
 
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
+import {
+  Daemon,
+  hasPendingReplication,
+  MirroringRow,
+  MirrorStatusResponse
+} from '~/app/shared/models/cephfs.model';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { MirroringSyncStatus } from '~/app/shared/enum/cephfs-mirroring-sync-status.enum';
+
+describe('hasPendingReplication', () => {
+  const peerUuid = 'peer-uuid';
+
+  it('should return true when mirror status reports an active sync', () => {
+    const status: MirrorStatusResponse = {
+      metrics: {
+        '/dir': {
+          peer: {
+            [peerUuid]: { state: MirroringSyncStatus.SYNCING }
+          }
+        }
+      }
+    };
+    expect(hasPendingReplication(status, peerUuid)).toBe(true);
+  });
+
+  it('should return true when mirror status reports a current syncing snapshot', () => {
+    const status: MirrorStatusResponse = {
+      metrics: {
+        '/dir': {
+          peer: {
+            [peerUuid]: { state: 'idle', current_syncing_snap: { name: 'snap1' } }
+          }
+        }
+      }
+    };
+    expect(hasPendingReplication(status, peerUuid)).toBe(true);
+  });
+
+  it('should return false when idle with no active sync', () => {
+    const status: MirrorStatusResponse = {
+      metrics: {
+        '/dir': {
+          peer: {
+            [peerUuid]: { state: 'idle' }
+          }
+        }
+      }
+    };
+    expect(hasPendingReplication(status, peerUuid)).toBe(false);
+  });
+
+  it('should return false when status is unavailable', () => {
+    expect(hasPendingReplication(null, peerUuid)).toBe(false);
+    expect(hasPendingReplication({ metrics: {} }, undefined)).toBe(false);
+  });
+});
 
 describe('CephfsMirroringListComponent', () => {
   let component: CephfsMirroringListComponent;
@@ -16,7 +74,15 @@ describe('CephfsMirroringListComponent', () => {
   let routerNavigateSpy: jest.Mock;
 
   const cephfsServiceMock = {
-    listDaemonStatus: jest.fn()
+    listDaemonStatus: jest.fn(),
+    disableMirror: jest.fn(),
+    getMirrorStatus: jest.fn()
+  };
+  const modalServiceMock = {
+    show: jest.fn()
+  };
+  const taskWrapperMock = {
+    wrapTaskAroundCall: jest.fn()
   };
 
   const authStorageServiceMock = {
@@ -32,6 +98,8 @@ describe('CephfsMirroringListComponent', () => {
       providers: [
         { provide: CephfsService, useValue: cephfsServiceMock },
         { provide: AuthStorageService, useValue: authStorageServiceMock },
+        { provide: ModalCdsService, useValue: modalServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperMock },
         {
           provide: Router,
           useValue: {
@@ -87,8 +155,8 @@ describe('CephfsMirroringListComponent', () => {
                   fs_name: 'fsA',
                   client_name: 'clientA'
                 },
-                uuid: '',
-                stats: undefined
+                uuid: 'peer-uuid',
+                stats: { failure_count: 0, recovery_count: 1 }
               }
             ],
             id: ''
@@ -113,6 +181,11 @@ describe('CephfsMirroringListComponent', () => {
       client_name: 'clientA',
       directory_count: 3,
       filesystem_id: 10,
+      peer_uuid: 'peer-uuid',
+      failure_count: 0,
+      recovery_count: 1,
+      sync_status: MirroringSyncStatus.SYNCING,
+      sync_status_label: 'Syncing',
       id: '1-10'
     });
   });
@@ -150,6 +223,10 @@ describe('CephfsMirroringListComponent', () => {
       directory_count: 5,
       filesystem_id: 20,
       peerId: '-',
+      failure_count: 0,
+      recovery_count: 0,
+      sync_status: MirroringSyncStatus.NONE,
+      sync_status_label: '-',
       id: '2-20'
     });
   });
@@ -177,5 +254,49 @@ describe('CephfsMirroringListComponent', () => {
         }
       }
     ]);
+  });
+
+  it('should open disable mirroring confirmation modal with active sync warning', () => {
+    cephfsServiceMock.getMirrorStatus.mockReturnValue(
+      of({
+        metrics: {
+          '/dir': {
+            peer: {
+              'peer-uuid': { state: MirroringSyncStatus.SYNCING }
+            }
+          }
+        }
+      })
+    );
+
+    component.ngOnInit();
+    component.selection.selected = [
+      {
+        local_fs_name: 'fs1',
+        remote_cluster_name: 'clusterA',
+        directory_count: 4,
+        peer_uuid: 'peer-uuid',
+        failure_count: 0,
+        recovery_count: 0,
+        sync_status: MirroringSyncStatus.SYNCING,
+        sync_status_label: 'Syncing'
+      } as MirroringRow
+    ];
+
+    component.disableMirroringModal();
+
+    expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledWith('fs1', undefined, 'peer-uuid');
+    expect(modalServiceMock.show).toHaveBeenCalledWith(
+      DeleteConfirmationModalComponent,
+      expect.objectContaining({
+        impact: DeletionImpact.high,
+        itemNames: ['fs1'],
+        actionDescription: 'disable',
+        submitText: 'Disable',
+        bodyContext: expect.objectContaining({
+          hasPendingReplication: true
+        })
+      })
+    );
   });
 });

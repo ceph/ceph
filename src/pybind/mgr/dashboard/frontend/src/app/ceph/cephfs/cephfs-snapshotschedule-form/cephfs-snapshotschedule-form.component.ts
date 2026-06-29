@@ -447,7 +447,7 @@ export class CephfsSnapshotscheduleFormComponent
       const repeatFrequency = frm.get('repeatFrequency');
       const repeatInterval = frm.get('repeatInterval');
       const directoryPath = this.hideDirectory
-        ? directory?.getRawValue?.() ?? directory?.value
+        ? (directory?.getRawValue?.() ?? directory?.value)
         : directory?.value;
 
       if (this.isEdit) {

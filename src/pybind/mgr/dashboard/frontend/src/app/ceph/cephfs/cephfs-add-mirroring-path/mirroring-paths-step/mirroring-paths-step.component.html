@@ -1,23 +1,45 @@
-<p class="cds--type-heading-03 cds-mb-3"
-   i18n>What do you want to replicate inside this filesystem?</p>
-<p class="cds--type-body-compact-01 cds-mb-5"
-   i18n>A path defines what data will be mirrored to the destination cluster. Select at least one path to continue.</p>
+<p
+  class="cds--type-heading-03 cds-mb-3"
+  i18n
+>
+  What do you want to replicate inside this filesystem?
+</p>
+<p
+  class="cds--type-body-compact-01 cds-mb-5"
+  i18n
+>
+  A path defines what data will be mirrored to the destination cluster. Select at least one path to
+  continue.
+</p>
 
 <div class="cds-mb-5">
   <cd-alert-panel type="info">
-    <div [cdsStack]="'vertical'"
-         [gap]="2">
-      <div class="cds--type-heading-compact-01"
-           i18n>About path selection</div>
-      <div class="cds--type-body-compact-01"
-           i18n>Selecting a higher level path includes all nested content. Select a deeper path for more precise mirroring.</div>
+    <div
+      [cdsStack]="'vertical'"
+      [gap]="2"
+    >
+      <div
+        class="cds--type-heading-compact-01"
+        i18n
+      >
+        About path selection
+      </div>
+      <div
+        class="cds--type-body-compact-01"
+        i18n
+      >
+        Selecting a higher level path includes all nested content. Select a deeper path for more
+        precise mirroring.
+      </div>
     </div>
   </cd-alert-panel>
 </div>
 
 @if (pathsError) {
-  <cd-alert-panel type="error"
-                  class="cds-mb-5">
+  <cd-alert-panel
+    type="error"
+    class="cds-mb-5"
+  >
     {{ pathsError }}
   </cd-alert-panel>
 }
@@ -25,21 +47,38 @@
 <form [formGroup]="formGroup">
   @for (entry of paths; track $index; let i = $index) {
     @if (i > 0) {
-      <hr class="cds-mb-5"/>
+      <hr class="cds-mb-5" />
     }
-    <div class="cds--tile cds-mb-5"
-         [class.cds-pb-5]="entry.expanded && !entry.levels.length">
-      <div class="cds--row"
-           (click)="toggleExpand(i)">
+    <div
+      class="cds--tile cds-mb-5"
+      [class.cds-pb-5]="entry.expanded && !entry.levels.length"
+    >
+      <div
+        class="cds--row"
+        role="button"
+        tabindex="0"
+        (click)="toggleExpand(i)"
+        (keydown.enter)="toggleExpand(i)"
+        (keydown.space)="$event.preventDefault(); toggleExpand(i)"
+      >
         <div class="cds--col-lg-14 cds--col-md-7 cds--col-sm-3">
-          <div cdsStack="horizontal"
-               gap="3">
-            <cd-icon [type]="entry.expanded ? 'chevronUp' : 'chevronDown'"
-                     size="16"></cd-icon>
-            <div cdsStack="vertical"
-                 gap="2">
-              <span class="cds--type-label-01"
-                    i18n>Path</span>
+          <div
+            cdsStack="horizontal"
+            gap="3"
+          >
+            <cd-icon
+              [type]="entry.expanded ? 'chevronUp' : 'chevronDown'"
+              size="16"
+            ></cd-icon>
+            <div
+              cdsStack="vertical"
+              gap="2"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Path</span
+              >
               <span class="cds--type-body-compact-01">
                 {{ entry.fullPath || '—' }}
               </span>
@@ -47,12 +86,16 @@
           </div>
         </div>
         <div class="cds--col-lg-2 cds--col-md-1 cds--col-sm-1">
-          <cds-icon-button kind="ghost"
-                           size="sm"
-                           (click)="$event.stopPropagation(); removePath(i)">
-            <cd-icon type="trash"
-                     size="16"
-                     class="cds--btn__icon"></cd-icon>
+          <cds-icon-button
+            kind="ghost"
+            size="sm"
+            (click)="$event.stopPropagation(); removePath(i)"
+          >
+            <cd-icon
+              type="trash"
+              size="16"
+              class="cds--btn__icon"
+            ></cd-icon>
           </cds-icon-button>
         </div>
       </div>
@@ -60,29 +103,46 @@
       @if (entry.expanded && entry.levels.length) {
         <div class="cds-mt-5 cds-pt-5">
           <div class="cds-mb-3">
-            <span class="cds--type-label-01"
-                  i18n>Path definition</span>
-            <span class="cds--type-helper-text-01"
-                  i18n> (Choose folders step by step to build the path.)</span>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Path definition</span
+            >
+            <span
+              class="cds--type-helper-text-01"
+              i18n
+            >
+              (Choose folders step by step to build the path.)</span
+            >
           </div>
-          <div cdsStack="horizontal"
-               gap="3"
-               class="path-definition-row">
+          <div
+            cdsStack="horizontal"
+            gap="3"
+            class="path-definition-row"
+          >
             @for (level of entry.levels; track $index; let lvl = $index) {
               @if (lvl > 0) {
                 <span class="cds--type-body-compact-01 path-separator">/</span>
               }
               @if (isLevelLoading(i, lvl) && !level.options.length) {
-                <cds-loading [isActive]="true"
-                             [overlay]="false"
-                             size="sm">
+                <cds-loading
+                  [isActive]="true"
+                  [overlay]="false"
+                  size="sm"
+                >
                 </cds-loading>
               } @else {
-                <cds-select [label]="''"
-                            [value]="level.selected"
-                            (valueChange)="onLevelChange(i, lvl, $event)">
-                  <option value=""
-                          i18n>-- Select --</option>
+                <cds-select
+                  [label]="''"
+                  [value]="level.selected"
+                  (valueChange)="onLevelChange(i, lvl, $event)"
+                >
+                  <option
+                    value=""
+                    i18n
+                  >
+                    -- Select --
+                  </option>
                   @for (opt of level.options; track opt) {
                     <option [value]="opt">{{ opt }}</option>
                   }
@@ -93,9 +153,11 @@
               @if (entry.levels.length) {
                 <span class="cds--type-body-compact-01 path-separator">/</span>
               }
-              <cds-loading [isActive]="true"
-                           [overlay]="false"
-                           size="sm">
+              <cds-loading
+                [isActive]="true"
+                [overlay]="false"
+                size="sm"
+              >
               </cds-loading>
             }
           </div>
@@ -104,14 +166,18 @@
     </div>
   }
 
-  <hr class="cds-mb-5"/>
+  <hr class="cds-mb-5" />
 
-  <button cdsButton="tertiary"
-          type="button"
-          (click)="addPath()"
-          i18n>
+  <button
+    cdsButton="tertiary"
+    type="button"
+    (click)="addPath()"
+    i18n
+  >
     Add another path
-    <cd-icon type="add"
-             customClass="cds--btn__icon"></cd-icon>
+    <cd-icon
+      type="add"
+      customClass="cds--btn__icon"
+    ></cd-icon>
   </button>
 </form>
