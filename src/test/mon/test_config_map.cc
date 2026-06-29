@@ -53,6 +53,67 @@ TEST(ConfigMap, parse_key)
   }
 }
 
+TEST(ConfigMap, parse_mask)
+{
+  {
+    std::string section;
+    OptionMask mask;
+    ASSERT_TRUE(ConfigMap::parse_mask("osd.2", &section, &mask));
+    ASSERT_EQ("osd.2", section);
+  }
+  {
+    std::string section;
+    OptionMask mask;
+    ASSERT_TRUE(ConfigMap::parse_mask("osd.2  ", &section, &mask));
+    ASSERT_EQ("osd.2", section);
+  }
+  {
+    std::string section;
+    OptionMask mask;
+    ASSERT_TRUE(ConfigMap::parse_mask("  osd.2", &section, &mask));
+    ASSERT_EQ("osd.2", section);
+  }
+  {
+    std::string section;
+    OptionMask mask;
+    ASSERT_TRUE(ConfigMap::parse_mask(" global ", &section, &mask));
+    ASSERT_EQ("global", section);
+  }
+}
+
+TEST(ConfigMap, add_option_who_whitespace)
+{
+  ConfigMap cm;
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
+  auto crush = std::make_unique<CrushWrapper>();
+  crush->finalize();
+
+  int r = cm.add_option(
+    cct.get(), "debug_ms", "osd.2  ", "1/1",
+    [&](const std::string& name) {
+      return nullptr;
+    });
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(1, cm.by_id.size());
+  ASSERT_EQ(1, cm.by_id["osd.2"].options.size());
+
+  EntityName n;
+  n.set(CEPH_ENTITY_TYPE_OSD, "2");
+  auto c = cm.generate_entity_map(n, {}, crush.get(), "none", nullptr);
+  ASSERT_EQ(1, c.size());
+  ASSERT_EQ("1/1", c["debug_ms"]);
+
+  r = cm.add_option(
+    cct.get(), "foo", "osd.2", "clean",
+    [&](const std::string& name) {
+      return nullptr;
+    });
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(1, cm.by_id.size());
+  ASSERT_EQ(2, cm.by_id["osd.2"].options.size());
+}
+
 TEST(ConfigMap, add_option)
 {
   ConfigMap cm;
