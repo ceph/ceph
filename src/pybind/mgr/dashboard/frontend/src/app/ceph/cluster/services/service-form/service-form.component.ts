@@ -222,9 +222,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.requiredIf({
             service_type: 'iscsi'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'nvmeof'
           })
         ]
       ],
@@ -782,7 +779,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
               break;
             case 'nvmeof':
-              this.serviceForm.get('pool').setValue(response[0].spec.pool);
               this.serviceForm.get('group').setValue(response[0].spec.group);
               this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
               this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
@@ -1155,24 +1151,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   setNvmeServiceId() {
-    const pool = this.serviceForm.get('pool').value;
     const group = this.serviceForm.get('group').value;
-    if (pool && group) {
-      this.serviceForm.get('service_id').setValue(`${pool}.${group}`);
-    } else if (pool) {
-      this.serviceForm.get('service_id').setValue(pool);
-    } else if (group) {
+    if (group) {
       this.serviceForm.get('service_id').setValue(group);
     } else {
       this.serviceForm.get('service_id').setValue(null);
     }
-  }
-
-  setNvmeDefaultPool() {
-    const defaultPool =
-      this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')?.pool_name ||
-      this.rbdPools?.[0].pool_name;
-    this.serviceForm.get('pool').setValue(defaultPool);
   }
 
   requiresServiceId(serviceType: string) {
@@ -1182,7 +1166,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   setServiceId(serviceId: string): void {
     const requiresServiceId: boolean = this.requiresServiceId(serviceId);
     if (requiresServiceId && serviceId === 'nvmeof') {
-      this.setNvmeDefaultPool();
       this.setNvmeServiceId();
     } else if (requiresServiceId) {
       this.serviceForm.get('service_id').setValue(null);
@@ -1231,7 +1214,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceForm.get('backend_service').disable();
         break;
       case 'nvmeof':
-        this.serviceForm.get('pool').disable();
         this.serviceForm.get('group').disable();
         break;
     }
@@ -1344,7 +1326,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
 
       case 'nvmeof':
-        serviceSpec['pool'] = values['pool'];
         serviceSpec['group'] = values['group'];
         serviceSpec['enable_auth'] = values['enable_mtls'];
         if (values['enable_mtls']) {
