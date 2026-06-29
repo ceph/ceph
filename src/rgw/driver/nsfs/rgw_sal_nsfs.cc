@@ -5023,8 +5023,53 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   if (!req_version_id.empty()) {
     ldpp_dout(dpp, 10) << "delete_obj: version-specific vid="
       << req_version_id << " key=" << source->get_name() << dendl;
+
+    /* resolve path to get parent dir for version lock;
+     * stat without instance so we always get the object's parent
+     * directory, not .versions/ */
+    std::string saved_instance = source->get_instance();
+    source->clear_instance();
+    source->ent.reset();
     int ret = source->stat(dpp);
     nsfs::FSEnt* ent = source->get_fsent();
+
+    /* acquire version lock — must use the object's parent dir,
+     * not .versions/, so all competing threads contend on the
+     * same lock file */
+    int lock_parent_fd = -1;
+    if (ent && ent->get_parent()) {
+      lock_parent_fd = ent->get_parent()->get_fd();
+      if (lock_parent_fd < 0) {
+        ent->get_parent()->open(dpp);
+        lock_parent_fd = ent->get_parent()->get_fd();
+      }
+    } else {
+      /* object doesn't exist as current — resolve path just for lock */
+      std::vector<std::unique_ptr<nsfs::Directory>> lk_chain;
+      nsfs::Directory* lk_dir = nullptr;
+      std::string lk_leaf;
+      int r = nsfs::resolve_path(dpp, b->get_dir(),
+          source->get_fname(/*use_version=*/false),
+          /*create_dirs=*/false, source->driver->ctx(),
+          lk_chain, lk_dir, lk_leaf);
+      if (r == 0 && lk_dir) {
+        lock_parent_fd = lk_dir->get_fd();
+        if (lock_parent_fd < 0) {
+          lk_dir->open(dpp);
+          lock_parent_fd = lk_dir->get_fd();
+        }
+      }
+    }
+    auto vlock = (lock_parent_fd >= 0)
+      ? source->driver->get_fs_strategy()->version_lock(
+          dpp, open_versions_lockfile(lock_parent_fd))
+      : std::unique_ptr<VersionLockHandle>();
+
+    /* re-stat under lock with original instance to get fresh state */
+    source->set_instance(saved_instance);
+    source->ent.reset();
+    ret = source->stat(dpp);
+    ent = source->get_fsent();
 
     /* check if the requested version is the current */
     if (ret == 0 && ent) {
@@ -5082,10 +5127,39 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             << promote_leaf << dendl;
           promote_version(promote_fd, promote_leaf, dpp,
                           source->driver->get_fs_strategy());
+          struct statx pstx;
+          if (statx(promote_fd, promote_leaf.c_str(),
+                    AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
+            bool promoted_is_null = false;
+            {
+              int chk = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
+              if (chk >= 0) {
+                promoted_is_null = is_null_version_fd(chk);
+                ::close(chk);
+              }
+            }
+            std::string promoted_ver = promoted_is_null
+              ? NULL_VERSION_ID
+              : nsfs_version_id_from_statx(pstx);
+            rgw_bucket_dir_entry bde{};
+            bde.key.name = source->get_name();
+            bde.key.instance = promoted_ver;
+            bde.ver.pool = 1;
+            bde.ver.epoch = 1;
+            bde.exists = true;
+            bde.meta.category = RGWObjCategory::Main;
+            bde.meta.size = pstx.stx_size;
+            bde.meta.accounted_size = pstx.stx_size;
+            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
+            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+            bde.meta.etag = synthesize_etag(pstx);
+            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                        rgw_bucket_dir_entry::FLAG_CURRENT;
+            source->driver->get_bucket_cache()->add_entry(
+              dpp, b->get_name(), bde);
+          }
           ::close(promote_fd);
         }
-        source->driver->get_bucket_cache()->invalidate_bucket(
-          dpp, b->get_name());
         return 0;
       }
     }
@@ -5187,7 +5261,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         ::close(vfd);
         result.version_id = req_version_id;
         result.delete_marker = is_dm;
-        source->driver->get_bucket_cache()->invalidate_bucket(dpp, b->get_name());
+        {
+          cls_rgw_obj_key cache_key;
+          cache_key.name = source->get_name();
+          cache_key.instance = req_version_id;
+          source->driver->get_bucket_cache()->remove_entry(
+            dpp, b->get_name(), cache_key);
+        }
         return 0;
       }
     }
@@ -5272,6 +5352,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return vfd;
   }
 
+  auto vlock = source->driver->get_fs_strategy()->version_lock(
+    dpp, open_versions_lockfile(parent_fd));
+
   /* determine if current is a null version */
   bool cur_is_null = false;
   if (ret == 0 && ent && ent->exists()) {
@@ -5290,6 +5373,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     std::string null_name = nsfs_ver_entry(dm_leaf, NULL_VERSION_ID);
     ::unlinkat(vfd, null_name.c_str(), 0);
   }
+
+  std::string demoted_ver_id;
+  bool did_demote = false;
 
   /* demote current to .versions/ with retry on CAS mismatch;
    * skip when suspended and current is null (S3: replace null version) */
@@ -5327,6 +5413,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         source->driver->get_fs_strategy()->safe_unlink(
                     dpp, parent_fd, dm_leaf, vfd,
                     cur_mtime, cur_ino);
+        demoted_ver_id = cur_ver_id;
+        did_demote = true;
         break;
       }
       if (sr == SafeResult::ERROR) {
@@ -5387,8 +5475,50 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   ::close(vfd);
 
-  /* invalidate bucket cache — version state changed */
-  source->driver->get_bucket_cache()->invalidate_bucket(dpp, b->get_name());
+  /* surgical cache update: demoted current → non-current, add delete marker */
+  auto* bcache = source->driver->get_bucket_cache();
+  std::string obj_name = source->get_name();
+
+  if (did_demote) {
+    /* remove old current entry, add non-current entry */
+    cls_rgw_obj_key old_key;
+    old_key.name = obj_name;
+    old_key.instance = demoted_ver_id;
+    bcache->remove_entry(dpp, b->get_name(), old_key);
+
+    rgw_bucket_dir_entry dem_bde{};
+    dem_bde.key.name = obj_name;
+    dem_bde.key.instance = demoted_ver_id;
+    dem_bde.ver.pool = 1;
+    dem_bde.ver.epoch = 1;
+    dem_bde.exists = true;
+    dem_bde.meta.category = RGWObjCategory::Main;
+    dem_bde.meta.size = ent->get_stx().stx_size;
+    dem_bde.meta.accounted_size = ent->get_stx().stx_size;
+    dem_bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+    dem_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+    dem_bde.meta.etag = synthesize_etag(ent->get_stx());
+    dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+    bcache->add_entry(dpp, b->get_name(), dem_bde);
+  }
+
+  if (!result.version_id.empty()) {
+    /* add delete marker entry */
+    rgw_bucket_dir_entry dm_bde{};
+    dm_bde.key.name = obj_name;
+    dm_bde.key.instance = result.version_id;
+    dm_bde.ver.pool = 1;
+    dm_bde.ver.epoch = 1;
+    dm_bde.exists = true;
+    dm_bde.meta.category = RGWObjCategory::Main;
+    dm_bde.meta.size = 0;
+    dm_bde.meta.accounted_size = 0;
+    dm_bde.meta.mtime = ceph::real_clock::now();
+    dm_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+    dm_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                   rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+    bcache->add_entry(dpp, b->get_name(), dm_bde);
+  }
 
   return 0;
   } /* versioned delete without versionId */
