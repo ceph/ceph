@@ -142,12 +142,37 @@ export interface MirrorPeerListEntry {
 
 export type MirrorPeerList = Record<string, MirrorPeerListEntry>;
 
+export interface MirrorSyncCrawl {
+  state?: string;
+  duration?: string;
+}
+
+export interface MirrorSyncBytes {
+  sync_bytes?: string;
+  total_bytes?: string;
+  sync_percent?: string;
+}
+
+export interface MirrorSyncFiles {
+  sync_files?: number;
+  total_files?: number;
+  sync_percent?: string;
+}
+
 export interface MirrorSyncedSnap {
   id?: number;
   name?: string;
+  'sync-mode'?: string;
   sync_bytes?: number | string;
   sync_duration?: number | string;
   sync_time_stamp?: number | string;
+  avg_read_throughput_bytes?: string;
+  avg_write_throughput_bytes?: string;
+  crawl?: MirrorSyncCrawl;
+  datasync_queue_wait?: MirrorSyncCrawl;
+  bytes?: MirrorSyncBytes;
+  files?: MirrorSyncFiles;
+  eta?: string;
 }
 
 export interface MirrorSyncProgress {

@@ -9,11 +9,13 @@ import {
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { MirrorDirStatus, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
 
 interface MirrorPath {
   path: string;
@@ -62,11 +64,16 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   selectedPath: MirrorPath | null = null;
   sidePanelOpen = false;
   fsName: string = '';
+  schedulePolicies: MirrorPathSchedule[] = [];
+  schedulePoliciesLoading = false;
+  removingSchedule = '';
 
   private subscriptions = new Subscription();
+  private mirrorPathsSubscription?: Subscription;
 
   constructor(
     private cephfsService: CephfsService,
+    private snapshotScheduleService: CephfsSnapshotScheduleService,
     private route: ActivatedRoute,
     private formatterService: FormatterService
   ) {}
@@ -133,7 +140,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       return;
     }
 
-    this.cephfsService.getMirrorStatus(this.fsName).subscribe(
+    this.mirrorPathsSubscription?.unsubscribe();
+    this.mirrorPathsSubscription = this.cephfsService.getMirrorStatus(this.fsName).subscribe(
       (data: MirrorStatusResponse) => {
         this.mirrorPaths = this.parseMirrorStatus(data);
         if (this.selectedPath) {
@@ -149,6 +157,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         this.sidePanelOpen = false;
       }
     );
+    this.subscriptions.add(this.mirrorPathsSubscription);
   }
 
   parseMirrorStatus(data: MirrorStatusResponse): MirrorPath[] {
@@ -264,13 +273,229 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   }
 
   onPathClick(path: MirrorPath): void {
-    this.selectedPath = path;
-    this.sidePanelOpen = true;
+    this.sidePanelOpen = false;
+    this.selectedPath = null;
+
+    setTimeout(() => {
+      this.selectedPath = path;
+      this.sidePanelOpen = true;
+      this.loadSchedulePolicies(path.path);
+      this.loadMirrorPaths();
+    });
   }
 
   closeSidePanel(): void {
     this.sidePanelOpen = false;
     this.selectedPath = null;
+    this.schedulePolicies = [];
+    this.schedulePoliciesLoading = false;
+    this.removingSchedule = '';
+  }
+
+  loadSchedulePolicies(path: string): void {
+    if (!this.fsName || !path) {
+      this.schedulePolicies = [];
+      return;
+    }
+
+    this.schedulePoliciesLoading = true;
+    this.subscriptions.add(
+      this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, false).subscribe(
+        (policies) => {
+          if (this.selectedPath?.path !== path) {
+            this.schedulePoliciesLoading = false;
+            return;
+          }
+
+          const normalizedPath = this.normalizePath(path);
+          this.schedulePolicies = policies
+            .filter((policy) => {
+              return (
+                this.normalizePath(policy.path) === normalizedPath ||
+                this.normalizePath(policy.rel_path) === normalizedPath
+              );
+            })
+            .filter(
+              (policy, index, filteredPolicies) =>
+                filteredPolicies.findIndex(
+                  (candidate) =>
+                    candidate.path === policy.path &&
+                    candidate.schedule === policy.schedule &&
+                    String(candidate.start) === String(policy.start)
+                ) === index
+            )
+            .map((policy) => this.buildSchedulePolicyViewModel(policy as MirrorPathSchedule));
+          this.schedulePoliciesLoading = false;
+        },
+        () => {
+          if (this.selectedPath?.path === path) {
+            this.schedulePolicies = [];
+          }
+          this.schedulePoliciesLoading = false;
+        }
+      )
+    );
+  }
+
+  removeSchedulePolicy(policy: MirrorPathSchedule): void {
+    if (!policy?.path || !policy?.schedule || !policy?.start || !this.fsName) {
+      return;
+    }
+
+    const retentionPolicy = policy.retention
+      ? Object.entries(policy.retention)
+          .filter(([, interval]) => interval !== null && interval !== undefined)
+          .map(([frequency, interval]) => `${interval}-${frequency}`)
+          .join('|')
+      : undefined;
+
+    this.removingSchedule = `${policy.path}@${policy.schedule}`;
+    this.subscriptions.add(
+      this.snapshotScheduleService
+        .delete({
+          path: policy.path,
+          schedule: policy.schedule,
+          start: policy.start,
+          fs: policy.fs || this.fsName,
+          retentionPolicy
+        })
+        .subscribe(
+          () => {
+            this.removingSchedule = '';
+            this.loadSchedulePolicies(policy.path);
+          },
+          () => {
+            this.removingSchedule = '';
+          }
+        )
+    );
+  }
+
+  get selectedPathSyncStatusIcon(): keyof typeof ICON_TYPE {
+    return this.getSyncStatusIcon(this.selectedPath?.syncStatus || '');
+  }
+
+  get selectedPathSyncStatusClass(): string {
+    return this.getSyncStatusClass(this.selectedPath?.syncStatus || '');
+  }
+
+  get selectedPathSyncStatusLabel(): string {
+    return this.selectedPath?.syncStatus ? this.toTitleCase(this.selectedPath.syncStatus) : '-';
+  }
+
+  get showSelectedPathProgress(): boolean {
+    return (
+      this.selectedPath?.syncStatus === 'syncing' && this.selectedPath?.syncProgress !== undefined
+    );
+  }
+
+  private buildSchedulePolicyViewModel(policy: MirrorPathSchedule): MirrorPathSchedule {
+    const retention =
+      typeof policy.retention === 'string'
+        ? {}
+        : ((policy.retention || {}) as Record<string, number>);
+    const retentionCopy = this.buildRetentionCopy(retention);
+
+    return {
+      ...policy,
+      retention,
+      scheduleCopy: this.snapshotScheduleService.parseScheduleCopy(policy.schedule),
+      retentionCopy,
+      nextSync: this.calculateNextSync(policy),
+      scheduleText: policy.schedule || '-',
+      retentionText: this.formatRetentionCopy(retentionCopy),
+      statusLabel: this.getScheduleStatusLabel(policy.active),
+      statusIcon: this.getScheduleStatusIcon(policy.active),
+      removeId: `${policy.path}@${policy.schedule}`
+    };
+  }
+
+  private getScheduleStatusLabel(active: boolean): string {
+    return active ? $localize`Active` : $localize`Inactive`;
+  }
+
+  private formatRetentionCopy(retentionCopy?: string[]): string {
+    return retentionCopy?.length ? retentionCopy.join(', ') : '-';
+  }
+
+  private buildRetentionCopy(retention?: Record<string, number>): string[] {
+    if (!retention || !Object.keys(retention).length) {
+      return [];
+    }
+
+    const retentionLabels: Record<string, string> = {
+      h: $localize`hourly`,
+      d: $localize`daily`,
+      w: $localize`weekly`,
+      M: $localize`monthly`,
+      m: $localize`minutely`,
+      y: $localize`yearly`,
+      n: $localize`latest snapshots`
+    };
+
+    return Object.entries(retention)
+      .filter(([, interval]) => interval !== null && interval !== undefined)
+      .map(([frequency, interval]) => `${interval} ${retentionLabels[frequency] || frequency}`);
+  }
+
+  formatScheduleDate(value?: string | Date | null): string {
+    if (!value) {
+      return '-';
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+  }
+
+  private calculateNextSync(policy: MirrorPathSchedule): string {
+    if (!policy?.schedule) {
+      return '-';
+    }
+
+    const baseTime = policy.last ?? policy.start;
+    if (!baseTime) {
+      return '-';
+    }
+
+    const baseDate = new Date(baseTime);
+    if (Number.isNaN(baseDate.getTime())) {
+      return '-';
+    }
+
+    const scheduleMatch = policy.schedule.trim().match(/^(\d+)([a-zA-Z])$/);
+    if (!scheduleMatch) {
+      return '-';
+    }
+
+    const interval = parseInt(scheduleMatch[1], 10);
+    const unit = scheduleMatch[2];
+    const nextSync = new Date(baseDate);
+
+    switch (unit) {
+      case 'm':
+        nextSync.setMinutes(nextSync.getMinutes() + interval);
+        break;
+      case 'h':
+        nextSync.setHours(nextSync.getHours() + interval);
+        break;
+      case 'd':
+        nextSync.setDate(nextSync.getDate() + interval);
+        break;
+      case 'w':
+        nextSync.setDate(nextSync.getDate() + interval * 7);
+        break;
+      case 'M':
+        nextSync.setMonth(nextSync.getMonth() + interval);
+        break;
+      case 'y':
+      case 'Y':
+        nextSync.setFullYear(nextSync.getFullYear() + interval);
+        break;
+      default:
+        return '-';
+    }
+
+    return nextSync.toLocaleString();
   }
 
   getSyncStatusIcon(status: string): keyof typeof ICON_TYPE {
@@ -288,6 +513,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     }
   }
 
+  getScheduleStatusIcon(active: boolean): keyof typeof ICON_TYPE {
+    return active ? 'success' : 'warning';
+  }
+
   getSyncStatusClass(status: string): string {
     switch (status) {
       case 'syncing':
@@ -301,5 +530,14 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       default:
         return '';
     }
+  }
+
+  private normalizePath(p?: string): string {
+    if (!p) return '';
+    return p.replace(/([/](\.\.?)){1,}\s*$/, '').replace(/\/$/, '') || '/';
+  }
+
+  private toTitleCase(value: string): string {
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : '-';
   }
 }
