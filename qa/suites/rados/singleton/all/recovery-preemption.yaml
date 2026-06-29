@@ -46,7 +46,7 @@ tasks:
       - ceph osd set noup
 - ceph.restart:
     daemons: [osd.1]
-    wait-for-up: false
+    wait-for-osds-up: true
     wait-for-healthy: false
 - exec:
     osd.0:
