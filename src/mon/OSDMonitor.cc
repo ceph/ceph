@@ -14100,6 +14100,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    bool enable_ec_optimizations = cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
+    if (source_pool) {
+      bool source_not_legacy_ec = source_pool->get_type() == pg_pool_t::TYPE_REPLICATED ||
+        source_pool->allows_ecoptimizations();
+      bool target_is_legacy_ec = (pool_type == pg_pool_t::TYPE_ERASURE && !enable_ec_optimizations);
+      if (source_not_legacy_ec && target_is_legacy_ec && !confirm) {
+        ss << "You are attempting to migrate to a pool type with less features " <<
+          "than the source pool which will result in functionality loss. Perhaps you want to enable " <<
+          "EC optimisations with the --enable_ec_optimizations option? Otherwise, please confirm with " <<
+          "the --yes-i-really-mean-it option.";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+    }
+
     // Only inherit type-specific parameters when pool types match
     bool types_match = source_pool && (static_cast<unsigned>(pool_type) == source_pool->get_type());
 
@@ -14216,8 +14231,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool default_crimson = (source_pool) ? source_pool->is_crimson() : false;
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", default_crimson) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
-
-    bool enable_ec_optimizations = cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
 
     err = prepare_new_pool(poolstr,
                            -1, // default crush rule
