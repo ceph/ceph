@@ -1,3 +1,11 @@
+* CephFS: The ``fs subvolumegroup create`` command now supports the
+  ``--namespace-isolated`` option. When a subvolume group is created with this flag,
+  the group directory is placed in a separate RADOS namespace, and all subvolumes
+  subsequently created within that group automatically inherit RADOS namespace
+  isolation without needing the ``--namespace-isolated`` flag on each
+  ``fs subvolume create`` invocation. This provides per-tenant RADOS-level security
+  isolation at the subvolume group granularity.
+
 * DASHBOARD: Added support for RGW zonegroup hostnames and wildcard certificates for virtual-host-style bucket access
 >=22.0.0
 
