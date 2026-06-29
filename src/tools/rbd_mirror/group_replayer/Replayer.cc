@@ -165,7 +165,7 @@ void Replayer<I>::schedule_load_group_snapshots() {
   std::lock_guard timer_locker{m_threads->timer_lock};
   std::lock_guard locker{m_lock};
 
-  if (m_state != STATE_REPLAYING) {
+  if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
     return;
   }
 
@@ -186,9 +186,10 @@ void Replayer<I>::handle_schedule_load_group_snapshots(int r) {
 
   {
     std::unique_lock locker{m_lock};
-    if (m_state != STATE_REPLAYING) {
+    if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
       return;
     }
+    m_state = STATE_REPLAYING;
 
     ceph_assert(m_load_snapshots_task != nullptr);
     m_load_snapshots_task = nullptr;
@@ -849,7 +850,10 @@ void Replayer<I>::try_create_group_snapshot(
           continue;
         }
       } else {
-        dout(10) << "all remote snaps synced" << dendl;
+        dout(10) << "all remote snaps synced: idling waiting for new snapshot"
+                 << dendl;
+        ceph_assert(m_state == STATE_REPLAYING);
+        m_state = STATE_IDLE;
         return;
       }
     }
@@ -2222,7 +2226,7 @@ bool Replayer<I>::get_replay_status(std::string* description) {
   dout(10) << dendl;
 
   std::unique_lock locker{m_lock};
-  if (m_state != STATE_REPLAYING) {
+  if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
     derr << "replay not running" << dendl;
     return false;
   }
