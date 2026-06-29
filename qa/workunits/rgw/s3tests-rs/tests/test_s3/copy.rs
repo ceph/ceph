@@ -849,3 +849,163 @@ async fn test_object_copy_not_owned_object_bucket() {
         .await
         .unwrap();
 }
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_object_copy_versioned_overwrite() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "target";
+    let src_key = "source";
+
+    // create source object
+    let src_body = "source-content";
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(src_key)
+        .body(ByteStream::from(src_body.as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+
+    // create initial version of target via PUT
+    let v1_body = "version-1";
+    let v1_resp = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from(v1_body.as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+    let v1_id = v1_resp.version_id().unwrap().to_string();
+
+    // overwrite target via copy — should demote v1 to .versions/
+    client
+        .copy_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .copy_source(format!("{bucket_name}/{src_key}"))
+        .send()
+        .await
+        .unwrap();
+
+    // current version should be the copy
+    let get_resp = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    let v2_id = get_resp.version_id().unwrap().to_string();
+    assert_ne!(v1_id, v2_id);
+    let body = get_body(get_resp).await;
+    assert_eq!(body, src_body);
+
+    // old version should still be retrievable
+    let get_v1 = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&v1_id)
+        .send()
+        .await
+        .unwrap();
+    let v1_retrieved = get_body(get_v1).await;
+    assert_eq!(v1_retrieved, v1_body);
+
+    // list_object_versions should show both versions
+    let versions_resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .prefix(key)
+        .send()
+        .await
+        .unwrap();
+    let versions: Vec<_> = versions_resp.versions().iter()
+        .filter(|v| v.key().unwrap_or_default() == key)
+        .collect();
+    assert_eq!(versions.len(), 2);
+
+    // overwrite again via copy — should now have 3 versions
+    client
+        .copy_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .copy_source(format!("{bucket_name}/{src_key}"))
+        .send()
+        .await
+        .unwrap();
+
+    let versions_resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .prefix(key)
+        .send()
+        .await
+        .unwrap();
+    let versions: Vec<_> = versions_resp.versions().iter()
+        .filter(|v| v.key().unwrap_or_default() == key)
+        .collect();
+    assert_eq!(versions.len(), 3);
+
+    // all old versions still retrievable
+    let get_v1 = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&v1_id)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get_body(get_v1).await, v1_body);
+
+    let get_v2 = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&v2_id)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get_body(get_v2).await, src_body);
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: copy response missing version_id")]
+async fn test_object_copy_versioned_overwrite_response_version_id() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("target")
+        .body(ByteStream::from_static(b"v1"))
+        .send()
+        .await
+        .unwrap();
+
+    let copy_resp = client
+        .copy_object()
+        .bucket(&bucket_name)
+        .key("target")
+        .copy_source(format!("{bucket_name}/target"))
+        .metadata_directive(aws_sdk_s3::types::MetadataDirective::Replace)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(copy_resp.version_id().is_some(),
+            "copy_object response must include x-amz-version-id");
+}
