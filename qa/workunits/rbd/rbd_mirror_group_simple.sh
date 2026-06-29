@@ -1195,9 +1195,11 @@ test_remote_namespace()
     local group_id_before
     get_id_from_group_info "${secondary_cluster}" "${secondary_pool_spec}/${group}" group_id_before
     mirror_group_resync "${secondary_cluster}" "${secondary_pool_spec}/${group}"
+    group_resync_marker_exists "${secondary_cluster}" "${secondary_pool_spec}/${group}" || fail "group resync marker is not set"
     wait_for_group_id_changed "${secondary_cluster}" "${secondary_pool_spec}/${group}" "${group_id_before}"
 
     wait_for_group_synced "${primary_cluster}" "${primary_pool_spec}/${group}" "${secondary_cluster}" "${secondary_pool_spec}/${group}"
+    group_resync_marker_exists "${secondary_cluster}" "${secondary_pool_spec}/${group}" && fail "group resync marker is still set"
 
     wait_for_group_status_in_pool_dir "${secondary_cluster}" "${secondary_pool_spec}"/"${group}" 'up+replaying' "${image_count}"
     wait_for_group_status_in_pool_dir "${primary_cluster}" "${primary_pool_spec}"/"${group}" 'up+stopped' "${image_count}"
@@ -1319,9 +1321,11 @@ test_empty_group()
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group}" || fail "group resync marker is not set"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group}" && fail "group resync marker is still set"
 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped'
@@ -1491,9 +1495,11 @@ test_empty_groups()
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group1}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group1}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group1}" || fail "group resync marker is not set"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group1}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}/${group1}" "${secondary_cluster}" "${pool}/${group1}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group1}" && fail "group resync marker is still set"
 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group1}" 'up+replaying'
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group1}" 'up+stopped'
@@ -2694,6 +2700,7 @@ test_force_promote()
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
 
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
 
   if [ "${scenario}" != 'no_change_primary_up' ]; then
     start_mirrors "${secondary_cluster}"
@@ -2703,6 +2710,7 @@ test_force_promote()
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${secondary_cluster}" "${pool}/${image_prefix}0@${snap0}"
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${big_image}" "${secondary_cluster}" "${pool}/${big_image}@${snap0}"
@@ -2899,10 +2907,12 @@ test_force_promote_before_initial_sync()
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   start_mirrors "${secondary_cluster}"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   # try another force promote - this time it should work
   stop_mirrors "${secondary_cluster}" '-9'
@@ -2913,10 +2923,12 @@ test_force_promote_before_initial_sync()
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   start_mirrors "${secondary_cluster}"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   # tidy up
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
@@ -2990,8 +3002,10 @@ test_resync_after_relocate_and_force_promote()
   local group_id_before_resync
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before_resync
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' ${image_count}
@@ -3320,8 +3334,10 @@ test_odf_failover_failback()
   local group_id_before
   get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${primary_cluster}" "${pool}/${group0}" 
+  group_resync_marker_exists "${primary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed "${primary_cluster}" "${pool}/${group0}" "${group_id_before}"
   wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}/${group0}" 
+  group_resync_marker_exists "${primary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   compare_image_with_snapshot "${primary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
 
@@ -3355,6 +3371,7 @@ test_odf_failover_failback()
   if [ "${scenario}" = 'resync_on_failback' ]; then
     # request resync - won't happen until other site is marked as primary
     mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+    group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   fi  
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
@@ -3398,6 +3415,7 @@ test_odf_failover_failback()
     wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
     get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
     test "${image_id_before}" != "${image_id_after}" || fail "image not recreated by resync"
+    group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
   fi  
 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
@@ -3470,6 +3488,7 @@ test_resync_marker()
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
@@ -3478,6 +3497,7 @@ test_resync_marker()
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated with no primary"
 
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
@@ -3499,6 +3519,7 @@ test_resync_marker()
   mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
 
   # confirm that group and image are not recreated - resync flag was cleared
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
   get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
@@ -3582,10 +3603,12 @@ test_resync()
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches initial snapshot on primary
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
 
   # Repeat the test this time changing the data on the primary too.
@@ -3608,10 +3631,12 @@ test_resync()
   start_mirrors "${secondary_cluster}"
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches latest snapshot on primary
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"  "${secondary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
   wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
   compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}0"
 
@@ -3636,10 +3661,12 @@ test_resync()
   
   get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${primary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${primary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed  "${primary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches latest snapshot on primary
   wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${primary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
   wait_for_test_group_snap_present "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
   compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}0"
 
@@ -3881,8 +3908,10 @@ test_rollback_after_add_image()
   local group_id_before_resync
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before_resync
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" || fail "group resync marker is not set"
   wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}" && fail "group resync marker is still set"
 
   # TEST group membership has 2 images only and the respective groups reflect right mirror status
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
