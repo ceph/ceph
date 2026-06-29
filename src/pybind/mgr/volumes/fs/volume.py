@@ -237,6 +237,15 @@ class VolumeClient(CephfsClient["Module"]):
         casesensitive = kwargs['casesensitive']
         enctag = kwargs['enctag'] or '' # if not set, default to empty string
 
+        # inherit namespace isolation from group if not explicitly specified
+        if not isolate_nspace:
+            try:
+                fs_handle.getxattr(group.path,
+                                    'ceph.dir.layout.pool_namespace')
+                isolate_nspace = True
+            except (cephfs.NoData, cephfs.Error):
+                pass
+
         oct_mode = octal_str_to_decimal_int(mode)
 
         try:
@@ -1156,6 +1165,7 @@ class VolumeClient(CephfsClient["Module"]):
         mode      = kwargs['mode']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
+        namespace_isolated = kwargs.get('namespace_isolated', False)
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1171,11 +1181,13 @@ class VolumeClient(CephfsClient["Module"]):
                             'normalization': normalization,
                             'casesensitive': casesensitive,
                         }
+                        if namespace_isolated:
+                            attrs['pool_namespace'] = f'{self.volspec.fs_namespace}_{groupname}'
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive, namespace_isolated)
                     else:
                         raise
         except VolumeException as ve:
