@@ -516,8 +516,10 @@ class Batch(object):
                 if fast_alloc:
                     osd.add_fast_device(*fast_alloc, type_=fast_type)
 
-            if very_fast_devices and self.args.objectstore == 'bluestore':
-                osd.add_very_fast_device(*very_fast_allocations.pop())
+                if very_fast_devices and self.args.objectstore == 'bluestore':
+                    very_fast_alloc = very_fast_allocations.pop() if very_fast_allocations else None
+                    if very_fast_alloc:
+                        osd.add_very_fast_device(*very_fast_alloc)
         return plan
 
     def fast_allocations(self, devices: List[device.Device], requested_osds: int, new_osds: int, type_: str) -> List[Tuple[str, float, disk.Size, int]]:
