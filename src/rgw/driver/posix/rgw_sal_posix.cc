@@ -1540,7 +1540,14 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
     }
     bufferlist bl;
     if (rgw::sal::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-    //  cur_version.reset();
+      uint16_t flags = 0;
+      ceph::decode(flags, bl);
+      if (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+        ldpp_dout(dpp, 0) << "ERROR: a delete marker, returning ENOENT "
+                          << get_name() << dendl;
+        cur_version.reset();
+        return -ENOENT;
+      }
     }
   }
 
@@ -1683,7 +1690,7 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
                                           optional_yield y,
                                           std::unique_ptr<File>& marker,
-                                          std::string& name)
+                                          const std::string &name)
 {
   // Create as temporary file first
   int ret = marker->create(dpp, /*existed=*/nullptr, /*temp_file=*/true);
