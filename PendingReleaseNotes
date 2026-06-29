@@ -1,3 +1,5 @@
+* DASHBOARD: Added support for RGW zonegroup hostnames and wildcard certificates for virtual-host-style bucket access
+
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
   legacy string-based parameters with strongly-typed ClsMethod structs. C++
