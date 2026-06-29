@@ -13,7 +13,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
+import { NvmeofGatewayGroup, NvmeofSubsystem } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -24,6 +24,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -194,16 +195,42 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       spec: { group }
     } = selectedGroup;
 
-    const disableForm = selectedGroup.subSystemCount > 0 || !group;
+    if (!group) {
+      return;
+    }
 
+    // Fetch actual subsystem list to decide which modal to show
+    this.nvmeofService
+      .listSubsystems(group)
+      .pipe(catchError(() => of([])))
+      .subscribe((subsystems: NvmeofSubsystem[]) => {
+        let subsList: NvmeofSubsystem[] = [];
+        if (subsystems) {
+          const rawList = Array.isArray(subsystems) ? subsystems : [subsystems];
+          subsList = rawList.filter((subsystem: NvmeofSubsystem) => subsystem && subsystem.nqn);
+        }
+
+        if (subsList.length > 0) {
+          this.modalService.show(NvmeofGatewayGroupDeleteGuardModalComponent, {
+            gatewayName: group,
+            connectedSubsystems: subsList.map((subsystem: NvmeofSubsystem) => ({
+              nqn: subsystem.nqn
+            }))
+          });
+        } else {
+          // No subsystems — show the regular delete confirmation modal
+          this.showDeleteConfirmationModal(selectedGroup, serviceName);
+        }
+      });
+  }
+
+  private showDeleteConfirmationModal(selectedGroup: CephServiceSpec, serviceName: string) {
     this.modalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
       itemDescription: $localize`gateway group`,
       bodyTemplate: this.deleteTpl,
       itemNames: [selectedGroup.spec.group],
       bodyContext: {
-        disableForm,
-        subsystemCount: selectedGroup.subSystemCount,
         deletionMessage: $localize`Deleting <strong>${selectedGroup.spec.group}</strong> will remove all associated subsystems and may disrupt traffic routing for services relying on it. This action cannot be undone.`
       },
       submitActionObservable: () => {
