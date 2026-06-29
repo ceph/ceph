@@ -1179,6 +1179,8 @@ private:
   // -- client caps --
   uint64_t last_cap_id = 0;
 
+  uint64_t num_backend_fetching = 0;  // count of in-flight background dirfrag fetches
+
   std::map<ceph_tid_t, discover_info_t> discovers;
   ceph_tid_t discover_last_tid = 0;
 

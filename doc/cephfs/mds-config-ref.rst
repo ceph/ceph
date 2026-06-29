@@ -7,6 +7,8 @@
 .. confval:: mds_cache_mid
 .. confval:: mds_allow_batched_ops
 .. confval:: mds_dir_max_commit_size
+.. confval:: mds_dir_prefetch_backend
+.. confval:: mds_dir_prefetch_backend_max
 .. confval:: mds_dir_max_entries
 .. confval:: mds_decay_halflife
 .. confval:: mds_beacon_interval
