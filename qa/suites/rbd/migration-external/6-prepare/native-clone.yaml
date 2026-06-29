@@ -22,8 +22,11 @@ tasks:
         - rbd --cluster cluster2 clone client.0.2-src@snap client.0.2
         - rbd --cluster cluster2 bench --io-type write --io-pattern rand --io-size 16K --io-threads 1 --io-total 2M client.0.2
         - rbd --cluster cluster2 snap create client.0.2@snap
+        - ceph --cluster cluster2 auth caps client.0 mon 'profile rbd' mgr 'profile rbd-read-only' osd 'profile rbd-read-only'
   - exec:
       cluster1.client.0:
-        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.admin","pool_name":"rbd","image_name":"client.0.0","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.0
-        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.admin","pool_name":"rbd","image_name":"client.0.1","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.1
-        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.admin","pool_name":"rbd","image_name":"client.0.2","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.2
+        - ceph --cluster cluster2 auth get client.0 -o /etc/ceph/cluster2.client.0.keyring
+        - ceph --cluster cluster1 auth caps client.0 mon 'profile rbd' mgr 'profile rbd' osd 'profile rbd'
+        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.0","pool_name":"rbd","image_name":"client.0.0","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.0
+        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.0","pool_name":"rbd","image_name":"client.0.1","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.1
+        - echo '{"type":"native","cluster_name":"cluster2","client_name":"client.0","pool_name":"rbd","image_name":"client.0.2","snap_name":"snap"}' | rbd --cluster cluster1 migration prepare --import-only --source-spec-path - client.0.2
