@@ -5,6 +5,14 @@ export class ConfigurationPageHelper extends PageHelper {
     index: { url: '#/configuration', id: 'cd-configuration' }
   };
 
+  private waitForEditForm(name: string) {
+    cy.contains('h3', `Edit ${name}`).should('be.visible');
+  }
+
+  private getSectionInput(section: string) {
+    return cy.get(`input#${section}`);
+  }
+
   /**
    * Clears out all the values in a config to reset before and after testing
    * Does not work for configs with checkbox only, possible future PR
@@ -14,16 +22,16 @@ export class ConfigurationPageHelper extends PageHelper {
     const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
     this.getFirstTableCell(name).click();
     cy.contains('button', 'Edit').click();
-    // Waits for the data to load
-    cy.contains('.card-header', `Edit ${name}`);
+    this.waitForEditForm(name);
 
     for (const i of valList) {
-      cy.get(`#${i}`).clear();
+      this.getSectionInput(i).clear({ force: true }).blur({ force: true });
     }
     // Clicks save button and checks that values are not present for the selected config
     cy.get('[data-testid=submitBtn]').click();
 
-    cy.wait(3 * 1000);
+    cy.url().should('include', '#/configuration');
+    cy.get(this.pages.index.id);
 
     this.clearFilter();
 
@@ -54,18 +62,18 @@ export class ConfigurationPageHelper extends PageHelper {
     this.getFirstTableCell(name).click();
     cy.contains('button', 'Edit').click();
 
-    // Waits for data to load
-    cy.contains('.card-header', `Edit ${name}`);
+    this.waitForEditForm(name);
 
     values.forEach((valtuple) => {
       // Finds desired value based off given list
-      cy.get(`#${valtuple[0]}`).type(valtuple[1]); // of values and inserts the given number for the value
+      this.getSectionInput(valtuple[0]).type(valtuple[1]);
     });
 
     // Clicks save button then waits until the desired config is visible, clicks it,
     // then checks that each desired value appears with the desired number
     cy.get('[data-testid=submitBtn]').click();
-    cy.wait(3 * 1000);
+    cy.url().should('include', '#/configuration');
+    cy.get(this.pages.index.id);
 
     // Enter config setting name into filter box
     this.searchTable(name, 100);
