@@ -617,16 +617,9 @@ public:
 	/* do nothing */
 	return 0;
       }
-      ulk.unlock();
       auto txn = b->env->getRWTransaction();
       for (const auto& ev : evec) {
 	using EventType = Notifiable::EventType;
-	/*
-	std::string_view nil{""};
-	std::cout << fmt::format("notify {} {}!",
-				 ev.name ? *ev.name : nil,
-				 uint32_t(ev.type))
-				 << std::endl; */
 	switch (ev.type)
 	{
 	case EventType::ADD:
@@ -664,10 +657,11 @@ public:
 	  /* yikes, cache blown */
 	  lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
 	    << " bucket=" << b->name << dendl;
-	  ulk.lock();
 	  mdb_drop(*txn, b->dbi, 0);
 	  txn->commit();
 	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+	  ulk.unlock();
+	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0; /* don't process any more events in this batch */
 	}
 	  break;
@@ -677,6 +671,7 @@ public:
 	}
       } /* all events */
       txn->commit();
+      ulk.unlock();
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
     return rc;
