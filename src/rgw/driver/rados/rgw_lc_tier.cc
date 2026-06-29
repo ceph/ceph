@@ -77,9 +77,9 @@ WRITE_CLASS_ENCODER(rgw_lc_multipart_upload_info)
 
 static inline string get_key_instance(const rgw_obj_key& key)
 {
-  // if non-current entry, add versionID to the
-  // transitioned object name including "null".
-  if (!key.instance.empty()) {
+  // if non-current entry, add the encoded version id to the
+  // transitioned object name.
+  if (key.need_to_encode_instance()) {
     return "-" + key.instance;
   }
   return "";
