@@ -78,6 +78,7 @@ Synopsis
         [--dedup_chunk_size <bytes>]
         [--timestamps]
         [--migrate-pool]
+        [--migration-enable-ec-optmizations]
         [--initial-migration-delay <seconds>]
         [--migration-interval <seconds>]
         [--migration-pg-count <pg_num>]
@@ -167,6 +168,10 @@ Pool Migration
 
         This will migrate all objects from the original pool to a new pool which has the same name as
         the original pool, followed by a migration suffix.
+
+``--migration-enable-ec-optmizations``
+    Enable erasure code optimizations on the migration target pool.
+    Pool type must be EC, will have no effect if specified on a non-EC pool.
 
 ``--initial-migration-delay <seconds>``
     How long to wait in seconds after the test has began to
@@ -432,6 +437,7 @@ Pool migration test::
     ceph_test_rados \
       --pool testpool \
       --migrate-pool \
+      --migration-enable-ec-optmizations \
       --migration-pg-count 16 \
       --migration-interval 30 \
       --initial-migration-delay 20 \
