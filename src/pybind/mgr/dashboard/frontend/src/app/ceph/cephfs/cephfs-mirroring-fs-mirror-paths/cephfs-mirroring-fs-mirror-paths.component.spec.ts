@@ -1,12 +1,18 @@
+declare const jest: any;
+
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
-import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths.component';
+import { HttpClientModule } from '@angular/common/http';
+import { RouterTestingModule } from '@angular/router/testing';
+import { SharedModule } from '~/app/shared/shared.module';
 
 describe('CephfsMirroringFsMirrorPathsComponent', () => {
   let component: CephfsMirroringFsMirrorPathsComponent;
@@ -51,9 +57,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
               name: 'snap-last',
               sync_time_stamp: '1583.101609s'
             },
-            snaps_synced: 10,
-            snaps_deleted: 2,
-            snaps_renamed: 1
+            snaps_synced: 10
           }
         }
       },
@@ -80,17 +84,42 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
               id: 2,
               name: 'snap-last-2'
             },
-            snaps_synced: 5,
-            snaps_deleted: 1
+            snaps_synced: 5
           }
         }
       }
     }
   };
 
+  const mockSchedulePolicies = [
+    {
+      path: '/path1',
+      schedule: '1h',
+      start: '2024-01-01T00:00:00Z',
+      retention: { h: 24, d: 7 },
+      active: true,
+      fs: 'test-fs',
+      last: '2024-01-01T01:00:00Z'
+    },
+    {
+      path: '/path1',
+      schedule: '1d',
+      start: '2024-01-01T00:00:00Z',
+      retention: { d: 30 },
+      active: false,
+      fs: 'test-fs'
+    }
+  ];
+
   beforeEach(async () => {
     const cephfsServiceMock = {
       getMirrorStatus: jest.fn()
+    };
+
+    const snapshotScheduleServiceMock = {
+      getSnapshotSchedule: jest.fn(),
+      parseScheduleCopy: jest.fn((schedule: string) => schedule),
+      delete: jest.fn()
     };
 
     const formatterServiceMock = {
@@ -122,6 +151,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           useValue: cephfsServiceMock
         },
         {
+          provide: CephfsSnapshotScheduleService,
+          useValue: snapshotScheduleServiceMock
+        },
+        {
           provide: FormatterService,
           useValue: formatterServiceMock
         },
@@ -134,7 +167,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           }
         }
       ],
-      schemas: [NO_ERRORS_SCHEMA]
+      schemas: [NO_ERRORS_SCHEMA],
+      imports: [HttpClientModule, RouterTestingModule, SharedModule]
     }).compileComponents();
 
     cephfsService = TestBed.inject(CephfsService);
@@ -190,8 +224,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].lastSyncedSnapshot).toBe('snap-last');
       expect(result[0].lastSyncedTime).toBe('1583.101609s');
       expect(result[0].snapshotCount).toBe(10);
-      expect(result[0].checkpointCount).toBe(2);
-      expect(result[0].renamedSnapshotCount).toBe(1);
       expect(result[0].filesSynced).toBe(100);
       expect(result[0].totalFiles).toBe(200);
       expect(result[0].syncProgress).toBe(50);
@@ -207,7 +239,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[1].currentSyncSnapshot).toBe('snap-current-2');
       expect(result[1].lastSyncedSnapshot).toBe('snap-last-2');
       expect(result[1].snapshotCount).toBe(5);
-      expect(result[1].checkpointCount).toBe(1);
       expect(result[1].filesSynced).toBe(50);
       expect(result[1].totalFiles).toBe(100);
       expect(result[1].bytesSynced).toBe(1073741824);
@@ -246,7 +277,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].currentSyncSnapshot).toBe('-');
       expect(result[0].lastSyncedSnapshot).toBe('-');
       expect(result[0].snapshotCount).toBe(0);
-      expect(result[0].checkpointCount).toBe(0);
       expect(result[0].syncProgress).toBe(0);
     });
   });
@@ -444,7 +474,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   });
 
   describe('onPathClick', () => {
-    it('should set selected path and open side panel', () => {
+    it('should set selected path and open side panel', fakeAsync(() => {
       const mockPath = {
         path: '/test',
         syncStatus: 'syncing' as const,
@@ -453,10 +483,11 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       };
 
       component.onPathClick(mockPath as any);
+      tick();
 
       expect(component.selectedPath).toBe(mockPath);
       expect(component.sidePanelOpen).toBe(true);
-    });
+    }));
   });
 
   describe('closeSidePanel', () => {
@@ -478,6 +509,516 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       component.selection = mockSelection;
 
       expect(component.selection).toBe(mockSelection);
+    });
+  });
+
+  describe('Schedule Policy Tests', () => {
+    let snapshotScheduleService: any;
+
+    beforeEach(() => {
+      snapshotScheduleService = TestBed.inject(CephfsSnapshotScheduleService);
+    });
+
+    describe('loadSchedulePolicies', () => {
+      it('should load schedule policies for a path', () => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/path1',
+          'test-fs',
+          false
+        );
+        expect(component.schedulePoliciesLoading).toBe(false);
+        expect(component.schedulePolicies.length).toBeGreaterThan(0);
+      });
+
+      it('should set empty array when fsName is empty', () => {
+        component.fsName = '';
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(snapshotScheduleService.getSnapshotSchedule).not.toHaveBeenCalled();
+        expect(component.schedulePolicies).toEqual([]);
+      });
+
+      it('should set empty array when path is empty', () => {
+        component.fsName = 'test-fs';
+
+        component.loadSchedulePolicies('');
+
+        expect(snapshotScheduleService.getSnapshotSchedule).not.toHaveBeenCalled();
+        expect(component.schedulePolicies).toEqual([]);
+      });
+
+      it('should handle error when loading schedule policies', () => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(
+          throwError(() => new Error('API Error'))
+        );
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(component.schedulePoliciesLoading).toBe(false);
+        expect(component.schedulePolicies).toEqual([]);
+      });
+
+      it('should filter policies by path', () => {
+        const policies = [
+          ...mockSchedulePolicies,
+          {
+            path: '/path2',
+            schedule: '1h',
+            start: '2024-01-01T00:00:00Z',
+            retention: {},
+            active: true,
+            fs: 'test-fs'
+          }
+        ];
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(policies));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(component.schedulePolicies.length).toBe(2);
+        expect(component.schedulePolicies.every((p) => p.path === '/path1')).toBe(true);
+      });
+
+      it('should remove duplicate policies', () => {
+        const duplicatePolicies = [
+          ...mockSchedulePolicies,
+          mockSchedulePolicies[0] // duplicate
+        ];
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(duplicatePolicies));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(component.schedulePolicies.length).toBe(2);
+      });
+
+      it('should not update policies if selected path changed', () => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path2' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(component.schedulePoliciesLoading).toBe(false);
+      });
+    });
+
+    describe('removeSchedulePolicy', () => {
+      it('should remove a schedule policy', () => {
+        snapshotScheduleService.delete.mockReturnValue(of({}));
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
+        component.fsName = 'test-fs';
+
+        const policy = {
+          path: '/path1',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          fs: 'test-fs'
+        };
+
+        component.removeSchedulePolicy(policy as any);
+
+        expect(snapshotScheduleService.delete).toHaveBeenCalledWith({
+          path: '/path1',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          fs: 'test-fs'
+        });
+        expect(component.removingSchedule).toBe('');
+      });
+
+      it('should handle error when removing schedule policy', () => {
+        snapshotScheduleService.delete.mockReturnValue(throwError(() => new Error('API Error')));
+        component.fsName = 'test-fs';
+
+        const policy = {
+          path: '/path1',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          fs: 'test-fs'
+        };
+
+        component.removeSchedulePolicy(policy as any);
+
+        expect(component.removingSchedule).toBe('');
+      });
+
+      it('should not remove policy when path is missing', () => {
+        component.fsName = 'test-fs';
+
+        const policy = {
+          path: '',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        component.removeSchedulePolicy(policy as any);
+
+        expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
+      });
+
+      it('should not remove policy when schedule is missing', () => {
+        component.fsName = 'test-fs';
+
+        const policy = {
+          path: '/path1',
+          schedule: '',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        component.removeSchedulePolicy(policy as any);
+
+        expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
+      });
+
+      it('should not remove policy when fsName is empty', () => {
+        component.fsName = '';
+
+        const policy = {
+          path: '/path1',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        component.removeSchedulePolicy(policy as any);
+
+        expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('formatScheduleDate', () => {
+      it('should format valid date string', () => {
+        const result = component.formatScheduleDate('2024-01-01T00:00:00Z');
+        expect(result).not.toBe('-');
+      });
+
+      it('should return dash for null value', () => {
+        const result = component.formatScheduleDate(null);
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for undefined value', () => {
+        const result = component.formatScheduleDate(undefined);
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for invalid date string', () => {
+        const result = component.formatScheduleDate('invalid-date');
+        expect(result).toBe('-');
+      });
+
+      it('should format Date object', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const result = component.formatScheduleDate(date);
+        expect(result).not.toBe('-');
+      });
+    });
+
+    describe('getScheduleStatusIcon', () => {
+      it('should return success icon for active schedule', () => {
+        const icon = component.getScheduleStatusIcon(true);
+        expect(icon).toBe('success');
+      });
+
+      it('should return warning icon for inactive schedule', () => {
+        const icon = component.getScheduleStatusIcon(false);
+        expect(icon).toBe('warning');
+      });
+    });
+
+    describe('buildSchedulePolicyViewModel', () => {
+      it('should build view model with all properties', () => {
+        snapshotScheduleService.parseScheduleCopy.mockReturnValue('Every hour');
+        const policy = mockSchedulePolicies[0];
+
+        const result = component['buildSchedulePolicyViewModel'](policy as any);
+
+        expect(result.scheduleCopy).toBe('Every hour');
+        expect(result.retentionCopy).toBeDefined();
+        expect(result.nextSync).toBeDefined();
+        expect(result.scheduleText).toBe('1h');
+        expect(result.retentionText).toBeDefined();
+        expect(result.statusLabel).toBeDefined();
+        expect(result.statusIcon).toBeDefined();
+        expect(result.removeId).toBe('/path1@1h');
+      });
+
+      it('should handle policy with string retention', () => {
+        snapshotScheduleService.parseScheduleCopy.mockReturnValue('Every hour');
+        const policy = {
+          ...mockSchedulePolicies[0],
+          retention: 'invalid'
+        };
+
+        const result = component['buildSchedulePolicyViewModel'](policy as any);
+
+        expect(result.retention).toEqual({});
+      });
+
+      it('should handle policy without retention', () => {
+        snapshotScheduleService.parseScheduleCopy.mockReturnValue('Every hour');
+        const policy = {
+          path: '/path1',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          active: true,
+          fs: 'test-fs'
+        };
+
+        const result = component['buildSchedulePolicyViewModel'](policy as any);
+
+        expect(result.retentionText).toBe('-');
+      });
+    });
+
+    describe('calculateNextSync', () => {
+      it('should calculate next sync for minutely schedule', () => {
+        const policy = {
+          schedule: '30m',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should calculate next sync for hourly schedule', () => {
+        const policy = {
+          schedule: '2h',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should calculate next sync for daily schedule', () => {
+        const policy = {
+          schedule: '1d',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should calculate next sync for weekly schedule', () => {
+        const policy = {
+          schedule: '1w',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should calculate next sync for monthly schedule', () => {
+        const policy = {
+          schedule: '1M',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should calculate next sync for yearly schedule', () => {
+        const policy = {
+          schedule: '1y',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should use last time if available', () => {
+        const policy = {
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          last: '2024-01-01T01:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).not.toBe('-');
+      });
+
+      it('should return dash for missing schedule', () => {
+        const policy = {
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for missing start time', () => {
+        const policy = {
+          schedule: '1h'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for invalid date', () => {
+        const policy = {
+          schedule: '1h',
+          start: 'invalid-date'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for invalid schedule format', () => {
+        const policy = {
+          schedule: 'invalid',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).toBe('-');
+      });
+
+      it('should return dash for unknown schedule unit', () => {
+        const policy = {
+          schedule: '1x',
+          start: '2024-01-01T00:00:00Z'
+        };
+
+        const result = component['calculateNextSync'](policy as any);
+
+        expect(result).toBe('-');
+      });
+    });
+
+    describe('buildRetentionCopy', () => {
+      it('should build retention copy for hourly retention', () => {
+        const retention = { h: 24 };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result).toContain('24 hourly');
+      });
+
+      it('should build retention copy for daily retention', () => {
+        const retention = { d: 7 };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result).toContain('7 daily');
+      });
+
+      it('should build retention copy for weekly retention', () => {
+        const retention = { w: 4 };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result).toContain('4 weekly');
+      });
+
+      it('should build retention copy for monthly retention', () => {
+        const retention = { M: 12 };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result).toContain('12 monthly');
+      });
+
+      it('should build retention copy for multiple retention periods', () => {
+        const retention = { h: 24, d: 7, w: 4 };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result.length).toBe(3);
+      });
+
+      it('should return empty array for empty retention', () => {
+        const retention = {};
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result).toEqual([]);
+      });
+
+      it('should return empty array for undefined retention', () => {
+        const result = component['buildRetentionCopy'](undefined);
+
+        expect(result).toEqual([]);
+      });
+
+      it('should filter out null retention values', () => {
+        const retention = { h: 24, d: null as any };
+
+        const result = component['buildRetentionCopy'](retention);
+
+        expect(result.length).toBe(1);
+      });
+    });
+
+    describe('closeSidePanel with schedule policies', () => {
+      it('should clear schedule policies when closing side panel', () => {
+        component.sidePanelOpen = true;
+        component.selectedPath = {} as any;
+        component.schedulePolicies = mockSchedulePolicies as any;
+        component.schedulePoliciesLoading = true;
+        component.removingSchedule = 'test';
+
+        component.closeSidePanel();
+
+        expect(component.sidePanelOpen).toBe(false);
+        expect(component.selectedPath).toBeNull();
+        expect(component.schedulePolicies).toEqual([]);
+        expect(component.schedulePoliciesLoading).toBe(false);
+        expect(component.removingSchedule).toBe('');
+      });
+    });
+
+    describe('onPathClick with schedule policies', () => {
+      it('should load schedule policies when path is clicked', fakeAsync(() => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
+        cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+        component.fsName = 'test-fs';
+
+        const mockPath = {
+          path: '/path1',
+          syncStatus: 'syncing' as const,
+          currentSyncSnapshot: 'snap1',
+          lastSyncedSnapshot: 'snap0'
+        };
+
+        component.onPathClick(mockPath as any);
+        tick();
+
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/path1',
+          'test-fs',
+          false
+        );
+      }));
     });
   });
 });
