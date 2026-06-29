@@ -498,6 +498,7 @@ void usage(const char *prog)
   cout << "        [--dedup_chunk_size <bytes>]" << std::endl;
   cout << "        [--timestamps]" << std::endl;
   cout << "        [--migrate-pool]" << std::endl;
+  cout << "        [--migration-enable-ec-optmizations]" << std::endl;
   cout << "        [--initial-migration-delay <int>]" << std::endl;
   cout << "        [--migration-interval <int>]" << std::endl;
   cout << "        [--migration-pg-count <int>]" << std::endl;
@@ -579,6 +580,7 @@ int main(int argc, char **argv)
   string chunk_size = "";
   size_t max_attr_len = 20000;
   bool migrate_pool = false;
+  bool migration_ec_opts = false;
   int migration_interval = 60;
   std::optional<int> migration_pg_num;
   int initial_migration_delay = 0;
@@ -696,6 +698,8 @@ int main(int argc, char **argv)
       timestamp = true;
     } else if (strcmp(argv[i], "--migrate-pool") == 0) {
       migrate_pool = true;
+    } else if (strcmp(argv[i], "--migration-enable-ec-optimizations") == 0) {
+      migration_ec_opts = true;
     } else if (strcmp(argv[i], "--initial-migration-delay") == 0) {
       initial_migration_delay = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--migration-interval") == 0) {
@@ -779,6 +783,7 @@ int main(int argc, char **argv)
     chunk_size,
     max_attr_len,
     migrate_pool,
+    migration_ec_opts,
     migration_interval,
     migration_pg_num,
     initial_migration_delay,

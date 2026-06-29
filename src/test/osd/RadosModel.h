@@ -234,6 +234,7 @@ public:
   std::string chunk_algo;
   std::string chunk_size;
   const bool migrate_pool;
+  const bool migration_ec_opts;
   const int migration_interval;
   std::optional<int> migration_pg_num;
   int initial_migration_delay;
@@ -255,6 +256,7 @@ public:
 		   std::string chunk_size,
 		   size_t max_attr_len,
 		   const bool migrate_pool,
+		   const bool migration_ec_opts,
 		   const uint8_t migration_interval,
 		   std::optional<int> migration_pg_num,
 		   uint8_t initial_migration_delay,
@@ -281,6 +283,7 @@ public:
     chunk_algo(chunk_algo),
     chunk_size(chunk_size),
     migrate_pool(migrate_pool),
+    migration_ec_opts(migration_ec_opts),
     migration_interval(migration_interval),
     migration_pg_num(migration_pg_num),
     initial_migration_delay(initial_migration_delay)
@@ -818,11 +821,12 @@ public:
     return (outbl.to_str().contains("Pool migration"));
   }
 
-  void start_pool_migration(const std::string &source_name, const std::string &target_name, const int pg_num) {
+  void start_pool_migration(const std::string &source_name, const std::string &target_name,
+                            const int pg_num, bool enable_ec_optimizations) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     std::ostringstream oss;
-    messaging::osd::OSDPoolMigrateRequest pool_mig_request{target_name, source_name, pg_num};
-
+    messaging::osd::OSDPoolMigrateRequest pool_mig_request{target_name, source_name,
+      pg_num, enable_ec_optimizations, true};
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
 
@@ -857,7 +861,7 @@ public:
           migration_pg_num.value() : initial_pg_num;
         cout_prefix() << __func__ << " starting new pool migration from "
                       << pool_name << " to " << target_pool_name << std::endl;
-        start_pool_migration(pool_name, target_pool_name, pg_num);
+        start_pool_migration(pool_name, target_pool_name, pg_num, migration_ec_opts);
         needs_wait = true;
       } else {
         pool_name = target_pool_name;
