@@ -30,6 +30,13 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* CephFS: The ``fs subvolumegroup create`` command now supports the
+  ``--namespace-isolated`` option. When a subvolume group is created with this flag,
+  the group directory is placed in a separate RADOS namespace, and all subvolumes
+  subsequently created within that group automatically inherit RADOS namespace
+  isolation without needing the ``--namespace-isolated`` flag on each
+  ``fs subvolume create`` invocation. This provides per-tenant RADOS-level security
+  isolation at the subvolume group granularity.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
