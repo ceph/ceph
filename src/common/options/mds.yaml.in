@@ -460,6 +460,26 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_dir_prefetch_backend
+  type: bool
+  level: advanced
+  desc: When mds_dir_prefetch is false, additionally launch a full background
+    dirfrag fetch to warm the cache while the operation completes via keyed fetch
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dir_prefetch_backend_max
+  type: uint
+  level: advanced
+  desc: Maximum number of concurrent background dirfrag prefetches when
+    mds_dir_prefetch_backend is enabled
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_tick_interval
   type: float
   level: advanced

@@ -1583,10 +1583,31 @@ void CDir::fetch(std::string_view dname, snapid_t last,
 
   // FIXME: to fetch a snap dentry, we need to get omap key in range
   //       [(name, last), (name, CEPH_NOSNAP))
-  if (!dname.empty() && last == CEPH_NOSNAP && !g_conf().get_val<bool>("mds_dir_prefetch")) {
+  if (!dname.empty() && last == CEPH_NOSNAP) {
     dentry_key_t key(last, dname, inode->hash_dentry_name(dname));
-    fetch_keys({key}, c);
-    return;
+
+    if (!g_conf().get_val<bool>("mds_dir_prefetch")) {
+      // prefetch disabled: only fetch the requested key
+      fetch_keys({key}, c);
+
+      // backend mode: also launch a background full fetch to warm the cache
+      // (throttled by mds_dir_prefetch_backend_max)
+      if (g_conf().get_val<bool>("mds_dir_prefetch_backend") &&
+	  !state_test(CDir::STATE_FETCHING) &&
+	  mdcache->num_backend_fetching < g_conf().get_val<uint64_t>("mds_dir_prefetch_backend_max")) {
+	auth_pin(this);
+	state_set(CDir::STATE_FETCHING);
+	state_set(CDir::STATE_BACKEND_FETCH);
+	++mdcache->num_backend_fetching;
+	_omap_fetch(nullptr, nullptr);
+
+	if (mdcache->mds->logger)
+	  mdcache->mds->logger->inc(l_mds_dir_fetch_background);
+	mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
+      }
+      return;
+    }
+    // prefetch enabled, backend has no effect — fall through to full fetch
   }
 
   if (c)
@@ -1603,8 +1624,6 @@ void CDir::fetch(std::string_view dname, snapid_t last,
 
   _omap_fetch(nullptr, nullptr);
 
-  if (mdcache->mds->logger)
-    mdcache->mds->logger->inc(l_mds_dir_fetch_complete);
   mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
 }
 
@@ -1658,7 +1677,7 @@ void CDir::fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c)
     }
   }
 
-  if (state_test(CDir::STATE_FETCHING)) {
+  if (state_test(CDir::STATE_FETCHING) && !state_test(CDir::STATE_BACKEND_FETCH)) {
     dout(7) << "fetch keys, waiting for full fetch" << dendl;
     if (c)
       add_waiter(WAIT_COMPLETE, c);
@@ -2229,8 +2248,16 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // mark complete, !fetching
   if (complete) {
+    if (mdcache->mds->logger)
+      mdcache->mds->logger->inc(l_mds_dir_fetch_complete);
     mark_complete();
     state_clear(STATE_FETCHING);
+
+    if (state_test(STATE_BACKEND_FETCH)) {
+      state_clear(STATE_BACKEND_FETCH);
+      --mdcache->num_backend_fetching;
+    }
+
     take_waiting(WAIT_COMPLETE, finished);
   }
 
