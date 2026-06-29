@@ -24,6 +24,7 @@ export interface NvmeofSubsystem {
   gw_group?: string;
   initiator_count?: number;
   has_dhchap_key: boolean;
+  network_mask?: string[];
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {

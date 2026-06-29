@@ -28,7 +28,8 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     enable_ha: true,
     allow_any_host: true,
     gw_group: 'gateway-prod',
-    psk: 'some-key'
+    has_dhchap_key: true,
+    network_mask: []
   };
 
   beforeEach(async () => {
@@ -143,38 +144,23 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(labelTexts).toContain('Serial number');
     expect(labelTexts).toContain('Model Number');
     expect(labelTexts).toContain('Gateway group');
+    expect(labelTexts).toContain('Host access');
+    expect(labelTexts).toContain('Authentication');
+    expect(labelTexts).toContain('Listeners');
     expect(labelTexts).toContain('Maximum Controller Identifier');
     expect(labelTexts).toContain('Minimum Controller Identifier');
     expect(labelTexts).toContain('Namespaces');
     expect(labelTexts).toContain('Maximum allowed namespaces');
   }));
 
-  it('should not display MTLS label in overview details', fakeAsync(() => {
+  it('should display host access and auth state from subsystem data', fakeAsync(() => {
     component.ngOnInit();
     tick();
     fixture.detectChanges();
 
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
-    const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).not.toContain('MTLS');
-  }));
-
-  it('should display hosts allowed from subsystem data', fakeAsync(() => {
-    component.ngOnInit();
-    tick();
-    fixture.detectChanges();
-
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
-    const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).toContain('Any host');
-  }));
-
-  it('should not render Edit link for Hosts allowed', fakeAsync(() => {
-    component.ngOnInit();
-    tick();
-    fixture.detectChanges();
-
-    const editLink = fixture.nativeElement.querySelector('a[cdsLink]');
-    expect(editLink).toBeFalsy();
+    const hostAccessText = fixture.nativeElement.textContent;
+    expect(hostAccessText).toContain('Allow all hosts');
+    expect(hostAccessText).toContain('Bi-directional');
+    expect(hostAccessText).toContain('Edit');
   }));
 });
