@@ -492,3 +492,37 @@ class TestBatchOsd(object):
                                                         '5G',
                                                         1,
                                                         'block_wal')
+
+    def test_multiple_osds_get_wal_devices(self, factory, conf_ceph_stub, mock_device_generator):
+        """
+        Test that when deploying multiple OSDs with wal_devices configured,
+        each OSD gets a WAL device assigned (not just the last one).
+        
+        This test verifies the fix for the bug where the WAL allocation code
+        was outside the OSD iteration loop, causing only the last OSD to
+        receive a WAL device.
+        """
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(2)]
+        very_fast_devs = [mock_device_generator() for _ in range(2)]
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=devs,
+                       db_devices=[],
+                       wal_devices=very_fast_devs,
+                       objectstore='bluestore',
+                       block_db_size=None,
+                       block_db_slots=1,
+                       block_wal_slots=1,
+                       dmcrypt=True,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
+                      )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        
+        assert len(plan) == 2, "Should have 2 OSDs"
+        assert plan[0].very_fast is not None, "First OSD should have a WAL device"
+        assert plan[1].very_fast is not None, "Second OSD should have a WAL device"
