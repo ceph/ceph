@@ -1248,7 +1248,7 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 Usage::
 
     ceph osd pool set <poolname> size|min_size|pg_num|
-    pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|
+    pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|nobackfill|
     hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
     target_max_bytes|target_max_objects|cache_target_dirty_ratio|
     cache_target_dirty_high_ratio|
