@@ -149,7 +149,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
    * 2. ALL delete operations (do NOT use is_delete() here!!!)
    * 3. Truncates that reduce size.
    */
-  invalidates_cache = op.has_source(&source) || op.delete_first || projected_size < orig_size;
+  invalidates_cache = op.has_source(&source) || op.delete_first || (op.truncate && op.truncate->first < orig_size);
 
   op.buffer_updates.to_interval_set(unaligned_ro_writes);
 
@@ -215,7 +215,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
       /* Here we decide if we want to do a conventional write or a parity delta write. */
       if (sinfo.supports_parity_delta_writes() && !object_in_cache &&
-          orig_size == projected_size && !reads.empty()) {
+          orig_size == projected_size && !reads.empty() && !op.truncate) {
 
         shard_id_set read_shards = reads.get_shard_id_set();
         shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
@@ -267,6 +267,15 @@ ECTransaction::WritePlanObj::WritePlanObj(
    * read the existing data on the partial stripe.
    */
   if (op.truncate && op.truncate->first < orig_size) {
+    if (to_read) {
+      ECUtil::shard_extent_set_t truncate_mask(sinfo.get_k_plus_m());
+      sinfo.ro_range_to_shard_extent_set(0, op.truncate->first, truncate_mask);
+      
+      to_read->intersection_of(truncate_mask);
+      if (to_read->empty()) {
+          to_read = std::nullopt;
+      }
+    }
     ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
     uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
     uint64_t next_align = ECUtil::align_next(op.truncate->first);
@@ -294,7 +303,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
       // We only need to update the parity buffer for the write
       for (auto && shard : sinfo.get_parity_shards()) {
-        will_write[shard] = truncate_write;
+        will_write[shard].insert(truncate_write);
       }
     }
   }
@@ -1000,7 +1009,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
   ECUtil::shard_extent_set_t cloneable_range(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(clone_max, cloneable_range);
 
-  if (plan.orig_size < plan.projected_size) {
+  if (op.delete_first || op.truncate || plan.orig_size < plan.projected_size) {
     ECUtil::shard_extent_set_t projected_cloneable_range(sinfo.get_k_plus_m());
     sinfo.ro_size_to_read_mask(plan.projected_size,projected_cloneable_range);
 
