@@ -2037,7 +2037,8 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_nsfs_cache_max_buckets"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lanes"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count")));
+      g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_nsfs_inotify")));
 
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_nsfs_cache_max_users"));

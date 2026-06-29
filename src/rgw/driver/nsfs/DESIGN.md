@@ -134,6 +134,20 @@ Uses `BucketCache<NSFSDriver, NSFSBucket>` (lmdb) from the posix driver
 template. `fill_cache()` recursively traverses the directory tree,
 accumulating path prefixes to reconstruct full object keys.
 
+### Inotify watcher (`rgw_nsfs_inotify`)
+
+The bucket cache can optionally use inotify to detect files created or
+removed in bucket directories by processes outside radosgw (sideloading).
+This is **disabled by default** (`rgw_nsfs_inotify = false`) because in
+single-process deployments every filesystem change made by radosgw
+itself generates a redundant inotify event, adding lock contention and
+wasted I/O.  Enable it only when external tools (cp, rsync, NFS, GPFS
+tools) modify files that should appear as S3 objects without a PUT.
+
+The corresponding posix-backend option is `rgw_posix_inotify`.
+`rgw-vstart.sh` accepts `--with-inotify` to enable it at dev-cluster
+start.
+
 ## GPFS Integration Surface
 
 Portable Linux equivalents are used throughout, with clean substitution
