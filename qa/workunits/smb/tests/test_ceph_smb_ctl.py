@@ -1,3 +1,4 @@
+import pathlib
 import time
 
 import pytest
@@ -8,14 +9,12 @@ import smbutil
 CEPH_SMB_CTL = 'ceph-smb-ctl'
 
 
-@pytest.mark.ceph_smb_ctl_local
-class TestCephSMBCtlLocal:
+class RemoteCtlBase:
+    def _rcontrol(self, smb_cfg, args, **kwargs):
+        raise NotImplementedError()
+
     def test_get_info(self, smb_cfg):
-        jres = cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            [CEPH_SMB_CTL, 'info'],
-            load_json=True,
-        )
+        jres = self._rcontrol(smb_cfg, ['info'], load_json=True)
         assert jres.returncode == 0
         assert jres.obj
         assert 'samba_info' in jres.obj
@@ -23,11 +22,7 @@ class TestCephSMBCtlLocal:
         assert 'clustered' in jres.obj['samba_info']
 
     def test_status_empty(self, smb_cfg):
-        jres = cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            [CEPH_SMB_CTL, 'status'],
-            load_json=True,
-        )
+        jres = self._rcontrol(smb_cfg, ['status'], load_json=True)
         assert jres.returncode == 0
         assert jres.obj
         assert 'server_timestamp' in jres.obj
@@ -41,11 +36,7 @@ class TestCephSMBCtlLocal:
         with smbutil.connection(smb_cfg, share_name) as sharep:
             sharep.listdir()  # trigger a tree connect in client lib
             time.sleep(0.2)
-            jres = cephutil.cephadm_shell_cmd(
-                smb_cfg,
-                [CEPH_SMB_CTL, 'status'],
-                load_json=True,
-            )
+            jres = self._rcontrol(smb_cfg, ['status'], load_json=True)
         assert jres.returncode == 0
         assert jres.obj
         assert 'server_timestamp' in jres.obj
@@ -60,28 +51,23 @@ class TestCephSMBCtlLocal:
 
     def test_config_dump_samba(self, smb_cfg):
         share_name = smbutil.get_shares(smb_cfg)[0]['name']
-        res = cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            [CEPH_SMB_CTL, 'config-dump', 'samba'],
-            capture_output=True,
-            text=True,
+        res = self._rcontrol(
+            smb_cfg, ['config-dump', 'samba'], capture_output=True, text=True
         )
         assert res.returncode == 0
         assert f'[{share_name}]' in res.stdout
 
     def test_config_dump_sambacc(self, smb_cfg):
-        jres = cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            [CEPH_SMB_CTL, 'config-dump', 'sambacc'],
-            load_json=True,
+        jres = self._rcontrol(
+            smb_cfg, ['config-dump', 'sambacc'], load_json=True
         )
         assert jres.returncode == 0
         assert jres.obj
 
     def test_config_dump_cmp_hash(self, smb_cfg):
-        res = cephutil.cephadm_shell_cmd(
+        res = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'config-dump', '--sha256', 'samba'],
+            ['config-dump', '--sha256', 'samba'],
             capture_output=True,
             text=True,
         )
@@ -93,9 +79,9 @@ class TestCephSMBCtlLocal:
         alg, digest = parts[-1].split(':', 1)
         assert alg == 'sha256'
 
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'config-summary', '--sha256', 'samba'],
+            ['config-summary', '--sha256', 'samba'],
             load_json=True,
         )
         assert jres.returncode == 0
@@ -104,9 +90,9 @@ class TestCephSMBCtlLocal:
         assert jres.obj['digest']['config_digest'] == digest
 
     def test_config_shares_list(self, smb_cfg):
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'config-shares-list', 'samba'],
+            ['config-shares-list', 'samba'],
             load_json=True,
         )
         assert jres.returncode == 0
@@ -118,43 +104,77 @@ class TestCephSMBCtlLocal:
         # the shares list in sambacc should always map exactly to the
         # shares list in samba itself
         prev_names = jres.obj
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'config-shares-list', 'sambacc'],
+            ['config-shares-list', 'sambacc'],
             load_json=True,
         )
         assert jres.returncode == 0
         assert sorted(jres.obj) == sorted(prev_names)
 
     def test_debug_get_set(self, smb_cfg):
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'get-debug-level', 'smb'],
+            ['get-debug-level', 'smb'],
             load_json=True,
         )
         assert jres.returncode == 0, "get-debug-level smb failed"
         assert "debug_level" in jres.obj
         orig_debug_level = jres.obj["debug_level"]
 
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'set-debug-level', 'smb', "10"],
+            ['set-debug-level', 'smb', "10"],
             load_json=True,
         )
         assert jres.returncode == 0, "set-debug-level smb 10 failed"
 
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'get-debug-level', 'smb'],
+            ['get-debug-level', 'smb'],
             load_json=True,
         )
         assert jres.returncode == 0, "get-debug-level smb failed"
         assert "debug_level" in jres.obj
         assert jres.obj["debug_level"] == "10"
 
-        jres = cephutil.cephadm_shell_cmd(
+        jres = self._rcontrol(
             smb_cfg,
-            [CEPH_SMB_CTL, 'set-debug-level', 'smb', orig_debug_level],
+            ['set-debug-level', 'smb', orig_debug_level],
             load_json=True,
         )
         assert jres.returncode == 0, "set-debug-level smb orig level failed"
+
+
+@pytest.mark.ceph_smb_ctl_local
+class TestCephSMBCtlLocal(RemoteCtlBase):
+    def _rcontrol(self, smb_cfg, args, **kwargs):
+        return cephutil.cephadm_shell_cmd(
+            smb_cfg,
+            [CEPH_SMB_CTL] + args,
+            **kwargs,
+        )
+
+
+@pytest.mark.ceph_smb_ctl_remote
+class TestCephSMBCtlRemote(RemoteCtlBase):
+    def _rcontrol(self, smb_cfg, args, **kwargs):
+        grpc_host = f"{smb_cfg.server.ip_address}:54445"
+        ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
+        ca_mnt = pathlib.Path('/tls')
+        assert (ca_dir / 'remote-control-client.crt').is_file()
+        assert (ca_dir / 'remote-control-client.key').is_file()
+        assert (ca_dir / 'rcroot.crt').is_file()
+        _args = [
+            CEPH_SMB_CTL,
+            f'--address={grpc_host}',
+            f"--tls-cert={ca_mnt}/remote-control-client.crt",
+            f"--tls-key={ca_mnt}/remote-control-client.key",
+            f"--tls-ca-cert={ca_mnt}/rcroot.crt",
+        ]
+        return cephutil.cephadm_shell_cmd(
+            smb_cfg,
+            _args + args,
+            volumes=[f'{ca_dir}:{ca_mnt}:ro'],
+            **kwargs,
+        )
