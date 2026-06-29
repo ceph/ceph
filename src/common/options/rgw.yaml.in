@@ -4393,6 +4393,17 @@ options:
   default: 3
   services:
   - rgw
+- name: rgw_posix_inotify
+  type: bool
+  level: advanced
+  desc: Enable inotify watcher on bucket directories for sideloaded file detection
+  long_desc: When enabled, the bucket cache uses inotify to detect files created
+    or removed outside radosgw (sideloading).  Disable when no external filesystem
+    changes are expected; this avoids redundant inotify processing of radosgw's own
+    operations.
+  default: false
+  services:
+  - rgw
 - name: rgw_nsfs_base_path
   type: str
   level: advanced
@@ -4450,6 +4461,17 @@ options:
   level: advanced
   desc: Number of lmdb partitions in the ordered listing cache
   default: 3
+  services:
+  - rgw
+- name: rgw_nsfs_inotify
+  type: bool
+  level: advanced
+  desc: Enable inotify watcher on bucket directories for sideloaded file detection
+  long_desc: When enabled, the bucket cache uses inotify to detect files created
+    or removed outside radosgw (sideloading).  Disable when no external filesystem
+    changes are expected; this avoids redundant inotify processing of radosgw's own
+    operations.
+  default: false
   services:
   - rgw
 - name: rgw_nsfs_gpfs_lib_path

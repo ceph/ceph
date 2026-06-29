@@ -67,14 +67,29 @@ namespace file::listing {
       {}
 
     friend class Inotify;
+    friend class NullNotify;
   public:
-    static std::unique_ptr<Notify> factory(Notifiable* n, const std::string& bucket_root);
-    
+    static std::unique_ptr<Notify> factory(Notifiable* n,
+					   const std::string& bucket_root,
+					   bool use_inotify);
+
     virtual int add_watch(const std::string& dname, void* opaque) = 0;
     virtual int remove_watch(const std::string& dname) = 0;
     virtual ~Notify()
       {}
   }; /* Notify */
+
+  class NullNotify : public Notify
+  {
+    NullNotify(Notifiable* n, const std::string& bucket_root)
+      : Notify(n, bucket_root)
+      {}
+
+    friend class Notify;
+  public:
+    int add_watch(const std::string&, void*) override { return 0; }
+    int remove_watch(const std::string&) override { return 0; }
+  }; /* NullNotify */
 
 #ifdef __linux__
   class Inotify : public Notify
