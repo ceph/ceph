@@ -209,6 +209,7 @@ class CherryPyConfig(object):
         self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
             'url_prefix', default=''))
 
+        bind_addr = server_addr
         if server_addr in ['::', '0.0.0.0']:
             server_addr = self.get_mgr_ip()  # type: ignore
         base_url = build_url(
@@ -217,7 +218,7 @@ class CherryPyConfig(object):
             port=server_port,
         )
         uri = f'{base_url}{self.url_prefix}/'
-        return uri, (server_addr, server_port), ssl_info, config
+        return uri, (bind_addr, server_port), ssl_info, config
 
     def await_configuration(self):
         """
