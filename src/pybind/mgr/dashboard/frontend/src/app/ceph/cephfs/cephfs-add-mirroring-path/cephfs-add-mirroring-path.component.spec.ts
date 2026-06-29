@@ -16,7 +16,8 @@ describe('CephfsAddMirroringPathComponent', () => {
   let routerNavigateSpy: jest.Mock;
 
   const cephfsServiceMock = {
-    addMirrorDirectory: jest.fn()
+    addMirrorDirectory: jest.fn(),
+    listDaemonStatus: jest.fn().mockReturnValue(of([]))
   };
 
   const snapScheduleServiceMock = {
@@ -121,6 +122,7 @@ describe('CephfsAddMirroringPathComponent', () => {
         updateValueAndValidity: jest.fn(),
         invalid: false
       },
+      paths: [],
       refreshTrackedPaths: () => of(undefined),
       getSubmitPaths: () => ({ toAdd: [], alreadyMirrored: [] }),
       addTrackedPath: jest.fn(),
@@ -259,6 +261,7 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapScheduleServiceMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]

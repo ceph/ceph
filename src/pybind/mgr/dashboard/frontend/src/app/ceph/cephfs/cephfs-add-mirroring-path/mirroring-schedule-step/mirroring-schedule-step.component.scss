@@ -1,0 +1,13 @@
+cd-mirroring-schedule-step {
+  form {
+    max-width: 50%;
+  }
+
+  .cds--row {
+    margin-inline: 0;
+  }
+
+  cd-date-time-picker [cdsCol] {
+    padding-inline: 0;
+  }
+}

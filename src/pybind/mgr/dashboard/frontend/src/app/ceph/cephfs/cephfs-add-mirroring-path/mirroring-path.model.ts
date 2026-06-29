@@ -23,6 +23,12 @@ export function createPathEntry(expanded = true): PathEntry {
   };
 }
 
+export interface MirroringPathSelection {
+  path: string;
+  subvol?: string;
+  group?: string;
+}
+
 export interface PathSubmitFailure {
   path: string;
   detail: string;

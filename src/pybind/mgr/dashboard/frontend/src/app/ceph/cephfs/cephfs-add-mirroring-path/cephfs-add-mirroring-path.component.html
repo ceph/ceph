@@ -7,9 +7,10 @@
   [descriptionTemplate]="descTpl"
   [isSubmitLoading]="isSubmitLoading"
   progressPosition="top"
-  submitButtonLabel="Add mirror path"
+  submitButtonLabel="Add"
   i18n-submitButtonLabel
   (submitRequested)="onSubmit()"
+  (stepChanged)="onStepChanged($event)"
   (closeRequested)="onCancel()">
   <cd-tearsheet-step>
     <cd-mirroring-paths-step
@@ -24,5 +25,17 @@
       #scheduleStep
       #tearsheetStep>
     </cd-mirroring-schedule-step>
+  </cd-tearsheet-step>
+  <cd-tearsheet-step>
+    <cd-mirroring-review-step
+      #reviewStep
+      #tearsheetStep
+      [destinationCluster]="reviewDestinationCluster"
+      [destinationFilesystem]="reviewDestinationFs"
+      [totalPaths]="reviewTotalPaths"
+      [snapshotInterval]="reviewSnapshotInterval"
+      [retention]="reviewRetention"
+      [existingScheduleCount]="reviewExistingScheduleCount">
+    </cd-mirroring-review-step>
   </cd-tearsheet-step>
 </cd-tearsheet>
