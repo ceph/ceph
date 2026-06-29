@@ -2671,6 +2671,29 @@ mirror_group_resync()
     run_cmd "rbd --cluster=${cluster} mirror group resync ${group_spec}"
 }
 
+group_resync_marker_exists()
+{
+    local cluster=$1 ; shift
+    local pool_spec=$1 ; shift
+    local group_spec=$1 ; shift
+
+    local group_id
+    get_id_from_group_info "${cluster}" "${group_spec}" group_id "run_admin_cmd" || { fail; return 1; }
+
+    local group_header_oid="rbd_group_header.${group_id}"
+
+    # pool_spec may be "pool" or "pool/namespace", rados (unlike rbd) does
+    # not understand the combined pool/namespace spec, so it must be split
+    # and the namespace passed separately via --namespace.
+    local pool="${pool_spec%%/*}"
+    if [[ "${pool_spec}" == */* ]]; then
+        local namespace="${pool_spec#*/}"
+        try_admin_cmd "rados --cluster ${cluster} --pool ${pool} --namespace ${namespace} getomapval ${group_header_oid} metadata_rbd_group_resync >/dev/null"
+    else
+        try_admin_cmd "rados --cluster ${cluster} --pool ${pool} getomapval ${group_header_oid} metadata_rbd_group_resync >/dev/null"
+    fi
+}
+
 test_group_present()
 {
     local cluster=$1
