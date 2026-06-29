@@ -192,7 +192,7 @@ class FSStatus(RunCephCmd):
 
     def get_mds_addr(self, name):
         """
-        Return the instance addr as a string, like "10.214.133.138:6807\/10825"
+        Return the instance addr as a string, like "10.214.133.138:6807/10825"
         """
         info = self.get_mds(name)
         if info:
