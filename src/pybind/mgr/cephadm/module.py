@@ -21,7 +21,7 @@ from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 from ceph.deployment.tls_utils import (
     SSLConfigException,
     contains_private_key,
-    is_fullchain_pem,
+    contains_multiple_pem_blocks,
     parse_tls_pem_bundle
 )
 
@@ -4146,7 +4146,7 @@ Then run the following:
                 'Please either supply the fullchain PEM without a separate key, '
                 'or supply a plain certificate PEM with the key separately.'
             )
-        if contains_private_key(cert) or is_fullchain_pem(cert):
+        if contains_private_key(cert) or contains_multiple_pem_blocks(cert):
             try:
                 cert, split_key = parse_tls_pem_bundle(cert)
             except SSLConfigException as exc:
@@ -4217,7 +4217,7 @@ Then run the following:
                 "'ceph orch certmgr cert set', or provide the bundle through a "
                 'service spec field that supports fullchain PEM input.'
             )
-        if is_fullchain_pem(cert):
+        if contains_multiple_pem_blocks(cert):
             try:
                 cert, _ = parse_tls_pem_bundle(cert)
             except SSLConfigException as exc:

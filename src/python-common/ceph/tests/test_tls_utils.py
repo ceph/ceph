@@ -397,23 +397,23 @@ class TestParseTlsPemBundle:
 
 
 class TestPemDetectors:
-    """Unit tests for the is_fullchain_pem / contains_private_key helpers."""
+    """Unit tests for the contains_multiple_pem_blocks / contains_private_key helpers."""
 
     def test_is_fullchain_true_for_key_plus_cert(self):
-        from ceph.deployment.tls_utils import is_fullchain_pem
-        assert is_fullchain_pem(_fullchain_pkcs1()) is True
+        from ceph.deployment.tls_utils import contains_multiple_pem_blocks
+        assert contains_multiple_pem_blocks(_fullchain_pkcs1()) is True
 
     def test_is_fullchain_true_for_multiple_certs(self):
-        from ceph.deployment.tls_utils import is_fullchain_pem
-        assert is_fullchain_pem(_cert_chain_only()) is True
+        from ceph.deployment.tls_utils import contains_multiple_pem_blocks
+        assert contains_multiple_pem_blocks(_cert_chain_only()) is True
 
     def test_is_fullchain_false_for_single_cert(self):
-        from ceph.deployment.tls_utils import is_fullchain_pem
-        assert is_fullchain_pem(LEAF_CERT) is False
+        from ceph.deployment.tls_utils import contains_multiple_pem_blocks
+        assert contains_multiple_pem_blocks(LEAF_CERT) is False
 
     def test_is_fullchain_false_for_single_key(self):
-        from ceph.deployment.tls_utils import is_fullchain_pem
-        assert is_fullchain_pem(LEAF_KEY_PKCS1) is False
+        from ceph.deployment.tls_utils import contains_multiple_pem_blocks
+        assert contains_multiple_pem_blocks(LEAF_KEY_PKCS1) is False
 
     def test_contains_private_key_pkcs1(self):
         from ceph.deployment.tls_utils import contains_private_key

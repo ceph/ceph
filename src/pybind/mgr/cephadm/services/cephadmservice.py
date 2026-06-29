@@ -47,7 +47,7 @@ from ceph.deployment.tls_utils import (
     extract_ips_and_fqdns_from_cert,
     parse_tls_pem_bundle,
     contains_private_key,
-    is_fullchain_pem,
+    contains_multiple_pem_blocks,
     SSLConfigException,
 )
 
@@ -502,7 +502,7 @@ class CephadmService(metaclass=ABCMeta):
                 f"or a plain certificate PEM with the key field."
             )
             return EMPTY_TLS_CREDENTIALS
-        if cert and (contains_private_key(cert) or is_fullchain_pem(cert)):
+        if cert and (contains_private_key(cert) or contains_multiple_pem_blocks(cert)):
             try:
                 cert, split_key = parse_tls_pem_bundle(cert)
                 logger.debug(

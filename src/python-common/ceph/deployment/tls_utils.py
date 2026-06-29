@@ -167,7 +167,7 @@ def parse_tls_pem_bundle(pem_data: str) -> Tuple[str, str]:
     return cert_chain_pem, private_key_pem
 
 
-def is_fullchain_pem(pem_data: str) -> bool:
+def contains_multiple_pem_blocks(pem_data: str) -> bool:
     """Return *True* if *pem_data* contains more than one PEM block.
 
     A "fullchain" PEM is any blob that bundles multiple PEM objects —
@@ -283,7 +283,7 @@ def get_certificate_info(cert_data: str, include_details: bool = False) -> Dict[
         remaining_days = (cert.not_valid_after - datetime.utcnow()).days
         info = {
             'subject': {get_oid_name(attr.oid): attr.value for attr in cert.subject},
-            'contains_chain': is_fullchain_pem(cert_data),
+            'contains_chain': contains_multiple_pem_blocks(cert_data),
             'validity': {
                 'remaining_days': remaining_days,
             }

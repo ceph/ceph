@@ -546,7 +546,7 @@ class TestCertStoreSetPairFullchain:
     @mock.patch('cephadm.module.CephadmOrchestrator.set_store')
     def test_cert_chain_only_with_separate_key_is_normalized(self, _set_store, cephadm_module):
         """A multi-block cert chain (no embedded key) + a separate --key is
-        now routed through parse_tls_pem_bundle (is_fullchain_pem() check),
+        now routed through parse_tls_pem_bundle (contains_multiple_pem_blocks() check),
         not just contains_private_key(). For well-formed chains the stored
         output is unchanged; see test_malformed_multiblock_cert_rejected_via_cli
         below for the case where this actually changes behaviour.
@@ -577,7 +577,7 @@ class TestCertStoreSetPairFullchain:
         PUBLIC KEY blocks) must be rejected with a clear error instead of
         being silently passed through to check_certificate_state as if it
         were valid cert data. This is the concrete case where checking
-        is_fullchain_pem() (in addition to contains_private_key()) changes
+        contains_multiple_pem_blocks() (in addition to contains_private_key()) changes
         behaviour: previously, since no PRIVATE KEY block is present, this
         blob skipped fullchain handling entirely and was forwarded unchanged.
         """
@@ -833,7 +833,7 @@ class TestGetCertificatesFromSpecFullchain:
     def test_spec_cert_chain_only_with_separate_key_is_normalized(self, _set_store, cephadm_module):
         """A multi-block cert chain (no embedded key) in the spec's cert field,
         with a separate key field set, is now routed through
-        parse_tls_pem_bundle via the is_fullchain_pem() check, not just
+        parse_tls_pem_bundle via the contains_multiple_pem_blocks() check, not just
         contains_private_key(). For well-formed chains the output is
         unchanged; see test_spec_malformed_multiblock_cert_returns_empty
         below for the case where this actually changes behaviour.
@@ -865,7 +865,7 @@ class TestGetCertificatesFromSpecFullchain:
         """A multi-block spec cert field with zero CERTIFICATE blocks must be
         rejected (EMPTY_TLS_CREDENTIALS) rather than silently accepted as-is.
         Previously this slipped past fullchain handling entirely because
-        contains_private_key() alone was checked, not is_fullchain_pem().
+        contains_private_key() alone was checked, not contains_multiple_pem_blocks().
         """
         from cephadm.tlsobject_types import EMPTY_TLS_CREDENTIALS
         svc = self._make_service(cephadm_module)

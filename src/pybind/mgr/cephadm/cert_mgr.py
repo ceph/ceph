@@ -10,7 +10,7 @@ from ceph.deployment.tls_utils import (
     get_private_key_info,
     parse_tls_pem_bundle,
     contains_private_key,
-    is_fullchain_pem,
+    contains_multiple_pem_blocks,
     SSLConfigException
 )
 from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
@@ -425,7 +425,7 @@ class CertMgr:
                 no CERTIFICATE block, an encrypted/unsupported private key, or a
                 private key that does not match the leaf certificate.
         """
-        if contains_private_key(pem_data) or is_fullchain_pem(pem_data):
+        if contains_private_key(pem_data) or contains_multiple_pem_blocks(pem_data):
             # Combined PEM bundle or multi-block cert chain: parse and normalize before storing.
             cert_chain, private_key = parse_tls_pem_bundle(pem_data)
             logger.debug(
