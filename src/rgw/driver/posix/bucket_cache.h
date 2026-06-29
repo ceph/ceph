@@ -329,13 +329,14 @@ struct BucketCache : public Notifiable
 public:
   BucketCache(D* driver, std::string bucket_root, std::string database_root,
 	      uint32_t max_buckets=100, uint8_t max_lanes=3,
-	      uint8_t max_partitions=3, uint8_t lmdb_count=3)
+	      uint8_t max_partitions=3, uint8_t lmdb_count=3,
+	      bool use_inotify=false)
     : driver(driver), bucket_root(bucket_root), max_buckets(max_buckets),
       lru(max_lanes, max_buckets/max_lanes),
       cache(max_lanes, max_buckets/max_partitions),
       rp(bucket_root),
       lmdbs(database_root, lmdb_count, max_buckets),
-      un(Notify::factory(this, bucket_root))
+      un(Notify::factory(this, bucket_root, use_inotify))
     {
       if (! (sf::exists(rp) && sf::is_directory(rp))) {
 	std::cerr << fmt::format("{} bucket root {} invalid", __func__,
