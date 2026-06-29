@@ -68,21 +68,38 @@ struct results_t {
   uint64_t ios_completed = 0;
   std::chrono::duration<double> total_latency = 0s;
   std::chrono::duration<double> duration = 0s;
+  std::vector<results_t> buckets_io_vector;
 
   results_t &operator += (const results_t &other_result) {
     ios_completed += other_result.ios_completed;
     total_latency += other_result.total_latency;
+    if (buckets_io_vector.empty()) {
+      buckets_io_vector = other_result.buckets_io_vector;
+    } else {
+      for (size_t i = 0; i < buckets_io_vector.size(); ++i) {
+        buckets_io_vector[i] += other_result.buckets_io_vector[i];
+      }
+    }
     return *this;
   }
 
   void dump(ceph::Formatter *f) const {
     f->dump_int("ios_completed", ios_completed);
-    f->dump_float(
-      "total_latency_s",
-      total_latency.count());
-    f->dump_float(
-      "total_duration_s",
-      duration.count());
+    f->dump_float("total_latency_s", total_latency.count());
+    f->dump_float("total_duration_s", duration.count());
+    if (!buckets_io_vector.empty()) {
+      f->open_array_section("buckets");
+      for (size_t i = 0; i < buckets_io_vector.size(); ++i) {
+        const auto &b = buckets_io_vector[i];
+        f->open_object_section("bucket");
+        f->dump_unsigned("bucket_index", i);
+        f->dump_unsigned("ios_completed", b.ios_completed);
+        f->dump_float("avg_latency_s",
+          b.ios_completed > 0 ? b.total_latency.count() / b.ios_completed : 0.0);
+        f->close_section();
+      }
+      f->close_section();
+    }
   }
 };
 
@@ -93,6 +110,7 @@ public:
   unsigned num_concurrent_io = 16;
   bool dump_metrics = false;
   std::string track_metrics="";
+  unsigned bucket_size_time = 0;
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -109,6 +127,8 @@ public:
        "Dump JSON formatted metrics to stdout")
       ("track-metrics",po:: value<std::string>(&track_metrics),
         "Metrics we wnat to include in result list,filtered from dump-metrics")
+      ("bucket-size", po::value<unsigned>(&bucket_size_time),
+       "collect metrics per bucket of this duration in seconds (0 = disabled)")
       ;
     return ret;
   }
@@ -319,7 +339,27 @@ seastar::future<results_t> PGLogWorkload::run(
         std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
 
+    std::vector<results_t> local_buckets;
+    uint64_t io_bucket = 0;
+    std::chrono::duration<double> latency_bucket =
+        std::chrono::duration<double>(0.0);
+    unsigned curr_bucket = 0;
+    auto last_bucket_time = start;
+    // latency and io's bucketing 
     while (ceph::mono_clock::now() - start <= common.get_duration()) {
+      if (common.bucket_size_time > 0) {
+        auto elapsed_since_last = std::chrono::duration<double>(
+            ceph::mono_clock::now() - last_bucket_time);
+        if (elapsed_since_last >= std::chrono::seconds(common.bucket_size_time)
+            && std::chrono::duration<double>(ceph::mono_clock::now() - start)
+               <= common.get_duration()) {
+          local_buckets.push_back(results_t{io_bucket, latency_bucket});
+          io_bucket = 0;
+          latency_bucket = std::chrono::duration<double>(0.0);
+          last_bucket_time = ceph::mono_clock::now();
+          curr_bucket++;
+        }
+      }
       int obj_num = std::rand() % num_logs;
 
       auto object = create_hobj(obj_num);
@@ -351,8 +391,10 @@ seastar::future<results_t> PGLogWorkload::run(
           std::chrono::duration<double>(time_nanosec);
       tot_latency += time_sec;
       num_ops++;
+      io_bucket++;
+      latency_bucket += time_sec;
     }
-    co_return results_t{num_ops, tot_latency, common.get_duration()};
+    co_return results_t{num_ops, tot_latency, common.get_duration(), std::move(local_buckets)};
   };
   co_await pre_fill_logs();
   co_return co_await run_concurrent_ios(
