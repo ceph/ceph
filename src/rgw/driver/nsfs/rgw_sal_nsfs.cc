@@ -3902,6 +3902,88 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     get_key().instance.clear();
   }
 
+  const auto& dbinfo = db->get_info();
+  bool dest_versioned = dbinfo.versioned();
+  bool dest_ver_enabled = dbinfo.versioning_enabled();
+  std::string demoted_ver_id;
+  bool did_demote = false;
+  std::unique_ptr<VersionLockHandle> vlock;
+
+  /* versioned copy: demote existing dest current to .versions/ */
+  if (dest_versioned && state.obj != dobj->state.obj) {
+    /* stat destination to find existing current version */
+    dobj->ent.reset();
+    int dret = dobj->stat(dpp);
+    nsfs::FSEnt* dest_ent = dobj->get_fsent();
+
+    int dest_parent_fd = -1;
+    std::string dest_leaf;
+    if (dest_ent && dest_ent->get_parent()) {
+      nsfs::Directory* dp = dest_ent->get_parent();
+      dest_parent_fd = dp->get_fd();
+      if (dest_parent_fd < 0) {
+        dp->open(dpp);
+        dest_parent_fd = dp->get_fd();
+      }
+      dest_leaf = dest_ent->get_name();
+    }
+
+    if (dest_parent_fd >= 0) {
+      vlock = driver->get_fs_strategy()->version_lock(
+        dpp, open_versions_lockfile(dest_parent_fd));
+
+      int vfd = open_versions_dir(dest_parent_fd);
+      if (vfd >= 0) {
+        if (!dest_ver_enabled) {
+          std::string null_name = nsfs_ver_entry(dest_leaf, NULL_VERSION_ID);
+          ::unlinkat(vfd, null_name.c_str(), 0);
+        }
+
+        /* re-stat under lock for fresh state */
+        struct statx cur_stx;
+        if (dret == 0 && dest_ent && dest_ent->exists() &&
+            statx(dest_parent_fd, dest_leaf.c_str(),
+                  AT_SYMLINK_NOFOLLOW, STATX_ALL, &cur_stx) == 0) {
+          bool cur_is_null = false;
+          {
+            int chk_fd = ::openat(dest_parent_fd, dest_leaf.c_str(), O_RDONLY);
+            if (chk_fd >= 0) {
+              cur_is_null = is_null_version_fd(chk_fd);
+              ::close(chk_fd);
+            }
+          }
+          if (!(!dest_ver_enabled && cur_is_null)) {
+            std::string cur_ver_id = cur_is_null
+              ? NULL_VERSION_ID
+              : nsfs_version_id_from_statx(cur_stx);
+            std::string ver_name = nsfs_ver_entry(dest_leaf, cur_ver_id);
+
+            SafeResult sr = driver->get_fs_strategy()->safe_link(
+              dpp, dest_parent_fd, dest_leaf,
+              vfd, ver_name,
+              statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+            if (sr == SafeResult::OK) {
+              int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+              if (demoted_fd >= 0) {
+                auto now_ms = std::to_string(
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+                std::string ts_x =
+                  NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
+                ::fsetxattr(demoted_fd, ts_x.c_str(),
+                            now_ms.c_str(), now_ms.size(), 0);
+                ::close(demoted_fd);
+              }
+              demoted_ver_id = cur_ver_id;
+              did_demote = true;
+            }
+          }
+        }
+        ::close(vfd);
+      }
+    }
+  }
+
   if (state.obj != dobj->state.obj) {
     /* An actual copy, copy the data */
     ret = copy(dpp, y, sb, db, dobj);
@@ -3911,6 +3993,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
         return ret;
     }
   }
+  vlock.reset();
   dobj->make_ent(ent->get_type());
 
   /* Set up attributes for destination */
@@ -3974,11 +4057,12 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     return ret;
   }
 
-  /* versioned copy: compute version ID from dest file's stat */
-  if (db->get_info().versioned() && dobj->get_fsent()) {
+  /* versioned copy: compute version ID and update cache */
+  if (dest_versioned && dobj->get_fsent()) {
     dobj->get_fsent()->stat(dpp, /*force=*/true);
-    std::string new_ver_id = db->get_info().versioning_enabled()
-      ? nsfs_version_id_from_statx(dobj->get_fsent()->get_stx())
+    const struct statx& new_stx = dobj->get_fsent()->get_stx();
+    std::string new_ver_id = dest_ver_enabled
+      ? nsfs_version_id_from_statx(new_stx)
       : NULL_VERSION_ID;
     dest_object->set_instance(new_ver_id);
     if (version_id) {
@@ -3990,7 +4074,42 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       ::fsetxattr(obj_fd, vid_xattr.c_str(),
                   new_ver_id.c_str(), new_ver_id.size(), 0);
     }
-    driver->get_bucket_cache()->invalidate_bucket(dpp, db->get_name());
+
+    auto* bcache = driver->get_bucket_cache();
+    std::string obj_name = dobj->get_name();
+
+    if (did_demote) {
+      cls_rgw_obj_key old_key;
+      old_key.name = obj_name;
+      old_key.instance = demoted_ver_id;
+      bcache->remove_entry(dpp, db->get_name(), old_key);
+
+      rgw_bucket_dir_entry dem_bde{};
+      dem_bde.key.name = obj_name;
+      dem_bde.key.instance = demoted_ver_id;
+      dem_bde.ver.pool = 1;
+      dem_bde.ver.epoch = 1;
+      dem_bde.exists = true;
+      dem_bde.meta.category = RGWObjCategory::Main;
+      dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+      bcache->add_entry(dpp, db->get_name(), dem_bde);
+    }
+
+    rgw_bucket_dir_entry new_bde{};
+    new_bde.key.name = obj_name;
+    new_bde.key.instance = new_ver_id;
+    new_bde.ver.pool = 1;
+    new_bde.ver.epoch = 1;
+    new_bde.exists = true;
+    new_bde.meta.category = RGWObjCategory::Main;
+    new_bde.meta.size = new_stx.stx_size;
+    new_bde.meta.accounted_size = new_stx.stx_size;
+    new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
+    new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+    new_bde.meta.etag = synthesize_etag(new_stx);
+    new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                    rgw_bucket_dir_entry::FLAG_CURRENT;
+    bcache->add_entry(dpp, db->get_name(), new_bde);
   }
 
   return 0;
