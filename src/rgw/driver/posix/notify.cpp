@@ -8,8 +8,13 @@
 
 namespace file::listing {
 
-  std::unique_ptr<Notify> Notify::factory(Notifiable* n, const std::string& bucket_root)
+  std::unique_ptr<Notify> Notify::factory(Notifiable* n,
+					  const std::string& bucket_root,
+					  bool use_inotify)
   {
+    if (!use_inotify) {
+      return std::unique_ptr<Notify>(new NullNotify(n, bucket_root));
+    }
 #ifdef __linux__
     return std::unique_ptr<Notify>(new Inotify(n, bucket_root));
 #else
