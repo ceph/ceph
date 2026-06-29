@@ -22,6 +22,8 @@
 #                       (requires podman)
 #   --with-vault        Start a local HashiCorp Vault for SSE-KMS / SSE-S3
 #                       testing (requires podman, curl)
+#   --with-inotify      Enable inotify watcher on bucket directories
+#                       (for sideloaded file detection; off by default)
 #   --foreground        Print the radosgw command instead of running it;
 #                       use this to start the daemon as root in another
 #                       terminal (LWE requires root for DMAPI handles)
@@ -38,6 +40,7 @@ CLEAN=false
 KEYCLOAK=false
 KAFKA=false
 VAULT=false
+INOTIFY=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
@@ -52,6 +55,7 @@ while [[ $# -gt 0 ]]; do
 		--with-keycloak) KEYCLOAK=true; shift ;;
 		--with-kafka) KAFKA=true; shift ;;
 		--with-vault) VAULT=true; shift ;;
+		--with-inotify) INOTIFY=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
@@ -147,6 +151,10 @@ VSTART_OPTS=(
 	-o "rgw_${STORE}_cache_max_buckets=500"
 	-o 'rgw_multipart_min_part_size=32'
 )
+
+if $INOTIFY; then
+	VSTART_OPTS+=(-o "rgw_${STORE}_inotify=true")
+fi
 
 if $VAULT; then
 	VSTART_OPTS+=(

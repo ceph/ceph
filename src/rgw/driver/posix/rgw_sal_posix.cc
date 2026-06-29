@@ -2093,7 +2093,8 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
       g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
       g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count")));
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_posix_inotify")));
 
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_posix_cache_max_users"));
