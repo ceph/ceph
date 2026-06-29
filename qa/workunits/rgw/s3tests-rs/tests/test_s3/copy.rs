@@ -980,7 +980,6 @@ async fn test_object_copy_versioned_overwrite() {
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: copy response missing version_id")]
 async fn test_object_copy_versioned_overwrite_response_version_id() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
@@ -996,12 +995,20 @@ async fn test_object_copy_versioned_overwrite_response_version_id() {
         .await
         .unwrap();
 
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("source")
+        .body(ByteStream::from_static(b"src"))
+        .send()
+        .await
+        .unwrap();
+
     let copy_resp = client
         .copy_object()
         .bucket(&bucket_name)
         .key("target")
-        .copy_source(format!("{bucket_name}/target"))
-        .metadata_directive(aws_sdk_s3::types::MetadataDirective::Replace)
+        .copy_source(format!("{bucket_name}/source"))
         .send()
         .await
         .unwrap();
