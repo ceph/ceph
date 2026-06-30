@@ -61,3 +61,13 @@
 - **Action**: Merged "Do Not Reformat Existing Code" and "Minimize Diff Noise" into a single concise "Minimal Diffs" section.
 - **Commit**: `doc: AGENTS.md: merge redundant diff noise sections`
 - **Status**: Done
+
+### 11. epuertat discussion comments (reply-only, no code changes)
+- **Comment IDs**: 3491689297, 3492977242, 3493066431, 3493097856, 3493106070, 3493224031, 3493264995, 3493336056, 3493377514
+- **Action**: Replied to each with reasoning. These are architectural suggestions (SKILLs, token optimization, per-language style files, prompt compression) that are valid future direction but out of scope for this PR. Some concerns were already addressed by prior commits (CodingStyle/SubmittingPatches.rst references).
+- **Status**: Replied
+
+### 12. SPDX header conflict (epuertat vs mmgaggle)
+- **Comment IDs**: 3491704611, 3493484136 (epuertat pushback) vs 3443367898 (mmgaggle request)
+- **Action**: Flagged conflicting reviewer feedback on GitHub. epuertat questions team agreement and notes Ceph is single-license. mmgaggle originally requested the addition. Needs PR author decision.
+- **Status**: Flagged for human decision
