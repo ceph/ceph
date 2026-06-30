@@ -8,6 +8,10 @@
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
   
+* CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
+  update and remove existing key-value pairs that are part of a snapshot
+  metadata via libcephfs API ceph_do_snap_md_op().
+
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
   legacy string-based parameters with strongly-typed ClsMethod structs. C++
