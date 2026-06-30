@@ -121,7 +121,6 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
-  l_mdss_cache_trim_throttle,
   l_mdss_session_recall_throttle,
   l_mdss_session_recall_throttle2o,
   l_mdss_global_recall_throttle,
