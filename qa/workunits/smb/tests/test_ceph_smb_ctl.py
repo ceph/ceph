@@ -178,3 +178,108 @@ class TestCephSMBCtlRemote(RemoteCtlBase):
             volumes=[f'{ca_dir}:{ca_mnt}:ro'],
             **kwargs,
         )
+
+
+def _get_obj(value):
+    return value.to_simplified()
+
+
+@pytest.mark.ceph_smb_ctl_remote
+class TestCephSMBCtlAPI:
+    def _client(self, smb_cfg):
+        # alter paths to include python-common
+        import sys
+
+        curr = pathlib.Path('.').absolute()
+        while curr.parent != pathlib.Path('/'):
+            pcomm = curr / 'src/python-common'
+            if pcomm.is_dir():
+                sys.path.append(str(pcomm))
+                break
+            curr = curr.parent
+
+        # import the needed packges
+        try:
+            import ceph.smb.ctl.client as rclient
+            import ceph.smb.ctl.config as rconfig
+        except ImportError:
+            pytest.skip('failed to import ceph.smb.ctl.client OR dependency')
+
+        # set up a grpc client w/in the test
+        grpc_host = f"{smb_cfg.server.ip_address}:54445"
+        ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
+        tls_cert = ca_dir / 'remote-control-client.crt'
+        tls_key = ca_dir / 'remote-control-client.key'
+        tls_ca_cert = ca_dir / 'rcroot.crt'
+        assert tls_cert.is_file()
+        assert tls_key.is_file()
+        assert tls_ca_cert.is_file()
+
+        cc = rconfig.Config(
+            address=grpc_host,
+            channel_type=rconfig.ChannelType.SECURE,
+            tls_cert=rconfig.TLSPath.create(tls_cert),
+            tls_key=rconfig.TLSPath.create(tls_key),
+            tls_ca_cert=rconfig.TLSPath.create(tls_ca_cert),
+        )
+        return rclient.Client(cc)
+
+    def test_get_info(self, smb_cfg):
+        obj = _get_obj(self._client(smb_cfg).info())
+        assert 'samba_info' in obj
+        assert 'version' in obj['samba_info']
+        assert 'clustered' in obj['samba_info']
+
+    def test_status_empty(self, smb_cfg):
+        obj = _get_obj(self._client(smb_cfg).status())
+        assert 'server_timestamp' in obj
+        assert 'sessions' in obj
+        assert 'tree_connections' in obj
+        assert not obj['sessions']
+        assert not obj['tree_connections']
+
+    def test_status_connected(self, smb_cfg):
+        share_name = smbutil.get_shares(smb_cfg)[0]['name']
+        with smbutil.connection(smb_cfg, share_name) as sharep:
+            sharep.listdir()  # trigger a tree connect in client lib
+            time.sleep(0.2)
+            obj = _get_obj(self._client(smb_cfg).status())
+        assert obj
+        assert 'server_timestamp' in obj
+        assert 'sessions' in obj
+        assert 'tree_connections' in obj
+        assert len(obj['sessions']) == 1
+        assert len(obj['tree_connections']) == 1
+        assert (
+            obj['sessions'][0]['session_id']
+            == obj['tree_connections'][0]['session_id']
+        )
+
+    def test_config_summary_change_poll(self, smb_cfg):
+        source = 'CONFIG_FOR_SAMBA'
+        obj = _get_obj(self._client(smb_cfg).config_summary(source))
+        assert 'digest' in obj
+        assert 'config_digest' in obj['digest']
+        prev_digest = obj['digest']['config_digest']
+        time.sleep(0.2)
+
+        # no change
+        obj = _get_obj(self._client(smb_cfg).config_summary(source))
+        assert prev_digest == obj['digest']['config_digest']
+
+        # change
+        share_cfg = smbutil.get_shares(smb_cfg)[0]
+        orig_comment = share_cfg.get('comment', '')
+        share_cfg['comment'] = 'Foo bar baz asdf bar baz foo'
+        assert share_cfg['comment'] != orig_comment
+        smbutil.apply_share_config(smb_cfg, share_cfg, immediate=True)
+
+        changed = False
+        for _ in range(0, 150):
+            time.sleep(0.5)
+            obj = _get_obj(self._client(smb_cfg).config_summary(source))
+            changed = prev_digest != obj['digest']['config_digest']
+            if changed:
+                break
+
+        assert changed, "config digest never changed"
