@@ -16,6 +16,8 @@ export interface RemoteInfo {
   client_name: string;
   cluster_name: string;
   fs_name: string;
+  fsid?: string;
+  mon_host?: string;
 }
 
 export interface PeerStats {
@@ -131,6 +133,78 @@ export function mdsStateToStatus(state: string | undefined): MdsStatus {
 }
 
 export type DaemonResponse = Daemon[];
+
+export interface MirrorPeerListEntry {
+  client_name: string;
+  site_name: string;
+  fs_name: string;
+}
+
+export type MirrorPeerList = Record<string, MirrorPeerListEntry>;
+
+export interface MirrorSyncedSnap {
+  id?: number;
+  name?: string;
+  sync_bytes?: number | string;
+  sync_duration?: number | string;
+  sync_time_stamp?: number | string;
+}
+
+export interface MirrorDirStatus {
+  state?: string;
+  last_synced_snap?: MirrorSyncedSnap;
+  current_syncing_snap?: MirrorSyncedSnap;
+  snaps_synced?: number;
+  metrics_updated_at?: number | string;
+}
+
+export interface MirrorDirMetrics {
+  peer?: Record<string, MirrorDirStatus>;
+}
+
+export type MirrorStatusMetrics = Record<string, MirrorDirMetrics>;
+
+export interface MirrorStatusResponse {
+  metrics?: MirrorStatusMetrics;
+}
+
+export interface DaemonOverviewInfo {
+  mirrorPaths: number;
+  failures: number;
+  clusterName: string;
+  destinationFsName: string;
+  fsid: string;
+  monitorEndpoint: string;
+  peerUuid?: string;
+}
+
+export interface MirroringFsOverviewStats {
+  mirrorPaths: number;
+  syncingPaths: number;
+  failures: number;
+}
+
+export interface MirroringFsDestinationCluster {
+  clusterName: string;
+  siteName: string;
+  destinationFsName: string;
+  fsid: string;
+  monitorEndpoint: string;
+}
+
+export interface MirroringFsSyncInfo {
+  bytesSynced: string;
+  path: string;
+  snapName: string;
+  syncedAt: number | null;
+}
+
+export interface MirroringFsOverviewData {
+  fsName: string;
+  stats: MirroringFsOverviewStats;
+  destination: MirroringFsDestinationCluster;
+  sync: MirroringFsSyncInfo;
+}
 
 export type MirroringEntityRow = {
   entity: string;
