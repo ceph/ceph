@@ -1756,7 +1756,9 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_range(
 PGBackend::interruptible_future<> PGBackend::omap_remove_key(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  osd_op_params_t &osd_op_params,
+  object_stat_sum_t &delta_stats)
 {
   ceph::bufferlist to_rm_bl;
   try {
@@ -1766,9 +1768,8 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_key(
     throw crimson::osd::invalid_argument{};
   }
   txn.omap_rmkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_rm_bl);
-  // TODO:
-  // ctx->clean_regions.mark_omap_dirty();
-  // ctx->delta_stats.num_wr++;
+  osd_op_params.clean_regions.mark_omap_dirty();
+  delta_stats.num_wr++;
   os.oi.clear_omap_digest();
   return seastar::now();
 }
