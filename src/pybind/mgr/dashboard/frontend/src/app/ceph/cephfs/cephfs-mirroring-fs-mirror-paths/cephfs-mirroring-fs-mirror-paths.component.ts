@@ -26,15 +26,31 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
+type SnapshotReplicationStatus = 'in-progress' | 'replicated' | 'pending' | 'failed';
+type SyncStatus = 'syncing' | 'idle' | 'failed' | 'completed';
+
+interface SnapshotEntry {
+  name: string;
+  status: SnapshotReplicationStatus;
+  eta?: string;
+  icon: keyof typeof ICON_TYPE;
+  iconClass: string;
+  statusLabel: string;
+}
+
 interface MirrorPath {
   path: string;
-  syncStatus: 'syncing' | 'idle' | 'failed';
+  syncStatus: SyncStatus;
+  syncStatusIcon: keyof typeof ICON_TYPE;
+  syncStatusClass: string;
   currentSyncSnapshot: string;
   currentSyncEta?: string;
   currentSyncMode?: string;
   lastSyncedSnapshot: string;
   lastSyncedTime?: string;
   snapshotCount?: number;
+  pendingSnapshotCount?: number;
+  snapshots?: SnapshotEntry[];
   checkpointCount?: number;
   renamedSnapshotCount?: number;
   syncProgress?: number;
@@ -49,6 +65,34 @@ interface MirrorPath {
   avgReadThroughput?: string;
   avgWriteThroughput?: string;
 }
+
+const SYNC_STATUS_ICONS: Record<SyncStatus, keyof typeof ICON_TYPE> = {
+  syncing: 'inProgress',
+  idle: 'pendingFilled',
+  failed: 'danger',
+  completed: 'checkMarkOutline'
+};
+
+const SYNC_STATUS_CLASSES: Record<SyncStatus, string> = {
+  syncing: 'info',
+  completed: 'success',
+  idle: 'muted',
+  failed: 'danger'
+};
+
+const SNAPSHOT_STATUS_ICONS: Record<SnapshotReplicationStatus, keyof typeof ICON_TYPE> = {
+  'in-progress': 'inProgress',
+  replicated: 'checkMarkOutline',
+  pending: 'pendingFilled',
+  failed: 'danger'
+};
+
+const SNAPSHOT_STATUS_CLASSES: Record<SnapshotReplicationStatus, string> = {
+  'in-progress': 'info',
+  replicated: 'success',
+  pending: 'muted',
+  failed: 'danger'
+};
 
 @Component({
   selector: 'cd-cephfs-mirroring-fs-mirror-paths',
@@ -298,9 +342,14 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       byteProgress
     );
 
+    const syncStatus = (peerInfo.state ?? 'idle') as SyncStatus;
+    const snapshots = this.buildSnapshotList(peerInfo, syncStatus);
+
     return {
       path,
-      syncStatus: (peerInfo.state ?? 'idle') as 'syncing' | 'idle' | 'failed',
+      syncStatus,
+      syncStatusIcon: SYNC_STATUS_ICONS[syncStatus] ?? 'infoCircle',
+      syncStatusClass: SYNC_STATUS_CLASSES[syncStatus] ?? '',
       currentSyncSnapshot: currentSnap?.name ?? '-',
       currentSyncEta: currentSnap?.eta,
       currentSyncMode: currentSnap?.['sync-mode'],
@@ -310,6 +359,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           ? String(peerInfo.last_synced_snap.sync_time_stamp)
           : undefined,
       snapshotCount: peerInfo.snaps_synced ?? 0,
+      pendingSnapshotCount: snapshots.filter(
+        (snapshot) => snapshot.status === 'in-progress' || snapshot.status === 'pending'
+      ).length,
+      snapshots,
       checkpointCount: peerInfo.snaps_deleted ?? 0,
       renamedSnapshotCount: peerInfo.snaps_renamed ?? 0,
       syncProgress,
@@ -324,6 +377,90 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       avgReadThroughput: currentSnap?.avg_read_throughput_bytes,
       avgWriteThroughput: currentSnap?.avg_write_throughput_bytes
     };
+  }
+
+  private buildSnapshotList(peerInfo: MirrorDirStatus, syncStatus: SyncStatus): SnapshotEntry[] {
+    const snapshots: SnapshotEntry[] = [];
+    const currentSnap = peerInfo.current_syncing_snap ?? peerInfo.current_sync_snap;
+    const lastSnap = peerInfo.last_synced_snap;
+    const currentName = currentSnap?.name;
+    const lastName = lastSnap?.name;
+
+    if (currentName && currentName !== '-') {
+      if (syncStatus === 'syncing') {
+        snapshots.push(
+          this.createSnapshotEntry({
+            name: currentName,
+            status: 'in-progress',
+            eta: currentSnap?.eta
+          })
+        );
+      } else if (currentName !== lastName) {
+        snapshots.push(
+          this.createSnapshotEntry({
+            name: currentName,
+            status: syncStatus === 'failed' ? 'failed' : 'pending'
+          })
+        );
+      }
+    }
+
+    if (lastName && lastName !== '-') {
+      snapshots.push(
+        this.createSnapshotEntry({
+          name: lastName,
+          status: 'replicated'
+        })
+      );
+    }
+
+    return snapshots;
+  }
+
+  private createSnapshotEntry(entry: {
+    name: string;
+    status: SnapshotReplicationStatus;
+    eta?: string;
+  }): SnapshotEntry {
+    return {
+      ...entry,
+      icon: SNAPSHOT_STATUS_ICONS[entry.status],
+      iconClass: SNAPSHOT_STATUS_CLASSES[entry.status],
+      statusLabel: this.snapshotStatusLabel(entry.status)
+    };
+  }
+
+  private snapshotStatusLabel(status: SnapshotReplicationStatus): string {
+    switch (status) {
+      case 'in-progress':
+        return $localize`replication in-progress`;
+      case 'replicated':
+        return $localize`replicated.`;
+      case 'pending':
+        return $localize`replication pending`;
+      case 'failed':
+        return $localize`replication failed`;
+      default:
+        return '';
+    }
+  }
+
+  get selectedPathSyncStatusIcon(): keyof typeof ICON_TYPE {
+    return this.selectedPath?.syncStatusIcon ?? 'infoCircle';
+  }
+
+  get selectedPathSyncStatusClass(): string {
+    return this.selectedPath?.syncStatusClass ?? '';
+  }
+
+  get selectedPathSyncStatusLabel(): string {
+    return this.selectedPath?.syncStatus ? this.toTitleCase(this.selectedPath.syncStatus) : '-';
+  }
+
+  get showSelectedPathProgress(): boolean {
+    return (
+      this.selectedPath?.syncStatus === 'syncing' && this.selectedPath?.syncProgress !== undefined
+    );
   }
 
   onPathClick(path: MirrorPath): void {
@@ -425,22 +562,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     );
   }
 
-  get selectedPathSyncStatusIcon(): keyof typeof ICON_TYPE {
-    return this.getSyncStatusIcon(this.selectedPath?.syncStatus || '');
-  }
-
-  get selectedPathSyncStatusClass(): string {
-    return this.getSyncStatusClass(this.selectedPath?.syncStatus || '');
-  }
-
-  get selectedPathSyncStatusLabel(): string {
-    return this.selectedPath?.syncStatus ? this.toTitleCase(this.selectedPath.syncStatus) : '-';
-  }
-
-  get showSelectedPathProgress(): boolean {
-    return (
-      this.selectedPath?.syncStatus === 'syncing' && this.selectedPath?.syncProgress !== undefined
-    );
+  getScheduleStatusIcon(active: boolean): keyof typeof ICON_TYPE {
+    return active ? 'success' : 'warning';
   }
 
   private buildSchedulePolicyViewModel(policy: MirrorPathSchedule): MirrorPathSchedule {
@@ -552,43 +675,11 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     return nextSync.toLocaleString();
   }
 
-  getSyncStatusIcon(status: string): keyof typeof ICON_TYPE {
-    switch (status) {
-      case 'syncing':
-        return 'inProgress';
-      case 'idle':
-        return 'pendingFilled';
-      case 'failed':
-        return 'danger';
-      case 'completed':
-        return 'checkMarkOutline';
-      default:
-        return 'infoCircle';
+  private normalizePath(path?: string): string {
+    if (!path) {
+      return '';
     }
-  }
-
-  getScheduleStatusIcon(active: boolean): keyof typeof ICON_TYPE {
-    return active ? 'success' : 'warning';
-  }
-
-  getSyncStatusClass(status: string): string {
-    switch (status) {
-      case 'syncing':
-        return 'info';
-      case 'completed':
-        return 'success';
-      case 'idle':
-        return 'muted';
-      case 'failed':
-        return 'danger';
-      default:
-        return '';
-    }
-  }
-
-  private normalizePath(p?: string): string {
-    if (!p) return '';
-    return p.replace(/([/](\.\.?)){1,}\s*$/, '').replace(/\/$/, '') || '/';
+    return path.replace(/([/](\.\.?)){1,}\s*$/, '').replace(/\/$/, '') || '/';
   }
 
   private toTitleCase(value: string): string {
