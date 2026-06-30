@@ -5,7 +5,12 @@ import _ from 'lodash';
 import { Observable, forkJoin, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo, mergeMap, switchMap } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
-import { ListenerItem, NvmeofSubsystem, NvmeofSubsystemNamespace } from '../models/nvmeof';
+import {
+  AUTHENTICATION,
+  ListenerItem,
+  NvmeofSubsystem,
+  NvmeofSubsystemNamespace
+} from '../models/nvmeof';
 import { HostService } from './host.service';
 import { OrchestratorService } from './orchestrator.service';
 import { HostStatus } from '../enum/host-status.enum';
@@ -63,6 +68,12 @@ export type SubsystemInitiatorRequest = NvmeofRequest & {
 
 export type NamespaceInitiatorRequest = InitiatorRequest & {
   subsystem_nqn: string;
+};
+
+export type AuthKeyUpdate = {
+  authType: AUTHENTICATION;
+  subsystemKey: string | null;
+  hostKeyList: Array<{ host_nqn: string; dhchap_key: string | null }>;
 };
 
 const API_PATH = 'api/nvmeof';
@@ -296,6 +307,14 @@ export class NvmeofService {
     });
   }
 
+  changeSubsystemKey(subsystemNQN: string, dhchapKey: string, gwGroup: string) {
+    return this.http.put(
+      `${API_PATH}/subsystem/${subsystemNQN}/change_key`,
+      { dhchap_key: dhchapKey, gw_group: gwGroup },
+      { observe: 'response' }
+    );
+  }
+
   updateHostKey(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.put(
       `${API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/change_key`,
@@ -304,6 +323,31 @@ export class NvmeofService {
         observe: 'response'
       }
     );
+  }
+
+  updateAuthenticationKey(
+    subsystemNQN: string,
+    gwGroup: string,
+    update: AuthKeyUpdate
+  ): Observable<void> {
+    const { authType, subsystemKey, hostKeyList } = update;
+
+    const subsystemKeyCall =
+      authType === AUTHENTICATION.Bidirectional && subsystemKey
+        ? this.changeSubsystemKey(subsystemNQN, subsystemKey, gwGroup)
+        : observableOf(null);
+
+    const hostKeyCalls = hostKeyList
+      .filter((item) => !!item.dhchap_key)
+      .map((item) =>
+        this.updateHostKey(subsystemNQN, {
+          host_nqn: item.host_nqn,
+          dhchap_key: item.dhchap_key,
+          gw_group: gwGroup
+        }).pipe(catchError(() => observableOf(null)))
+      );
+
+    return forkJoin([subsystemKeyCall, ...hostKeyCalls]).pipe(map(() => undefined));
   }
 
   removeInitiators(subsystemNQN: string, request: InitiatorRequest) {

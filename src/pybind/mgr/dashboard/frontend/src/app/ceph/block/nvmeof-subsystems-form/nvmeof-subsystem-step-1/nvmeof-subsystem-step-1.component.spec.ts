@@ -37,8 +37,7 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
         InputModule,
         GridModule,
         ComboBoxModule,
-        RadioModule,
-        ToastrModule.forRoot()
+        RadioModule
       ],
       providers: [NgbActiveModal],
       schemas: [NO_ERRORS_SCHEMA]
