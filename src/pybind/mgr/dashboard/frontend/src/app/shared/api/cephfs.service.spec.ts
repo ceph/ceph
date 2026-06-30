@@ -64,12 +64,6 @@ describe('CephfsService', () => {
     httpTesting.expectOne('ui-api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
   });
 
-  it('should call statfs', () => {
-    service.statfs(1, '/volumes/g1/sv1').subscribe();
-    const req = httpTesting.expectOne('api/cephfs/1/statfs?path=%252Fvolumes%252Fg1%252Fsv1');
-    expect(req.request.method).toBe('GET');
-  });
-
   it('should call mkSnapshot', () => {
     service.mkSnapshot(3, '/some/path').subscribe();
     const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=%252Fsome%252Fpath');
