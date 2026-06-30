@@ -1590,10 +1590,18 @@ void CDir::fetch(std::string_view dname, snapid_t last,
       // prefetch disabled: only fetch the requested key
       fetch_keys({key}, c);
 
-      // backend mode: also launch a background full fetch to warm the cache
+      // backend mode: launch background full fetch only after
+      // mds_dir_prefetch_backend_hit_threshold accesses.
+      // avoids wasted omap reads for directories hit only once.
       // (throttled by mds_dir_prefetch_backend_max)
+      // saturated increment: avoid uint8_t wrap-around on hot dirfrags
+      auto threshold = g_conf().get_val<uint64_t>("mds_dir_prefetch_backend_hit_threshold");
+      if (backend_hit_count < threshold) {
+        ++backend_hit_count;
+      }
       if (g_conf().get_val<bool>("mds_dir_prefetch_backend") &&
 	  !state_test(CDir::STATE_FETCHING) &&
+	  backend_hit_count >= threshold &&
 	  mdcache->num_backend_fetching < g_conf().get_val<uint64_t>("mds_dir_prefetch_backend_max")) {
 	auth_pin(this);
 	state_set(CDir::STATE_FETCHING);

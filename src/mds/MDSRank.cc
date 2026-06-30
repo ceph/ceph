@@ -4156,6 +4156,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_dir_max_entries",
     "mds_dir_prefetch",
     "mds_dir_prefetch_backend",
+    "mds_dir_prefetch_backend_hit_threshold",
     "mds_dir_prefetch_backend_max",
     "mds_dmclock_enable",
     "mds_dmclock_limit",
