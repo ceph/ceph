@@ -1204,18 +1204,21 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     std::string var;
     if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     string val;
     if (!cmd_getval(cmdmap, "val", val)) {
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
 
     if (var == "down") {
       bool enable_down = false;
-      int r = parse_bool(val, &enable_down, ss);
-      if (r != 0) {
-        return r;
+      int ret = parse_bool(val, &enable_down, ss);
+      if (ret != 0) {
+        r = ret;
+        goto out;
       }
       if (enable_down) {
         bool has_active = !!pending_map.active_gid;
@@ -1234,7 +1237,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         }
       }
     } else {
-      return -EINVAL;
+      ss << "Unknown variable '" << var << "'";
+      r = -EINVAL;
+      goto out;
     }
   } else if (prefix == "mgr fail") {
     string who;
