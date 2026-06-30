@@ -148,6 +148,7 @@ public:
     return 0;
   }
   int get_devices(std::set<std::string> *ls) const override;
+  int refresh_size() override;
 
   int get_ebd_state(ExtBlkDevState &state) const override;
   int detect_ebd(std::string& id) override;
