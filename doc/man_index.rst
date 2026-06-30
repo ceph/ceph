@@ -33,6 +33,7 @@
    man/8/mount.ceph
    man/8/osdmaptool
    man/8/rados
+   man/8/radostrace
    man/8/radosgw-admin
    man/8/radosgw
    man/8/rbd-fuse
