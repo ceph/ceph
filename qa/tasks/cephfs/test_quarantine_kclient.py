@@ -148,6 +148,16 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
             return str(proc.stdout)
         return ""
 
+    def _wait_for_proc(self, proc, timeout=30):
+        """Poll-based wait since RemoteProcess.wait() has no timeout arg."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                return
+            time.sleep(0.5)
+        raise TimeoutError(
+            f"process did not complete within {timeout}s")
+
     def _assert_blocked_and_resume(self, proc, label="operation"):
         """Assert proc is blocked, disable quarantine, wait for completion."""
         time.sleep(2)
@@ -157,7 +167,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
         self._quarantine_cmd("disable")
 
         try:
-            proc.wait(timeout=30)
+            self._wait_for_proc(proc, timeout=30)
         except Exception as e:
             try:
                 proc.kill()
@@ -284,7 +294,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
         self._quarantine_cmd("disable")
 
         try:
-            proc.wait(timeout=180)
+            self._wait_for_proc(proc, timeout=180)
         except Exception as e:
             try:
                 proc.kill()
@@ -331,7 +341,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
 
         for name, proc in procs.items():
             try:
-                proc.wait(timeout=30)
+                self._wait_for_proc(proc, timeout=30)
             except Exception as e:
                 for p in procs.values():
                     try:
@@ -409,7 +419,7 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
             self._quarantine_cmd("disable")
 
             try:
-                proc.wait(timeout=30)
+                self._wait_for_proc(proc, timeout=30)
             except Exception as e:
                 try:
                     proc.kill()
