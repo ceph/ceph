@@ -165,6 +165,7 @@ void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
   entry.object = list_state.key.name;
   entry.instance = list_state.key.instance;
   entry.timestamp = list_state.meta.mtime;
+  entry.ver = list_state.ver;
   entry.op = op;
   entry.state = CLS_RGW_STATE_COMPLETE;
   entry.tag = list_state.tag;

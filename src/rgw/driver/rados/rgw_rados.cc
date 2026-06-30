@@ -9403,7 +9403,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     ldpp_dout(dpp, 20) << __func__ << ": committed_epoch=" << committed_epoch
                        << " olh_epoch=" << olh_epoch << " key=" << key << dendl;
     bilog.add_maybe_flush(committed_epoch, key, op_tag, delete_marker,
-                          meta ? meta->mtime : ceph::real_time{}, zones_trace);
+                          meta ? meta->mtime : ceph::real_clock::now(), zones_trace);
     int r = bilog.flush(y);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
@@ -9500,7 +9500,7 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
         }
         ldpp_dout(dpp, 20) << __func__ << ": committed_epoch=" << committed_epoch
                            << " olh_epoch=" << olh_epoch << " key=" << key << dendl;
-        bilog.add_maybe_flush(committed_epoch, ceph::real_time{}, op_issuer);
+        bilog.add_maybe_flush(committed_epoch, ceph::real_clock::now(), op_issuer);
         int r = bilog.flush(y);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "ERROR: " << __func__
@@ -9862,28 +9862,6 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
     }
     return r;
-  }
-
-  // OLH xattr update committed. now record the FIFO bilog entry.
-  if (need_to_link) {
-    rgw_zone_set zt;
-    if (zones_trace) {
-      zt = *zones_trace;
-    }
-    zt.insert(svc.zone->get_zone().id, obj.bucket.get_key());
-    int bilog_r = 0;
-    // with_bilog<void> always returns 0; capture the flush error via bilog_r.
-    with_bilog<void>(dpp, [&](auto& bilog_handler) {
-      bilog_handler.add_maybe_flush(link_epoch, key, link_op_tag,
-                                    delete_marker, state.mtime, zt);
-      bilog_r = bilog_handler.flush(y);
-    }, bucket_info, log_op);
-    if (bilog_r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__
-                        << ": failed to flush bilog entry for " << key
-                        << ": " << cpp_strerror(bilog_r) << dendl;
-      return bilog_r;
-    }
   }
 
   if (need_to_remove) {
@@ -11087,9 +11065,16 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
     dpp,
     [&](auto& op_issuer, auto& bilog_handler) {
       // Record the bilog entry (into FIFO, or NOP for InIndex) before the CLS op.
+      rgw_bucket_dir_entry bilog_ent = ent;
+      bilog_ent.ver = ver;
       bilog_handler.add_maybe_flush(
-        epoch, ent.meta.mtime,
-        static_cast<const cls_rgw_bi_log_related_op&>(op_issuer));
+        op_issuer.op, bilog_ent, zones_trace);
+      int flush_r = bilog_handler.flush(null_yield);
+      if (flush_r < 0) {
+        ldout_bitx_c(bitx, cct, 0) << "ERROR: " << __func__
+            << ": failed to flush bilog entry: " << cpp_strerror(flush_r) << dendl_bitx;
+        return flush_r;
+      }
 
       ObjectWriteOperation o;
       o.assert_exists(); // bucket index shard must exist
