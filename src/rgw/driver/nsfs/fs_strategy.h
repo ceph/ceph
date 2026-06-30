@@ -86,6 +86,12 @@ public:
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name) = 0;
 
+  /* clone from an open source fd — used when the source pathname is
+   * no longer valid (e.g. versioned self-copy after demote). */
+  virtual int clone_fd(const DoutPrefixProvider* dpp,
+                       int src_fd,
+                       int dst_dir_fd, const std::string& dst_name) = 0;
+
   /* remove the hidden clone parent associated with name, if any.
    * Call when an object created by clone_file is deleted or
    * overwritten.  No-op when no clone parent exists or when the
@@ -146,6 +152,10 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name) override;
+
+  int clone_fd(const DoutPrefixProvider* dpp,
+               int src_fd,
+               int dst_dir_fd, const std::string& dst_name) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override {}
@@ -251,6 +261,10 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name) override;
+
+  int clone_fd(const DoutPrefixProvider* dpp,
+               int src_fd,
+               int dst_dir_fd, const std::string& dst_name) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override;
