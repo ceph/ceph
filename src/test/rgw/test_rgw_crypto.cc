@@ -1202,16 +1202,19 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
 
   // Test 3: Different part numbers produce different derived keys
   {
+    const std::string part_salt(AES_256_GCM_PART_SALT_SIZE, 'p');
     auto aes1(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32));
     std::string salt = AES_256_GCM_get_salt(aes1.get());
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes1.get(), user_key, 32,
                                                "bucket", "object", 1));
+    aes1->set_part_number(1, part_salt);
 
     auto aes2(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32,
                                   reinterpret_cast<const uint8_t*>(salt.c_str()),
                                   salt.size()));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes2.get(), user_key, 32,
                                                "bucket", "object", 2));
+    aes2->set_part_number(2, part_salt);
 
     bufferlist input;
     input.append(plaintext);
@@ -1243,6 +1246,44 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
     bufferlist decrypted;
     ASSERT_FALSE(aes_dec->decrypt(encrypted, 0, encrypted.length(), decrypted, 0, null_yield));
   }
+}
+
+TEST(TestRGWCrypto, verify_AES_256_GCM_part_salt_key_isolation)
+{
+  NoDoutPrefix no_dpp(g_ceph_context, ceph_subsys_rgw);
+  uint8_t user_key[32];
+  for (size_t i = 0; i < sizeof(user_key); i++) user_key[i] = i;
+
+  const std::string osalt(AES_256_GCM_SALT_SIZE, 'o');
+  const std::string a(AES_256_GCM_PART_SALT_SIZE, 'a');
+  const std::string b(AES_256_GCM_PART_SALT_SIZE, 'b');
+  const uint8_t* os = reinterpret_cast<const uint8_t*>(osalt.data());
+  bufferlist in;
+  in.append("same part number, different salt");
+
+  auto mk = [&](const std::string& s) {
+    auto e = AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32, os, osalt.size());
+    EXPECT_NE(e.get(), nullptr);
+    EXPECT_TRUE(AES_256_GCM_derive_object_key(e.get(), user_key, 32, "bucket", "object", 1));
+    e->set_part_number(1, s);
+    return e;
+  };
+
+  // Same object key, same part number, different salt -> different ciphertext.
+  // This is false on the pre-fix binary (same part number -> same key+IV).
+  bufferlist ca, cb;
+  ASSERT_TRUE(mk(a)->encrypt(in, 0, in.length(), ca, 0, null_yield));
+  ASSERT_TRUE(mk(b)->encrypt(in, 0, in.length(), cb, 0, null_yield));
+  ASSERT_NE(std::string_view(ca.c_str(), ca.length()),
+            std::string_view(cb.c_str(), cb.length()));
+
+  // Correct salt round-trips; wrong salt fails the GCM tag.
+  bufferlist pa;
+  ASSERT_TRUE(mk(a)->decrypt(ca, 0, ca.length(), pa, 0, null_yield));
+  ASSERT_EQ(std::string_view(in.c_str(), in.length()),
+            std::string_view(pa.c_str(), pa.length()));
+  bufferlist bad;
+  ASSERT_FALSE(mk(b)->decrypt(ca, 0, ca.length(), bad, 0, null_yield));
 }
 
 TEST(TestRGWCrypto, verify_AES_256_GCM_chunk_reorder_detection)
