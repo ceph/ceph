@@ -1,6 +1,7 @@
 add_library(os STATIC
   ObjectStore.cc
   Transaction.cc)
+target_compile_options(os PRIVATE -fno-omit-frame-pointer)
 
 target_link_libraries(os
   PRIVATE

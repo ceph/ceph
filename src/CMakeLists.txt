@@ -677,6 +677,7 @@ if(WITH_BREAKPAD)
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
+target_compile_options(common PRIVATE -fno-omit-frame-pointer)
 target_link_libraries(common
   ${ceph_common_deps}
   legacy-option-headers)
@@ -848,6 +849,7 @@ set(ceph_osd_srcs
   ceph_osd.cc)
 
 add_executable(ceph-osd ${ceph_osd_srcs})
+target_compile_options(ceph-osd PRIVATE -fno-omit-frame-pointer)
 add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${ALLOC_LIBS}

@@ -141,6 +141,7 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+target_compile_options(crimson-common PRIVATE -fno-omit-frame-pointer)
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
@@ -192,7 +193,8 @@ add_library(crimson STATIC
   ${crimson_mon_srcs}
   ${crimson_net_srcs})
 target_compile_options(crimson PUBLIC
-  "-ftemplate-backtrace-limit=0")
+  "-ftemplate-backtrace-limit=0"
+  PRIVATE -fno-omit-frame-pointer)
 set_target_properties(crimson PROPERTIES
   JOB_POOL_COMPILE heavy_compile_job_pool)
 target_link_libraries(crimson
