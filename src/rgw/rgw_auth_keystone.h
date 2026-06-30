@@ -20,6 +20,13 @@ namespace keystone {
  * Keystone offers three different authentication mechanisms (token, EC2 and
  * regular user/pass). RadosGW actually does support the first two. */
 
+namespace detail {
+/* Match a request path against an application-credential access-rule
+ * pattern. Exposed for unit testing. See rgw_auth_keystone.cc for the
+ * full pattern syntax. */
+bool path_matches_pattern(std::string_view pattern, std::string_view path);
+} // namespace detail
+
 class TokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
 
