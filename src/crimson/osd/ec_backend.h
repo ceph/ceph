@@ -88,13 +88,13 @@ private:
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
+    const otel_span_ref &otel_trace,
     ECListener& eclistener) override;
 
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const ZTracer::Trace &trace) override;
+    const otel_span_ref &otel_trace) override;
 
   bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 
@@ -109,10 +109,12 @@ private:
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
     uint64_t object_size,
+    OpRequestRef op,
     GenContextURef<ec_extents_t &&> &&func) override;
 
   void objects_read_and_reconstruct_for_rmw(
     std::map<hobject_t, read_request_t> &&to_read,
+    OpRequestRef op,
     GenContextURef<ec_extents_t&&> &&func) override;
 
   ceph::ErasureCodeInterfaceRef ec_impl;

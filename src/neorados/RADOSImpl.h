@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string_view>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -24,6 +25,7 @@
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/tracer.h"
 
 #include "librados/RadosClient.h"
 
@@ -49,6 +51,7 @@ class RADOS : public Dispatcher {
 
   boost::asio::io_context& ioctx;
   boost::intrusive_ptr<CephContext> cct;
+  tracing::Tracer tracer;
 
   ceph::mutex lock = ceph::make_mutex("neorados::detail::RADOSImpl");
   int instance_id = -1;
@@ -63,7 +66,14 @@ class RADOS : public Dispatcher {
 
 public:
 
-  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct);
+  // Constructor 1: Create tracer from name (for apps wanting neorados to manage tracing)
+  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct,
+	std::string_view tracer_name);
+  
+  // Constructor 2: Accept external tracer (for apps with existing tracing infrastructure)
+  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct,
+	      tracing::Tracer&& external_tracer);
+  
   ~RADOS();
   bool ms_dispatch(Message *m) override;
   void ms_handle_connect(Connection *con) override;
@@ -74,14 +84,19 @@ public:
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
   }
   void shutdown();
+
+private:
+  void initialize_common();
 };
 
 class Client : public std::enable_shared_from_this<Client> {
 public:
   Client(boost::asio::io_context& ioctx,
          boost::intrusive_ptr<CephContext> cct,
-         MonClient& monclient, Objecter* objecter)
-    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter) {
+         MonClient& monclient, Objecter* objecter,
+	 tracing::Tracer& tracer)
+    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter),
+      tracer(tracer) {
   }
   virtual ~Client() {}
 
@@ -93,6 +108,7 @@ public:
   boost::intrusive_ptr<CephContext> cct;
   MonClient& monclient;
   Objecter* objecter;
+  tracing::Tracer& tracer;
 
   mon_feature_t get_required_monitor_features() const {
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
@@ -107,7 +123,7 @@ public:
 
   NeoClient(std::unique_ptr<RADOS>&& rados)
     : Client(rados->ioctx, rados->cct, rados->monclient,
-	     rados->objecter.get()),
+	     rados->objecter.get(), rados->tracer),
       svc(boost::asio::use_service<ceph::async::service<NeoClient>>(
 	  boost::asio::query(ioctx.get_executor(),
 			     boost::asio::execution::context))),
@@ -140,7 +156,8 @@ class RadosClient : public Client {
 public:
   RadosClient(librados::RadosClient* rados_client)
     : Client(rados_client->poolctx, {rados_client->cct},
-             rados_client->monclient, rados_client->objecter),
+             rados_client->monclient, rados_client->objecter,
+	     rados_client->tracer()),
       rados_client(rados_client) {
   }
 

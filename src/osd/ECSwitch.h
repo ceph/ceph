@@ -307,15 +307,16 @@ public:
     const std::list<std::pair<ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &
     to_read,
-    Context *on_complete, bool fast_read = false) override
+    Context *on_complete, bool fast_read = false,
+    OpRequestRef op = OpRequestRef()) override
   {
     if (is_optimized()) {
       optimized.objects_read_async(hoid, object_size, to_read, on_complete,
-                                   fast_read);
+                                   fast_read, op);
     }
     else {
       legacy.objects_read_async(hoid, object_size, to_read, on_complete,
-                                fast_read);
+                                fast_read, op);
     }
   }
 

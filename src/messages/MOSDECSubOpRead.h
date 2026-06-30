@@ -62,7 +62,10 @@ public:
     decode(pgid, p);
     decode(map_epoch, p);
     decode(op, p);
-    if (header.version >= 3) {
+    if (header.version >= 4) {
+      decode(min_epoch, p);
+      decode_otel_trace(p);
+    } else if (header.version >= 3) {
       decode(min_epoch, p);
       decode_trace(p);
     } else {
@@ -79,7 +82,7 @@ public:
     encode(map_epoch, payload);
     encode(op, payload, features);
     encode(min_epoch, payload);
-    encode_trace(payload, features);
+    encode_otel_trace(payload, features);
     if (header.version >= 4) {
       encode(cost, payload);
     }

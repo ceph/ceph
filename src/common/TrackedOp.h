@@ -18,7 +18,7 @@
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
-#include "common/zipkin_trace.h"
+#include "common/tracer.h"
 #include "include/spinlock.h"
 
 #include <boost/intrusive/list.hpp>
@@ -312,10 +312,11 @@ protected:
   virtual bool filter_out(const std::set<std::string>& filters) { return true; }
 
 public:
-  ZTracer::Trace osd_trace;
-  ZTracer::Trace pg_trace;
-  ZTracer::Trace store_trace;
-  ZTracer::Trace journal_trace;
+
+  otel_span_context_t osd_trace{false, false};
+  otel_span_context_t pg_trace{false, false};
+  otel_span_context_t store_trace{false, false};
+  otel_span_context_t journal_trace{false, false};
 
   virtual ~TrackedOp() {}
 

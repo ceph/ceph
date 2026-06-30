@@ -4,6 +4,7 @@
 #ifndef CEPH_OBJECTCACHER_H
 #define CEPH_OBJECTCACHER_H
 
+#include "common/tracer.h"
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
@@ -11,11 +12,9 @@
 #include "include/xlist.h"
 #include "include/common_fwd.h"
 
-#include "common/Cond.h"
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
-#include "common/zipkin_trace.h"
 
 #include "Striper.h"
 
@@ -57,6 +56,7 @@ class ObjectCacher {
   PerfCounters *perfcounter;
  public:
   CephContext *cct;
+  tracing::Tracer tracer{cct, "io.ceph.ObjectCacher"};
   class Object;
   struct ObjectSet;
   class C_ReadFinish;
@@ -419,8 +419,6 @@ class ObjectCacher {
   ceph::timespan max_dirty_age;
   bool cfg_block_writes_upfront;
 
-  ZTracer::Endpoint trace_endpoint;
-
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
@@ -541,14 +539,17 @@ class ObjectCacher {
 
   // io
   void bh_read(BufferHead *bh, int op_flags,
-               const ZTracer::Trace &parent_trace);
-  void bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace);
+               const otel_span_context_t& otel_ctx);
+  void bh_read(BufferHead *bh, int op_flags,
+               const otel_span_ref& trace);
+  void bh_write(BufferHead *bh, const otel_span_ref& otel_trace);
+  void bh_write(BufferHead *bh, const otel_span_context_t& otel_trace);
   void bh_write_scattered(std::list<BufferHead*>& blist);
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0);
+  void flush(const otel_span_ref& otel_trace, loff_t amount=0, int max_bhs=0);
 
   /**
    * flush a range of buffers
@@ -559,10 +560,13 @@ class ObjectCacher {
    * @param o object
    * @param off start offset
    * @param len extent length, or 0 for entire object
+   * @param otel_ctx OpenTelemetry Context
    * @return true if object was already clean/flushed.
    */
   bool flush(Object *o, loff_t off, loff_t len,
-             ZTracer::Trace *trace);
+             const otel_span_context_t& otel_ctx);
+  bool flush(Object *o, loff_t off, loff_t len,
+             const otel_span_ref& trace);
   loff_t release(Object *o);
   void purge(Object *o);
 
@@ -570,7 +574,7 @@ class ObjectCacher {
   ceph::condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call, ZTracer::Trace *trace,
+	     bool external_call, const otel_span_ref& otel_trace,
              std::vector<ObjHole> *holes);
   void retry_waiting_reads();
 
@@ -623,14 +627,14 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	    ZTracer::Trace *parent_trace = nullptr,
+	    const otel_span_context_t &otel_trace = {false, false},
             std::vector<ObjHole> *holes = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-	     ZTracer::Trace *parent_trace,
+	     const otel_span_context_t &otel_trace,
 	     bool block_writes_upfront);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-	     ZTracer::Trace *parent_trace = nullptr) {
-    return writex(wr, oset, onfreespace, parent_trace, cfg_block_writes_upfront);
+	     const otel_span_context_t &otel_trace = {false, false}) {
+    return writex(wr, oset, onfreespace, otel_trace, cfg_block_writes_upfront);
   }
   bool is_cached(ObjectSet *oset, std::vector<ObjectExtent>& extents,
 		 snapid_t snapid);
@@ -638,9 +642,9 @@ class ObjectCacher {
 private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
-                      ZTracer::Trace *trace, Context *onfreespace,
+                      const otel_span_ref& otel_trace, Context *onfreespace,
                       bool block_writes_upfront);
-  void _maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
+  void _maybe_wait_for_writeback(uint64_t len, const otel_span_ref& otel_trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
   void _discard(ObjectSet *oset, const std::vector<ObjectExtent>& exls,
@@ -654,7 +658,12 @@ public:
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
   bool flush_set(ObjectSet *oset, std::vector<ObjectExtent>& ex,
-                 ZTracer::Trace *trace, Context *onfinish = 0);
+                 const otel_span_ref& trace, Context *onfinish = 0);
+  bool flush_set(ObjectSet *oset, std::vector<ObjectExtent>& ex,
+                 const otel_span_context_t& otel_ctx, Context *onfinish = 0) {
+    auto trace = tracer.add_span("flush_set", otel_ctx);
+    return flush_set(oset, ex, trace, onfinish);
+  }
   bool flush_all(Context *onfinish = 0);
 
   void purge_set(ObjectSet *oset);
@@ -717,31 +726,34 @@ public:
   int file_read_ex(ObjectSet *oset, file_layout_t *layout, snapid_t snapid,
                    loff_t offset, uint64_t len, ceph::buffer::list *bl, int flags,
                    std::vector<ObjHole> *holes,
-                   Context *onfinish) {
+                   Context *onfinish,
+                   const otel_span_context_t& otel_trace = {false, false}) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
-			     oset->truncate_size, rd->extents);
-    return readx(rd, oset, onfinish, nullptr, holes);
+           oset->truncate_size, rd->extents);
+    return readx(rd, oset, onfinish, otel_trace, holes);
   }
 
   int file_write(ObjectSet *oset, file_layout_t *layout,
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags,
-		 Context *onfreespace, bool block_writes_upfront) {
+		 Context *onfreespace, bool block_writes_upfront,
+		 const otel_span_context_t& otel_trace = {false, false}) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
-    return writex(wr, oset, onfreespace, nullptr, block_writes_upfront);
+    return writex(wr, oset, onfreespace, otel_trace, block_writes_upfront);
   }
 
   bool file_flush(ObjectSet *oset, file_layout_t *layout,
 		  const SnapContext& snapc, loff_t offset, uint64_t len,
-		  Context *onfinish) {
+		  Context *onfinish,
+		  const otel_span_context_t& otel_ctx = {false, false}) {
     std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, extents);
-    ZTracer::Trace trace;
-    return flush_set(oset, extents, &trace, onfinish);
+    auto trace = tracer.add_span("file_flush", otel_ctx);
+    return flush_set(oset, extents, trace, onfinish);
   }
 };
 

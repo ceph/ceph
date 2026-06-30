@@ -86,7 +86,7 @@ int AddEvent(lua_State* L)  {
     s->trace->AddEvent(log);
   } else if(args == 2) {
     auto event_name = luaL_checkstring(L, 1);
-    std::unordered_map<const char*, jspan_attribute> event_values;
+    std::unordered_map<const char*, otel_attribute_t> event_values;
     lua_pushnil(L);
     while (lua_next(L, 2) != 0) {
       if (lua_type(L, -2) != LUA_TSTRING) {

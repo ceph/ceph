@@ -34,6 +34,7 @@
 #include "osd/ReplicatedBackend.h"
 #include "osd/PGBackend.h"
 #include "osd/OSDMap.h"
+#include "osd/osd_tracer.h"
 #include "osd/osd_types.h"
 #include "osd/PGTransaction.h"
 #include "common/ceph_context.h"
@@ -159,6 +160,8 @@ public:
     dpp = std::make_unique<NoDoutPrefix>(cct, ceph_subsys_osd);
     event_loop = std::make_unique<EventLoop>(dpp.get());
     
+    tracing::osd::tracer.init(cct, "osd-test");
+
     if (pool_type == EC) {
       setup_ec_pool();
     } else {

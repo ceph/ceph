@@ -280,7 +280,7 @@ class StoreObject : public Object {
   protected:
     RGWObjState state;
     Bucket* bucket = nullptr;
-    jspan_context trace_ctx{false, false};
+    otel_span_context_t trace_ctx{false, false};
 
   public:
     StoreObject() = default;
@@ -378,8 +378,8 @@ class StoreObject : public Object {
 			   optional_yield y) override {
       return -1;
     }
-    jspan_context& get_trace() override { return trace_ctx; }
-    void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
+    otel_span_context_t& get_trace() override { return trace_ctx; }
+    void set_trace (otel_span_context_t&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) override {
@@ -412,14 +412,14 @@ class StoreMultipartUpload : public MultipartUpload {
 protected:
   Bucket* bucket;
   std::map<uint32_t, std::unique_ptr<MultipartPart>> parts;
-  jspan_context trace_ctx{false, false};
+  otel_span_context_t trace_ctx{false, false};
 public:
   StoreMultipartUpload(Bucket* _bucket) : bucket(_bucket) {}
   virtual ~StoreMultipartUpload() = default;
 
   virtual std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() override { return parts; }
 
-  virtual jspan_context& get_trace() override { return trace_ctx; }
+  virtual otel_span_context_t& get_trace() override { return trace_ctx; }
 
   virtual void print(std::ostream& out) const override {
     out << get_meta();

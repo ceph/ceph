@@ -411,7 +411,7 @@ ECBackend::handle_sub_write(
 void ECBackend::handle_sub_read_n_reply(
   pg_shard_t from,
   ECSubRead &op,
-  const ZTracer::Trace &)
+  const otel_span_ref &otel_trace)
 {
   std::ignore = seastar::do_with(std::move(op), [this](auto&& op) {
     return handle_rep_read_op(op).si_then([this](auto&& reply) {
@@ -424,7 +424,7 @@ void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const ZTracer::Trace &trace,
+  const otel_span_ref &otel_trace,
   ECListener& eclistener)
 {
   LOG_PREFIX(ECBackend::handle_sub_write);
@@ -548,18 +548,20 @@ void ECBackend::objects_read_and_reconstruct(
   const std::map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
   uint64_t object_size,
+  OpRequestRef op,
   GenContextURef<ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, object_size, std::move(func));
+    reads, fast_read, object_size, op, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(
   std::map<hobject_t, ECCommon::read_request_t> &&to_read,
+  OpRequestRef op,
   GenContextURef<ECCommon::ec_extents_t&&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct_for_rmw(
-    std::move(to_read), std::move(func));
+    std::move(to_read), op, std::move(func));
 }
 
 ECBackend::ll_read_ierrorator::future<ECSubReadReply>

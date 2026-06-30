@@ -1296,12 +1296,12 @@ inline namespace v14_2_0 {
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
-    int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const jspan_context *trace_info);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const otel_span_context_t& trace_info);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl, int flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags, const jspan_context *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags, const otel_span_context_t& trace_info);
     /**
      * Schedule an async write operation with explicit snapshot parameters
      *
@@ -1322,11 +1322,11 @@ inline namespace v14_2_0 {
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectWriteOperation *op, snap_t seq,
         std::vector<snap_t>& snaps,
-        const blkin_trace_info *trace_info);
+        const otel_span_context_t& trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectWriteOperation *op, snap_t seq,
         std::vector<snap_t>& snaps, int flags,
-        const blkin_trace_info *trace_info);
+        const otel_span_context_t& trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
@@ -1340,7 +1340,7 @@ inline namespace v14_2_0 {
 		    bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectReadOperation *op, int flags,
-        bufferlist *pbl, const blkin_trace_info *trace_info);
+        bufferlist *pbl, const otel_span_context_t& trace_info);
 
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,
