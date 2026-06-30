@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
-import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
+import { CephfsDir, CephfsDirStatfs, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import { Daemon } from '../models/cephfs.model';
 
@@ -90,6 +90,11 @@ export class CephfsService {
       apiPath += `&path=${encodeURIComponent(path)}`;
     }
     return this.http.get<CephfsDir[]>(apiPath).pipe(shareReplay());
+  }
+
+  statfs(id: number, path: string): Observable<CephfsDirStatfs> {
+    const params = new HttpParams().set('path', path);
+    return this.http.get<CephfsDirStatfs>(`${this.baseURL}/${id}/statfs`, { params });
   }
 
   getCephfs(id: number) {
@@ -230,5 +235,16 @@ export class CephfsService {
       `${this.baseURL}/mirror/snapshot-mirror-status/${fsName}`,
       { params }
     );
+  }
+
+  addMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/directory`, {
+      fs_name: fsName,
+      path: path
+    });
+  }
+
+  listMirrorDirectories(@cdEncodeNot fsName: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseURL}/mirror/directory/${fsName}`);
   }
 }
