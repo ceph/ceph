@@ -146,6 +146,9 @@ static int copy_file_data(int src_fd, int dst_fd, off64_t size)
   off64_t soff = 0, doff = 0;
   while (size > 0) {
     ssize_t copied = ::copy_file_range(src_fd, &soff, dst_fd, &doff, size, 0);
+    if (copied == 0) {
+      return (soff > 0) ? 0 : -EIO;
+    }
     if (copied < 0) {
       if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
         char buf[65536];
@@ -320,6 +323,40 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
       << " → " << dst_name << " failed: " << cpp_strerror(-ret) << dendl;
     ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   }
+  return ret;
+}
+
+int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
+                            int src_fd,
+                            int dst_dir_fd, const std::string& dst_name)
+{
+  struct statx stx;
+  if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 0) << "ERROR: clone_fd: statx src failed: "
+      << cpp_strerror(err) << dendl;
+    return -err;
+  }
+
+  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY, 0644);
+  if (tmp_fd < 0) {
+    int err = errno;
+    ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
+      << cpp_strerror(err) << dendl;
+    return -err;
+  }
+
+  ::lseek(src_fd, 0, SEEK_SET);
+  int ret = copy_file_data(src_fd, tmp_fd, stx.stx_size);
+  if (ret < 0) {
+    ::close(tmp_fd);
+    ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
+      << " failed: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp);
+  ::close(tmp_fd);
   return ret;
 }
 
@@ -661,6 +698,13 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
     << " → " << dst_name << dendl;
   return 0;
+}
+
+int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
+                           int src_fd,
+                           int dst_dir_fd, const std::string& dst_name)
+{
+  return POSIXStrategy().clone_fd(dpp, src_fd, dst_dir_fd, dst_name);
 }
 
 void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,

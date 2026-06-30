@@ -3888,6 +3888,11 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   }
   bool has_instance = !get_key().instance.empty();
 
+  ldpp_dout(dpp, 10) << "copy_object: src=" << get_key()
+    << " dst=" << dobj->get_key()
+    << " src_bucket=" << sb->get_name()
+    << " dst_bucket=" << db->get_name() << dendl;
+
   // Source must exist, and we need to know if it's a shadow obj
   if (!check_exists(dpp)) {
     ret = errno;
@@ -3909,8 +3914,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   bool did_demote = false;
   std::unique_ptr<VersionLockHandle> vlock;
 
-  /* versioned copy: demote existing dest current to .versions/ */
-  if (dest_versioned && state.obj != dobj->state.obj) {
+  /* versioned copy: demote existing dest current to .versions/
+   * (includes self-copy — S3 requires a new version even when
+   * source == dest with MetadataDirective=REPLACE) */
+  if (dest_versioned) {
     /* stat destination to find existing current version */
     dobj->ent.reset();
     int dret = dobj->stat(dpp);
@@ -3984,13 +3991,39 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
   }
 
-  if (state.obj != dobj->state.obj) {
-    /* An actual copy, copy the data */
+  bool same_key = (get_bucket()->get_name() == dobj->get_bucket()->get_name() &&
+                   get_key().name == dobj->get_key().name);
+  if (!same_key) {
+    /* cross-object copy */
     ret = copy(dpp, y, sb, db, dobj);
     if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to copy object " << get_key()
                           << dendl;
         return ret;
+    }
+  } else if (did_demote && ent) {
+    rgw_obj_key dst_key = dobj->get_key();
+    std::vector<std::unique_ptr<nsfs::Directory>> dst_chain;
+    nsfs::Directory* dst_leaf_dir = nullptr;
+    std::string dst_leaf_name;
+    ret = nsfs::resolve_path(dpp, db->get_dir(),
+        get_key_fname(dst_key, /*use_version=*/false),
+        /*create_dirs=*/true, driver->ctx(),
+        dst_chain, dst_leaf_dir, dst_leaf_name);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: copy_object: self-copy resolve_path failed: "
+        << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    int src_fd = ent->get_fd();
+    if (src_fd < 0) {
+      ent->open(dpp);
+      src_fd = ent->get_fd();
+    }
+    ret = driver->get_fs_strategy()->clone_fd(
+      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name);
+    if (ret < 0) {
+      return ret;
     }
   }
   vlock.reset();
