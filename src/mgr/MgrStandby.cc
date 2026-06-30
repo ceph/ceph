@@ -17,7 +17,10 @@
 
 #include "common/errno.h"
 #include "common/signal.h"
+#include "common/cmdparse.h"
 #include "include/compat.h"
+#include "include/str_list.h"
+#include "perfglue/heap_profiler.h"
 
 #include "include/stringify.h"
 #include "global/global_context.h"
@@ -42,6 +45,7 @@ using std::map;
 using std::string;
 using std::vector;
 using namespace std::literals;
+using ceph::common::cmd_getval;
 
 class MgrHook : public AdminSocketHook {
   MgrStandby* mgr;
@@ -55,7 +59,7 @@ public:
            bufferlist& outbl) override {
     int r = 0;
     try {
-      r = mgr->asok_command(admin_command, cmdmap, f, errss);
+      r = mgr->asok_command(admin_command, cmdmap, f, errss, outbl);
     } catch (const TOPNSPC::common::bad_cmd_get& e) {
       errss << e.what();
       r = -EINVAL;
@@ -141,12 +145,31 @@ void MgrStandby::handle_conf_change(
   }
 }
 
-int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f, std::ostream& errss)
+int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap,
+			     Formatter* f, std::ostream& errss,
+			     ceph::buffer::list& outbl)
 {
   dout(10) << __func__ << ": " << cmd << dendl;
   if (cmd == "status") {
     f->open_object_section("status");
     f->close_section();
+    return 0;
+  } else if (cmd == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      errss << "could not issue heap profiler command -- not using tcmalloc!";
+      return -EOPNOTSUPP;
+    }
+    std::string heapcmd;
+    cmd_getval(cmdmap, "heapcmd", heapcmd);
+    std::vector<std::string> cmd_vec;
+    get_str_vec(heapcmd, cmd_vec);
+    std::string val;
+    if (cmd_getval(cmdmap, "value", val)) {
+      cmd_vec.push_back(val);
+    }
+    std::ostringstream outss;
+    ceph_heap_profiler_handle_command(cmd_vec, outss);
+    outbl.append(outss.str());
     return 0;
   } else {
     return -ENOSYS;
@@ -181,6 +204,14 @@ int MgrStandby::init()
   asok_hook.reset(new MgrHook(this));
   {
     int r = admin_socket->register_command("status", asok_hook.get(), "show status");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "heap " \
+      "name=heapcmd,type=CephChoices,strings=" \
+      "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+      "name=value,type=CephString,req=false",
+      asok_hook.get(),
+      "show heap usage info (available only if compiled with tcmalloc)");
     ceph_assert(r == 0);
   }
 
