@@ -55,3 +55,9 @@
 - **Action**: Replaced enumerated vendored directory list with a short reference to .gitmodules. Saves tokens, avoids staleness.
 - **Commit**: `doc: AGENTS.md: replace vendored list with .gitmodules reference`
 - **Status**: Done
+
+### 10. Merge redundant diff noise sections (epuertat)
+- **Comment ID**: 3493322339
+- **Action**: Merged "Do Not Reformat Existing Code" and "Minimize Diff Noise" into a single concise "Minimal Diffs" section.
+- **Commit**: `doc: AGENTS.md: merge redundant diff noise sections`
+- **Status**: Done

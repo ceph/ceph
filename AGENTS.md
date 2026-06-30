@@ -107,15 +107,8 @@ The repository has a `.clang-format` file at the project root. **All new and mod
 
 When writing new code, follow `.clang-format`. When editing existing code, format only the lines you change.
 
-### Do Not Reformat Existing Code
-**Never make whitespace-only or style-only changes to code you are not otherwise modifying.** Reformatting untouched code causes unnecessary git conflicts with other developers' branches. If you see poorly formatted existing code, leave it alone unless you are already making functional changes to those specific lines.
-
-### Minimize Diff Noise
-Keep diffs clean and minimal:
-- Only change lines that are necessary for the functional change
-- Do not re-indent surrounding code blocks unless the change requires it
-- Do not reorganize includes in files where you are only changing a few lines
-- Do not add or remove blank lines in code you are not modifying
+### Minimal Diffs
+Only change lines necessary for the functional change. Never make whitespace-only, style-only, or include-reordering changes to code you are not otherwise modifying — it causes git conflicts with other branches.
 
 ### Comments
 Comments should explain **why**, not **what**. Assume developers have AI tools to explain what code does.
