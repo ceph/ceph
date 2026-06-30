@@ -49,3 +49,9 @@
 - **Action**: Added reference to SubmittingPatches.rst for commit/PR formatting, with explicit exception that S-o-b instructions apply to humans only.
 - **Commit**: `doc: AGENTS.md: reference SubmittingPatches.rst for commit format`
 - **Status**: Done
+
+### 9. Replace vendored list with .gitmodules reference (epuertat)
+- **Comment ID**: 3493093553
+- **Action**: Replaced enumerated vendored directory list with a short reference to .gitmodules. Saves tokens, avoids staleness.
+- **Commit**: `doc: AGENTS.md: replace vendored list with .gitmodules reference`
+- **Status**: Done

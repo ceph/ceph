@@ -65,7 +65,7 @@ The codebase is primarily C++23 with Python for management tooling. The build sy
 | `src/ceph-volume/` | LVM-based OSD provisioning tool | |
 
 ### Vendored Third-Party (do NOT modify)
-`src/rocksdb/`, `src/seastar/`, `src/fmt/`, `src/zstd/`, `src/xxHash/`, `src/BLAKE3/`, `src/arrow/`, `src/googletest/`, `src/json_spirit/`, `src/spdk/`, `src/isa-l/`, `src/c-ares/`, `src/utf8proc/`, `src/dmclock/`, `src/lss/`, `src/breakpad/`, `src/jaegertracing/`, `src/s3select/`, `src/qatlib/`, `src/qatzip/`, `src/uadk/`, `src/libkmip/`, `src/blkin/`
+Directories listed in `.gitmodules` are external repos vendored as git submodules. Never edit files inside them.
 
 ## Daemon Entry Points
 
