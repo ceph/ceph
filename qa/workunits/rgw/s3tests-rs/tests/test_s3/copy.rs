@@ -1014,5 +1014,20 @@ async fn test_object_copy_versioned_overwrite_response_version_id() {
         .unwrap();
 
     assert!(copy_resp.version_id().is_some(),
-            "copy_object response must include x-amz-version-id");
+            "cross-object copy response must include x-amz-version-id");
+
+    // self-copy (metadata replace) should also return version_id
+    let self_copy_resp = client
+        .copy_object()
+        .bucket(&bucket_name)
+        .key("target")
+        .copy_source(format!("{bucket_name}/target"))
+        .metadata_directive(aws_sdk_s3::types::MetadataDirective::Replace)
+        .send()
+        .await
+        .unwrap();
+    assert!(self_copy_resp.version_id().is_some(),
+            "self-copy response must include x-amz-version-id");
+    assert_ne!(copy_resp.version_id(), self_copy_resp.version_id(),
+            "self-copy must create a new version");
 }
