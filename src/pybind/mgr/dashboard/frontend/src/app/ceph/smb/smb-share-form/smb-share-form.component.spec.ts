@@ -42,6 +42,7 @@ describe('SmbShareFormComponent', () => {
 
     fixture = TestBed.createComponent(SmbShareFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
     fixture.detectChanges();
   });
 
@@ -50,7 +51,6 @@ describe('SmbShareFormComponent', () => {
   });
 
   it('should create the form', () => {
-    component.ngOnInit();
     expect(component.smbShareForm).toBeDefined();
     expect(component.smbShareForm.get('share_id')).toBeTruthy();
     expect(component.smbShareForm.get('volume')).toBeTruthy();
@@ -97,8 +97,8 @@ describe('SmbShareFormComponent', () => {
       read_bw_limit_unit: 'MiB',
       write_bw_limit: 0,
       write_bw_limit_unit: 'MiB',
-      read_delay_max: 30,
-      write_delay_max: 30
+      read_burst_mult: 15,
+      write_burst_mult: 15
     });
     component.submitAction();
     expect(component).toBeTruthy();
@@ -106,17 +106,16 @@ describe('SmbShareFormComponent', () => {
 
   describe('QoS', () => {
     it('should have QoS form controls with default values', () => {
-      component.ngOnInit();
       expect(component.smbShareForm.get('read_iops_limit')).toBeTruthy();
       expect(component.smbShareForm.get('write_iops_limit')).toBeTruthy();
       expect(component.smbShareForm.get('read_bw_limit')).toBeTruthy();
       expect(component.smbShareForm.get('read_bw_limit_unit')).toBeTruthy();
       expect(component.smbShareForm.get('write_bw_limit')).toBeTruthy();
       expect(component.smbShareForm.get('write_bw_limit_unit')).toBeTruthy();
-      expect(component.smbShareForm.get('read_delay_max')).toBeTruthy();
-      expect(component.smbShareForm.get('write_delay_max')).toBeTruthy();
+      expect(component.smbShareForm.get('read_burst_mult')).toBeTruthy();
+      expect(component.smbShareForm.get('write_burst_mult')).toBeTruthy();
       expect(component.smbShareForm.get('read_iops_limit').value).toBe(0);
-      expect(component.smbShareForm.get('write_delay_max').value).toBe(30);
+      expect(component.smbShareForm.get('write_burst_mult').value).toBe(15);
     });
 
     it('should include QoS fields in buildRequest when set', () => {
@@ -130,13 +129,13 @@ describe('SmbShareFormComponent', () => {
         write_iops_limit: 500,
         read_bw_limit: 100,
         read_bw_limit_unit: 'MiB',
-        write_delay_max: 60
+        write_burst_mult: 60
       });
       const request = component.buildRequest();
       expect(request.share_resource.cephfs.qos.read_iops_limit).toBe(1000);
       expect(request.share_resource.cephfs.qos.write_iops_limit).toBe(500);
       expect(request.share_resource.cephfs.qos.read_bw_limit).toBe(100 * 1024 * 1024);
-      expect(request.share_resource.cephfs.qos.write_delay_max).toBe(60);
+      expect(request.share_resource.cephfs.qos.write_burst_mult).toBe(60);
     });
   });
 });
