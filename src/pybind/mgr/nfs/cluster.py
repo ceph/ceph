@@ -383,6 +383,27 @@ class NFSCluster:
             'virtual_ip': None,
             'backend': backends,
         }
+        # If no daemons found, but placement spec has hosts, show those as backend and try to resolve IP
+        if not backends:
+            try:
+                spec_result = self.mgr.describe_service(service_type='nfs')
+                services = orchestrator.raise_if_exception(spec_result)
+                for s in services:
+                    if hasattr(s.spec, 'service_id') and s.spec.service_id == cluster_id and hasattr(s.spec, 'placement'):
+                        hosts = getattr(s.spec.placement, 'hosts', None)
+                        if hosts:
+                            resolved_backends = []
+                            for h in hosts:
+                                ip = ''
+                                try:
+                                    ip = resolve_ip(str(h))
+                                except Exception:
+                                    pass
+                                resolved_backends.append({'hostname': str(h), 'ip': ip, 'port': None})
+                            r['backend'] = resolved_backends
+                        break
+            except Exception:
+                pass
         sc = self.mgr.describe_service(service_type='ingress')
         services = orchestrator.raise_if_exception(sc)
         for i in services:

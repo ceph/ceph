@@ -1,4 +1,4 @@
-  <ng-container *ngIf="orchStatus?.available && clusters$ | async as clusters">
+<ng-container *ngIf="orchStatus?.available && clusters$ | async as clusters">
   <cd-table [autoReload]="true"
             [data]="clusters"
             columnMode="flex"
@@ -8,44 +8,43 @@
             (setExpandedRow)="setExpandedRow($event)"
             (fetchData)="loadData()"
             (updateSelection)="updateSelection($event)">
-  <cd-table-actions class="table-actions"
-                    [selection]="selection"
-                    [permission]="permission"
-                    [tableActions]="tableActions"></cd-table-actions>
-  <cd-nfs-cluster-details  *cdTableDetail
-                           [selection]="expandedRow"></cd-nfs-cluster-details>
+    <cd-table-actions class="table-actions"
+                      [selection]="selection"
+                      [permission]="permission"
+                      [tableActions]="tableActions"></cd-table-actions>
+    <cd-nfs-cluster-details *cdTableDetail
+                            [selection]="expandedRow"></cd-nfs-cluster-details>
   </cd-table>
-  </ng-container>
+</ng-container>
 
-  <ng-template
-  #virtualIpTpl
-  let-row="data.row"
-  >
-  <span *ngIf="row.virtual_ip || row.port">
-  <cds-tag size="md">
-    {{ row.virtual_ip }}:{{row.port}}
-  </cds-tag>
+<ng-template #virtualIpTpl
+             let-row="data.row">
+  <span *ngIf="row?.virtual_ip || row?.port">
+    <cds-tag size="md">
+      {{ row?.virtual_ip }}:{{row?.port}}
+    </cds-tag>
   </span>
-  </ng-template>
+</ng-template>
 
-  <ng-template
-  #ipAddrTpl
-  let-backends="data.value"
-  >
+<ng-template #ipAddrTpl
+             let-backends="data.value">
   <span *ngFor="let backend of backends">
-  <span *ngIf="backend.ip || backend.port">
-  <cds-tag size="md">
-    {{ backend.ip }}:{{backend.port}}
-  </cds-tag>
-  </span>
-  </span>
-  </ng-template>
-
-  <ng-template #hostnameTpl
-               let-backends="data.value">
-  <span *ngFor="let backend of backends">
-    <span *ngIf="backend.hostname">
-      <cds-tag size="md">{{backend.hostname }}</cds-tag>
+    <span *ngIf="backend?.ip || backend?.port">
+      <cds-tag size="md">
+        {{ backend?.ip }}:{{backend?.port}}
+      </cds-tag>
     </span>
   </span>
-  </ng-template>
+</ng-template>
+
+<ng-template #hostnameTpl
+             let-backends="data.value">
+  <span *ngIf="backends && backends.length">
+    <span *ngFor="let backend of backends; let last = last">
+      <ng-container
+        *ngIf="backend?.hostname && (typeof backend.hostname === 'string' ? backend.hostname.trim() : backend.hostname)">
+        <cds-tag size="md">{{backend?.hostname }}</cds-tag>
+      </ng-container>
+    </span>
+  </span>
+</ng-template>
