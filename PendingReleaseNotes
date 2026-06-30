@@ -1,9 +1,12 @@
 * CephFS: New MDS configuration options for non-blocking dirfrag prefetch have
   been added. ``mds_dir_prefetch_backend``, when enabled with
   ``mds_dir_prefetch=false``, serves dentry requests via a fast targeted keyed
-  OSD fetch while launching a full dirfrag prefetch in the background.
-  ``mds_dir_prefetch_backend_max`` (default 1) limits the number of concurrent
-  background fetches. This reduces the latency of directory operations in
+  OSD fetch while lazily launching a full dirfrag prefetch in the background.
+  The background prefetch is triggered only after
+  ``mds_dir_prefetch_backend_hit_threshold`` (default 16) accesses to the same
+  dirfrag, avoiding wasted full-omap reads for directories that are only hit
+  a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
+  limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked

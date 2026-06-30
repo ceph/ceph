@@ -722,6 +722,8 @@ protected:
 
   int num_inodes_with_caps = 0;
 
+  uint8_t backend_hit_count = 0;  // hit counter for lazy bg prefetch threshold
+
   // state
   version_t committing_version = 0;
   version_t committed_version = 0;
