@@ -109,6 +109,7 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group/nvmeof-gateway-group-delete-guard-modal.component';
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
 
 @NgModule({
   imports: [
@@ -201,7 +202,8 @@ import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
     NvmeofTabsComponent,
-    NvmeofGatewayGroupDeleteGuardModalComponent
+    NvmeofGatewayGroupDeleteGuardModalComponent,
+    NvmeofEditAuthenticationComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
