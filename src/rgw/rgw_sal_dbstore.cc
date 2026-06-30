@@ -208,6 +208,7 @@ namespace rgw::sal {
       int shard_id,
       std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats,
+      std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
       std::string *max_marker, bool *syncstopped)
   {
     return 0;
@@ -219,6 +220,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 bool reset,
                                  RGWBucketEnt* ent)
   {
     return 0;
@@ -257,7 +259,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
-      optional_yield y, bool check_size_only)
+      optional_yield y, bool check_size_only, const rgw_placement_rule* dest_placement)
   {
     /* Not Handled in the first pass as stats are also needed */
     return 0;

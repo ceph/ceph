@@ -71,7 +71,7 @@
 #include "rgw_bucket_logging.h"
 #include "rgw_restore.h"
 #include "rgw_restore_waiter.h"
-
+#include "rgw_sc_quota_checker.h"
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
 #include "services/svc_sys_obj.h"
@@ -1843,16 +1843,19 @@ int RGWOp::init_quota()
 
   driver->get_quota(quota);
 
-  if (s->bucket->get_info().quota.enabled) {
-    quota.bucket_quota = s->bucket->get_info().quota;
-  } else if (user_quotas.bucket_quota.enabled) {
-    quota.bucket_quota = user_quotas.bucket_quota;
+  const auto& bucket_info_quota = s->bucket->get_info().quota;
+  if (bucket_info_quota.enabled || bucket_info_quota.has_any_sc_quota()) {
+      quota.bucket_quota = bucket_info_quota;
+  } else if (user_quotas.bucket_quota.enabled ||
+      user_quotas.bucket_quota.has_any_sc_quota()) {
+      quota.bucket_quota = user_quotas.bucket_quota;
   }
 
-  if (user_quotas.user_quota.enabled) {
-    quota.user_quota = user_quotas.user_quota;
+  if (user_quotas.user_quota.enabled ||
+      user_quotas.user_quota.has_any_sc_quota()) {
+      quota.user_quota = user_quotas.user_quota;
   }
-
+  
   return 0;
 }
 
@@ -3137,7 +3140,7 @@ void RGWGetUsage::execute(optional_yield y)
   }
 
   op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),
-                              s->user->get_tenant());
+                              false, s->user->get_tenant());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
@@ -3493,8 +3496,11 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   const auto& index = bucket.get_info().layout.current_index;
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
 
-  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories, sc_stats);
   if (r < 0) {
     return r;
   }
@@ -4305,7 +4311,7 @@ void RGWDeleteBucket::execute(optional_yield y)
 
   if (own_bucket) {
     // only if we own the bucket
-    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    op_ret = s->bucket->sync_owner_stats(this, y, false, nullptr);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
     }
@@ -4764,7 +4770,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
+    op_ret = s->bucket->check_quota(this, quota, s->content_length, y, &s->dest_placement);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -5047,7 +5053,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
+  op_ret = s->bucket->check_quota(this, quota, s->obj_size, y,  &s->dest_placement);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -5301,7 +5307,7 @@ void RGWPostObj::execute(optional_yield y)
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     ceph::buffer::list bl, aclbl;
 
-    op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
+    op_ret = s->bucket->check_quota(this, quota, s->content_length, y, &s->dest_placement);
     if (op_ret < 0) {
       return;
     }
@@ -5435,11 +5441,11 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
-    op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
+    op_ret = s->bucket->check_quota(this, quota, s->obj_size, y, &s->dest_placement);
     if (op_ret < 0) {
       return;
     }
-
+    
     hash.Final(m);
     etag.clear();
     etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
@@ -6583,7 +6589,7 @@ void RGWCopyObj::execute(optional_yield y)
         return;
       }
       // enforce quota against the destination bucket owner
-      op_ret = s->bucket->check_quota(this, quota, s->src_object->get_accounted_size(), y);
+      op_ret = s->bucket->check_quota(this, quota, s->src_object->get_accounted_size(), y, &s->dest_placement);
       if (op_ret < 0) {
         return;
       }
@@ -7784,6 +7790,31 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  if (dest_placement) {
+    uint64_t mp_total_size = 0;
+    int lp_ret = upload->list_parts(this, s->cct,
+                                    /*max_parts=*/10000,
+                                    /*marker=*/0,
+                                    /*next_marker=*/nullptr,
+                                    /*truncated=*/nullptr,
+                                    y);
+    if (lp_ret >= 0) {
+      for (auto& [_, mp_part] : upload->get_parts()) {
+        mp_total_size += mp_part->get_size();
+      }
+      op_ret = s->bucket->check_quota(this, quota, mp_total_size, y,
+                                       false, dest_placement);
+      if (op_ret < 0) {
+        ldpp_dout(this, 20) << "multipart quota check returned ret="
+                            << op_ret << " total_size=" << mp_total_size << dendl;
+        return;
+      }
+    } else {
+      ldpp_dout(this, 10) << "WARNING: list_parts for quota sum failed ret="
+                          << lp_ret << "; skipping multipart quota check" << dendl;
+    }
+  }
+
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
@@ -8806,7 +8837,8 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(this, quota, size, y);
+  rgw_placement_rule dest_placement = s->dest_placement;
+  op_ret = bucket->check_quota(this, quota, size, y, &dest_placement);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -8815,7 +8847,6 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     obj->gen_rand_obj_instance_name();
   }
 
-  rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
@@ -8883,7 +8914,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(this, quota, size, y);
+  op_ret = bucket->check_quota(this, quota, size, y, &dest_placement);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "quota exceeded for path=" << path << dendl;
     return op_ret;

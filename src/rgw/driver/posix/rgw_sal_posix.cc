@@ -2844,6 +2844,7 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
+			    std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			    std::string* max_marker, bool* syncstopped)
 {
   auto& main = stats[RGWObjCategory::Main];
@@ -2894,6 +2895,7 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int POSIXBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  bool reset,
                                   RGWBucketEnt* ent)
 {
   return 0;
@@ -2960,7 +2962,7 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 }
 
 int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
-				optional_yield y, bool check_size_only)
+				optional_yield y, bool check_size_only, const rgw_placement_rule* dest_placement)
 {
   return driver->get_quota_handler()->check_quota(dpp, info.owner, get_key(),
                                                   quota, (check_size_only ? 0 : 1),

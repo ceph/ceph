@@ -157,10 +157,11 @@ protected:
 			     int shard_id,
           std::string *bucket_ver, std::string *master_ver,
           std::map<RGWObjCategory, RGWStorageStats>& stats,
+          std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
           std::string *max_marker = nullptr,
           bool *syncstopped = nullptr) override;
       virtual int read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-      int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+      int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, bool reset,
                            RGWBucketEnt* ent) override;
       int check_bucket_shards(const DoutPrefixProvider *dpp,
                               uint64_t num_objs, optional_yield y) override;
@@ -170,7 +171,7 @@ protected:
                         optional_yield y) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+      virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false, const rgw_placement_rule* dest_placement = nullptr) override;
       virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& attrs, optional_yield y) override;
       virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime, optional_yield y) override;
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,

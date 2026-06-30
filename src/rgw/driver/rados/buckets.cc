@@ -26,7 +26,8 @@ namespace rgwrados::buckets {
 
 static int set(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
-               cls_user_bucket_entry&& entry, bool add)
+               cls_user_bucket_entry&& entry, bool add, bool reset,
+               const RGWBucketEnt* ent)
 {
   std::list<cls_user_bucket_entry> entries;
   entries.push_back(std::move(entry));
@@ -38,7 +39,7 @@ static int set(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   librados::ObjectWriteOperation op;
-  ::cls_user_set_buckets(op, entries, add);
+  ::cls_user_set_buckets(op, entries, add, reset);
   return ref.operate(dpp, std::move(op), y);
 }
 
@@ -56,7 +57,7 @@ int add(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   constexpr bool add = true; // create/update entry
-  return set(dpp, y, rados, obj, std::move(entry), add);
+  return set(dpp, y, rados, obj, std::move(entry), add, false, nullptr);
 }
 
 int remove(const DoutPrefixProvider* dpp, optional_yield y,
@@ -141,13 +142,13 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
 int write_stats(const DoutPrefixProvider* dpp, optional_yield y,
                 librados::Rados& rados, const rgw_raw_obj& obj,
-                const RGWBucketEnt& ent)
+                const RGWBucketEnt& ent, bool reset)
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
 
   constexpr bool add = false; // bucket entry must exist
-  return set(dpp, y, rados, obj, std::move(entry), add);
+  return set(dpp, y, rados, obj, std::move(entry), add, reset, &ent);
 }
 
 int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
@@ -174,6 +175,18 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
   stats.size = header.stats.total_bytes;
   stats.size_rounded = header.stats.total_bytes_rounded;
   stats.num_objects = header.stats.total_entries;
+  if (header.storage_class_stats.has_value()) {
+    if (!stats.storage_class_stats.has_value()) {
+      stats.storage_class_stats.emplace();
+    }
+    for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
+      std::string storage_class = it->first;
+      stats.storage_class_stats.value()[storage_class].size = it->second.total_bytes;
+      stats.storage_class_stats.value()[storage_class].size_rounded = it->second.total_bytes_rounded;
+      stats.storage_class_stats.value()[storage_class].num_objects = it->second.total_entries;
+    }
+  }
+
   if (last_synced) {
     *last_synced = header.last_stats_sync;
   }

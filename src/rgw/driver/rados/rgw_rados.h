@@ -1504,7 +1504,7 @@ public:
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
                        RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
-      std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
+      std::map<RGWObjCategory, RGWStorageStats>& stats, std::optional<std::map<std::string, RGWStorageStats>>& sc_stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y);
@@ -1664,7 +1664,7 @@ public:
 
   int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                   RGWQuota& quota, uint64_t obj_size,
-		  optional_yield y, bool check_size_only = false);
+		  optional_yield y, bool check_size_only = false, const rgw_placement_rule* dest_placement = nullptr);
 
   void calculate_preferred_shards(const DoutPrefixProvider* dpp,
 				  bool is_versioned,
