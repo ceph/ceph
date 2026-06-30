@@ -117,7 +117,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_health)",
+                     "expr": "max(ceph_hardware_health)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -180,7 +180,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_temperature_celsius{sensor_name=~\".*CPU_TEMP\"})",
+                     "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\".*CPU_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -235,7 +235,7 @@
                },
                "targets": [
                   {
-                     "expr": "count by(version) (ceph_node_proxy_firmware_info{component=~\".*BMC.*\"})",
+                     "expr": "count by(version) (ceph_hardware_firmware_info{component=~\".*BMC.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{version}}",
@@ -289,7 +289,7 @@
                },
                "targets": [
                   {
-                     "expr": "count by(version) (ceph_node_proxy_firmware_info{component=~\".*BIOS.*\"})",
+                     "expr": "count by(version) (ceph_hardware_firmware_info{component=~\".*BIOS.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{version}}",
@@ -342,7 +342,7 @@
                },
                "targets": [
                   {
-                     "expr": "count by(model) (ceph_node_proxy_storage_capacity_bytes)",
+                     "expr": "count by(model) (ceph_hardware_storage_capacity_bytes)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{model}}",
@@ -395,11 +395,11 @@
                },
                "targets": [
                   {
-                     "expr": "count by(version) (ceph_node_proxy_firmware_info{component=~\".*Drive.*\"})",
+                     "expr": "count by(firmware_version) (ceph_hardware_storage_capacity_bytes{firmware_version!=\"unknown\"})",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
-                     "legendFormat": "{{version}}",
+                     "legendFormat": "{{firmware_version}}",
                      "refId": "A"
                   }
                ],
@@ -447,7 +447,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "count(count by(hostname) (ceph_node_proxy_health))",
+                     "expr": "count(count by(hostname) (ceph_hardware_health))",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -499,7 +499,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "count(ceph_node_proxy_storage_capacity_bytes)",
+                     "expr": "count(ceph_hardware_storage_capacity_bytes)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -562,7 +562,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_temperature_celsius{sensor_name=~\"NVME.*_TEMP\"})",
+                     "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\"NVME.*_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -662,7 +662,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_health{hostname=~\"$hostname\",category=\"power\"})",
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"power\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -684,7 +684,19 @@
                      "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "red",
+                              "value": 80
+                           }
+                        ]
                      },
                      "unit": "celsius"
                   }
@@ -699,7 +711,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -714,7 +726,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"})",
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -734,9 +746,23 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "max": 85,
+                     "min": 0,
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 80
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 90
+                           }
+                        ]
                      },
                      "unit": "celsius"
                   }
@@ -751,7 +777,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -766,7 +792,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "avg(ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"})",
+                     "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -786,9 +812,23 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "max": 88,
+                     "min": 0,
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "yellow",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 80
+                           }
+                        ]
                      },
                      "unit": "celsius"
                   }
@@ -803,7 +843,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -818,7 +858,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"})",
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -870,7 +910,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "count(ceph_node_proxy_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
+                     "expr": "count(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -887,12 +927,30 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "max": 100,
+                     "min": 0,
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "yellow",
+                              "value": 80
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 90
+                           }
+                        ]
                      },
                      "unit": "celsius"
                   }
@@ -907,7 +965,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -922,7 +980,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "avg(ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"})",
+                     "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -939,12 +997,28 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "thresholds"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 78
+                           }
+                        ]
                      },
                      "unit": "short"
                   }
@@ -974,7 +1048,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "count(ceph_node_proxy_storage_capacity_bytes{hostname=~\"$hostname\", protocol=\"NVMe\"})",
+                     "expr": "count(ceph_hardware_storage_capacity_bytes{hostname=~\"$hostname\", protocol=\"NVMe\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -991,12 +1065,30 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "thresholds"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "max": 85,
+                     "min": 0,
                      "thresholds": {
                         "mode": "absolute",
-                        "steps": [ ]
+                        "steps": [
+                           {
+                              "color": "green"
+                           },
+                           {
+                              "color": "#EAB839",
+                              "value": 70
+                           },
+                           {
+                              "color": "semi-dark-red",
+                              "value": 78
+                           }
+                        ]
                      },
                      "unit": "celsius"
                   }
@@ -1011,7 +1103,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -1026,7 +1118,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*\"})",
+                     "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -1106,7 +1198,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_health{hostname=~\"$hostname\",category=\"network\"})",
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"network\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -1186,7 +1278,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_health{hostname=~\"$hostname\",category=\"fans\"})",
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"fans\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -1266,7 +1358,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "max(ceph_node_proxy_health{hostname=~\"$hostname\",category=\"storage\"})",
+                     "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"storage\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "__auto",
@@ -1320,7 +1412,7 @@
                "styles": [ ],
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_storage_capacity_bytes{hostname=~\"$hostname\"}",
+                     "expr": "ceph_hardware_storage_capacity_bytes{hostname=~\"$hostname\"}",
                      "format": "table",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1397,7 +1489,7 @@
                "styles": [ ],
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_firmware_info{hostname=~\"$hostname\"}",
+                     "expr": "ceph_hardware_firmware_info{hostname=~\"$hostname\"}",
                      "format": "table",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1456,6 +1548,10 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
@@ -1477,7 +1573,7 @@
                "maxPerRow": 6,
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -1494,7 +1590,7 @@
                "repeatDirection": "h",
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_fan_rpm{hostname=~\"$hostname\",fan_name=~\"$fan_speeds\"}",
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"$fan_speeds\"}",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{fan_name}}",
@@ -1511,6 +1607,10 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
@@ -1531,7 +1631,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -1546,7 +1646,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU1.*\"}",
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU1.*\"}",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{fan_name}}",
@@ -1563,6 +1663,10 @@
                "description": "",
                "fieldConfig": {
                   "defaults": {
+                     "color": {
+                        "fixedColor": "blue",
+                        "mode": "fixed"
+                     },
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
@@ -1583,7 +1687,7 @@
                "links": [ ],
                "options": {
                   "colorMode": "none",
-                  "graphMode": "none",
+                  "graphMode": "area",
                   "justifyMode": "auto",
                   "orientation": "horizontal",
                   "reduceOptions": {
@@ -1598,7 +1702,7 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU2.*\"}",
+                     "expr": "ceph_hardware_fan_rpm{hostname=~\"$hostname\",fan_name=~\"PSU2.*\"}",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{fan_name}}",
@@ -1678,7 +1782,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"}",
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{sensor_name}}",
@@ -1765,7 +1869,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"}",
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{sensor_name}}",
@@ -1852,7 +1956,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"}",
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{sensor_name}}",
@@ -1939,7 +2043,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "ceph_node_proxy_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*_TEMP\"}",
+                     "expr": "ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*_TEMP\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{sensor_name}}",
@@ -2040,7 +2144,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "avg(ceph_node_proxy_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
+                     "expr": "avg(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "PSU Fans",
@@ -2066,7 +2170,7 @@
                },
                "yaxes": [
                   {
-                     "format": "none",
+                     "format": "locale",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2074,7 +2178,7 @@
                      "show": true
                   },
                   {
-                     "format": "none",
+                     "format": "locale",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2125,7 +2229,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "avg(ceph_node_proxy_fan_rpm{hostname=~\"$hostname\", fan_name!~\"PSU.*\"})",
+                     "expr": "avg(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name!~\"PSU.*\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "System Fans",
@@ -2135,7 +2239,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "AVG Cooling Fan Speed",
+               "title": "AVG Cooling Fan RPMs",
                "tooltip": {
                   "shared": true,
                   "sort": 0,
@@ -2151,7 +2255,7 @@
                },
                "yaxes": [
                   {
-                     "format": "none",
+                     "format": "locale",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2159,7 +2263,7 @@
                      "show": true
                   },
                   {
-                     "format": "none",
+                     "format": "locale",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2231,7 +2335,7 @@
             "multi": false,
             "name": "hostname",
             "options": [ ],
-            "query": "label_values(ceph_node_proxy_health, hostname)",
+            "query": "label_values(ceph_hardware_health, hostname)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
@@ -2251,9 +2355,9 @@
             "multi": true,
             "name": "fan_speeds",
             "options": [ ],
-            "query": "label_values(ceph_node_proxy_fan_rpm{hostname=~\"$hostname\"},fan_name)",
+            "query": "label_values(ceph_hardware_fan_rpm{hostname=~\"$hostname\"},fan_name)",
             "refresh": 1,
-            "regex": "",
+            "regex": "/.*TACH_OUT/",
             "sort": 0,
             "tagValuesQuery": "",
             "tags": [ ],
