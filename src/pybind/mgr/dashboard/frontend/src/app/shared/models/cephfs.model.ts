@@ -150,11 +150,55 @@ export interface MirrorSyncedSnap {
   sync_time_stamp?: number | string;
 }
 
+export interface MirrorSyncProgress {
+  state?: string;
+  duration?: string;
+}
+
+export interface MirrorSyncSnapBytes {
+  sync_bytes?: string;
+  total_bytes?: string;
+  sync_percent?: string;
+}
+
+export interface MirrorSyncSnapFiles {
+  sync_files?: number;
+  total_files?: number;
+  sync_percent?: string;
+}
+
+export interface MirrorCurrentSyncingSnap {
+  id?: number;
+  name: string;
+  'sync-mode'?: string;
+  avg_read_throughput_bytes?: string;
+  avg_write_throughput_bytes?: string;
+  crawl?: MirrorSyncProgress;
+  datasync_queue_wait?: MirrorSyncProgress;
+  bytes?: MirrorSyncSnapBytes;
+  files?: MirrorSyncSnapFiles;
+  eta?: string;
+}
+
+export interface MirrorLastSyncedSnap {
+  id?: number;
+  name?: string;
+  crawl_duration?: string;
+  datasync_queue_wait_duration?: string;
+  sync_duration?: string;
+  sync_time_stamp?: number | string;
+  sync_bytes?: number | string;
+  sync_files?: number;
+}
+
 export interface MirrorDirStatus {
   state?: string;
-  last_synced_snap?: MirrorSyncedSnap;
-  current_syncing_snap?: MirrorSyncedSnap;
+  last_synced_snap?: MirrorLastSyncedSnap;
+  current_syncing_snap?: MirrorCurrentSyncingSnap;
+  current_sync_snap?: MirrorCurrentSyncingSnap;
   snaps_synced?: number;
+  snaps_deleted?: number;
+  snaps_renamed?: number;
   metrics_updated_at?: number | string;
 }
 

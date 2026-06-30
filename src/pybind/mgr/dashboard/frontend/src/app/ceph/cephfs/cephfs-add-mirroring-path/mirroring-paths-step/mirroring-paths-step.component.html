@@ -72,15 +72,31 @@
               @if (lvl > 0) {
                 <span class="cds--type-body-compact-01 path-separator">/</span>
               }
-              <cds-select [label]="''"
-                          [value]="level.selected"
-                          (valueChange)="onLevelChange(i, lvl, $event)">
-                <option value=""
-                        i18n>-- Select --</option>
-                @for (opt of level.options; track opt) {
-                  <option [value]="opt">{{ opt }}</option>
-                }
-              </cds-select>
+              @if (isLevelLoading(i, lvl) && !level.options.length) {
+                <cds-loading [isActive]="true"
+                             [overlay]="false"
+                             size="sm">
+                </cds-loading>
+              } @else {
+                <cds-select [label]="''"
+                            [value]="level.selected"
+                            (valueChange)="onLevelChange(i, lvl, $event)">
+                  <option value=""
+                          i18n>-- Select --</option>
+                  @for (opt of level.options; track opt) {
+                    <option [value]="opt">{{ opt }}</option>
+                  }
+                </cds-select>
+              }
+            }
+            @if (isLevelLoading(i, entry.levels.length)) {
+              @if (entry.levels.length) {
+                <span class="cds--type-body-compact-01 path-separator">/</span>
+              }
+              <cds-loading [isActive]="true"
+                           [overlay]="false"
+                           size="sm">
+              </cds-loading>
             }
           </div>
         </div>
