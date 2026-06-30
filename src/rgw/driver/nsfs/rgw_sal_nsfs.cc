@@ -4109,7 +4109,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
 
     auto* bcache = driver->get_bucket_cache();
-    std::string obj_name = dobj->get_name();
+    std::string obj_name = dobj->get_key().get_index_key_name();
 
     if (did_demote) {
       cls_rgw_obj_key old_key;
@@ -4771,18 +4771,33 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
-  ret = stat(dpp);
+  ret = ent->stat(dpp, /*force=*/true);
   if (ret < 0) {
     ldpp_dout(dpp, 20)
-        << "ERROR: NSFSAtomicWriter failed closing file" << dendl;
+        << "ERROR: NSFSAtomicWriter failed stat after link" << dendl;
     return ret;
   }
 
-  fill_cache( nullptr, null_yield,
+  uint32_t flags = FSEnt::FLAG_NONE;
+  const auto& binfo = b->get_info();
+  if (binfo.versioned()) {
+    int fd = ent->get_fd();
+    if (fd >= 0) {
+      const struct statx& stx = ent->get_stx();
+      std::string ver_id = binfo.versioning_enabled()
+        ? nsfs_version_id_from_statx(stx) : NULL_VERSION_ID;
+      std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
+      ::fsetxattr(fd, xattr.c_str(), ver_id.c_str(), ver_id.size(), 0);
+      set_instance(ver_id);
+    }
+    flags = FSEnt::FLAG_LIST_VERSIONS;
+  }
+
+  ent->fill_cache(nullptr, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
 	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
 	return 0;
-      });
+      }, flags);
   return 0;
 }
 
@@ -5294,7 +5309,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
               ? NULL_VERSION_ID
               : nsfs_version_id_from_statx(pstx);
             rgw_bucket_dir_entry bde{};
-            bde.key.name = source->get_name();
+            bde.key.name = source->get_key().get_index_key_name();
             bde.key.instance = promoted_ver;
             bde.ver.pool = 1;
             bde.ver.epoch = 1;
@@ -5415,7 +5430,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         result.delete_marker = is_dm;
         {
           cls_rgw_obj_key cache_key;
-          cache_key.name = source->get_name();
+          cache_key.name = source->get_key().get_index_key_name();
           cache_key.instance = req_version_id;
           source->driver->get_bucket_cache()->remove_entry(
             dpp, b->get_name(), cache_key);
@@ -5629,7 +5644,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   /* surgical cache update: demoted current → non-current, add delete marker */
   auto* bcache = source->driver->get_bucket_cache();
-  std::string obj_name = source->get_name();
+  std::string obj_name = source->get_key().get_index_key_name();
 
   if (did_demote) {
     /* remove old current entry, add non-current entry */
@@ -6141,6 +6156,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  bool did_demote = false;
+  std::string demoted_ver_id;
+
   /* versioned: demote current version before publishing, with lock */
   if (versioned && leaf_fd >= 0) {
     int vfd = open_versions_dir(leaf_fd);
@@ -6185,6 +6203,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
                           now_ms.c_str(), now_ms.size(), 0);
               ::close(demoted_fd);
             }
+            demoted_ver_id = cur_ver_id;
+            did_demote = true;
           } else if (sr == SafeResult::MISMATCH && cur_is_null) {
             /* null version already demoted */
           } else if (sr != SafeResult::OK) {
@@ -6230,8 +6250,43 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
                     new_ver_id.c_str(), new_ver_id.size(), 0);
         ::close(obj_fd);
       }
+
+      auto* bcache = driver->get_bucket_cache();
+      std::string obj_name = target_obj->get_key().get_index_key_name();
+
+      if (did_demote) {
+        cls_rgw_obj_key old_key;
+        old_key.name = obj_name;
+        old_key.instance = demoted_ver_id;
+        bcache->remove_entry(dpp, pb->get_name(), old_key);
+
+        rgw_bucket_dir_entry dem_bde{};
+        dem_bde.key.name = obj_name;
+        dem_bde.key.instance = demoted_ver_id;
+        dem_bde.ver.pool = 1;
+        dem_bde.ver.epoch = 1;
+        dem_bde.exists = true;
+        dem_bde.meta.category = RGWObjCategory::Main;
+        dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+        bcache->add_entry(dpp, pb->get_name(), dem_bde);
+      }
+
+      rgw_bucket_dir_entry new_bde{};
+      new_bde.key.name = obj_name;
+      new_bde.key.instance = new_ver_id;
+      new_bde.ver.pool = 1;
+      new_bde.ver.epoch = 1;
+      new_bde.exists = true;
+      new_bde.meta.category = RGWObjCategory::Main;
+      new_bde.meta.size = new_stx.stx_size;
+      new_bde.meta.accounted_size = new_stx.stx_size;
+      new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
+      new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      new_bde.meta.etag = synthesize_etag(new_stx);
+      new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+                      rgw_bucket_dir_entry::FLAG_CURRENT;
+      bcache->add_entry(dpp, pb->get_name(), new_bde);
     }
-    driver->get_bucket_cache()->invalidate_bucket(dpp, pb->get_name());
   }
 
   // remove staging directory
@@ -6501,6 +6556,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   const auto& binfo = b->get_info();
   bool versioned = binfo.versioned();
   bool ver_enabled = binfo.versioning_enabled();
+  bool did_demote = false;
+  std::string demoted_ver_id;
 
   /* versioned PUT: demote current version to .versions/ before publishing */
   if (versioned) {
@@ -6534,10 +6591,6 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
         struct statx cur_stx;
         if (statx(parent_fd, cur_leaf.c_str(), AT_SYMLINK_NOFOLLOW,
                   STATX_ALL, &cur_stx) == 0) {
-          ldpp_dout(dpp, 10) << "versioned PUT demote: cur_leaf="
-            << cur_leaf << " ino=" << cur_stx.stx_ino
-            << " nlink=" << cur_stx.stx_nlink
-            << " parent_fd=" << parent_fd << dendl;
           bool cur_is_null = false;
           {
             int chk_fd = ::openat(parent_fd, cur_leaf.c_str(), O_RDONLY);
@@ -6569,6 +6622,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                             now_ms.c_str(), now_ms.size(), 0);
                 ::close(demoted_fd);
               }
+              demoted_ver_id = cur_ver_id;
+              did_demote = true;
             } else if (sr == SafeResult::MISMATCH && cur_is_null) {
               /* null version already demoted by a prior writer */
             } else if (sr != SafeResult::OK) {
@@ -6598,23 +6653,27 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return ret;
   }
 
-  /* versioned PUT: compute version ID from the published file's stat
-   * and persist as xattr on the new current version */
-  if (versioned && obj->get_fsent()) {
-    obj->get_fsent()->stat(dpp, /*force=*/true);
-    const struct statx& new_stx = obj->get_fsent()->get_stx();
-    std::string new_ver_id = ver_enabled
-      ? nsfs_version_id_from_statx(new_stx)
-      : NULL_VERSION_ID;
-    obj->set_instance(new_ver_id);
+  /* versioned PUT: link_temp_file already set the version_id xattr,
+   * set_instance, and added the new current cache entry; handle the
+   * demoted entry here */
+  if (versioned && did_demote) {
+    auto* bcache = driver->get_bucket_cache();
+    std::string obj_name = obj->get_key().get_index_key_name();
 
-    int obj_fd = obj->get_fsent()->get_fd();
-    if (obj_fd >= 0) {
-      std::string xattr = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_VERSION_ID;
-      ::fsetxattr(obj_fd, xattr.c_str(),
-                  new_ver_id.c_str(), new_ver_id.size(), 0);
-    }
-    driver->get_bucket_cache()->invalidate_bucket(rctx.dpp, b->get_name());
+    cls_rgw_obj_key old_key;
+    old_key.name = obj_name;
+    old_key.instance = demoted_ver_id;
+    bcache->remove_entry(rctx.dpp, b->get_name(), old_key);
+
+    rgw_bucket_dir_entry dem_bde{};
+    dem_bde.key.name = obj_name;
+    dem_bde.key.instance = demoted_ver_id;
+    dem_bde.ver.pool = 1;
+    dem_bde.ver.epoch = 1;
+    dem_bde.exists = true;
+    dem_bde.meta.category = RGWObjCategory::Main;
+    dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+    bcache->add_entry(rctx.dpp, b->get_name(), dem_bde);
   }
 
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
