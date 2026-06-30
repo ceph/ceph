@@ -446,6 +446,8 @@ else()
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
+  get_target_property(FMT_VERSION fmt VERSION)
+  set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions

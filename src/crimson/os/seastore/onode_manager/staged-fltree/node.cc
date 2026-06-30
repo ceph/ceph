@@ -7,6 +7,8 @@
 #include <exception>
 #include <sstream>
 
+#include <fmt/std.h>  // for fmt::formatter<std::error_code>
+
 #include "common/likely.h"
 #include "crimson/common/utility.h"
 #include "crimson/os/seastore/logging.h"
@@ -693,7 +695,7 @@ eagain_ifuture<Ref<Node>> Node::load(
     crimson::ct_error::all_same_way(
       [FNAME, c, addr, expect_is_level_tail](const auto &e) {
       ERRORT("{} -- addr={}, is_level_tail={}",
-        c.t, addr, expect_is_level_tail);
+        c.t, e, addr, expect_is_level_tail);
       ceph_abort();
       return eagain_iertr::make_ready_future<NodeExtentRef>();
     })

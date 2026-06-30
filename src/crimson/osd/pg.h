@@ -11,6 +11,8 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
+#include <fmt/ostream.h>
+
 #include "common/dout.h"
 #include "common/ostream_temp.h"
 #include "include/interval_set.h"
@@ -66,6 +68,16 @@ namespace crimson::net {
 namespace crimson::os {
   class FuturizedStore;
 }
+
+namespace crimson::osd {
+class PG;
+}
+
+// declared ahead of the class so the consteval {fmt} check can see it from
+// PG's own inline logging methods (which format *this) above the class.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::PG> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::osd {
 class OpsExecuter;
@@ -1356,7 +1368,3 @@ struct PG::do_osd_ops_params_t {
 std::ostream& operator<<(std::ostream&, const PG& pg);
 
 }
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::PG> : fmt::ostream_formatter {};
-#endif

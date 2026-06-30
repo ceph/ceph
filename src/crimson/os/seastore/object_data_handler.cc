@@ -4,9 +4,22 @@
 #include <utility>
 #include <functional>
 
+#include <fmt/ostream.h>
+
 #include "crimson/common/log.h"
 
 #include "crimson/os/seastore/object_data_handler.h"
+
+// declared ahead of the logging functions below so the consteval {fmt}
+// check can see them at the call sites.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::overwrite_range_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::data_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::edge_t>
+  : fmt::ostream_formatter {};
+#endif
 
 namespace {
   seastar::logger& logger() {
@@ -1882,11 +1895,3 @@ ObjectDataHandler::rename(context_t ctx)
 
 } // namespace crimson::os::seastore
 
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::overwrite_range_t>
-  : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::data_t>
-  : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::edge_t>
-  : fmt::ostream_formatter {};
-#endif

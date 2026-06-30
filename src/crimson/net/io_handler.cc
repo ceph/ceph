@@ -1294,6 +1294,14 @@ IOHandler::shard_states_t::notify_out_dispatching_stopped(
   }
 }
 
+void
+IOHandler::shard_states_t::abort_wrong_io_state(SocketConnection &conn)
+{
+  logger().error("{} try_enter_out_dispatching() got wrong io_state {}",
+                 conn, io_state);
+  ceph_abort_msg("impossible");
+}
+
 seastar::future<>
 IOHandler::shard_states_t::wait_io_exit_dispatching()
 {

@@ -7,6 +7,7 @@
 #include <memory>
 #include <string.h>
 
+#include <fmt/ostream.h>
 
 #include "include/buffer.h"
 
@@ -23,6 +24,16 @@
 namespace crimson::os::seastore {
 class LogicalChildNode;
 }
+
+namespace crimson::os::seastore::lba {
+struct LBALeafNode;
+}
+
+// declared ahead of the struct so the consteval {fmt} check sees it from
+// LBALeafNode's own inline logging methods.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::os::seastore::lba {
 
@@ -489,6 +500,5 @@ using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBACursor> : fmt::ostream_formatter {};
 #endif

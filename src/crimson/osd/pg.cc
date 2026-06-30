@@ -760,7 +760,7 @@ PG::interruptible_future<bool> PG::do_recover_missing(
   }
   DEBUGDPP(
     "reqid {} need to wait for recovery, {} version {}",
-    *this, reqid, soid);
+    *this, reqid, soid, ver);
   if (recovery_backend->is_recovering(soid)) {
     DEBUGDPP(
       "reqid {} object {} version {}, already recovering",

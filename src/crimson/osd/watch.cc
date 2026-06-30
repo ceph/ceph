@@ -11,12 +11,22 @@
 
 #include "messages/MWatchNotify.h"
 
+#include <fmt/ostream.h>
+
 
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);
   }
 }
+
+namespace crimson::osd {
+class WatchTimeoutRequest;
+}
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::WatchTimeoutRequest> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::osd {
 
@@ -348,7 +358,3 @@ void Notify::do_notify_timeout()
 }
 
 } // namespace crimson::osd
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::WatchTimeoutRequest> : fmt::ostream_formatter {};
-#endif

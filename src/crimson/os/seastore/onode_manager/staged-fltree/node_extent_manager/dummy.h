@@ -11,11 +11,21 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 
+#include <fmt/ostream.h>
+
 /**
  * dummy.h
  *
  * Dummy backend implementations for test purposes.
  */
+
+namespace crimson::os::seastore::onode {
+class DummyNodeExtent;
+}
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::DummyNodeExtent> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::os::seastore::onode {
 
@@ -191,7 +201,3 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 };
 
 }
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::onode::DummyNodeExtent> : fmt::ostream_formatter {};
-#endif
