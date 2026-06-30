@@ -813,6 +813,10 @@ public:
   void do_set_pool_opt(int64_t pool_id, pool_opts_t::key_t opt,
 		       pool_opts_t::value_t);
 
+  bool have_pg_pool(int64_t pool);
+  const pg_pool_t &get_pg_pool(int64_t pool) const;
+  pg_pool_t &get_pg_pool(int64_t pool);
+
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {
       if (pending_inc.new_flags < 0)

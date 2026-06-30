@@ -4256,15 +4256,14 @@ bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
          << "with insufficient privileges " << session->caps << dendl;
     goto ignore;
   }
-  if (pending_inc.new_pools.count(m->pgid.pool())) {
-    pi = pending_inc.new_pools[m->pgid.pool()];
-  } else if (!osdmap.have_pg_pool(m->pgid.pool())) {
-    // Raced with pool delete
-    dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
+
+  if (!have_pg_pool(m->pgid.pool())) {
+    // Pool deleted or being deleted
+    dout(20) << __func__ << " pool for " << m->pgid << " dne or being deleted" << dendl;
     goto ignore;
-  } else {
-    pi = *osdmap.get_pg_pool(m->pgid.pool());
   }
+  pi = std::as_const(*this).get_pg_pool(m->pgid.pool());
+
   if (pi.get_pg_num() <= m->pgid.ps()) {
     // Duplicated message
     dout(20) << __func__ << " pg_num " << pi.get_pg_num() << " already < " << m->pgid << dendl;
@@ -4288,11 +4287,11 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   auto m  = op->get_req<MOSDPGMigratedPool>();
   dout(10) << __func__ << " " << *m << dendl;
-  pg_pool_t source_p;
-  if (pending_inc.new_pools.count(m->pgid.pool()))
-    source_p = pending_inc.new_pools[m->pgid.pool()];
-  else
-    source_p = *osdmap.get_pg_pool(m->pgid.pool());
+  if (!have_pg_pool(m->pgid.pool())) {
+    dout(1) << __func__ << " source pool " << m->pgid.pool() << " deleted during migration" << dendl;
+    return false;
+  }
+  pg_pool_t source_p = get_pg_pool(m->pgid.pool());
 
   // Checked in preprocess
   ceph_assert(source_p.migrating_pgs.contains(m->pgid));
@@ -4301,28 +4300,27 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   pg_t pgid = m->pgid;
   source_p.migrating_pgs.erase(pgid);
 
-  pg_pool_t target_p;
-  if (pending_inc.new_pools.count(source_p.migration_target.value())) {
-    target_p = pending_inc.new_pools[source_p.migration_target.value()];
-  } else {
-    target_p = *osdmap.get_pg_pool(source_p.migration_target.value());
+  if (!have_pg_pool(source_p.migration_target.value())) {
+    dout(1) << __func__ << " target pool " << source_p.migration_target.value() << " deleted during migration" << dendl;
+    return false;
   }
 
   dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
   if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
     dout(0) << "finished migration of pool " << pgid.pool() << dendl;
-    pg_pool_t target_p = *osdmap.get_pg_pool(source_p.migration_target.value()); //TODO need to check pending_inc first?
-    //If the default flag is not set and its not on crimson then reset the pool flag for nopgchange
+    pg_pool_t& target_p = get_pg_pool(source_p.migration_target.value());
+    // If the default flag is not set and its not on crimson then reset the pool
+    // flag for nopgchange
     if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
       target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
     }
     target_p.pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::ON;
     target_p.migration_src.reset();
     target_p.last_change = pending_inc.epoch;
-    pending_inc.new_pools[source_p.migration_target.value()] = target_p;
   } else if (source_p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
+    const pg_pool_t target_p = std::as_const(*this).get_pg_pool(source_p.migration_target.value());
     auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
     uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_percent);
     uint64_t num_pgs_to_add = migrating_pgs_target_total - source_p.migrating_pgs.size();
@@ -4399,26 +4397,34 @@ uint64_t OSDMonitor::calculate_migrating_pg_count(int source_pgnum,
 
 void OSDMonitor::insert_new_removed_snap(int64_t pool, snapid_t s)
 {
-  pg_pool_t& pi = osdmap.pools[pool];
-  if (pending_inc.new_pools.count(pool)) {
-    pi = pending_inc.new_pools[pool];
+  if (!have_pg_pool(pool)) {
+    dout(10) << __func__ << " pool " << pool << " does not exist or being deleted"
+    << dendl;
+    return;
   }
+
+  const pg_pool_t& pi = std::as_const(*this).get_pg_pool(pool);
+
   if (pi.migration_target.has_value()) {
     int64_t target_pool = pi.migration_target.value();
+
+    if (!have_pg_pool(target_pool)) {
+      dout(10) << __func__ << " target pool " << target_pool << " deleted during migration" << dendl;
+      return;
+    }
 
     // Pool is migrating or has finished migrating, need to
     // trim the snap on the target pool
     pending_inc.new_removed_snaps[target_pool].insert(s);
 
-    pi = osdmap.pools[target_pool];
-    if (pending_inc.new_pools.count(target_pool)) {
-      pi = pending_inc.new_pools[target_pool];
-    }
-    if (pi.migration_src.has_value()) {
-      int64_t source_pool = pi.migration_src.value();
-      // Midway through a migration, also need to trim the
-      // snap on the source pool
-      pending_inc.new_removed_snaps[source_pool].insert(s);
+    const pg_pool_t& target_pi = std::as_const(*this).get_pg_pool(target_pool);
+    if (target_pi.migration_src.has_value()) {
+      int64_t source_pool = target_pi.migration_src.value();
+      if (have_pg_pool(source_pool)) {
+        // Midway through a migration, also need to trim the
+        // snap on the source pool
+        pending_inc.new_removed_snaps[source_pool].insert(s);
+      }
     }
   } else {
     // Not migrating, just trim the snap for the pool
@@ -7356,6 +7362,48 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
   pool->unset_flag(flags);
 }
 
+bool OSDMonitor::have_pg_pool(int64_t pool)
+{
+  if (pending_inc.old_pools.count(pool)) {
+    return false;
+  }
+  if (pending_inc.new_pools.count(pool)) {
+    return true;
+  }
+  return osdmap.have_pg_pool(pool);
+}
+
+const pg_pool_t& OSDMonitor::get_pg_pool(int64_t pool) const
+{
+  auto it = pending_inc.new_pools.find(pool);
+  if (it != pending_inc.new_pools.end()) {
+    return it->second;
+  }
+
+  const pg_pool_t *p = osdmap.get_pg_pool(pool);
+  ceph_assert(p != nullptr);
+  return *p;
+}
+
+pg_pool_t& OSDMonitor::get_pg_pool(int64_t pool)
+{
+  auto it = pending_inc.new_pools.find(pool);
+  if (it != pending_inc.new_pools.end()) {
+    pending_inc.old_pools.erase(pool);
+    return it->second;
+  }
+
+  const pg_pool_t* existing = osdmap.get_pg_pool(pool);
+  if (existing) {
+    pending_inc.new_pools[pool] = *existing;
+  } else {
+    pending_inc.new_pools[pool] = pg_pool_t();
+  }
+
+  pending_inc.old_pools.erase(pool);
+  return pending_inc.new_pools[pool];
+}
+
 string OSDMonitor::make_purged_snap_epoch_key(epoch_t epoch)
 {
   char k[80];
@@ -8569,18 +8617,22 @@ int OSDMonitor::prepare_new_pool(string& name,
     // Check if there are any previous migration sources pointing to the current migration source
     // If there is change its migration_target value to point to the current migration target
     for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
-      if (pending_inc.new_pools.contains(pool_id)) {
-        pool_ptr = pending_inc.new_pools[pool_id];
+      if (!have_pg_pool(pool_id)) {
+        continue;  // Skip pools being deleted
       }
-      if (pool_ptr.migration_target == source_pool_id.value()) {
-        pg_pool_t *temp_pool = pending_inc.get_new_pool(pool_id, &pool_ptr);
-        temp_pool->migration_target = pool;
+      if (std::as_const(*this).get_pg_pool(pool_id).migration_target == source_pool_id.value()) {
+        get_pg_pool(pool_id).migration_target = pool;
         dout(10) << "Updating transitive migration pointer: pool " << pool_id
                  << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
       }
     }
 
-    const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
+    if (!have_pg_pool(source_pool_id.value())) {
+      dout(10) << "Source pool " << source_pool_id.value() << " does not exist or is being deleted" << dendl;
+      return -ENOENT;
+    }
+
+    const pg_pool_t *sp = &get_pg_pool(source_pool_id.value());
     pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
 
     dout(0) << "starting migration of pool " << source_pool_id.value() << dendl;
@@ -14064,7 +14116,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         err = -EINVAL;
         goto reply_no_propose;
       }
-      source_pool = osdmap.get_pg_pool(source_pool_id.value_or(-1));
+      source_pool = &std::as_const(*this).get_pg_pool(source_pool_id.value());
       if (source_pool->is_migrating()) {
         ss << "Cannot migrate from a pool which is part of an ongoing migration";
         err = -EINVAL;
@@ -14280,7 +14332,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    const pg_pool_t *current_pool = osdmap.get_pg_pool(pool);
+    const pg_pool_t *current_pool = &std::as_const(*this).get_pg_pool(pool);
     int64_t target_pool = pool;
 
     // If the current pool is a current migration src or is a src in a cascade then set the target to its target pool
@@ -14294,9 +14346,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // Will remain empty if the given pool was never in a migration
     std::vector<int64_t> cascade_pool_ids;
     std::vector<std::string> cascade_pool_names;
-    for (const auto& [pool_id, other_pool] : osdmap.get_pools()) {
-      if (other_pool.migration_target.has_value() &&
-          other_pool.migration_target.value() == target_pool) {
+    for (const auto& [pool_id, _] : osdmap.get_pools()) {
+      if (!have_pg_pool(pool_id)) continue;
+      if (std::as_const(*this).get_pg_pool(pool_id).migration_target.has_value() &&
+          std::as_const(*this).get_pg_pool(pool_id).migration_target.value() == target_pool) {
         cascade_pool_ids.push_back(pool_id);
         cascade_pool_names.push_back(osdmap.get_pool_name(pool_id));
       }
@@ -15378,10 +15431,6 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       return false;
     }
   }
-  dout(0) << "BILL: pool " << m->pool << " flags: " << pool->get_flags_string() << dendl;
-  if (pending_inc.new_pools.count(m->pool)) {
-    dout(0) << "BILL: pending_inc " << m->pool << " flags: " << pending_inc.new_pools[m->pool].get_flags_string() << dendl;
-  }
 
   switch (m->op) {
     case POOL_OP_CREATE_SNAP:
@@ -15409,7 +15458,6 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       // we won't allow removal of an unmanaged snapshot from a pool
       // not in unmanaged snaps mode.
       if (!pool->is_unmanaged_snaps_mode()) {
-        dout(0) << "BILL: failing DELETE_UNMANAGED_SNAP with ENOTSUP" << dendl;
         _pool_op_reply(op, -ENOTSUP, osdmap.get_epoch());
         return false;
       }
