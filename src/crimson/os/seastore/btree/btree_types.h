@@ -298,3 +298,7 @@ std::ostream &operator<<(
 }
 
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
+#endif
