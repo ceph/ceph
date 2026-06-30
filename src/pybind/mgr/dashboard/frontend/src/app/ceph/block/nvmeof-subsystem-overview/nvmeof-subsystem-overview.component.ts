@@ -1,8 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { forkJoin } from 'rxjs';
+
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
+import {
+  NvmeofSubsystem,
+  NvmeofSubsystemInitiator,
+  NO_AUTH,
+  getSubsystemAuthStatus
+} from '~/app/shared/models/nvmeof';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NvmeofEditAuthenticationComponent } from '../nvmeof-edit-authentication/nvmeof-edit-authentication.component';
 
 export interface SubsystemDetail {
   label: string;
@@ -24,7 +33,11 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   subsystem!: NvmeofSubsystem;
   details: SubsystemDetail[] = [];
 
-  constructor(private route: ActivatedRoute, private nvmeofService: NvmeofService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private nvmeofService: NvmeofService,
+    private modalService: ModalCdsService
+  ) {}
 
   ngOnInit() {
     this.route.parent?.params.subscribe((params) => {
@@ -44,13 +57,19 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   }
 
   fetchSubsystem() {
-    this.nvmeofService.getSubsystem(this.subsystemNQN, this.groupName).subscribe((subsystem) => {
+    forkJoin({
+      subsystem: this.nvmeofService.getSubsystem(this.subsystemNQN, this.groupName),
+      initiators: this.nvmeofService.getInitiators(this.subsystemNQN, this.groupName)
+    }).subscribe(({ subsystem, initiators }) => {
       this.subsystem = subsystem as NvmeofSubsystem;
-      this.buildDetails();
+      const initiatorList = initiators as
+        | NvmeofSubsystemInitiator[]
+        | { hosts?: NvmeofSubsystemInitiator[] };
+      this.buildDetails(getSubsystemAuthStatus(this.subsystem, initiatorList));
     });
   }
 
-  private buildDetails() {
+  private buildDetails(authStatus: string) {
     this.details = [
       {
         label: $localize`Serial number`,
@@ -73,7 +92,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
       },
       {
         label: $localize`Authentication`,
-        value: this.subsystem.has_dhchap_key,
+        value: authStatus,
         type: 'auth',
         row: 2
       },
@@ -124,6 +143,10 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
     return String(value);
   }
 
+  getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
+    return authStatus === NO_AUTH ? 'error' : 'success';
+  }
+
   getStatusIcon(detail: SubsystemDetail): keyof typeof ICON_TYPE {
     return detail.value ? 'success' : 'error';
   }
@@ -139,5 +162,15 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   getFillerCount(row: number): number[] {
     const needed = 3 - this.getDetailsForRow(row).length;
     return Array.from({ length: needed });
+  }
+
+  openEditAuthModal() {
+    const modalRef = this.modalService.show(NvmeofEditAuthenticationComponent, {
+      subsystemNQN: this.subsystemNQN,
+      groupName: this.groupName
+    });
+    if (modalRef?.closeChange) {
+      modalRef.closeChange.subscribe(() => this.fetchSubsystem());
+    }
   }
 }

@@ -27,13 +27,12 @@
             <span class="cds--type-label-01"
                   i18n>Authentication</span>
             <div>
-              <cd-icon [type]="getStatusIcon(detail)"></cd-icon>
-              <span class="cds--type-label-02">
-                {{ detail.value ? 'Bi-directional' : 'No authentication' }}
-              </span>
+              <cd-icon [type]="getAuthStatusIcon(detail.value.toString())"
+                       class="cds-mr-3"></cd-icon>
+              <span class="cds--type-label-02">{{ detail.value }}</span>
               <a cdsLink
-                 [routerLink]="['../hosts']"
-                 [queryParams]="{ group: groupName }"
+                 class="cds-ml-2"
+                 (click)="openEditAuthModal()"
                  [cdsStack]="'horizontal'"
                  [gap]="1">
                 <span i18n>Edit</span>
