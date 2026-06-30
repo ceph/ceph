@@ -26,6 +26,7 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   resource: string;
   editing: boolean = false;
   submitObservables: Observable<Object>[] = [];
+  originalAccountName: string = '';
 
   constructor(
     private router: Router,
@@ -48,6 +49,7 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
       this.route.paramMap.subscribe((params: any) => {
         const account_id = params.get('id');
         this.rgwUserAccountsService.get(account_id).subscribe((accountData: Account) => {
+          this.originalAccountName = accountData.name;
           // Get the default values.
           const defaults = _.clone(this.accountForm.value);
           // Extract the values displayed in the form.
@@ -112,7 +114,11 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
     this.accountForm = this.formBuilder.group({
       id: [''],
       tenant: [''],
-      name: ['', Validators.required],
+      name: [
+        '',
+        [Validators.required],
+        [CdValidators.unique(this.rgwUserAccountsService.exists, this.rgwUserAccountsService)]
+      ],
       email: ['', CdValidators.email],
       max_users_mode: ['1'],
       max_users: [

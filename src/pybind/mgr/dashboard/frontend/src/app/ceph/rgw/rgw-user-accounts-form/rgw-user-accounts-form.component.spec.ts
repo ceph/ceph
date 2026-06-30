@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick, flush } from '@angular/core/testing';
 
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -10,11 +10,13 @@ import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.servi
 import { ModalModule } from 'carbon-components-angular';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RgwUserAccountsComponent } from '../rgw-user-accounts/rgw-user-accounts.component';
+import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 
 class MockRgwUserAccountsService {
   create = jest.fn().mockReturnValue(of(null));
   modify = jest.fn().mockReturnValue(of(null));
   setQuota = jest.fn().mockReturnValue(of(null));
+  exists = jest.fn().mockReturnValue(of(false));
 }
 
 describe('RgwUserAccountsFormComponent', () => {
@@ -50,9 +52,10 @@ describe('RgwUserAccountsFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should call create method of MockRgwUserAccountsService and show success notification', () => {
+  it('should call create method of MockRgwUserAccountsService and show success notification', fakeAsync(() => {
     component.editing = false;
-    component.accountForm.get('name').setValue('test');
+    component.accountForm.get('name').setValue('test', { emitEvent: true });
+    tick(DUE_TIMER);
     const payload = {
       account_name: 'test',
       email: '',
@@ -63,18 +66,24 @@ describe('RgwUserAccountsFormComponent', () => {
       max_group: 1000,
       max_access_keys: 4
     };
+    const mockAccount = { id: 'RGW12312312312312312', name: 'test' };
     const spy = jest.spyOn(component, 'submit');
-    const createDataSpy = jest.spyOn(rgwUserAccountsService, 'create').mockReturnValue(of(null));
+    const createDataSpy = jest
+      .spyOn(rgwUserAccountsService, 'create')
+      .mockReturnValue(of(mockAccount));
     component.submit();
     expect(component.accountForm.valid).toBe(true);
     expect(spy).toHaveBeenCalled();
     expect(createDataSpy).toHaveBeenCalled();
     expect(createDataSpy).toHaveBeenCalledWith(payload);
-  });
+    flush();
+  }));
 
-  it('should call modify method of MockRgwUserAccountsService and show success notification', () => {
+  it('should call modify method of MockRgwUserAccountsService and show success notification', fakeAsync(() => {
     component.editing = true;
-    component.accountForm.get('name').setValue('test');
+    component.originalAccountName = 'test';
+    component.accountForm.get('name').setValue('test', { emitEvent: true });
+    tick(DUE_TIMER);
     component.accountForm.get('id').setValue('RGW12312312312312312');
     component.accountForm.get('email').setValue('test@test.com');
     const payload = {
@@ -88,14 +97,18 @@ describe('RgwUserAccountsFormComponent', () => {
       max_group: 1000,
       max_access_keys: 4
     };
+    const mockAccount = { id: 'RGW12312312312312312', name: 'test' };
     const spy = jest.spyOn(component, 'submit');
-    const modifyDataSpy = jest.spyOn(rgwUserAccountsService, 'modify').mockReturnValue(of(null));
+    const modifyDataSpy = jest
+      .spyOn(rgwUserAccountsService, 'modify')
+      .mockReturnValue(of(mockAccount));
     component.submit();
     expect(component.accountForm.valid).toBe(true);
     expect(spy).toHaveBeenCalled();
     expect(modifyDataSpy).toHaveBeenCalled();
     expect(modifyDataSpy).toHaveBeenCalledWith(payload);
-  });
+    flush();
+  }));
 
   it('should call setQuota for "account" if account quota is dirty', () => {
     component.accountForm.get('id').setValue('123');
