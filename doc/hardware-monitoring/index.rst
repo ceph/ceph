@@ -88,7 +88,8 @@ Supported categories are:
 * network
 * power
 * fans
-* firmwares
+* temperatures
+* firmware
 * criticals
 
 
@@ -143,7 +144,7 @@ ________________
 
 .. prompt:: bash # auto
 
-  # ceph orch hardware status node-10 --category firmwares
+  # ceph orch hardware status node-10 --category firmware
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
   |    HOST    |                                 COMPONENT                                  |                             NAME                             |         DATE         |   VERSION   | STATUS |
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
@@ -187,6 +188,7 @@ For Developers
 .. automethod:: NodeProxyEndpoint.power
 .. automethod:: NodeProxyEndpoint.processors
 .. automethod:: NodeProxyEndpoint.fans
-.. automethod:: NodeProxyEndpoint.firmwares
+.. automethod:: NodeProxyEndpoint.temperatures
+.. automethod:: NodeProxyEndpoint.firmware
 .. automethod:: NodeProxyEndpoint.led
 

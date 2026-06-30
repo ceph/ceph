@@ -367,9 +367,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_firmware(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmware report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
-        Return node-proxy firmwares report
+        Return node-proxy firmware report (deprecated alias)
 
         :param hostname: hostname
         """
