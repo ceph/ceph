@@ -308,6 +308,8 @@ else:
                 )
             )
 
+        @Endpoint('PUT', '{nqn}/change_key')
+        @UpdatePermission
         @EndpointDoc(
             "Change subsystem inband authentication key",
             parameters={

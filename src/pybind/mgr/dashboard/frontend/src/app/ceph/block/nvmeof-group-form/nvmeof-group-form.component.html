@@ -48,18 +48,17 @@
             i18n>Special characters are not allowed.</span>
         </div>
       </div>
-
       <div cdsRow
            class="form-item">
         <div cdsCol>
           <cds-checkbox id="enableCds"
-                        formControlName="enable_auth"
+                        formControlName="enableEncryption"
                         i18n>Enable encryption
           </cds-checkbox>
         </div>
       </div>
 
-      @if (groupForm.controls.enable_auth.value) {
+      @if (groupForm.controls.enableEncryption.value) {
       <div cdsRow
            class="form-item">
         <div cdsCol>
@@ -75,13 +74,13 @@
                       cdValidate
                       #encryptionConfigRef="cdValidate"
                       [invalid]="encryptionConfigRef.isInvalid"
-                      formControlName="encryptionKey"
+                      formControlName="encryptionConfig"
                       cols="100"
                       rows="4"></textarea>
           </cds-textarea-label>
           <span
             class="invalid-feedback"
-            *ngIf="groupForm.showError('encryptionKey', formDir, 'required')"
+            *ngIf="groupForm.showError('encryptionConfig', formDir, 'required')"
             i18n>This field is required.</span>
         </div>
       </div>
