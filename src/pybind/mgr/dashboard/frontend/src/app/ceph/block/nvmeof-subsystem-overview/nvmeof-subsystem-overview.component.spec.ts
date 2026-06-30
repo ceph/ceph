@@ -10,13 +10,14 @@ import { GridModule, TilesModule } from 'carbon-components-angular';
 import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { NvmeofSubsystem, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
 
 describe('NvmeofSubsystemOverviewComponent', () => {
   let component: NvmeofSubsystemOverviewComponent;
   let fixture: ComponentFixture<NvmeofSubsystemOverviewComponent>;
   let nvmeofService: NvmeofService;
 
-  const mockSubsystem = {
+  const mockSubsystem: NvmeofSubsystem = {
     nqn: 'nqn.2016-06.io.spdk:cnode1',
     serial_number: 'Ceph30487186726692',
     model_number: 'Ceph bdev Controller',
@@ -28,8 +29,53 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     enable_ha: true,
     allow_any_host: true,
     gw_group: 'gateway-prod',
-    psk: 'some-key'
+    has_dhchap_key: true
   };
+
+  const defaultActivatedRoute = {
+    parent: { params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' }) },
+    queryParams: of({ group: 'group1' })
+  };
+
+  /**
+   * Creates a TestBed configuration with custom service overrides.
+   * Avoids repeating the full module declaration in tests that need different mock data.
+   */
+  function createTestBed(
+    initiators: NvmeofSubsystemInitiator[],
+    subsystem: NvmeofSubsystem = mockSubsystem,
+    activatedRoute: object = defaultActivatedRoute
+  ): Promise<ComponentFixture<NvmeofSubsystemOverviewComponent>> {
+    return TestBed.configureTestingModule({
+      declarations: [NvmeofSubsystemOverviewComponent],
+      imports: [
+        HttpClientTestingModule,
+        RouterTestingModule,
+        SharedModule,
+        NgbTooltipModule,
+        TilesModule,
+        GridModule
+      ],
+      providers: [
+        { provide: ActivatedRoute, useValue: activatedRoute },
+        {
+          provide: NvmeofService,
+          useValue: {
+            getSubsystem: jest.fn().mockReturnValue(of(subsystem)),
+            getInitiators: jest.fn().mockReturnValue(of(initiators))
+          }
+        }
+      ]
+    })
+      .compileComponents()
+      .then(() => {
+        const f = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
+        f.detectChanges();
+        tick();
+        f.detectChanges();
+        return f;
+      });
+  }
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -43,19 +89,12 @@ describe('NvmeofSubsystemOverviewComponent', () => {
         GridModule
       ],
       providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: {
-              params: of({ subsystem_nqn: 'nqn.2016-06.io.spdk:cnode1' })
-            },
-            queryParams: of({ group: 'group1' })
-          }
-        },
+        { provide: ActivatedRoute, useValue: defaultActivatedRoute },
         {
           provide: NvmeofService,
           useValue: {
-            getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem))
+            getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem)),
+            getInitiators: jest.fn().mockReturnValue(of([]))
           }
         }
       ]
@@ -93,44 +132,13 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(component.subsystem.subtype).toBe('NVMe');
   }));
 
-  it('should not fetch when subsystemNQN is missing', fakeAsync(() => {
+  it('should not fetch when subsystemNQN is missing', fakeAsync(async () => {
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemOverviewComponent],
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        NgbTooltipModule,
-        TilesModule,
-        GridModule
-      ],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            parent: {
-              params: of({})
-            },
-            queryParams: of({ group: 'group1' })
-          }
-        },
-        {
-          provide: NvmeofService,
-          useValue: {
-            getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem))
-          }
-        }
-      ]
-    }).compileComponents();
-
-    const newFixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
-    const newComponent = newFixture.componentInstance;
+    const noNqnRoute = { parent: { params: of({}) }, queryParams: of({ group: 'group1' }) };
+    const f = await createTestBed([], mockSubsystem, noNqnRoute);
     const newService = TestBed.inject(NvmeofService);
-    newFixture.detectChanges();
-    tick();
     expect(newService.getSubsystem).not.toHaveBeenCalled();
-    expect(newComponent.subsystem).toBeUndefined();
+    expect(f.componentInstance.subsystem).toBeUndefined();
   }));
 
   it('should render detail labels in the template', fakeAsync(() => {
@@ -159,27 +167,25 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     tick();
     fixture.detectChanges();
 
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
-    const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).not.toContain('MTLS');
+    const hostAccessText = fixture.nativeElement.textContent;
+    expect(hostAccessText).toContain('Allow all hosts');
+    // has_dhchap_key=true but no initiators with use_dhchap → No authentication
+    expect(hostAccessText).toContain('No authentication');
+    expect(hostAccessText).toContain('Edit');
   }));
 
-  it('should display hosts allowed from subsystem data', fakeAsync(() => {
-    component.ngOnInit();
-    tick();
-    fixture.detectChanges();
-
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
-    const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).toContain('Any host');
+  it('should display Bidirectional when subsystem and host both have keys', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: true }]);
+    expect(f.nativeElement.textContent).toContain('Bi-directional');
   }));
 
-  it('should not render Edit link for Hosts allowed', fakeAsync(() => {
-    component.ngOnInit();
-    tick();
-    fixture.detectChanges();
-
-    const editLink = fixture.nativeElement.querySelector('a[cdsLink]');
-    expect(editLink).toBeFalsy();
+  it('should display Unidirectional when only host has a key', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: true }], {
+      ...mockSubsystem,
+      has_dhchap_key: false
+    });
+    expect(f.nativeElement.textContent).toContain('Unidirectional');
   }));
 });

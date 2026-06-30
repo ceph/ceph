@@ -1,6 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
+import { IconModule, LayoutModule } from 'carbon-components-angular';
 
 import { DetailsCardComponent } from './details-card.component';
+import { ProductiveCardComponent } from '../productive-card/productive-card.component';
+import { IconComponent } from '../icon/icon.component';
 
 describe('DetailsCardComponent', () => {
   let component: DetailsCardComponent;
@@ -8,7 +12,8 @@ describe('DetailsCardComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [DetailsCardComponent]
+      declarations: [DetailsCardComponent, IconComponent],
+      imports: [ProductiveCardComponent, LayoutModule, IconModule, CommonModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetailsCardComponent);
