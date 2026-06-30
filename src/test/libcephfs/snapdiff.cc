@@ -15,6 +15,7 @@
 #include "include/interval_set.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/fs_types.h"
 #include "include/stat.h"
 #include "include/ceph_assert.h"
 #include "include/object.h"
@@ -479,6 +480,36 @@ public:
 
   ceph_mount_info* get_cmount() {
     return cmount;
+  }
+
+  string make_snap_file_path(const char* snap, const char* relpath) {
+    char path[PATH_MAX];
+    string snap_name = make_snap_name(snap);
+    sprintf(path, "%s/.snap/%s/%s", dir_path, snap_name.c_str(), relpath);
+    return string(path);
+  }
+
+  int read_path(const string& path, string& out) {
+    int fd = ceph_open(cmount, path.c_str(), O_RDONLY, 0);
+    if (fd < 0) {
+      return fd;
+    }
+    out.clear();
+    while (true) {
+      char buf[4096];
+      int64_t off = out.size();
+      int r = ceph_read(cmount, fd, buf, sizeof(buf), off);
+      if (r < 0) {
+	ceph_close(cmount, fd);
+	return r;
+      }
+      if (r == 0) {
+	break;
+      }
+      out.append(buf, r);
+    }
+    ceph_close(cmount, fd);
+    return 0;
   }
 
   void verify_snap_diff(vector<pair<string, uint64_t>>& expected,
@@ -2198,4 +2229,76 @@ TEST(LibCephFS, SnapDiffDeletionRecreation) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+TEST(LibCephFS, SnapDiffChangedContentPreservedMtime)
+{
+  TestMount test_mount("/SnapDiffChangeAttr");
+  const char *fname = "file1";
+  const string initial = "some text\n";
+  const string extra = "your data\n";
+
+  ASSERT_LE(0, test_mount.write_full(fname, initial));
+
+  struct ceph_statx stx = {};
+  auto path = test_mount.make_file_path(fname);
+  ASSERT_EQ(0, ceph_statx(test_mount.get_cmount(), path.c_str(), &stx,
+			  CEPH_STATX_MTIME, 0));
+
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  int fd = ceph_open(test_mount.get_cmount(), path.c_str(), O_RDWR, 0);
+  ASSERT_GE(fd, 0);
+  ASSERT_EQ((int)extra.size(),
+	    ceph_write(test_mount.get_cmount(), fd, extra.c_str(), extra.size(),
+		       initial.size()));
+  ASSERT_EQ(0, ceph_fsync(test_mount.get_cmount(), fd, 0));
+  ceph_close(test_mount.get_cmount(), fd);
+
+  struct timespec ts[2];
+  ts[0] = stx.stx_atime;
+  ts[1] = stx.stx_mtime;
+  ASSERT_EQ(0, ceph_utimensat(test_mount.get_cmount(), CEPHFS_AT_FDCWD,
+			      path.c_str(), ts, 0));
+
+  struct ceph_statx stx_head = {};
+  ASSERT_EQ(0, ceph_statx(test_mount.get_cmount(), path.c_str(), &stx_head,
+			  CEPH_STATX_MTIME, 0));
+  ASSERT_EQ(stx.stx_mtime.tv_sec, stx_head.stx_mtime.tv_sec);
+  ASSERT_EQ(stx.stx_mtime.tv_nsec, stx_head.stx_mtime.tv_nsec);
+
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  struct ceph_statx stx_snap1 = {};
+  struct ceph_statx stx_snap2 = {};
+  auto snap1_path = test_mount.make_snap_file_path("snap1", fname);
+  auto snap2_path = test_mount.make_snap_file_path("snap2", fname);
+  ASSERT_EQ(0, ceph_statx(test_mount.get_cmount(), snap1_path.c_str(), &stx_snap1,
+			  CEPH_STATX_MTIME | CEPH_STATX_SIZE, 0));
+  ASSERT_EQ(0, ceph_statx(test_mount.get_cmount(), snap2_path.c_str(), &stx_snap2,
+			  CEPH_STATX_MTIME | CEPH_STATX_SIZE, 0));
+  ASSERT_EQ(stx_snap1.stx_mtime.tv_sec, stx_snap2.stx_mtime.tv_sec);
+  ASSERT_EQ(stx_snap1.stx_mtime.tv_nsec, stx_snap2.stx_mtime.tv_nsec);
+  ASSERT_EQ(stx_snap1.stx_size, initial.size());
+  ASSERT_EQ(stx_snap2.stx_size, initial.size() + extra.size());
+
+  uint64_t snapid2 = 0;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_GT(snapid2, 0u);
+
+  vector<pair<string, uint64_t>> expected;
+  expected.emplace_back(fname, snapid2);
+  test_mount.verify_snap_diff(expected, "", "snap1", "snap2");
+
+  string snap1_data;
+  string snap2_data;
+  ASSERT_EQ(0, test_mount.read_path(test_mount.make_snap_file_path("snap1", fname),
+				    snap1_data));
+  ASSERT_EQ(0, test_mount.read_path(test_mount.make_snap_file_path("snap2", fname),
+				    snap2_data));
+  ASSERT_EQ(initial, snap1_data);
+  ASSERT_EQ(initial + extra, snap2_data);
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
