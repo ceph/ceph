@@ -627,7 +627,15 @@ If the NFS service is running on a non-standard port number:
 Troubleshooting
 ===============
 
-There are two methds for examining NFS-Ganesha logs:
+Examining Logs
+--------------
+
+There are two types of logs available for troubleshooting NFS issues:
+
+NFS-Ganesha Logs
+^^^^^^^^^^^^^^^^
+
+NFS-Ganesha logs capture the NFS protocol operations and client interactions.
 
 #. ``cephadm``: List the NFS daemons by running the following command:
 
@@ -641,6 +649,14 @@ There are two methds for examining NFS-Ganesha logs:
     .. prompt:: bash #
 
        cephadm logs --fsid <fsid> --name nfs.mynfs.0.0.myhost.xkfzal
+   
+   Alternatively, NFS-Ganesha logs are also available on the host at:
+
+    .. prompt:: bash #
+
+      cat /var/log/ceph/<fsid>/<daemon_name>/ganesha.log
+      # Example:
+      cat /var/log/ceph/60756928-8801-4110-9511-858524800000/nfs.mynfs.0.0.myhost.xkfzal/ganesha.log
 
 #. ``rook``:
 
@@ -648,8 +664,25 @@ There are two methds for examining NFS-Ganesha logs:
 
        kubectl logs -n rook-ceph rook-ceph-nfs-<cluster_id>-<node_id> nfs-ganesha
 
-The NFS log level can be adjusted using the ``nfs cluster config set`` command
+The NFS-Ganesha log level can be adjusted using the ``nfs cluster config set`` command
 (see :ref:`nfs-cluster-set`).
+
+Ceph Client Logs
+^^^^^^^^^^^^^^^^
+
+Ceph client logs capture the backend communication between the NFS gateway and the Ceph storage cluster (RADOS operations).
+
+#. ``cephadm``: Ceph client logs are available on the host at:
+
+    .. prompt:: bash #
+
+      cat /var/log/ceph/<fsid>/client.nfs.<cluster_id>.*
+      # Example:
+      cat /var/log/ceph/60756928-8801-4110-9511-858524800000/client.nfs.mynfs.1.0.ceph-node-0.xkfzal.2.log
+
+   These logs show librados client operations including object reads/writes, metadata operations, and network messaging between the NFS gateway and Ceph daemons (MONs, OSDs).
+
+#. ``rook``: Ceph client logs are available within the NFS pod's logs alongside the NFS-Ganesha logs.
 
 
 .. _nfs-ganesha-config:

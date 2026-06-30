@@ -88,6 +88,10 @@ class NFSGanesha(ContainerDaemonForm):
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        
+        daemon_name = self.get_daemon_name()
+        host_log_dir = f'/var/log/ceph/{self.fsid}/{daemon_name}'
+        mounts[host_log_dir] = '/var/log/ceph:z'
         if self.rgw:
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
@@ -181,6 +185,11 @@ class NFSGanesha(ContainerDaemonForm):
         tls_dir = os.path.join(data_dir, 'etc/ganesha/tls')
         makedirs(config_dir, uid, gid, 0o755)
         makedirs(tls_dir, uid, gid, 0o755)
+        
+        # Create log directory on host at /var/log/ceph/<fsid>/<daemon_name>
+        daemon_name = self.get_daemon_name()
+        log_dir = f'/var/log/ceph/{self.fsid}/{daemon_name}'
+        makedirs(log_dir, uid, gid, 0o755)
 
         config_files = {
             fname: content
