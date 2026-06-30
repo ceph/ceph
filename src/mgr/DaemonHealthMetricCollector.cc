@@ -61,6 +61,8 @@ class SlowOps final : public DaemonHealthMetricCollector {
 };
 
 
+// When aggregating metrics from multiple OSDs, n2 is a boolean flag packed in
+// n2. Upgrade MGR before OSD so old MGR never misinterprets the packed value.
 class PendingPGs final : public DaemonHealthMetricCollector {
   bool _is_relevant(daemon_metric type) const override {
     return type == daemon_metric::PENDING_CREATING_PGS;
@@ -72,8 +74,8 @@ class PendingPGs final : public DaemonHealthMetricCollector {
                const DaemonHealthMetric& metric) override {
     auto num_pgs = metric.get_n1();
     auto is_max_pgs_per_osd = metric.get_n2();
-    value.n1 = num_pgs;
-    value.n2 = is_max_pgs_per_osd;
+    value.n1 += num_pgs;
+    value.n2 = std::max(value.n2, is_max_pgs_per_osd);
     if (num_pgs) {
       osds.push_back(osd);
       return true;
