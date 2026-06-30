@@ -2626,10 +2626,13 @@ namespace rgw::dedup {
     }
 
     std::map<RGWObjCategory, RGWStorageStats> stats;
+    std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+      std::map<std::string, RGWStorageStats>{}
+    };
     std::string bucket_ver, master_ver;
     std::string max_marker;
     ret = bucket->read_stats(dpp, null_yield, index, RGW_NO_SHARD, &bucket_ver,
-                             &master_ver, stats, &max_marker);
+                             &master_ver, stats, sc_stats, &max_marker);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR getting bucket stats bucket="
                         << bucket->get_name() << " ret=" << ret << dendl;

@@ -2844,6 +2844,7 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
+			    std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			    std::string* max_marker, bool* syncstopped)
 {
   auto& main = stats[RGWObjCategory::Main];
@@ -2894,6 +2895,7 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int POSIXBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  bool reset,
                                   RGWBucketEnt* ent)
 {
   return 0;

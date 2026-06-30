@@ -862,10 +862,11 @@ int FilterBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     int shard_id, std::string* bucket_ver,
 			     std::string* master_ver,
 			     std::map<RGWObjCategory, RGWStorageStats>& stats,
+			     std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			     std::string* max_marker, bool* syncstopped)
 {
   return next->read_stats(dpp, y, idx_layout, shard_id, bucket_ver, master_ver,
-			  stats, max_marker, syncstopped);
+			  stats, sc_stats, max_marker, syncstopped);
 }
 
 int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -876,9 +877,10 @@ int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int FilterBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                   bool reset,
                                    RGWBucketEnt* ent)
 {
-  return next->sync_owner_stats(dpp, y, ent);
+  return next->sync_owner_stats(dpp, y, reset, ent);
 }
 
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
