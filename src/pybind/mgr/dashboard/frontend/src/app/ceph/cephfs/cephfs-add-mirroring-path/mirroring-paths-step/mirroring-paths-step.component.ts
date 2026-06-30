@@ -2,16 +2,16 @@ import { Component, DestroyRef, inject, Input, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl } from '@angular/forms';
 import { forkJoin, Observable, of } from 'rxjs';
-import { catchError, map, switchMap, take } from 'rxjs/operators';
+import { catchError, finalize, map, switchMap, take } from 'rxjs/operators';
 
-import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
-import { CephfsDir } from '~/app/shared/models/cephfs-directory-models';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 import { MirroringPathUtils } from '../mirroring-path-utils';
-import { createPathEntry, DirTreeEntry, PathEntry } from '../mirroring-path.model';
+import { createPathEntry, PathEntry } from '../mirroring-path.model';
+
+const VOLUMES_ROOT = '/volumes';
+const LS_DEPTH = 1;
 
 @Component({
   selector: 'cd-mirroring-paths-step',
@@ -25,21 +25,17 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
   formGroup!: CdFormGroup;
   paths: PathEntry[] = [];
-  private trackedPaths = new Set<string>();
-  private cachedGroupNames: string[] = [];
-  private dirTree: DirTreeEntry[] = [];
-  private destroyRef = inject(DestroyRef);
+  loadingLevels: Record<string, true> = {};
 
-  constructor(
-    private cephfsService: CephfsService,
-    private subvolumeGroupService: CephfsSubvolumeGroupService
-  ) {}
+  private trackedPaths = new Set<string>();
+  private destroyRef = inject(DestroyRef);
+  private cephfsService = inject(CephfsService);
 
   ngOnInit(): void {
     this.formGroup = new CdFormGroup({
       pathsControl: new FormControl<string[]>([], { nonNullable: true })
     });
-    this.paths = [createPathEntry([])];
+    this.paths = [createPathEntry()];
     this.syncFormValue();
     this.loadInitialData();
   }
@@ -60,12 +56,12 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   }
 
   addPath(): void {
-    this.paths.push(createPathEntry([...this.filterAvailableGroupNames()]));
+    this.paths.push(createPathEntry());
+    this.loadLevelOptions(this.paths.length - 1, 0, VOLUMES_ROOT);
   }
 
   removePath(index: number): void {
     this.paths.splice(index, 1);
-    this.refreshGroupOptions();
     this.syncFormValue();
   }
 
@@ -73,48 +69,62 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     this.paths[index].expanded = !this.paths[index].expanded;
   }
 
+  isLevelLoading(pathIndex: number, levelIndex: number): boolean {
+    return !!this.loadingLevels[`${pathIndex}:${levelIndex}`];
+  }
+
   onLevelChange(pathIndex: number, levelIndex: number, selected: string): void {
     const entry = this.paths[pathIndex];
-    if (!entry) return;
+    if (!entry) {
+      return;
+    }
 
     const levels = entry.levels.map((level, i) =>
       i === levelIndex ? { ...level, selected } : level
     );
     levels.splice(levelIndex + 1);
 
-    const updatedEntry: PathEntry = { ...entry, levels };
+    const updated: PathEntry = {
+      ...entry,
+      levels,
+      fullPath: MirroringPathUtils.buildPathFromSegments(
+        levels.map((level) => level.selected).filter(Boolean)
+      )
+    };
+    this.paths[pathIndex] = updated;
 
     if (!selected) {
-      this.updatePath(pathIndex, MirroringPathUtils.withResolvedDisplayPath(updatedEntry));
+      this.syncFormValue();
       return;
     }
 
-    const kind = levels[levelIndex].kind;
-    if (kind === 'group') {
-      this.handleGroupSelection(pathIndex, updatedEntry, selected);
-    } else if (kind === 'subvolume') {
-      this.handleSubvolumeSelection(pathIndex, updatedEntry, selected);
-    } else {
-      this.handleDirSelection(pathIndex, MirroringPathUtils.withResolvedDisplayPath(updatedEntry));
-    }
+    this.loadLevelOptions(pathIndex, levelIndex + 1, updated.fullPath);
   }
 
   getSubmitPaths(): { toAdd: string[]; alreadyMirrored: string[] } {
     const toAdd: string[] = [];
     const alreadyMirrored: string[] = [];
-    this.paths.forEach((entry, i) => {
-      const rawPath = MirroringPathUtils.getMirrorPath(entry);
-      if (!rawPath) return;
-      const path = MirroringPathUtils.normalizeMirroringPath(rawPath);
-      if (this.isPathAvailable(path, i)) toAdd.push(path);
-      else if (MirroringPathUtils.isMirroringPathTracked(path, this.trackedPaths))
+
+    this.paths.forEach((entry, pathIndex) => {
+      if (!entry.fullPath) {
+        return;
+      }
+      const path = MirroringPathUtils.normalizePath(entry.fullPath);
+      if (!path) {
+        return;
+      }
+      if (MirroringPathUtils.isPathTracked(path, this.trackedPaths)) {
         alreadyMirrored.push(path);
+      } else if (this.isPathSelectable(path, pathIndex)) {
+        toAdd.push(path);
+      }
     });
+
     return { toAdd, alreadyMirrored };
   }
 
   addTrackedPath(path: string): void {
-    const normalized = MirroringPathUtils.normalizeMirroringPath(path);
+    const normalized = MirroringPathUtils.normalizePath(path);
     if (normalized) {
       this.trackedPaths.add(normalized);
       this.syncFormValue();
@@ -122,12 +132,12 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   }
 
   refreshTrackedPaths(): Observable<void> {
-    if (!this.fsName) return of(undefined);
+    if (!this.fsName) {
+      return of(undefined);
+    }
     return this.cephfsService.listMirrorDirectories(this.fsName).pipe(
-      map((response) => {
-        this.trackedPaths = MirroringPathUtils.toTrackedPathSet(
-          MirroringPathUtils.parseMirrorDirectoryList(response)
-        );
+      map((paths) => {
+        this.trackedPaths = new Set(paths.map(MirroringPathUtils.normalizePath).filter(Boolean));
         this.syncFormValue();
       }),
       catchError(() => of(undefined)),
@@ -135,86 +145,109 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     );
   }
 
-  private handleGroupSelection(pathIndex: number, entry: PathEntry, groupName: string): void {
-    const groupPath = MirroringPathUtils.buildGroupPath(groupName);
-    const updated = MirroringPathUtils.withResolvedDisplayPath({
-      ...entry,
-      subvolumePath: undefined,
-      resolvedSubvolumeRoot: undefined,
-      fullPath: groupPath
+  private loadInitialData(): void {
+    if (!this.fsName) {
+      return;
+    }
+
+    this.resolveFsId()
+      .pipe(
+        switchMap((fsId) =>
+          forkJoin([
+            of(fsId),
+            this.cephfsService.listMirrorDirectories(this.fsName).pipe(catchError(() => of([])))
+          ])
+        ),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(([fsId, trackedList]) => {
+        this.trackedPaths = new Set(
+          trackedList.map(MirroringPathUtils.normalizePath).filter(Boolean)
+        );
+        if (fsId) {
+          this.loadLevelOptions(0, 0, VOLUMES_ROOT);
+        }
+      });
+  }
+
+  private resolveFsId(): Observable<number> {
+    if (this.fsId) {
+      return of(this.fsId);
+    }
+    return this.cephfsService.list().pipe(
+      map((filesystems: { id?: number; mdsmap?: { fs_name?: string } }[]) => {
+        const id = filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName)?.id ?? 0;
+        this.fsId = id;
+        return id;
+      }),
+      catchError(() => of(0))
+    );
+  }
+
+  private loadLevelOptions(pathIndex: number, levelIndex: number, parentPath: string): void {
+    if (!this.fsId) {
+      return;
+    }
+
+    const loadingKey = `${pathIndex}:${levelIndex}`;
+    this.loadingLevels = { ...this.loadingLevels, [loadingKey]: true };
+
+    this.cephfsService
+      .lsDir(this.fsId, parentPath, LS_DEPTH)
+      .pipe(
+        take(1),
+        catchError(() => of([])),
+        finalize(() => {
+          const { [loadingKey]: _, ...rest } = this.loadingLevels;
+          this.loadingLevels = rest;
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((dirs) => {
+        const entry = this.paths[pathIndex];
+        if (!entry) {
+          return;
+        }
+
+        const options = dirs
+          .map((dir) => dir.name)
+          .filter((name) =>
+            this.isPathSelectable(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
+          )
+          .sort();
+
+        const levels = [...entry.levels];
+        if (levelIndex < levels.length) {
+          levels[levelIndex] = { ...levels[levelIndex], options };
+        } else if (options.length) {
+          levels.push({ options, selected: '' });
+        }
+
+        this.paths[pathIndex] = { ...entry, levels };
+        this.syncFormValue();
+      });
+  }
+
+  private isPathSelectable(path: string, pathIndex: number): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    if (!normalized || MirroringPathUtils.isPathTracked(normalized, this.trackedPaths)) {
+      return false;
+    }
+
+    return !this.paths.some((entry, index) => {
+      if (index === pathIndex) {
+        return false;
+      }
+      const selected = MirroringPathUtils.normalizePath(entry.fullPath);
+      return selected && MirroringPathUtils.pathsOverlap(normalized, selected);
     });
-
-    const usedSubvols = this.getUsedSubvolumes(groupName, pathIndex);
-    const subvolNames = this.getChildNamesFromTree(groupPath).filter(
-      (name) =>
-        !usedSubvols.has(name) &&
-        !MirroringPathUtils.isMirroringPathTracked(
-          MirroringPathUtils.buildSubvolumePath(groupName, name),
-          this.trackedPaths
-        )
-    );
-
-    this.updatePath(pathIndex, {
-      ...updated,
-      levels: [
-        ...updated.levels,
-        { options: subvolNames, selected: '', kind: 'subvolume' as const }
-      ]
-    });
-  }
-
-  private handleSubvolumeSelection(pathIndex: number, entry: PathEntry, subvolName: string): void {
-    const groupName = entry.levels[0].selected;
-    const subvolPath = MirroringPathUtils.buildSubvolumePath(groupName, subvolName);
-    const dirChildren = this.getChildNamesFromTree(subvolPath).filter((name) =>
-      this.isPathAvailable(MirroringPathUtils.joinMirroringPath(subvolPath, name), pathIndex)
-    );
-
-    this.updatePath(
-      pathIndex,
-      MirroringPathUtils.withResolvedDisplayPath({
-        ...entry,
-        fullPath: subvolPath,
-        subvolumePath: subvolPath,
-        resolvedSubvolumeRoot: subvolPath,
-        levels: [
-          ...entry.levels.slice(0, 2),
-          ...(dirChildren.length
-            ? [{ options: dirChildren, selected: '', kind: 'dir' as const }]
-            : [])
-        ]
-      })
-    );
-  }
-
-  private handleDirSelection(pathIndex: number, entry: PathEntry): void {
-    const parentPath = MirroringPathUtils.normalizeMirroringPath(
-      MirroringPathUtils.getMirrorPath(entry) || entry.fullPath
-    );
-    const childNames = this.getChildNamesFromTree(parentPath).filter((name) =>
-      this.isPathAvailable(MirroringPathUtils.joinMirroringPath(parentPath, name), pathIndex)
-    );
-    this.updatePath(
-      pathIndex,
-      childNames.length
-        ? {
-            ...entry,
-            levels: [...entry.levels, { options: childNames, selected: '', kind: 'dir' as const }]
-          }
-        : entry
-    );
-  }
-
-  private updatePath(pathIndex: number, entry: PathEntry): void {
-    if (!this.paths[pathIndex]) return;
-    this.paths = this.paths.map((c, i) => (i === pathIndex ? entry : c));
-    this.syncFormValue();
   }
 
   private syncFormValue(): void {
     const { toAdd, alreadyMirrored } = this.getSubmitPaths();
     const control = this.pathsControl;
     control.setValue(toAdd, { emitEvent: false });
+
     if (toAdd.length) {
       control.setErrors(null);
     } else if (alreadyMirrored.length) {
@@ -222,113 +255,5 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     } else {
       control.setErrors({ required: true });
     }
-  }
-
-  private loadInitialData(): void {
-    if (!this.fsName) return;
-
-    this.resolveFs()
-      .pipe(
-        switchMap((fsId) =>
-          forkJoin([
-            this.subvolumeGroupService.get(this.fsName, false).pipe(catchError(() => of([]))),
-            fsId
-              ? this.cephfsService.lsDir(fsId, '/volumes', 3).pipe(catchError(() => of([])))
-              : of([]),
-            this.cephfsService.listMirrorDirectories(this.fsName).pipe(
-              map((r) => MirroringPathUtils.parseMirrorDirectoryList(r)),
-              catchError(() => of([] as string[]))
-            )
-          ])
-        ),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe(([groups, dirs, trackedList]: [{ name: string }[], CephfsDir[], string[]]) => {
-        this.dirTree = dirs.map(({ name, parent }) => ({ name, parent }));
-        this.trackedPaths = MirroringPathUtils.toTrackedPathSet(trackedList);
-
-        const groupNames = groups.map((g) => MirroringPathUtils.normalizeGroupOptionName(g.name));
-        if (!groupNames.includes(DEFAULT_SUBVOLUME_GROUP))
-          groupNames.unshift(DEFAULT_SUBVOLUME_GROUP);
-        this.cachedGroupNames = groupNames;
-
-        const available = this.filterAvailableGroupNames();
-        this.paths = this.paths.map((entry) => ({
-          ...entry,
-          levels: entry.levels.map((level, i) =>
-            i === 0 ? { ...level, options: available } : level
-          )
-        }));
-        this.syncFormValue();
-      });
-  }
-
-  private resolveFs(): Observable<number> {
-    return this.fsId
-      ? of(this.fsId)
-      : this.cephfsService.list().pipe(
-          map(
-            (fs: { id?: number; mdsmap?: { fs_name?: string } }[]) =>
-              fs.find((f) => f.mdsmap?.fs_name === this.fsName)?.id ?? 0
-          ),
-          map((id) => {
-            this.fsId = id;
-            return id;
-          }),
-          catchError(() => of(0))
-        );
-  }
-
-  private refreshGroupOptions(): void {
-    const available = this.filterAvailableGroupNames();
-    this.paths = this.paths.map((entry) => ({
-      ...entry,
-      levels: entry.levels.map((level, i) => (i === 0 ? { ...level, options: available } : level))
-    }));
-  }
-
-  private filterAvailableGroupNames(): string[] {
-    return this.cachedGroupNames.filter(
-      (name) =>
-        !MirroringPathUtils.isGroupPathMirrored(
-          MirroringPathUtils.buildGroupPath(name),
-          this.trackedPaths
-        )
-    );
-  }
-
-  private getUsedSubvolumes(groupName: string, excludeIndex: number): Set<string> {
-    const used = new Set<string>();
-    this.paths.forEach((entry, i) => {
-      if (i === excludeIndex) return;
-      const group = entry.levels.find((l) => l.kind === 'group');
-      const subvol = entry.levels.find((l) => l.kind === 'subvolume');
-      if (group?.selected === groupName && subvol?.selected) used.add(subvol.selected);
-    });
-    return used;
-  }
-
-  private getChildNamesFromTree(parentPath: string): string[] {
-    const normalized = MirroringPathUtils.normalizeMirroringPath(parentPath);
-    return this.dirTree
-      .filter((d) => MirroringPathUtils.normalizeMirroringPath(d.parent) === normalized)
-      .map((d) => d.name)
-      .filter(Boolean)
-      .sort();
-  }
-
-  private isPathAvailable(path: string, pathIndex: number): boolean {
-    const normalized = MirroringPathUtils.normalizeMirroringPath(path);
-    return (
-      !!normalized &&
-      !MirroringPathUtils.isMirroringPathTracked(normalized, this.trackedPaths) &&
-      !this.paths.some((entry, i) => {
-        if (i === pathIndex) return false;
-        const selected = MirroringPathUtils.normalizeMirroringPath(
-          MirroringPathUtils.getMirrorPath(entry)
-        );
-        return selected && MirroringPathUtils.mirroringPathsOverlap(normalized, selected);
-      })
-    );
   }
 }

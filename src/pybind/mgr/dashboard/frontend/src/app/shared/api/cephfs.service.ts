@@ -5,70 +5,9 @@ import _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
-import { CephfsDir, CephfsDirStatfs, CephfsQuotas } from '../models/cephfs-directory-models';
+import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import { Daemon, MirrorPeerList, MirrorStatusResponse } from '../models/cephfs.model';
-
-export interface SnapshotMirrorStatusResponse {
-  metrics: {
-    [path: string]: {
-      peer: {
-        [peerId: string]: {
-          state: string;
-          current_sync_snap?: {
-            name: string;
-            files?: string | number;
-            bytes?: string | number;
-            eta_completion?: string;
-            files_synced?: number;
-            total_files?: number;
-            bytes_synced?: number;
-            total_bytes?: number;
-          };
-          current_syncing_snap?: {
-            id?: number;
-            name: string;
-            'sync-mode'?: string;
-            avg_read_throughput_bytes?: string;
-            avg_write_throughput_bytes?: string;
-            crawl?: {
-              state?: string;
-              duration?: string;
-            };
-            datasync_queue_wait?: {
-              state?: string;
-              duration?: string;
-            };
-            bytes?: {
-              sync_bytes?: string;
-              total_bytes?: string;
-              sync_percent?: string;
-            };
-            files?: {
-              sync_files?: number;
-              total_files?: number;
-              sync_percent?: string;
-            };
-            eta?: string;
-          };
-          last_synced_snap?: {
-            id: number;
-            name: string;
-            crawl_duration?: string;
-            datasync_queue_wait_duration?: string;
-            sync_duration?: string;
-            sync_time_stamp?: string;
-            sync_bytes?: string;
-            sync_files?: number;
-          };
-          snaps_synced?: number;
-          snaps_deleted?: number;
-          snaps_renamed?: number;
-        };
-      };
-    };
-  };
-}
 
 @cdEncode
 @Injectable({
@@ -90,11 +29,6 @@ export class CephfsService {
       apiPath += `&path=${encodeURIComponent(path)}`;
     }
     return this.http.get<CephfsDir[]>(apiPath).pipe(shareReplay());
-  }
-
-  statfs(id: number, path: string): Observable<CephfsDirStatfs> {
-    const params = new HttpParams().set('path', path);
-    return this.http.get<CephfsDirStatfs>(`${this.baseURL}/${id}/statfs`, { params });
   }
 
   getCephfs(id: number) {

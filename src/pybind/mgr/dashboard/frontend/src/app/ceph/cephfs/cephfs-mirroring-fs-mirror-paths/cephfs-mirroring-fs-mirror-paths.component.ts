@@ -13,7 +13,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import { MirrorDirStatus, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 
 interface MirrorPath {
   path: string;
@@ -37,58 +37,6 @@ interface MirrorPath {
   datasyncQueueWaitDuration?: string;
   avgReadThroughput?: string;
   avgWriteThroughput?: string;
-}
-
-interface PathData {
-  peer: Record<string, PeerInfo>;
-}
-
-interface PeerInfo {
-  state: string;
-  current_sync_snap?: CurrentSyncSnap;
-  current_syncing_snap?: CurrentSyncSnap;
-  last_synced_snap?: LastSyncedSnap;
-  snaps_synced?: number;
-  snaps_deleted?: number;
-  snaps_renamed?: number;
-}
-
-interface CurrentSyncSnap {
-  id?: number;
-  name: string;
-  'sync-mode'?: string;
-  avg_read_throughput_bytes?: string;
-  avg_write_throughput_bytes?: string;
-  crawl?: {
-    state?: string;
-    duration?: string;
-  };
-  datasync_queue_wait?: {
-    state?: string;
-    duration?: string;
-  };
-  bytes?: {
-    sync_bytes?: string;
-    total_bytes?: string;
-    sync_percent?: string;
-  };
-  files?: {
-    sync_files?: number;
-    total_files?: number;
-    sync_percent?: string;
-  };
-  eta?: string;
-}
-
-interface LastSyncedSnap {
-  id?: number;
-  name: string;
-  crawl_duration?: string;
-  datasync_queue_wait_duration?: string;
-  sync_duration?: string;
-  sync_time_stamp?: string;
-  sync_bytes?: string;
-  sync_files?: number;
 }
 
 @Component({
@@ -212,10 +160,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
     for (const path in data.metrics) {
       if (Object.prototype.hasOwnProperty.call(data.metrics, path)) {
-        const pathData = data.metrics[path] as PathData;
+        const pathData = data.metrics[path];
 
         // Skip invalid entries
-        if (!pathData?.peer) continue;
+        if (!pathData?.peer) {
+          continue;
+        }
 
         const peerInfo = this.extractPeerInfo(pathData);
         if (!peerInfo) continue;
@@ -260,12 +210,14 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     return 0;
   }
 
-  private extractPeerInfo(pathData: PathData): PeerInfo | null {
+  private extractPeerInfo(pathData: {
+    peer?: Record<string, MirrorDirStatus>;
+  }): MirrorDirStatus | null {
     const peerEntries = Object.entries(pathData.peer ?? {});
     return peerEntries.length > 0 ? peerEntries[0][1] : null;
   }
 
-  private buildMirrorPath(path: string, peerInfo: PeerInfo): MirrorPath {
+  private buildMirrorPath(path: string, peerInfo: MirrorDirStatus): MirrorPath {
     const currentSnap = peerInfo.current_syncing_snap ?? peerInfo.current_sync_snap;
     const filesSynced = currentSnap?.files?.sync_files ?? 0;
     const totalFiles = currentSnap?.files?.total_files ?? 0;
@@ -290,7 +242,10 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       currentSyncEta: currentSnap?.eta,
       currentSyncMode: currentSnap?.['sync-mode'],
       lastSyncedSnapshot: peerInfo.last_synced_snap?.name ?? '-',
-      lastSyncedTime: peerInfo.last_synced_snap?.sync_time_stamp,
+      lastSyncedTime:
+        peerInfo.last_synced_snap?.sync_time_stamp != null
+          ? String(peerInfo.last_synced_snap.sync_time_stamp)
+          : undefined,
       snapshotCount: peerInfo.snaps_synced ?? 0,
       checkpointCount: peerInfo.snaps_deleted ?? 0,
       renamedSnapshotCount: peerInfo.snaps_renamed ?? 0,

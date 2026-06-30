@@ -1,26 +1,18 @@
-export interface DirTreeEntry {
-  name: string;
-  parent: string;
-}
-
-export interface DirLevel {
+export interface PathLevel {
   options: string[];
   selected: string;
-  kind: 'group' | 'subvolume' | 'dir';
 }
 
 export interface PathEntry {
   fullPath: string;
-  levels: DirLevel[];
+  levels: PathLevel[];
   expanded: boolean;
-  subvolumePath?: string;
-  resolvedSubvolumeRoot?: string;
 }
 
-export function createPathEntry(groupOptions: string[], expanded = true): PathEntry {
+export function createPathEntry(expanded = true): PathEntry {
   return {
     fullPath: '',
-    levels: [{ options: groupOptions, selected: '', kind: 'group' }],
+    levels: [{ options: [], selected: '' }],
     expanded
   };
 }

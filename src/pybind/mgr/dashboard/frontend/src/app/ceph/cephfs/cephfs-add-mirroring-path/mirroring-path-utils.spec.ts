@@ -2,72 +2,44 @@ import { MirroringPathUtils } from './mirroring-path-utils';
 import { PathEntry } from './mirroring-path.model';
 
 describe('MirroringPathUtils', () => {
-  describe('mirroringPathsOverlap', () => {
+  describe('pathsOverlap', () => {
     it('should detect exact, ancestor, and descendant overlap', () => {
-      expect(MirroringPathUtils.mirroringPathsOverlap('/volumes/g1/sv1', '/volumes/g1/sv1')).toBe(
-        true
-      );
-      expect(
-        MirroringPathUtils.mirroringPathsOverlap('/volumes/g1/sv1/dir', '/volumes/g1/sv1')
-      ).toBe(true);
-      expect(
-        MirroringPathUtils.mirroringPathsOverlap('/volumes/g1/sv1', '/volumes/g1/sv1/dir')
-      ).toBe(true);
-      expect(MirroringPathUtils.mirroringPathsOverlap('/volumes/g1/sv1', '/volumes/g2/sv1')).toBe(
-        false
-      );
+      expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1', '/volumes/g1/sv1')).toBe(true);
+      expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1/dir', '/volumes/g1/sv1')).toBe(true);
+      expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1', '/volumes/g1/sv1/dir')).toBe(true);
+      expect(MirroringPathUtils.pathsOverlap('/volumes/g1/sv1', '/volumes/g2/sv1')).toBe(false);
     });
   });
 
-  describe('isMirroringPathTracked', () => {
-    it('should match resolved subvolume paths against tracked paths', () => {
-      const tracked = MirroringPathUtils.toTrackedPathSet([
-        '/volumes/cs/g1/64446b51-d39b-436b-991f-0f8e713067ff'
-      ]);
-      expect(MirroringPathUtils.isMirroringPathTracked('/volumes/g1/my-subvol', tracked)).toBe(
-        false
-      );
-      expect(
-        MirroringPathUtils.isMirroringPathTracked(
-          '/volumes/cs/g1/64446b51-d39b-436b-991f-0f8e713067ff',
-          tracked
-        )
-      ).toBe(true);
+  describe('isPathTracked', () => {
+    it('should match tracked paths and their descendants', () => {
+      const tracked = new Set(['/volumes/g1/sv1']);
+      expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv1', tracked)).toBe(true);
+      expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv1/dir', tracked)).toBe(true);
+      expect(MirroringPathUtils.isPathTracked('/volumes/g1/sv2', tracked)).toBe(false);
     });
   });
 
-  describe('isGroupPathMirrored', () => {
-    it('should only match exact group paths', () => {
-      const tracked = MirroringPathUtils.toTrackedPathSet(['/volumes/g1/sv1']);
-      expect(MirroringPathUtils.isGroupPathMirrored('/volumes/g1', tracked)).toBe(false);
-      expect(MirroringPathUtils.isGroupPathMirrored('/volumes/g1/sv1', tracked)).toBe(true);
+  describe('buildPathFromSegments', () => {
+    it('should build a path from selected segments', () => {
+      expect(MirroringPathUtils.buildPathFromSegments(['g1', 'sv1'])).toBe('/volumes/g1/sv1');
+      expect(MirroringPathUtils.buildPathFromSegments([])).toBe('');
     });
   });
 
-  describe('getMirrorPath', () => {
-    it('should require a dir selection before returning a resolved subvolume path', () => {
+  describe('getSelectedSegments', () => {
+    it('should return only selected level values', () => {
       const entry: PathEntry = {
-        fullPath: '/volumes/Group1/B1iu7',
+        fullPath: '/volumes/g1/sv1',
         expanded: true,
-        subvolumePath: '/volumes/Group1/B1iu7',
-        resolvedSubvolumeRoot: '/volumes/Group1/B1iu7/0ef49a41-2569-41d7-80a6-7849910e62cb',
         levels: [
-          { options: ['Group1'], selected: 'Group1', kind: 'group' },
-          { options: ['B1iu7'], selected: 'B1iu7', kind: 'subvolume' }
+          { options: ['g1'], selected: 'g1' },
+          { options: ['sv1', 'sv2'], selected: 'sv1' },
+          { options: [], selected: '' }
         ]
       };
 
-      expect(MirroringPathUtils.getMirrorPath(entry)).toBe('');
-
-      entry.levels.push({
-        options: ['0ef49a41-2569-41d7-80a6-7849910e62cb'],
-        selected: '0ef49a41-2569-41d7-80a6-7849910e62cb',
-        kind: 'dir'
-      });
-
-      expect(MirroringPathUtils.getMirrorPath(entry)).toBe(
-        '/volumes/Group1/B1iu7/0ef49a41-2569-41d7-80a6-7849910e62cb'
-      );
+      expect(MirroringPathUtils.getSelectedSegments(entry)).toEqual(['g1', 'sv1']);
     });
   });
 
@@ -79,15 +51,6 @@ describe('MirroringPathUtils', () => {
         )
       ).toBe(true);
       expect(MirroringPathUtils.isAlreadyTrackedMirrorError('permission denied')).toBe(false);
-    });
-  });
-
-  describe('parseMirrorDirectoryList', () => {
-    it('should parse array and json string responses', () => {
-      expect(MirroringPathUtils.parseMirrorDirectoryList(['/volumes/a'])).toEqual(['/volumes/a']);
-      expect(MirroringPathUtils.parseMirrorDirectoryList(JSON.stringify(['/volumes/b']))).toEqual([
-        '/volumes/b'
-      ]);
     });
   });
 });
