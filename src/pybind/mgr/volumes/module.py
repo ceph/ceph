@@ -97,10 +97,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=mode,type=CephString,req=false '
                    'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
                    'name=casesensitive,type=CephBool,req=false '
-                   'name=namespace_isolated,type=CephBool,req=false ',
+                   'name=namespace_isolated,type=CephBool,req=false '
+                   'name=pool_namespace,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume group in a volume, and optionally, "
                     "with a specific data pool layout, a specific numeric mode, "
-                    "and in separate RADOS namespace",
+                    "and in separate RADOS namespace. The pool_namespace parameter "
+                    "specifies an explicit RADOS namespace to use when "
+                    "--namespace-isolated is set; if omitted, it is auto-generated",
             'perm': 'rw'
         },
         {
@@ -780,7 +783,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             uid=cmd.get('uid', None), gid=cmd.get('gid', None),
             normalization=cmd.get('normalization', None),
             casesensitive=cmd.get('casesensitive', None),
-            namespace_isolated=cmd.get('namespace_isolated', False))
+            namespace_isolated=cmd.get('namespace_isolated', False),
+            pool_namespace=cmd.get('pool_namespace', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):

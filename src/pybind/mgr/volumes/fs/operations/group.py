@@ -268,7 +268,7 @@ def set_group_attrs(fs, path, attrs):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive, namespace_isolated=False):
+def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive, namespace_isolated=False, pool_namespace=None):
     """
     create a subvolume group.
 
@@ -283,6 +283,7 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalizat
     :param normalization: the unicode normalization form to use (nfd, nfc, nfkd or nfkc)
     :param casesensitive: whether to make the subvolume case insensitive or not
     :param namespace_isolated: whether to enable RADOS namespace isolation for the group
+    :param pool_namespace: an explicit RADOS namespace to use; if None, auto-generated from group name
     :return: None
     """
     group = Group(fs, vol_spec, groupname)
@@ -302,7 +303,7 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalizat
             'casesensitive': casesensitive,
         }
         if namespace_isolated:
-            attrs['pool_namespace'] = f'{vol_spec.fs_namespace}_{groupname}'
+            attrs['pool_namespace'] = pool_namespace or f'{vol_spec.fs_namespace}_{groupname}'
         set_group_attrs(fs, path, attrs)
     except (cephfs.Error, VolumeException) as e:
         try:
