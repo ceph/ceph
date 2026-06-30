@@ -216,7 +216,7 @@ Create a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>] [--namespace-isolated]
+   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>] [--namespace-isolated] [--pool-namespace <namespace>]
 
 The command succeeds even if the subvolume group already exists.
 
@@ -260,6 +260,12 @@ own unique RADOS namespace (``fsvolumens__<group>_<subvolume>``) without
 needing the ``--namespace-isolated`` flag on the ``fs subvolume create``
 command. This provides security isolation at the RADOS level for all
 subvolumes belonging to the group.
+
+An explicit RADOS namespace can be specified via the ``--pool-namespace``
+option (e.g. ``--pool-namespace my-custom-ns``), which overrides the
+auto-generated namespace. This is useful when a RADOS namespace has been
+pre-created by an administrator and needs to be associated with a specific
+subvolume group.
 
 To check if a subvolume group has namespace isolation enabled, use the
 ``fs subvolumegroup info`` command and look for the ``pool_namespace``
