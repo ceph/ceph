@@ -7044,14 +7044,14 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 #if defined(__linux__)
   // dummy encryption?
   if (cct->_conf.get_val<bool>("client_fscrypt_dummy_encryption")) {
-    client_lock.unlock();
+    cl.unlock();
 
     r = fscrypt_dummy_encryption();
     if (r < 0) {
       return r;
     }
 
-    client_lock.lock();
+    cl.lock();
   }
 #endif
   /*
