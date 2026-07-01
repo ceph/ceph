@@ -2774,7 +2774,7 @@ TEST(LibCephFS, SnapMdCreateAdds) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -2834,7 +2834,7 @@ TEST(LibCephFS, SnapMdCreateUpdates) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -2894,7 +2894,7 @@ TEST(LibCephFS, SnapMdExclAdds) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -2954,7 +2954,7 @@ TEST(LibCephFS, SnapMdExclRejectsUpdate) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -3012,7 +3012,7 @@ TEST(LibCephFS, SnapMdRemove) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -3070,7 +3070,7 @@ TEST(LibCephFS, SnapMdOpEmptyStrings) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
@@ -3136,7 +3136,7 @@ TEST(LibCephFS, SnapMdNegTest) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
-  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char dir_path[64];
   char snap_name[64];
