@@ -26,6 +26,7 @@ enum {
   l_bluestore_allocator_first = 732300,
   l_bluestore_allocator_alloc_process_lat,
   l_bluestore_allocator_lock_wait_lat,
+  l_bluestore_allocator_nolock_process_lat,
   l_bluestore_allocator_last
 };
 

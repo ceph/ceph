@@ -86,9 +86,13 @@ int64_t Btree2Allocator::allocate(
     max_alloc_size = p2align(uint64_t(cap), (uint64_t)block_size);
   }
   uint64_t cached_chunk_offs = 0;
+  auto fast_alloc_start = mono_clock::now();
   if (cache && cache->try_get(&cached_chunk_offs, want)) {
     num_free -= want;
     extents->emplace_back(cached_chunk_offs, want);
+    logger->tinc_with_max(
+        l_bluestore_allocator_nolock_process_lat,
+        mono_clock::now() - fast_alloc_start);
     return want;
   }
   auto lock_wait_start = mono_clock::now();

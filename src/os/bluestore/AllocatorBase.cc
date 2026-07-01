@@ -215,13 +215,18 @@ void AllocatorPerf::_init_logger(std::string_view name) {
 
   b.add_time_avg(l_bluestore_allocator_alloc_process_lat,
     "alloc_process_lat",
-    "Allocator processing latency",
+    "Allocator processing latency while holding lock",
     "apl",
     PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_allocator_lock_wait_lat,
     "lock_wait_lat",
     "Allocator lock wait latency",
     "lwl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_allocator_nolock_process_lat,
+    "nolock_process_lat",
+    "Allocator lockless fast-path allocation latency",
+    "fpl",
     PerfCountersBuilder::PRIO_USEFUL);
 
   logger = b.create_perf_counters();
