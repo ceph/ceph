@@ -6,11 +6,16 @@ import { from, of } from 'rxjs';
 import { catchError, concatMap, finalize, map, switchMap, tap, toArray } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { MirroringPathUtils } from './mirroring-path-utils';
 import { PathSubmitFailure, PathSubmitOutput } from './mirroring-path.model';
 import { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
+import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
 
 import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 
@@ -22,10 +27,13 @@ import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 })
 export class CephfsAddMirroringPathComponent implements OnInit {
   @ViewChild('pathsStep') pathsStep!: MirroringPathsStepComponent;
+  @ViewChild('scheduleStep') scheduleStep?: CephfsSnapshotscheduleFormComponent;
 
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private cephfsService = inject(CephfsService);
+  private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
+  private taskWrapper = inject(TaskWrapperService);
   private notificationService = inject(NotificationService);
   private destroyRef = inject(DestroyRef);
 
@@ -40,6 +48,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   ];
   isSubmitLoading = false;
 
+  get schedulePath(): string {
+    return this.pathsStep?.getSubmitPaths()?.toAdd?.[0] ?? '';
+  }
+
   ngOnInit(): void {
     this.fsId = Number(this.route.snapshot.paramMap.get('fsId'));
     const fsName = this.route.snapshot.paramMap.get('fsName') ?? '';
@@ -53,12 +65,6 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   onSubmit(): void {
     const pathsStep = this.pathsStep;
     if (!pathsStep?.formGroup) {
-      return;
-    }
-
-    pathsStep.formGroup.markAllAsTouched();
-    pathsStep.formGroup.updateValueAndValidity();
-    if (pathsStep.formGroup.invalid) {
       return;
     }
 
@@ -77,7 +83,12 @@ export class CephfsAddMirroringPathComponent implements OnInit {
               skippedByServer: [],
               succeeded: []
             });
-            return of([] as (string | null)[]);
+            return of({
+              failed: [],
+              alreadyMirrored,
+              skippedByServer: [],
+              succeeded: []
+            });
           }
 
           const skippedByServer: string[] = [];
@@ -109,15 +120,13 @@ export class CephfsAddMirroringPathComponent implements OnInit {
               );
             }),
             toArray(),
-            tap((results) => {
+            switchMap((results) => {
               const succeeded = results.filter((path): path is string => !!path);
-              this.showSubmitSummary({
-                failed,
-                alreadyMirrored,
-                skippedByServer,
-                succeeded
-              });
-            })
+              return this.createSnapshotSchedules(succeeded).pipe(
+                map(() => ({ failed, alreadyMirrored, skippedByServer, succeeded }))
+              );
+            }),
+            tap((outcome) => this.showSubmitSummary(outcome))
           );
         }),
         finalize(() => {
@@ -125,12 +134,43 @@ export class CephfsAddMirroringPathComponent implements OnInit {
         }),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe((results) => {
-        const succeeded = results.filter((path): path is string => !!path);
-        if (succeeded.length) {
+      .subscribe((outcome) => {
+        if (outcome?.succeeded?.length) {
           this.closeTearsheet(true);
         }
       });
+  }
+
+  private createSnapshotSchedules(paths: string[]) {
+    if (!this.scheduleStep || !paths.length) {
+      return of(undefined);
+    }
+
+    return from(paths).pipe(
+      concatMap((path) =>
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, { path }),
+            call: this.snapshotScheduleService.create(this.scheduleStep.buildCreatePayload(path))
+          })
+          .pipe(
+            catchError((error) => {
+              const detail =
+                error?.error?.detail ||
+                error?.message ||
+                $localize`Failed to create snapshot schedule for '${path}'`;
+              this.notificationService.show(
+                NotificationType.error,
+                $localize`Failed to create snapshot schedule`,
+                detail
+              );
+              return of(undefined);
+            })
+          )
+      ),
+      toArray(),
+      map(() => undefined)
+    );
   }
 
   onCancel(): void {
