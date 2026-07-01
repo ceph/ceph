@@ -184,4 +184,10 @@ export class CephfsService {
   listMirrorDirectories(@cdEncodeNot fsName: string): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseURL}/mirror/directory/${fsName}`);
   }
+
+  removeMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+    return this.http.delete(`${this.baseURL}/mirror/directory`, {
+      params: { fs_name: fsName, path }
+    });
+  }
 }

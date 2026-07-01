@@ -5,10 +5,16 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
-import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths.component';
 import { HttpClientModule } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -113,7 +119,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
   beforeEach(async () => {
     const cephfsServiceMock = {
-      getMirrorStatus: jest.fn()
+      getMirrorStatus: jest.fn(),
+      removeMirrorDirectory: jest.fn().mockReturnValue(of({}))
     };
 
     const snapshotScheduleServiceMock = {
@@ -165,6 +172,22 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
               paramMap: of(convertToParamMap({ fsName: 'test-fs' }))
             }
           }
+        },
+        {
+          provide: AuthStorageService,
+          useValue: {
+            getPermissions: () => ({
+              cephfsMirror: { read: true, create: true, update: true, delete: true }
+            })
+          }
+        },
+        {
+          provide: ModalCdsService,
+          useValue: { show: jest.fn() }
+        },
+        {
+          provide: TaskWrapperService,
+          useValue: { wrapTaskAroundCall: jest.fn((args) => args.call) }
         }
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -504,9 +527,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
   describe('onSelectionChange', () => {
     it('should update selection', () => {
-      const mockSelection = { selected: [{ path: '/test' }] } as any;
+      const mockSelection = new CdTableSelection([{ path: '/test' }]);
 
-      component.selection = mockSelection;
+      component.updateSelection(mockSelection);
 
       expect(component.selection).toBe(mockSelection);
     });
@@ -1019,6 +1042,24 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           false
         );
       }));
+    });
+  });
+  describe('removePathModal', () => {
+    it('should open high-impact deletion modal for selected path', () => {
+      const modalService = TestBed.inject(ModalCdsService);
+      component.selection = new CdTableSelection([{ path: '/path1' }]);
+      component.fsName = 'test-fs';
+
+      component.removePathModal();
+
+      expect(modalService.show).toHaveBeenCalledWith(
+        DeleteConfirmationModalComponent,
+        expect.objectContaining({
+          impact: DeletionImpact.high,
+          itemNames: ['/path1'],
+          actionDescription: 'remove'
+        })
+      );
     });
   });
 });

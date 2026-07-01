@@ -33,7 +33,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   tableActions: CdTableAction[];
   isSetupModalOpen = false;
   selection = new CdTableSelection();
-  permission = this.authStorageService.getPermissions().cephfs;
+  permission = this.authStorageService.getPermissions().cephfsMirror;
   isPrepareModalOpen = false;
   jumpInTiles: MirroringJumpInTile[] = [];
 
