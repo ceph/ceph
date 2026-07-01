@@ -494,22 +494,6 @@ target_link_libraries(ceph_test_bilog
 install(TARGETS ceph_test_bilog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-#
-# Helper for adding RGW tests built with Catch2:
-# Note: to define a test that does not use Catch2::main(), use:
-#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
-# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
-# and the output will be called "unittest_my_test_name".
-#
-function(add_catch2_test_rgw test_name)
-add_catch2_test(${test_name}
- ${ARGV1}
- EXTRA_LIBS rgw_common ${rgw_libs}
- EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
-endfunction()
-
-add_catch2_test_rgw(rgw_hex)
-
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
