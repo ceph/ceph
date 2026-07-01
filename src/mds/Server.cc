@@ -12452,6 +12452,7 @@ bool Server::build_snap_diff(
     CDentry* dn = nullptr;
     CInode* in = nullptr;
     utime_t mtime;
+    uint64_t change_attr = 0;
 
     void reset() {
       *this = EntryInfo();
@@ -12471,7 +12472,7 @@ bool Server::build_snap_diff(
     return false;
   };
 
-  auto rdlock_file_mtime = [&](CInode *in, utime_t &mtime) -> bool {
+  auto rdlock_file_inode = [&](CInode *in, utime_t &mtime, uint64_t &change_attr) -> bool {
     if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
       dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
            << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
@@ -12480,6 +12481,7 @@ bool Server::build_snap_diff(
       return false;
     }
     mtime = in->get_inode()->mtime;
+    change_attr = in->get_inode()->change_attr;
     auto lit = mdr->locks.find(&in->filelock);
     ceph_assert(lit != mdr->locks.end());
     mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
@@ -12597,15 +12599,19 @@ bool Server::build_snap_diff(
 	  continue;
 	}
 	utime_t mtime = in->get_inode()->mtime;
-	if (!rdlock_file_mtime(in, mtime))
+	uint64_t change_attr = in->get_inode()->change_attr;
+	if (!rdlock_file_inode(in, mtime, change_attr))
 	  return false;
 	CInode *in_prev = mdcache->pick_inode_snap(head, snapid_prev);
 	CInode *in_snap = mdcache->pick_inode_snap(head, snapid);
-	if (in_prev->get_inode()->mtime != in_snap->get_inode()->mtime) {
-	  dout(30) << __func__ << " timestamp changed on unchanged span "
+	if (in_prev->get_inode()->mtime != in_snap->get_inode()->mtime ||
+	    in_prev->get_inode()->change_attr != in_snap->get_inode()->change_attr) {
+	  dout(30) << __func__ << " metadata changed on unchanged span "
 	    << dn->get_name() << " " << dn->first << "/" << dn->last
-	    << " " << in_prev->get_inode()->mtime << " vs. "
-	    << in_snap->get_inode()->mtime << dendl;
+	    << " mtime " << in_prev->get_inode()->mtime << " vs. "
+	    << in_snap->get_inode()->mtime
+	    << " change_attr " << in_prev->get_inode()->change_attr << " vs. "
+	    << in_snap->get_inode()->change_attr << dendl;
 	  if (!add_result_cb(dn, in, true)) {
 	    break;
 	  }
@@ -12630,7 +12636,8 @@ bool Server::build_snap_diff(
       if (snapid_prev >= dn->first && snapid_prev <= dn->last) {
 	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
-	before = EntryInfo {dn, in, in->get_inode()->mtime};
+	before = EntryInfo {dn, in, in->get_inode()->mtime,
+			    in->get_inode()->change_attr};
 	continue;
       } else {
 	if (before.dn && dn->get_name() == name_before) {
@@ -12643,26 +12650,32 @@ bool Server::build_snap_diff(
 	    before.reset();
 	  } else {
 	    utime_t mtime = in->get_inode()->mtime;
-	    if (mtime != before.mtime) {
-	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+        uint64_t change_attr = in->get_inode()->change_attr;
+        if (mtime != before.mtime || change_attr != before.change_attr) {
+        dout(30) << __func__ << " metadata changed " << dn->get_name() << " "
 		       << dn->first << "/" << dn->last
-		       << " " << before.mtime << " vs. " << mtime
+               << " mtime " << before.mtime << " vs. " << mtime
+               << " change_attr " << before.change_attr << " vs. "
+               << change_attr
 		       << dendl;
 	      before.reset();
 	    } else {
-	      if (!rdlock_file_mtime(in, mtime))
+	      if (!rdlock_file_inode(in, mtime, change_attr))
 		return false;
-	      if (mtime == before.mtime) {
-		dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+	      if (mtime == before.mtime && change_attr == before.change_attr) {
+		dout(30) << __func__ << " metadata not changed " << dn->get_name() << " "
 			 << dn->first << "/" << dn->last
-			 << " " << mtime
+			 << " mtime " << mtime
+			 << " change_attr " << change_attr
 			 << dendl;
 		before.reset();
 		continue;
 	      }
-	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+	      dout(30) << __func__ << " metadata changed " << dn->get_name() << " "
 		       << dn->first << "/" << dn->last
-		       << " " << before.mtime << " vs. " << mtime
+               << " mtime " << before.mtime << " vs. " << mtime
+               << " change_attr " << before.change_attr << " vs. "
+               << change_attr
 		       << " (after snapflush)"
 		       << dendl;
 	      before.reset();
