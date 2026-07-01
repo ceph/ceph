@@ -3,14 +3,20 @@ import { HttpClient } from '@angular/common/http';
 
 import _ from 'lodash';
 import { Observable, forkJoin, of as observableOf } from 'rxjs';
-import { catchError, map, mapTo, mergeMap } from 'rxjs/operators';
+import { catchError, map, mapTo, mergeMap, switchMap } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
-import { ListenerItem } from '../models/nvmeof';
+import { ListenerItem, NvmeofSubsystem, NvmeofSubsystemNamespace } from '../models/nvmeof';
 import { HostService } from './host.service';
 import { OrchestratorService } from './orchestrator.service';
 import { HostStatus } from '../enum/host-status.enum';
 import { Host } from '../models/host.interface';
 import { OrchestratorStatus } from '../models/orchestrator.interface';
+
+export type SetupState = {
+  hasGatewayGroups: boolean;
+  hasSubsystems: boolean;
+  hasNamespaces: boolean;
+};
 
 export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
 
@@ -171,6 +177,60 @@ export class NvmeofService {
       }
       return gwGrpList;
     }, []);
+  }
+
+  private normalizeListResponse<T>(response: unknown, key: string): T[] {
+    if (Array.isArray(response)) {
+      return response as T[];
+    }
+
+    const nested = (response as Record<string, T[]> | null)?.[key];
+    return Array.isArray(nested) ? nested : [];
+  }
+
+  fetchSetupState(): Observable<SetupState> {
+    return this.listGatewayGroups().pipe(
+      switchMap((gatewayGroups: CephServiceSpec[][]) => {
+        const rawGroups = Array.isArray(gatewayGroups[0]) ? gatewayGroups[0] : [];
+        const groups = rawGroups.filter((serviceSpec: CephServiceSpec) => serviceSpec?.spec?.group);
+        const hasGatewayGroups = groups.length > 0;
+
+        if (!hasGatewayGroups) {
+          return observableOf({
+            hasGatewayGroups: false,
+            hasSubsystems: false,
+            hasNamespaces: false
+          });
+        }
+
+        const firstGroupName = groups[0].spec.group;
+
+        return forkJoin({
+          subsystems: this.listSubsystems(firstGroupName).pipe(
+            map((resp: unknown) => this.normalizeListResponse<NvmeofSubsystem>(resp, 'subsystems')),
+            catchError(() => observableOf([]))
+          ),
+          namespaces: this.listNamespaces(firstGroupName).pipe(
+            map((resp: unknown) =>
+              this.normalizeListResponse<NvmeofSubsystemNamespace>(resp, 'namespaces')
+            ),
+            catchError(() => observableOf([]))
+          )
+        }).pipe(
+          map(({ subsystems, namespaces }) => ({
+            hasGatewayGroups,
+            hasSubsystems: subsystems.length > 0,
+            hasNamespaces: namespaces.length > 0
+          })),
+          catchError(() =>
+            observableOf({ hasGatewayGroups, hasSubsystems: false, hasNamespaces: false })
+          )
+        );
+      }),
+      catchError(() =>
+        observableOf({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false })
+      )
+    );
   }
 
   // Gateway groups

@@ -2,10 +2,11 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ActivatedRoute } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-namespaces-list.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
@@ -42,6 +43,11 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
   }
 
   beforeEach(async () => {
+    const nvmeofStateServiceMock = {
+      refresh$: new Subject<void>(),
+      requestRefresh: jest.fn()
+    };
+
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemNamespacesListComponent],
       imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
@@ -61,7 +67,8 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
             listNamespaces: jest.fn().mockReturnValue(of(mockNamespaces))
           }
         },
-        { provide: AuthStorageService, useClass: MockAuthStorageService }
+        { provide: AuthStorageService, useClass: MockAuthStorageService },
+        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
       ]
     }).compileComponents();
   });
