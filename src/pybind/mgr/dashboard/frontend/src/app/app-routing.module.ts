@@ -70,7 +70,6 @@ import { CephfsAddMirroringPathComponent } from './ceph/cephfs/cephfs-add-mirror
 import { CephfsMirroringFsTabsComponent } from './ceph/cephfs/cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './ceph/cephfs/cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './ceph/cephfs/cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
-import { CephfsMirroringFsSchedulesComponent } from './ceph/cephfs/cephfs-mirroring-fs-schedules/cephfs-mirroring-fs-schedules.component';
 import { CephfsMirroringFsBreadcrumbResolver } from './ceph/cephfs/cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-breadcrumb.resolver';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
@@ -518,10 +517,6 @@ const routes: Routes = [
                   {
                     path: 'mirror-paths',
                     component: CephfsMirroringFsMirrorPathsComponent
-                  },
-                  {
-                    path: 'schedules',
-                    component: CephfsMirroringFsSchedulesComponent
                   }
                 ]
               }
