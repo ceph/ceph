@@ -163,17 +163,19 @@ HEALTH_STATUS_MAP = {
     'Critical': 2,
 }
 
-SENSOR_METRICS = {
-    'fans': {
-        'metric': 'hardware_fan_rpm',
-        'description': 'Hardware fan speed in RPM',
-        'labels': HW_FAN_LABELS,
-    },
-    'temperatures': {
-        'metric': 'hardware_temperature_celsius',
-        'description': 'Hardware temperature sensor reading in Celsius',
-        'labels': HW_TEMP_LABELS,
-    },
+sensor_metric = namedtuple('sensor_metric', 'metric description labels')
+
+SENSOR_METRICS: Dict[str, sensor_metric] = {
+    'fans': sensor_metric(
+        'hardware_fan_rpm',
+        'Hardware fan speed in RPM',
+        HW_FAN_LABELS,
+    ),
+    'temperatures': sensor_metric(
+        'hardware_temperature_celsius',
+        'Hardware temperature sensor reading in Celsius',
+        HW_TEMP_LABELS,
+    )
 }
 
 CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
@@ -1063,11 +1065,11 @@ class Module(MgrModule, OrchestratorClientMixin):
         )
 
         for sensor in SENSOR_METRICS.values():
-            metrics[sensor['metric']] = Metric(
+            metrics[sensor.metric] = Metric(
                 'gauge',
-                sensor['metric'],
-                sensor['description'],
-                sensor['labels']
+                sensor.metric,
+                sensor.description,
+                sensor.labels
             )
 
         metrics['hardware_firmware_info'] = Metric(
@@ -2036,7 +2038,10 @@ class Module(MgrModule, OrchestratorClientMixin):
         except Exception as e:
             self.log.error(f"Failed to get SMB metadata: {str(e)}")
 
-    def _hw_get_health_value(self, status_val, hostname='', comp_id='', category=''):
+    def _hw_get_health_value(
+            self, status_val: Any, hostname: str = '',
+            comp_id: str = '', category: str = ''
+    ) -> Optional[int]:
         """Map a Redfish health status to a numeric value (0=OK, 1=Warning, 2=Error)."""
         if isinstance(status_val, dict):
             health_str = status_val.get('health', 'Unknown')
@@ -2054,8 +2059,11 @@ class Module(MgrModule, OrchestratorClientMixin):
             )
         return value
 
-    def _hw_set_health_metric(self, status_val, hostname, comp_id, category):
-        """Set ceph_hardware_health gauge for a single component."""
+    def _hw_set_health_metric(
+            self, status_val: Any, hostname: str,
+            comp_id: str, category: str
+    ) -> None:
+        """Set hardware_health gauge for a single component."""
         health_value = self._hw_get_health_value(
             status_val, hostname, comp_id, category
         )
@@ -2064,14 +2072,19 @@ class Module(MgrModule, OrchestratorClientMixin):
                 health_value, (hostname, comp_id, category)
             )
 
-    def _hw_iter_components(self, status, category):
+    def _hw_iter_components(
+            self, status: Dict[str, Any], category: str
+    ) -> Iterator[Tuple[str, Dict[str, Any]]]:
         """Yield (comp_id, comp_dict) pairs from nested status[category] dicts."""
         for components in status.get(category, {}).values():
             for comp_id, comp in components.items():
                 if isinstance(comp, dict):
                     yield comp_id, comp
 
-    def _hw_set_sensor_metric(self, comp, comp_id, hostname, category, metric_key):
+    def _hw_set_sensor_metric(
+            self, comp: Dict[str, Any], comp_id: str,
+            hostname: str, category: str, metric_key: str
+    ) -> None:
         """Set sensor value (temperature/fan) and health gauges using the sensor name."""
         name = comp.get('name', comp_id)
         reading = comp.get('reading')
@@ -2082,7 +2095,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 pass
         self._hw_set_health_metric(comp.get('status', {}), hostname, name, category)
 
-    def _process_storage(self, status, hostname):
+    def _process_storage(self, status: Dict[str, Any], hostname: str) -> None:
         """Set storage capacity and health metrics per drive."""
         for device_id, device in self._hw_iter_components(status, 'storage'):
             capacity = device.get('capacity_bytes', 0)
@@ -2098,7 +2111,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.metrics['hardware_storage_capacity_bytes'].set(capacity, labels)
             self._hw_set_health_metric(device.get('status', {}), hostname, device_id, 'storage')
 
-    def _process_processors(self, status, hostname):
+    def _process_processors(self, status: Dict[str, Any], hostname: str) -> None:
         """Set CPU cores count and health metrics per processor."""
         for cpu_id, cpu in self._hw_iter_components(status, 'processors'):
             cores = cpu.get('total_cores', 0)
@@ -2112,7 +2125,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.metrics['hardware_cpu_cores'].set(cores, labels)
             self._hw_set_health_metric(cpu.get('status', {}), hostname, cpu_id, 'processors')
 
-    def _process_memory(self, status, hostname):
+    def _process_memory(self, status: Dict[str, Any], hostname: str) -> None:
         """Set memory capacity (in bytes) and health metrics per DIMM."""
         for dimm_id, dimm in self._hw_iter_components(status, 'memory'):
             capacity_mib = dimm.get('capacity_mi_b', 0)
@@ -2125,7 +2138,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.metrics['hardware_memory_capacity_bytes'].set(capacity_bytes, labels)
             self._hw_set_health_metric(dimm.get('status', {}), hostname, dimm_id, 'memory')
 
-    def _process_power_network(self, status, hostname):
+    def _process_power_network(self, status: Dict[str, Any], hostname: str) -> None:
         """Set health metrics for power and network"""
         for comp_id, comp in self._hw_iter_components(status, 'power'):
             name = comp.get('name', comp_id)
@@ -2133,13 +2146,13 @@ class Module(MgrModule, OrchestratorClientMixin):
         for comp_id, comp in self._hw_iter_components(status, 'network'):
             self._hw_set_health_metric(comp.get('status', {}), hostname, comp_id, 'network')
 
-    def _process_sensors(self, status, hostname):
+    def _process_sensors(self, status: Dict[str, Any], hostname: str) -> None:
         """Set fan and temperature readings and health metrics"""
         for category, sensor in SENSOR_METRICS.items():
             for comp_id, comp in self._hw_iter_components(status, category):
-                self._hw_set_sensor_metric(comp, comp_id, hostname, category, sensor['metric'])
+                self._hw_set_sensor_metric(comp, comp_id, hostname, category, sensor.metric)
 
-    def _process_firmware(self, hostname, data):
+    def _process_firmware(self, hostname: str, data: Dict[str, Any]) -> None:
         """Set firmware info metrics (value=1) with version as label, skip unknown."""
         fw_data = data.get('firmware', data.get('firmwares', {}))
         for fw_id, fw_info in fw_data.items():

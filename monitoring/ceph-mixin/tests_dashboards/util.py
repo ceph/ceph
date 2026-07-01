@@ -44,7 +44,9 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
         return
     error = 0
     panel_ids_in_file = set()
-    for panel in dashboard_data['panels']:
+
+    def process_panel(panel, in_row=False):
+        nonlocal error
         if (
                 'title' in panel
                 and 'targets' in panel
@@ -55,13 +57,33 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
                 query_id = f'{title}-{legend_format}'
-                if query_id in panel_ids_in_file and legend_format != '__auto':
-                    cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
-                            f' already exists in the same file: "{path}"'), 'red')
-                    error = 1
+                # Skip duplicates within collapsed rows
+                # but error on duplicates at top-level or across different contexts
+                if query_id in panel_ids_in_file:
+                    if legend_format != '__auto' and not in_row:
+                        cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
+                                f' already exists in the same file: "{path}"'), 'red')
+                        error = 1
+                    # Skip adding duplicate
+                    continue
+                # Also check for duplicates across different files
+                # NOTE: This silently skips duplicate panel+legend combinations across dashboards,
+                # which means some queries never get tested. A better approach would be to include
+                # dashboard name in query_id (e.g., "dashboard:panel-legend"), but that requires
+                # updating all test .feature files to specify which dashboard they're testing.
+                if query_id in data['queries']:
+                    # Skip silently for duplicates across files (first one wins)
+                    continue
                 data['queries'][query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
                 panel_ids_in_file.add(query_id)
+        # Recurse into row panels
+        if panel.get('type') == 'row' and 'panels' in panel:
+            for nested_panel in panel['panels']:
+                process_panel(nested_panel, in_row=True)
+
+    for panel in dashboard_data['panels']:
+        process_panel(panel)
     if error:
         raise ValueError('Missing legend_format in queries, please add a proper value.')
 
