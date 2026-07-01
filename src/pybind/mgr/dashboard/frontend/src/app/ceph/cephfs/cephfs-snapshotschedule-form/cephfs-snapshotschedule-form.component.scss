@@ -1,13 +1,13 @@
-:host {
-  display: block;
-}
+:host ::ng-deep {
+  [cdsRow] {
+    margin: 0;
+  }
 
-:host .form-item-append {
-  align-items: flex-end;
-  gap: var(--cds-spacing-05);
-}
+  [cdsCol] {
+    padding: 0;
 
-:host .form-col {
-  flex: 1 1 0;
-  min-width: 0;
+    &:not(:first-child) {
+      padding-inline-start: var(--cds-spacing-05);
+    }
+  }
 }
