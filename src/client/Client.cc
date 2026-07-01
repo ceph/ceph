@@ -3341,20 +3341,15 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
     return Dispatcher::UNHANDLED();
   }
 
-  // unmounting?
-  std::scoped_lock cl(client_lock);
+  // During unmount, wake the unmount thread when a message is handled (e.g. a
+  // write reply).  Do not call trim_cache() here: it can block on cache_lock
+  // while holding client_lock in the dispatch thread and stall replies.
   if (is_unmounting()) {
-    ldout(cct, 10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
-             << "+" << inode_map.size() << dendl;
-    uint64_t size = lru.lru_get_size() + inode_map.size();
-    trim_cache();
-    if (size > lru.lru_get_size() + inode_map.size()) {
-      ldout(cct, 10) << "unmounting: trim pass, cache shrank, poking unmount()" << dendl;
-      mount_cond.notify_all();
-    } else {
-      ldout(cct, 10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
-               << "+" << inode_map.size() << dendl;
-    }
+    std::scoped_lock cl(client_lock);
+    ldout(cct, 10) << "unmounting: dispatch wake, lru=" << lru.lru_get_size()
+		   << " inodes=" << inode_map.size() << dendl;
+    delay_put_inodes(true);
+    mount_cond.notify_all();
   }
 
   return Dispatcher::HANDLED();
@@ -12377,8 +12372,11 @@ void Client::C_nonblocking_fsync_state::advance()
     } else {
       // FIXME: this can starve
       if (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
-        ldout(clnt->cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
-                             << " uncommitted, waiting" << dendl;
+        ldout(clnt->cct, 10) << "ino " << in->ino << " has "
+                             << in->cap_refs[CEPH_CAP_FILE_BUFFER]
+                             << " FILE_BUFFER refs, waitfor_commit="
+                             << in->waitfor_commit.size()
+                             << ", waiting" << dendl;
         advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
         in->waitfor_commit.push_back(advancer);
         // ------------  here is a state machine break point but we have to

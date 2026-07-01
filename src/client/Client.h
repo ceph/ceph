@@ -748,6 +748,9 @@ public:
                             bufferlist *blp = nullptr,
                             bool do_fsync = false, bool syncdataonly = false);
   int64_t nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
+  void queue_client_finisher(Context *ctx) {
+    client_finisher.queue(ctx);
+  }
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);

@@ -40,6 +40,8 @@
 
 #include "include/cephfs/libcephfs.h"
 
+#define dout_subsys ceph_subsys_client
+
 #define DEFAULT_UMASK 002
 
 using namespace std;
@@ -2214,37 +2216,69 @@ extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
 }
 
+class LL_CallbackDispatch : public Context {
+  CephContext *const cct;
+  struct ceph_ll_io_info *const io_info;
+public:
+  LL_CallbackDispatch(CephContext *cct_, struct ceph_ll_io_info *io_info_)
+    : cct(cct_), io_info(io_info_) {}
+  void finish(int) override {
+    ldout(cct, 10) << "LL_Onfinish dispatching callback"
+		   << " io_info=" << io_info
+		   << " priv=" << io_info->priv
+		   << " callback=" << (void*)io_info->callback
+		   << " result=" << io_info->result
+		   << " write=" << io_info->write
+		   << " fsync=" << io_info->fsync
+		   << dendl;
+    io_info->callback(io_info);
+  }
+};
+
 class LL_Onfinish : public Context {
 public:
-  LL_Onfinish(struct ceph_ll_io_info *io_info)
-    : io_info(io_info) {}
+  LL_Onfinish(Client *client_, struct ceph_ll_io_info *io_info)
+    : client(client_), io_info(io_info) {}
   bufferlist bl;
 private:
-  struct ceph_ll_io_info *io_info;
+  Client *const client;
+  struct ceph_ll_io_info *const io_info;
   void finish(int r) override {
     if (!io_info->write && r > 0) {
       copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &bl, r);
     }
     io_info->result = r;
-    io_info->callback(io_info);
+    ldout(client->cct, 10) << "LL_Onfinish::finish queuing on client_finisher"
+			   << " io_info=" << io_info
+			   << " priv=" << io_info->priv
+			   << " callback=" << (void*)io_info->callback
+			   << " r=" << r
+			   << " write=" << io_info->write
+			   << " fsync=" << io_info->fsync
+			   << dendl;
+    // Do not invoke the libcephfs caller callback from a finisher thread
+    // while client_lock may still be held (e.g. C_Write_Finisher::try_complete).
+    client->queue_client_finisher(new LL_CallbackDispatch(client->cct, io_info));
   }
 };
 
 extern "C" int64_t ceph_ll_nonblocking_fsync(class ceph_mount_info *cmount,
 					     Inode *in, struct ceph_ll_io_info *io_info)
 {
-  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+  Client *client = cmount->get_client();
+  LL_Onfinish *onfinish = new LL_Onfinish(client, io_info);
 
-  return (cmount->get_client()->nonblocking_fsync(
+  return (client->nonblocking_fsync(
 	                in, io_info->syncdataonly, onfinish));
 }
 
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)
 {
-  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+  Client *client = cmount->get_client();
+  LL_Onfinish *onfinish = new LL_Onfinish(client, io_info);
 
-  return (cmount->get_client()->ll_preadv_pwritev(
+  return (client->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
 			io_info->off, io_info->write, onfinish, &onfinish->bl,
 			io_info->fsync, io_info->syncdataonly));
