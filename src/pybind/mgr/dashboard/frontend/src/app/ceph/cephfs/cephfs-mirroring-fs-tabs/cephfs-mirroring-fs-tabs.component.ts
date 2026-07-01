@@ -5,8 +5,7 @@ import { filter } from 'rxjs/operators';
 
 enum TABS {
   overview = 'overview',
-  mirrorPaths = 'mirror-paths',
-  schedules = 'schedules'
+  mirrorPaths = 'mirror-paths'
 }
 
 @Component({
