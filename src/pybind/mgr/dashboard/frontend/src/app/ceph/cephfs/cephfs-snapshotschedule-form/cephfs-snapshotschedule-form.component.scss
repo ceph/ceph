@@ -1,0 +1,13 @@
+:host ::ng-deep {
+  [cdsRow] {
+    margin: 0;
+  }
+
+  [cdsCol] {
+    padding: 0;
+
+    &:not(:first-child) {
+      padding-inline-start: var(--cds-spacing-05);
+    }
+  }
+}
