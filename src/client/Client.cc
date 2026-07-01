@@ -3762,16 +3762,23 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
 
 void Client::_put_inode(Inode *in, int n)
 {
+  {
+    std::scoped_lock dl(delay_i_lock);
+    if (deleting_inodes.count(in))
+      return;
+  }
+
   ldout(cct, 10) << __func__ << " on " << *in << " n = " << n << dendl;
 
   int left = in->get_nref();
   // Deferred puts may race with cap teardown during unmount; clamp rather than
   // abort if we already drained refs on an earlier pass.
   if (left < n + 1) {
-    ldout(cct, 1) << __func__ << " inode " << *in << " has only " << left
+    ldout(cct, 1) << __func__ << " inode " << std::hex << in << std::dec
+                  << " has only " << left
                   << " refs but trying to put " << n
-                  << ", clamping to " << (left - 1) << dendl;
-    n = left - 1;
+                  << ", clamping to " << std::max(0, left - 1) << dendl;
+    n = std::max(0, left - 1);
   }
   if (n > 0) {
     in->iput(n);
@@ -3799,16 +3806,12 @@ void Client::_put_inode(Inode *in, int n)
     }
 
     ldout(cct, 10) << __func__ << " deleting " << *in << dendl;
-    // Keep client_lock: dropping it here allows tick/delay_put_inodes to
-    // re-enter _put_inode on the same inode mid-teardown.
+    // Pin in deleting_inodes so put_inode() cannot re-queue this inode while
+    // client_lock is dropped for ObjectCacher teardown.
     {
-      InodeOsetPin oc(in);
-      auto oc_lock = objectcacher->acquire_cache_lock();
-      if (is_unmounting()) {
-	objectcacher->purge_set(oc.oset);
-      }
-      bool unclean = objectcacher->release_set(oc.oset);
-      ceph_assert(!unclean);
+      std::scoped_lock dl(delay_i_lock);
+      deleting_inodes.insert(in);
+      delay_i_release.erase(in);
     }
     if (inode_map.count(in->vino())) {
       if (subvolume_tracker)
@@ -3824,6 +3827,11 @@ void Client::_put_inode(Inode *in, int n)
         root_parents.erase(root_parents.begin());
     }
 
+    if (is_unmounting()) {
+      objectcacher_purge_set(in);
+    }
+    objectcacher_release_set(in);
+    // Drop any put_inode() re-queued while client_lock was released above.
     {
       std::scoped_lock dl(delay_i_lock);
       delay_i_release.erase(in);
@@ -3832,6 +3840,10 @@ void Client::_put_inode(Inode *in, int n)
     if (extra > 0)
       in->iput(extra);
     in->iput();
+    {
+      std::scoped_lock dl(delay_i_lock);
+      deleting_inodes.erase(in);
+    }
     return;
   }
 }
@@ -3869,8 +3881,16 @@ void Client::delay_put_inodes(bool wakeup)
 		   << dendl;
   }
 
-  for (auto &[in, cnt] : release)
+  for (auto &[in, cnt] : release) {
+    bool skip = false;
+    {
+      std::scoped_lock dl(delay_i_lock);
+      skip = deleting_inodes.count(in);
+    }
+    if (skip)
+      continue;
     _put_inode(in, cnt);
+  }
 
   if (wakeup)
     mount_cond.notify_all();
@@ -3954,6 +3974,11 @@ void Client::dispose_orphan_inodes()
   }
 
   for (Inode *in : orphans) {
+    {
+      std::scoped_lock dl(delay_i_lock);
+      if (deleting_inodes.count(in))
+	continue;
+    }
     if (in->get_nref() == 0)
       continue;
 
@@ -3988,6 +4013,8 @@ void Client::put_inode(Inode *in, int n)
   ldout(cct, 20) << __func__ << " on " << *in << " n = " << n << dendl;
 
   std::scoped_lock dl(delay_i_lock);
+  if (deleting_inodes.count(in))
+    return;
   delay_i_release[in] += n;
 }
 
@@ -4670,8 +4697,6 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
   if (clean) {
     _flushed(in);
     if (is_unmounting()) {
-      // Safe to drain here: _put_inode keeps client_lock across OC teardown so
-      // the tick thread cannot re-enter on the same inode mid-delete.
       delay_put_inodes(true);
     }
   }
@@ -11580,48 +11605,61 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
         totallen += iov[i].iov_len;
     }
 
-    /*
-     * Some of the API functions take 64-bit size values, but only return
-     * 32-bit signed integers. Clamp the I/O sizes in those functions so that
-     * we don't do I/Os larger than the values we can return.
-     */
-    bufferlist data;
-    if (clamp_to_int) {
+    if (write) {
+        /*
+         * Some of the API functions take 64-bit size values, but only return
+         * 32-bit signed integers. Clamp the I/O sizes in those functions so
+         * that we don't do I/Os larger than the values we can return.
+         */
+        bufferlist data;
+        if (clamp_to_int) {
 #if defined(__linux__)
-  /* We can't return bytes written larger than INT_MAX, clamp size to
-   * that or FSCRYPT_MAXIO_SIZE*/
-      Inode *in = fh->inode.get();
-      if (in->is_fscrypt_enabled()) {
-        totallen = std::min(totallen, (size_t)FSCRYPT_MAXIO_SIZE);
-      } else {
-        totallen = std::min(totallen, (size_t)INT_MAX);
-      }
-#else
-      totallen = std::min(totallen, (size_t)INT_MAX);
-#endif
-      size_t total_appended = 0;
-      for (int i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_len > 0) {
-          if (total_appended + iov[i].iov_len >= totallen) {
-            data.append((const char *)iov[i].iov_base, totallen - total_appended);
-            break;
+          /* We can't return bytes written larger than INT_MAX, clamp size to
+           * that or FSCRYPT_MAXIO_SIZE*/
+          Inode *in = fh->inode.get();
+          if (in->is_fscrypt_enabled()) {
+            totallen = std::min(totallen, (size_t)FSCRYPT_MAXIO_SIZE);
           } else {
+            totallen = std::min(totallen, (size_t)INT_MAX);
+          }
+#else
+          totallen = std::min(totallen, (size_t)INT_MAX);
+#endif
+          size_t total_appended = 0;
+          for (int i = 0; i < iovcnt; i++) {
+            if (iov[i].iov_len > 0) {
+              if (total_appended + iov[i].iov_len >= totallen) {
+                data.append((const char *)iov[i].iov_base, totallen - total_appended);
+                break;
+              } else {
+                data.append((const char *)iov[i].iov_base, iov[i].iov_len);
+                total_appended += iov[i].iov_len;
+              }
+            }
+          }
+        } else {
+          for (int i = 0; i < iovcnt; i++) {
             data.append((const char *)iov[i].iov_base, iov[i].iov_len);
-            total_appended += iov[i].iov_len;
           }
         }
-      }
-    } else {
-      for (int i = 0; i < iovcnt; i++) {
-        data.append((const char *)iov[i].iov_base, iov[i].iov_len);
-      }
-    }
 
-    if (write) {
         int64_t w = _write(fh, offset, totallen, std::move(data), onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
+        if (clamp_to_int) {
+#if defined(__linux__)
+          Inode *in = fh->inode.get();
+          if (in->is_fscrypt_enabled()) {
+            totallen = std::min(totallen, (size_t)FSCRYPT_MAXIO_SIZE);
+          } else {
+            totallen = std::min(totallen, (size_t)INT_MAX);
+          }
+#else
+          totallen = std::min(totallen, (size_t)INT_MAX);
+#endif
+        }
+
         bufferlist bl;
         int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
                           onfinish);
@@ -11839,22 +11877,19 @@ Client::C_Write_Finisher::C_Write_Finisher(
   fsync_finished = !do_fsync;
   // Pin until try_complete(); finish_io runs on client_finisher after _write
   // returns and must not touch an inode that trim/dispose already deleted.
-  in->iget();
-  inode_pin_held = true;
+  // Use InodeRef (deferred put_inode) so release never directly frees the
+  // inode — that could race with delay_put_inodes iterating a raw release map.
+  inode_pin = InodeRef(in);
 }
 
 Client::C_Write_Finisher::~C_Write_Finisher()
 {
-  if (inode_pin_held)
-    in->iput();
+  // InodeRef destructor calls put_inode() (deferred) if pin still held.
 }
 
 void Client::C_Write_Finisher::release_inode_pin()
 {
-  if (!inode_pin_held)
-    return;
-  in->iput();
-  inode_pin_held = false;
+  inode_pin.reset();
 }
 
 bool Client::C_Write_Finisher::try_complete()

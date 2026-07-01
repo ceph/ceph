@@ -1945,7 +1945,7 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
-    bool inode_pin_held = false;
+    InodeRef inode_pin;
     void release_inode_pin();
     void finish_io_complete(int r);
     bool try_complete();
@@ -2424,6 +2424,7 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+  std::unordered_set<Inode*> deleting_inodes;
 
   uint64_t nr_metadata_request = 0;
   uint64_t nr_read_request = 0;
