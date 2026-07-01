@@ -2028,12 +2028,13 @@ private:
   };
 
   struct C_Readahead : public Context {
-    C_Readahead(Client *c, Fh *f);
+    C_Readahead(Client *c, Fh *f, Inode *in);
     ~C_Readahead() override;
     void finish(int r) override;
 
     Client *client;
     Fh *f;
+    InodeRef in;
     utime_t start_time = 0;
   };
 
