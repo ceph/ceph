@@ -1911,19 +1911,9 @@ private:
                      uint64_t fpos, int64_t req_ofs, uint64_t req_size,
                      int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly,
-                     bool encrypted)
-      : clnt(clnt), onfinish(onfinish), fsync_finish_ctx(this),
-        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
-        req_ofs(req_ofs), req_size(req_size),
-        offset(offset), size(size), syncdataonly(syncdataonly),
-        encrypted(encrypted) {
-      iofinished_r = 0;
-      onuninlinefinished_r = 0;
-      fsync_r = 0;
-      iofinished = false;
-      onuninlinefinished = dont_need_uninline;
-      fsync_finished = !do_fsync;
-    }
+                     bool encrypted);
+
+    ~C_Write_Finisher() override;
 
     void finish(int r) override {
       // We need to override finish, but have nothing to do.
@@ -1955,6 +1945,8 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
+    bool inode_pin_held = false;
+    void release_inode_pin();
     void finish_io_complete(int r);
     bool try_complete();
   };
