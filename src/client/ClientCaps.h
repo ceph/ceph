@@ -67,6 +67,9 @@ public:
   void early_kick_flushing_caps(MetaSession *session);
 
   int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff);
+  // Non-blocking cap check for async I/O submit.  Returns 0 when @need caps
+  // are issued and none of @want are revoking; -EAGAIN otherwise.
+  int try_get_caps(Fh *fh, int need, int want, int *have);
 
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);

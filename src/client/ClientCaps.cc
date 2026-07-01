@@ -104,6 +104,39 @@ void ClientCaps::put_cap_ref(Inode *in, int cap)
 // this routine blocks till the cap requirement is satisfied. also account
 // (track) for capability hit when required (when cap requirement succeedes).
 
+int ClientCaps::try_get_caps(Fh *fh, int need, int want, int *phave)
+{
+  Inode *in = fh->inode.get();
+
+  int r = client->check_pool_perm(in, need);
+  if (r < 0)
+    return r;
+
+  int file_wanted = in->caps_file_wanted();
+  if ((file_wanted & need) != need)
+    return -EAGAIN;
+
+  if ((fh->mode & CEPH_FILE_MODE_WR) && fh->gen != client->fd_gen)
+    return -EAGAIN;
+
+  if ((in->flags & I_ERROR_FILELOCK) && fh->has_any_filelocks())
+    return -EIO;
+
+  int implemented;
+  int have = in->caps_issued(&implemented);
+  if ((have & need) != need)
+    return -EAGAIN;
+
+  int revoking = implemented & ~have;
+  if ((revoking & want) != 0)
+    return -EAGAIN;
+
+  *phave = need | (have & want);
+  in->get_cap_ref(need);
+  client->cap_hit();
+  return 0;
+}
+
 int ClientCaps::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
   Inode *in = fh->inode.get();

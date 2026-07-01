@@ -4174,6 +4174,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
   return client_caps->get_caps(fh, need, want, phave, endoff);
 }
 
+int Client::try_get_caps(Fh *fh, int need, int want, int *phave)
+{
+  return client_caps->try_get_caps(fh, need, want, phave);
+}
+
 int Client::get_caps_used(Inode *in)
 {
   return client_caps->get_caps_used(in);
@@ -11018,10 +11023,20 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 retry:
   if (f->mode & CEPH_FILE_MODE_LAZY)
     want = CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO;
+  else if (onfinish && (f->flags & O_DIRECT))
+    // Async O_DIRECT reads go to the OSD; do not wait on Fc caps.
+    want = 0;
   else
     want = CEPH_CAP_FILE_CACHE;
   {
-    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
+    int r;
+    if (onfinish) {
+      r = try_get_caps(f, CEPH_CAP_FILE_RD, want, &have);
+      if (r == -EAGAIN)
+        r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
+    } else {
+      r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
+    }
     if (r < 0) {
       rc = r;
       goto done;
@@ -11127,7 +11142,11 @@ retry:
         explicit C_Start_Read_Sync_NB(C_Read_Sync_NonBlocking *c) : crsa(c) {}
         void finish(int) override { crsa->start(); }
       };
-      objecter_finisher.queue(new C_Start_Read_Sync_NB(crsa));
+      auto *starter = new C_Start_Read_Sync_NB(crsa);
+      {
+        ceph::unique_unlock<ceph::TrackedLock> cl_drop(client_lock);
+        objecter_finisher.queue(starter);
+      }
 
       // Now the C_Read_Sync_NonBlocking is going to handle EVERYTHING else
       // Allow caller to wait on onfinish...
@@ -11664,6 +11683,10 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
         int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
                           onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
+        if (onfinish) {
+          // Async submit: _read queues I/O and returns 0 (or an error).
+          return r;
+        }
         if (r <= 0) {
           return r;
         }
