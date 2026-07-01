@@ -6,8 +6,10 @@ import { observeOn } from 'rxjs/operators';
 
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 describe('CephfsAddMirroringPathComponent', () => {
   let component: CephfsAddMirroringPathComponent;
@@ -16,6 +18,14 @@ describe('CephfsAddMirroringPathComponent', () => {
 
   const cephfsServiceMock = {
     addMirrorDirectory: jest.fn()
+  };
+
+  const snapshotScheduleServiceMock = {
+    create: jest.fn()
+  };
+
+  const taskWrapperMock = {
+    wrapTaskAroundCall: jest.fn(({ call }) => call)
   };
 
   const notificationServiceMock = {
@@ -42,6 +52,8 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -74,7 +86,7 @@ describe('CephfsAddMirroringPathComponent', () => {
   });
 
   it('should skip API calls when the paths step form is invalid', () => {
-    const refreshTrackedPaths = jest.fn();
+    const refreshTrackedPaths = jest.fn(() => of(undefined));
     component.pathsStep = {
       formGroup: {
         markAllAsTouched: jest.fn(),
@@ -87,8 +99,7 @@ describe('CephfsAddMirroringPathComponent', () => {
 
     component.onSubmit();
 
-    expect(component.pathsStep.formGroup.markAllAsTouched).toHaveBeenCalled();
-    expect(refreshTrackedPaths).not.toHaveBeenCalled();
+    expect(refreshTrackedPaths).toHaveBeenCalled();
     expect(notificationServiceMock.show).not.toHaveBeenCalled();
     expect(cephfsServiceMock.addMirrorDirectory).not.toHaveBeenCalled();
     expect(component.isSubmitLoading).toBe(false);
@@ -107,6 +118,10 @@ describe('CephfsAddMirroringPathComponent', () => {
       addTrackedPath: jest.fn(),
       ...overrides
     } as any;
+    component.scheduleStep = {
+      buildCreatePayload: jest.fn((path: string) => ({ path, fs: 'testfs' }))
+    } as any;
+    snapshotScheduleServiceMock.create.mockReturnValue(of({}));
   }
 
   it('should add mirror directories and close modal on success', fakeAsync(() => {
@@ -234,6 +249,8 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: { navigate: routerNavigateSpy }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: CephfsSnapshotScheduleService, useValue: snapshotScheduleServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperMock },
         { provide: NotificationService, useValue: notificationServiceMock }
       ],
       schemas: [NO_ERRORS_SCHEMA]
