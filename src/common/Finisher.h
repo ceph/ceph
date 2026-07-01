@@ -124,6 +124,16 @@ class Finisher {
   void wait_for_empty();
 
   bool is_empty();
+
+  /// Items waiting or currently being processed by the worker thread.
+  size_t queue_size() {
+    const std::lock_guard l{finisher_lock};
+    size_t n = finisher_queue.size();
+    if (finisher_running)
+      n += in_progress_queue.size();
+    return n;
+  }
+
   pid_t get_tid() const { return finisher_tid; }
 
   /// True when called from this finisher's worker thread.

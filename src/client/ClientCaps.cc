@@ -1,4 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+#include <vector>
+
 #include "ClientCaps.h"
 #include "ClientCaps_impl.h"
 #include "Client.h"
@@ -1122,15 +1124,19 @@ void ClientCaps::flush_caps_sync()
   ldout(cct, 10) << __func__ << dendl;
   for (auto &q : client->mds_sessions) {
     auto s = q.second;
-    xlist<Inode*>::iterator p = s->dirty_list.begin();
-    while (!p.end()) {
-      unsigned flags = CHECK_CAPS_NODELAY;
-      Inode *in = *p;
+    // Snapshot dirty inodes before flushing: nested check_caps() or cap
+    // waiters may mark_caps_clean() other inodes still referenced by the
+    // xlist iterator and corrupt ++p (cur->_list assert).
+    std::vector<Inode*> dirty;
+    dirty.reserve(s->dirty_list.size());
+    for (auto p = s->dirty_list.begin(); !p.end(); ++p)
+      dirty.push_back(*p);
 
-      ++p;
-      if (p.end())
+    for (unsigned i = 0; i < dirty.size(); ++i) {
+      unsigned flags = CHECK_CAPS_NODELAY;
+      if (i + 1 == dirty.size())
         flags |= CHECK_CAPS_SYNCHRONOUS;
-      check_caps(in, flags);
+      check_caps(dirty[i], flags);
     }
   }
 }
