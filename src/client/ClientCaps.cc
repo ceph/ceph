@@ -36,6 +36,7 @@ ceph_tid_t ClientCaps::allocate_flush_tid(){ std::scoped_lock l(caps_lock); retu
 
 void ClientCaps::get_cap_ref(Inode *in, int cap)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
   if ((cap & CEPH_CAP_FILE_BUFFER) &&
       in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
     ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << *in << dendl;
@@ -220,7 +221,7 @@ int ClientCaps::get_caps_used(Inode *in)
 {
   unsigned used = in->caps_used();
   if (!(used & CEPH_CAP_FILE_CACHE) &&
-      !client->objectcacher->set_is_empty(&in->oset))
+      !client->objectcacher_set_is_empty(in))
     used |= CEPH_CAP_FILE_CACHE;
   return used;
 }
@@ -233,6 +234,28 @@ void ClientCaps::cap_delay_requeue(Inode *in)
 
   in->hold_caps_until = ceph::coarse_mono_clock::now() + caps_release_delay;
   delayed_list.push_back(&in->delay_cap_item);
+}
+
+void ClientCaps::purge_delayed_list()
+{
+  std::vector<Inode*> inodes;
+  {
+    std::scoped_lock lock(caps_lock);
+    while (!delayed_list.empty()) {
+      inodes.push_back(delayed_list.front());
+      delayed_list.pop_front();
+    }
+  }
+  for (Inode *in : inodes) {
+    in->delay_cap_item.remove_myself();
+    int extra = in->get_nref() - 1;
+    if (extra > 0) {
+      client->put_inode(in, extra);
+    } else if (in->get_nref() > 0) {
+      client->put_inode(in);
+    }
+  }
+  client->delay_put_inodes();
 }
 
 
@@ -931,9 +954,9 @@ void ClientCaps::remove_session_caps(MetaSession *s, int err)
 	  lderr(cct) << __func__ << " still has dirty data on " << *in << dendl;
 	  in->set_async_err(err);
 	}
-	client->objectcacher->purge_set(&in->oset);
+	client->objectcacher_purge_set(in.get());
       } else {
-	client->objectcacher->release_set(&in->oset);
+	client->objectcacher_release_set(in.get());
       }
       client->_schedule_invalidate_callback(in.get(), 0, 0);
     }
@@ -1241,7 +1264,7 @@ void ClientCaps::flush_cap_releases()
 
 void ClientCaps::renew_and_flush_cap_releases()
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
+  ceph_assert(client->client_lock.is_locked_by_me());
 
   if (!client->mount_aborted && client->mdsmap->get_epoch()) {
     // renew caps?

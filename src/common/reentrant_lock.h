@@ -467,6 +467,7 @@ public:
 };
 
 using reentrant_condition_variable = reentrant_condition_variable_impl<ReentrantLock>;
+using tracked_condition_variable = reentrant_condition_variable_impl<TrackedLock>;
 
 inline void wait_for_reentrant_cond_broadcast(std::atomic<bool>& wake_complete)
 {
@@ -490,6 +491,42 @@ struct C_ReentrantLock : public Context {
       fin->complete(r);
       fin = NULL;
     }
+  }
+};
+
+struct C_TrackedLock : public Context {
+  TrackedLock *lock;
+  Context *fin;
+  C_TrackedLock(TrackedLock *l, Context *c) : lock(l), fin(c) {}
+  ~C_TrackedLock() override
+  {
+    delete fin;
+  }
+  void finish(int r) override
+  {
+    if (fin) {
+      std::lock_guard l{*lock};
+      fin->complete(r);
+      fin = NULL;
+    }
+  }
+};
+
+class C_TrackedCond : public Context {
+  tracked_condition_variable& cond;
+  bool *done;
+  int *rval;
+public:
+  C_TrackedCond(tracked_condition_variable &c, bool *d, int *r)
+    : cond(c), done(d), rval(r)
+  {
+    *done = false;
+  }
+  void finish(int r) override
+  {
+    *done = true;
+    *rval = r;
+    cond.notify_all();
   }
 };
 

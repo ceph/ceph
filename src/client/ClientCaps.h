@@ -113,6 +113,8 @@ public:
   void inc_pinned_icaps();
   void dec_pinned_icaps(uint64_t nr = 1);
 
+  void purge_delayed_list();
+
   static bool is_max_size_approaching(Inode *in);
   static int adjust_caps_used_for_lazyio(int used, int issued, int implemented);
 
