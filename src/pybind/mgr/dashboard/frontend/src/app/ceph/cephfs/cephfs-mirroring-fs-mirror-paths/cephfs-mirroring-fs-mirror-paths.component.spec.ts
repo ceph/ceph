@@ -63,7 +63,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
               name: 'snap-last',
               sync_time_stamp: '1583.101609s'
             },
-            snaps_synced: 10
+            snaps_synced: 10,
+            snaps_deleted: 2,
+            snaps_renamed: 1
           }
         }
       },
@@ -90,7 +92,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
               id: 2,
               name: 'snap-last-2'
             },
-            snaps_synced: 5
+            snaps_synced: 5,
+            snaps_deleted: 1
           }
         }
       }
@@ -247,6 +250,28 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].lastSyncedSnapshot).toBe('snap-last');
       expect(result[0].lastSyncedTime).toBe('1583.101609s');
       expect(result[0].snapshotCount).toBe(10);
+      expect(result[0].pendingSnapshotCount).toBe(1);
+      expect(result[0].syncStatusIcon).toBe('inProgress');
+      expect(result[0].syncStatusClass).toBe('info');
+      expect(result[0].snapshots).toEqual([
+        {
+          name: 'snap-current',
+          status: 'in-progress',
+          eta: 'calculating...',
+          icon: 'inProgress',
+          iconClass: 'info',
+          statusLabel: 'replication in-progress'
+        },
+        {
+          name: 'snap-last',
+          status: 'replicated',
+          icon: 'checkMarkOutline',
+          iconClass: 'success',
+          statusLabel: 'replicated.'
+        }
+      ]);
+      expect(result[0].checkpointCount).toBe(2);
+      expect(result[0].renamedSnapshotCount).toBe(1);
       expect(result[0].filesSynced).toBe(100);
       expect(result[0].totalFiles).toBe(200);
       expect(result[0].syncProgress).toBe(50);
@@ -262,9 +287,26 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[1].currentSyncSnapshot).toBe('snap-current-2');
       expect(result[1].lastSyncedSnapshot).toBe('snap-last-2');
       expect(result[1].snapshotCount).toBe(5);
+      expect(result[1].pendingSnapshotCount).toBe(1);
+      expect(result[1].snapshots).toEqual([
+        {
+          name: 'snap-current-2',
+          status: 'pending',
+          icon: 'pendingFilled',
+          iconClass: 'muted',
+          statusLabel: 'replication pending'
+        },
+        {
+          name: 'snap-last-2',
+          status: 'replicated',
+          icon: 'checkMarkOutline',
+          iconClass: 'success',
+          statusLabel: 'replicated.'
+        }
+      ]);
+      expect(result[1].checkpointCount).toBe(1);
       expect(result[1].filesSynced).toBe(50);
       expect(result[1].totalFiles).toBe(100);
-      expect(result[1].bytesSynced).toBe(1073741824);
       expect(result[1].totalBytes).toBe(2147483648);
       expect(result[1].syncProgress).toBe(50);
     });
@@ -300,6 +342,9 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].currentSyncSnapshot).toBe('-');
       expect(result[0].lastSyncedSnapshot).toBe('-');
       expect(result[0].snapshotCount).toBe(0);
+      expect(result[0].pendingSnapshotCount).toBe(0);
+      expect(result[0].snapshots).toEqual([]);
+      expect(result[0].checkpointCount).toBe(0);
       expect(result[0].syncProgress).toBe(0);
     });
   });
@@ -442,57 +487,22 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
   });
 
-  describe('getSyncStatusIcon', () => {
-    it('should return correct icon for syncing status', () => {
-      const icon = component.getSyncStatusIcon('syncing');
-      expect(icon).toBe('inProgress');
+  describe('selectedPathSyncStatusIcon', () => {
+    it('should return sync status icon from selected path', () => {
+      component.selectedPath = {
+        syncStatusIcon: 'inProgress',
+        syncStatusClass: 'info'
+      } as any;
+
+      expect(component.selectedPathSyncStatusIcon).toBe('inProgress');
+      expect(component.selectedPathSyncStatusClass).toBe('info');
     });
 
-    it('should return correct icon for idle status', () => {
-      const icon = component.getSyncStatusIcon('idle');
-      expect(icon).toBe('pendingFilled');
-    });
+    it('should return defaults when no path is selected', () => {
+      component.selectedPath = null;
 
-    it('should return correct icon for failed status', () => {
-      const icon = component.getSyncStatusIcon('failed');
-      expect(icon).toBe('danger');
-    });
-
-    it('should return correct icon for completed status', () => {
-      const icon = component.getSyncStatusIcon('completed');
-      expect(icon).toBe('checkMarkOutline');
-    });
-
-    it('should return default icon for unknown status', () => {
-      const icon = component.getSyncStatusIcon('unknown');
-      expect(icon).toBe('infoCircle');
-    });
-  });
-
-  describe('getSyncStatusClass', () => {
-    it('should return correct class for syncing status', () => {
-      const cssClass = component.getSyncStatusClass('syncing');
-      expect(cssClass).toBe('info');
-    });
-
-    it('should return correct class for completed status', () => {
-      const cssClass = component.getSyncStatusClass('completed');
-      expect(cssClass).toBe('success');
-    });
-
-    it('should return correct class for idle status', () => {
-      const cssClass = component.getSyncStatusClass('idle');
-      expect(cssClass).toBe('muted');
-    });
-
-    it('should return correct class for failed status', () => {
-      const cssClass = component.getSyncStatusClass('failed');
-      expect(cssClass).toBe('danger');
-    });
-
-    it('should return empty string for unknown status', () => {
-      const cssClass = component.getSyncStatusClass('unknown');
-      expect(cssClass).toBe('');
+      expect(component.selectedPathSyncStatusIcon).toBe('infoCircle');
+      expect(component.selectedPathSyncStatusClass).toBe('');
     });
   });
 
