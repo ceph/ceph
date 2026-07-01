@@ -51,7 +51,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Overall hardware health across all hosts",
                "fieldConfig": {
                   "defaults": {
                      "mappings": [
@@ -120,7 +120,7 @@
                      "expr": "max(ceph_hardware_health)",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Health",
                      "refId": "A"
                   }
                ],
@@ -130,7 +130,7 @@
             },
             {
                "datasource": "$datasource",
-               "description": "",
+               "description": "Highest CPU temperature across all hosts",
                "fieldConfig": {
                   "defaults": {
                      "links": [ ],
@@ -183,7 +183,7 @@
                      "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\".*CPU_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "CPU",
                      "refId": "A"
                   }
                ],
@@ -409,7 +409,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Total hosts with hardware monitoring",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -450,7 +450,7 @@
                      "expr": "count(count by(hostname) (ceph_hardware_health))",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Hosts",
                      "refId": "A"
                   }
                ],
@@ -461,7 +461,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Total storage drives detected",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -502,7 +502,7 @@
                      "expr": "count(ceph_hardware_storage_capacity_bytes)",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Drives",
                      "refId": "A"
                   }
                ],
@@ -512,7 +512,7 @@
             },
             {
                "datasource": "$datasource",
-               "description": "",
+               "description": "Highest NVMe drive temperature across all hosts",
                "fieldConfig": {
                   "defaults": {
                      "links": [ ],
@@ -565,7 +565,7 @@
                      "expr": "max(ceph_hardware_temperature_celsius{sensor_name=~\"NVME.*_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "NVMe",
                      "refId": "A"
                   }
                ],
@@ -596,7 +596,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Power supply health status",
                "fieldConfig": {
                   "defaults": {
                      "mappings": [
@@ -665,7 +665,7 @@
                      "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"power\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Power",
                      "refId": "A"
                   }
                ],
@@ -676,7 +676,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Highest motherboard temperature",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -729,7 +729,7 @@
                      "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*MB_TEMP.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Motherboard",
                      "refId": "A"
                   }
                ],
@@ -740,7 +740,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Average CPU temperature",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -795,7 +795,7 @@
                      "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*CPU_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "CPU",
                      "refId": "A"
                   }
                ],
@@ -806,7 +806,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Highest DIMM temperature",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -861,7 +861,7 @@
                      "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\".*DIMM.*_TEMP\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "DIMM",
                      "refId": "A"
                   }
                ],
@@ -872,7 +872,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Number of PSU fans detected",
                "fieldConfig": {
                   "defaults": {
                      "decimals": 0,
@@ -913,7 +913,7 @@
                      "expr": "count(ceph_hardware_fan_rpm{hostname=~\"$hostname\", fan_name=~\"PSU.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "PSU Fans",
                      "refId": "A"
                   }
                ],
@@ -924,7 +924,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Average power supply temperature",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -983,7 +983,7 @@
                      "expr": "avg(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"PSU.*_TEMP.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "PSU",
                      "refId": "A"
                   }
                ],
@@ -994,7 +994,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Number of NVMe drives detected",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -1051,7 +1051,7 @@
                      "expr": "count(ceph_hardware_storage_capacity_bytes{hostname=~\"$hostname\", protocol=\"NVMe\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "NVMe",
                      "refId": "A"
                   }
                ],
@@ -1062,7 +1062,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Highest NVMe drive temperature",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -1121,7 +1121,7 @@
                      "expr": "max(ceph_hardware_temperature_celsius{hostname=~\"$hostname\", sensor_name=~\"NVME.*\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "NVMe",
                      "refId": "A"
                   }
                ],
@@ -1132,7 +1132,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Network adapter health status",
                "fieldConfig": {
                   "defaults": {
                      "mappings": [
@@ -1201,7 +1201,7 @@
                      "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"network\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Network",
                      "refId": "A"
                   }
                ],
@@ -1212,7 +1212,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Cooling fans health status",
                "fieldConfig": {
                   "defaults": {
                      "mappings": [
@@ -1281,7 +1281,7 @@
                      "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"fans\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Cooling",
                      "refId": "A"
                   }
                ],
@@ -1292,7 +1292,7 @@
             {
                "colors": null,
                "datasource": "$datasource",
-               "description": "",
+               "description": "Storage drives health status",
                "fieldConfig": {
                   "defaults": {
                      "mappings": [
@@ -1361,7 +1361,7 @@
                      "expr": "max(ceph_hardware_health{hostname=~\"$hostname\",category=\"storage\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "Drives",
                      "refId": "A"
                   }
                ],
@@ -1416,7 +1416,7 @@
                      "format": "table",
                      "instant": true,
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "",
                      "refId": "A"
                   }
                ],
@@ -1493,7 +1493,7 @@
                      "format": "table",
                      "instant": true,
                      "intervalFactor": 1,
-                     "legendFormat": "__auto",
+                     "legendFormat": "",
                      "refId": "A"
                   }
                ],
