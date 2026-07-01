@@ -254,7 +254,7 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
-BuildRequires:	grpc-devel
+BuildRequires:	pkgconfig(grpc++)
 # Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
 # elsewhere. Require the fixed version so we can reenable lto. See
 # ceph bug https://tracker.ceph.com/issues/63867
@@ -281,21 +281,28 @@ BuildRequires:	gperftools-devel >= 2.4
 %endif
 %endif
 BuildRequires:	libaio-devel
-BuildRequires:	libblkid-devel >= 2.17
-BuildRequires:	cryptsetup-devel
-BuildRequires:	libnbd-devel
-BuildRequires:	libcurl-devel
-BuildRequires:	libcap-devel
-BuildRequires:	libcap-ng-devel
-BuildRequires:	fmt-devel >= 6.2.1
+BuildRequires:	pkgconfig(blkid) >= 2.17
+BuildRequires:	pkgconfig(libcryptsetup)
+BuildRequires:	pkgconfig(libnbd)
+BuildRequires:	pkgconfig(libcurl)
+BuildRequires:	pkgconfig(libcap)
+BuildRequires:	pkgconfig(libcap-ng)
+BuildRequires:	pkgconfig(fmt) >= 6.2.1
 BuildRequires:	pkgconfig(libudev)
-BuildRequires:	libnl3-devel
-BuildRequires:	liboath-devel
+BuildRequires:	pkgconfig(nss)
+BuildRequires:	pkgconfig(libkeyutils)
+BuildRequires:	pkgconfig(openssl)
+BuildRequires:	pkgconfig(ldap)
+BuildRequires:	pkgconfig(libibverbs)
+BuildRequires:	pkgconfig(librdmacm)
+BuildRequires:	pkgconfig(liblz4) >= 1.7
+BuildRequires:	pkgconfig(libnl-3.0)
+BuildRequires:	pkgconfig(liboath)
 BuildRequires:	libtool
-BuildRequires:	libxml2-devel
+BuildRequires:	pkgconfig(libxml-2.0)
 BuildRequires:	make
-BuildRequires:	ncurses-devel
-BuildRequires:	libicu-devel
+BuildRequires:	pkgconfig(ncurses)
+BuildRequires:	pkgconfig(icu-uc)
 BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
@@ -306,25 +313,25 @@ BuildRequires:	python%{python3_pkgversion}-setuptools
 BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	python%{python3_pkgversion}-pip
 BuildRequires:	python%{python3_pkgversion}-wheel
-BuildRequires:	snappy-devel
-BuildRequires:	sqlite-devel
+BuildRequires:	pkgconfig(snappy)
+BuildRequires:	pkgconfig(sqlite3)
 BuildRequires:	sudo
 BuildRequires:	pkgconfig(udev)
-BuildRequires:	valgrind-devel
+BuildRequires:	pkgconfig(valgrind)
 BuildRequires:	which
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
-BuildRequires:	lua-devel
-BuildRequires:  lmdb-devel
+BuildRequires:	pkgconfig(lua)
+BuildRequires:  pkgconfig(lmdb)
 %if 0%{with crimson} || 0%{with jaeger}
-BuildRequires:  yaml-cpp-devel >= 0.6
+BuildRequires:  pkgconfig(yaml-cpp) >= 0.6
 %endif
 %if 0%{with amqp_endpoint}
-BuildRequires:  librabbitmq-devel
+BuildRequires:  pkgconfig(librabbitmq)
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  librdkafka-devel >= 1.1.0
+BuildRequires:  pkgconfig(rdkafka) >= 1.1.0
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
@@ -333,7 +340,7 @@ Requires:  %{luarocks_package_name}
 %if 0%{with make_check}
 BuildRequires:  hostname
 BuildRequires:  jq
-BuildRequires:	libuuid-devel
+BuildRequires:	pkgconfig(uuid)
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
@@ -343,53 +350,44 @@ BuildRequires:	socat
 BuildRequires:	python%{python3_pkgversion}-asyncssh
 BuildRequires:	python%{python3_pkgversion}-natsort
 %endif
-%if 0%{?suse_version}
-BuildRequires:  libthrift-devel >= 0.13.0
-%else
-BuildRequires:  thrift-devel >= 0.13.0
-%endif
-BuildRequires:  re2-devel
+BuildRequires:	pkgconfig(thrift) >= 0.13.0
+BuildRequires:  pkgconfig(re2)
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
-%if 0%{?fedora} || 0%{?rhel}
-BuildRequires:  json-devel
-%endif
-%if 0%{?suse_version}
-BuildRequires:  nlohmann_json-devel
-%endif
-BuildRequires:  libevent-devel
+BuildRequires:	pkgconfig(nlohmann_json)
+BuildRequires:  pkgconfig(libevent)
 %endif
 %if 0%{with system_pmdk}
 %if 0%{?suse_version}
-BuildRequires:  libndctl-devel >= 63
+BuildRequires:  pkgconfig(libndctl) >= 63
 %else
-BuildRequires:  ndctl-devel >= 63
-BuildRequires:  daxctl-devel >= 63
+BuildRequires:  pkgconfig(libndctl) >= 63
+BuildRequires:  pkgconfig(libdaxctl) >= 63
 %endif
-BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel >= 1.8
+BuildRequires:  pkgconfig(libpmem)
+BuildRequires:  pkgconfig(libpmemobj) >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  libarrow-devel
-BuildRequires:  parquet-libs-devel
-BuildRequires:  utf8proc-devel
+BuildRequires:  pkgconfig(arrow)
+BuildRequires:  pkgconfig(parquet)
+BuildRequires:  pkgconfig(libutf8proc)
 %endif
 %if 0%{with system_qat}
-BuildRequires:  qatlib-devel
-BuildRequires:  qatzip-devel
+BuildRequires:  pkgconfig(qatlib)
+BuildRequires:  pkgconfig(qatzip)
 %endif
 %if 0%{with crimson}
-BuildRequires:  c-ares-devel
-BuildRequires:  gnutls-devel
-BuildRequires:  hwloc-devel
-BuildRequires:  libpciaccess-devel
-BuildRequires:  lksctp-tools-devel
+BuildRequires:  pkgconfig(libcares)
+BuildRequires:  pkgconfig(gnutls)
+BuildRequires:  pkgconfig(hwloc)
+BuildRequires:  pkgconfig(pciaccess)
+BuildRequires:  pkgconfig(libsctp)
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
-BuildRequires:  protobuf-devel
+BuildRequires:  pkgconfig(protobuf)
 BuildRequires:  protobuf-compiler
 %if 0%{?gts_version} > 0
 BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
@@ -408,20 +406,14 @@ PreReq:		%fillup_prereq
 BuildRequires:	fdupes
 BuildRequires:  memory-constraints
 BuildRequires:	net-tools
-BuildRequires:	libbz2-devel
-BuildRequires:	mozilla-nss-devel
-BuildRequires:	keyutils-devel
-BuildRequires:  libopenssl-devel
+BuildRequires:	pkgconfig(bzip2)
 BuildRequires:  ninja
-BuildRequires:  openldap2-devel
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
 BuildRequires:	python%{python3_pkgversion}-PrettyTable
 BuildRequires:	python%{python3_pkgversion}-PyYAML
 BuildRequires:	python%{python3_pkgversion}-Sphinx
-BuildRequires:  rdma-core-devel
-BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
 BuildRequires:	jsonnet
@@ -429,36 +421,29 @@ BuildRequires:	jsonnet
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:	systemd
 BuildRequires:  boost-random
-BuildRequires:	nss-devel
-BuildRequires:	keyutils-libs-devel
 BuildRequires:  libatomic
-BuildRequires:	libibverbs-devel
-BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
-BuildRequires:  openldap-devel
 BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
-BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-prettytable
 BuildRequires:	python%{python3_pkgversion}-pyyaml
 BuildRequires:	python%{python3_pkgversion}-sphinx
-BuildRequires:	lz4-devel >= 1.7
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 BuildRequires:	golang
+BuildRequires:	pkgconfig(xmlsec1)
+BuildRequires:	pkgconfig(xmlsec1-openssl)
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:	/usr/bin/promtool
 BuildRequires:	libtool-ltdl-devel
 BuildRequires:	xmlsec1
-BuildRequires:	xmlsec1-devel
 %ifarch x86_64
 BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
-BuildRequires:	xmlsec1-openssl-devel
 BuildRequires:	python%{python3_pkgversion}-cherrypy
 BuildRequires:	python%{python3_pkgversion}-routes
 BuildRequires:	python%{python3_pkgversion}-scipy
@@ -473,27 +458,14 @@ BuildRequires:	libxmlsec1-openssl1
 BuildRequires:	python%{python3_pkgversion}-CherryPy
 BuildRequires:	python%{python3_pkgversion}-Routes
 BuildRequires:	python%{python3_pkgversion}-numpy-devel
-BuildRequires:	xmlsec1-devel
-BuildRequires:	xmlsec1-openssl-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:	lttng-ust-devel
-BuildRequires:	libbabeltrace-devel
+BuildRequires:	pkgconfig(lttng-ust)
+BuildRequires:	pkgconfig(babeltrace)
 %endif
-%if 0%{?suse_version}
-BuildRequires:	lttng-ust-devel
-BuildRequires:  babeltrace-devel
-%endif
-%endif
-%if 0%{?suse_version}
-BuildRequires:	libexpat-devel
-%endif
-%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler}
-BuildRequires:	expat-devel
-%endif
+BuildRequires:	pkgconfig(expat)
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
@@ -502,11 +474,11 @@ BuildRequires:  redhat-rpm-config
 BuildRequires:  openEuler-rpm-config
 %endif
 %if 0%{with crimson}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:  cryptopp-devel
-%endif
+# EPEL9's cryptopp-devel ships its pkgconfig file as cryptopp.pc (providing
+# pkgconfig(cryptopp)), while el10 and SUSE's cryptopp/libcryptopp-devel
+# provide pkgconfig(libcryptopp); accept either.
+BuildRequires:  (pkgconfig(libcryptopp) or pkgconfig(cryptopp))
 %if 0%{?suse_version}
-BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
