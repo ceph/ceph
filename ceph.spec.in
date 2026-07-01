@@ -35,7 +35,7 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-%if (0%{?rhel} && 0%{?rhel} < 9) || 0%{?openEuler}
+%if 0%{?openEuler}
 %bcond_with system_pmdk
 %else
 %ifarch s390x aarch64
@@ -97,23 +97,21 @@
 %else
 %bcond_without jaeger
 %endif
-%if 0%{?fedora} || 0%{?suse_version} >= 1500 || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?suse_version} >= 1500 || 0%{?rhel}
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
-%if 0%{?fedora} || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?rhel}
 %bcond_without system_arrow
 %else
-# for centos 8, utf8proc-devel comes from the subversion-devel module which isn't available in EPEL8
-# this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
 %endif
 # qat only supported for intel devices
 %ifarch x86_64
-%if 0%{?fedora} || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?rhel}
 %bcond_without system_qat
 %else
 # not fedora/rhel
@@ -123,7 +121,7 @@
 # not x86_64
 %bcond_with system_qat
 %endif
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
 %if %{with selinux}
@@ -275,11 +273,8 @@ BuildRequires:  libatomic
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:	gperftools-devel >= 2.7.90
-%endif
-%if 0%{?rhel} && 0%{?rhel} < 8
-BuildRequires:	gperftools-devel >= 2.6.1
 %endif
 %if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
@@ -515,7 +510,7 @@ BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
-%if 0%{?rhel} >= 9
+%if 0%{?rhel}
 BuildRequires: python-rpm-macros
 %endif
 
@@ -547,13 +542,6 @@ Requires:      logrotate
 Requires:      psmisc
 Requires:      util-linux
 Requires:      which
-%if 0%{?rhel} && 0%{?rhel} < 8
-# The following is necessary due to tracker 36508 and can be removed once the
-# associated upstream bugs are resolved.
-%if 0%{with tcmalloc}
-Requires:      gperftools-libs >= 2.6.1
-%endif
-%endif
 %if 0%{?weak_deps}
 Recommends:    chrony
 Recommends:    nvme-cli
@@ -729,7 +717,7 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{python3_pkgversion}-grpcio
 Requires:       python%{python3_pkgversion}-grpcio-tools
 Requires:       python%{python3_pkgversion}-jmespath
@@ -740,7 +728,7 @@ Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
-%if 0%{?fedora} || (0%{?rhel} && 0%{?rhel} <= 8)
+%if 0%{?fedora}
 Recommends:     python%{python3_pkgversion}-grpcio
 Recommends:     python%{python3_pkgversion}-grpcio-tools
 %endif
@@ -782,16 +770,11 @@ Group:          System/Filesystems
 Requires:       python%{python3_pkgversion}-prettytable
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-pyyaml
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-PyYAML
-%endif
-# RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
-# backport dataclasses module instead.
-%if 0%{?rhel} && 0%{?rhel} <= 8
-Requires:       python%{python3_pkgversion}-dataclasses
 %endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
@@ -1041,7 +1024,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
 %endif
 %if 0%{?suse_version}
@@ -1602,7 +1585,7 @@ descriptions, and submitting the command to the appropriate daemon.
 
 %package -n python%{python3_pkgversion}-ceph-common
 Summary:	Python 3 utility libraries for Ceph
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-pyyaml
 %if %{with pypkg}
 Recommends:     python%{python3_pkgversion}-ceph-smb-ctl
@@ -1996,7 +1979,7 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 # sudoers.d
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
-%if 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?rhel} || 0%{?openEuler}
 # Undefine -P flag as it is only supported with python version >= 3.11
 %undefine _py3_shebang_P
 
@@ -2038,7 +2021,7 @@ install -m 644 -D -t %{buildroot}%{_datadir}/snmp/mibs monitoring/snmp/CEPH-MIB.
 %fdupes %{buildroot}%{_prefix}
 %endif
 
-%if 0%{?rhel} == 8 || 0%{?openEuler}
+%if 0%{?openEuler}
 %py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
 %endif
 
