@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -1548,88 +1549,6 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 }
 
-struct RocksDBStore::RocksWBHandler: public rocksdb::WriteBatch::Handler {
-  RocksWBHandler(const RocksDBStore& db, bool verbose)
-   : db(db), verbose(verbose) {}
-  const RocksDBStore& db;
-  std::stringstream seen;
-  int num_seen = 0;
-  bool verbose = true;
-
-  void dump(const char* op_name, const char* op_short,
-	    uint32_t column_family_id,
-	    const rocksdb::Slice& key_in,
-	    const rocksdb::Slice* value = nullptr) {
-    string prefix;
-    string key;
-    if (column_family_id == 0) {
-      db.split_key(key_in, &prefix, &key);
-    } else {
-      auto it = db.cf_ids_to_prefix.find(column_family_id);
-      ceph_assert(it != db.cf_ids_to_prefix.end());
-      prefix = it->second;
-      key = key_in.ToString();
-    }
-    if (verbose) {
-      ssize_t size = value ? value->size() : -1;
-      seen << std::endl << op_name << "(";
-
-      seen << " prefix = " << prefix;
-      seen << " key = " << pretty_binary_string(key);
-      if (size != -1)
-        seen << " value size = " << std::to_string(size);
-      seen << ")";
-    } else {
-      if (num_seen)
-        seen << ",";
-      seen << op_short << ":" << prefix;
-    }
-    num_seen++;
-  }
-  void Put(const rocksdb::Slice& key,
-	   const rocksdb::Slice& value) override {
-    dump("Put", " P", 0, key, &value);
-  }
-  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
-			const rocksdb::Slice& value) override {
-    dump("PutCF", " p", column_family_id, key, &value);
-    return rocksdb::Status::OK();
-  }
-  void SingleDelete(const rocksdb::Slice& key) override {
-    dump("SingleDelete", "ds", 0, key);
-  }
-  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
-    dump("SingleDeleteCF", "DS", column_family_id, key);
-    return rocksdb::Status::OK();
-  }
-  void Delete(const rocksdb::Slice& key) override {
-    dump("Delete", " D", 0, key);
-  }
-  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
-    dump("DeleteCF", " d", column_family_id, key);
-    return rocksdb::Status::OK();
-  }
-  void Merge(const rocksdb::Slice& key,
-	     const rocksdb::Slice& value) override {
-    dump("Merge", " M", 0, key, &value);
-  }
-  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
-			  const rocksdb::Slice& value) override {
-    dump("MergeCF", " m", column_family_id, key, &value);
-    return rocksdb::Status::OK();
-  }
-  bool Continue() override {
-    bool r = verbose ? num_seen < 128 : num_seen < 50;
-    if (!r) {
-      if (verbose) {
-        seen << std::endl;
-      }
-      seen << " <skipped>";
-    }
-    return r;
-  }
-};
-
 int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t) 
 {
   // enable rocksdb breakdown
@@ -1645,14 +1564,14 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
   RocksWBHandler bat_txc(*this, true);
   _t->bat.Iterate(&bat_txc);
-  *_dout << " Rocksdb transaction: " << bat_txc.seen.str() << dendl;
+  *_dout << " Rocksdb transaction: " << bat_txc.get_seen() << dendl;
   
   rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
     RocksWBHandler rocks_txc(*this, true);
     _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
-         << " Rocksdb transaction: " << rocks_txc.seen.str() << dendl;
+         << " Rocksdb transaction: " << rocks_txc.get_seen() << dendl;
   }
 
   if (cct->_conf->rocksdb_perf) {
@@ -1738,7 +1657,7 @@ string RocksDBStore::RocksDBTransactionImpl::get_summary_string(
   ceph_assert(db);
   RocksWBHandler bat_txc(*db, verbose);
   bat.Iterate(&bat_txc);
-  return bat_txc.seen.str();
+  return bat_txc.get_seen();
 }
 
 void RocksDBStore::RocksDBTransactionImpl::set(
@@ -4143,4 +4062,84 @@ void RocksDBStore::util_divide_key_range(
   chunks.emplace_back(base->key, key_to);
   dout(10) << "produced chunk size=" << full_size - base->size << " "
     << pretty_binary_string(base->key) << " " << pretty_binary_string(key_to) << dendl;
+}
+
+void RocksWBHandler::_finalize_seen(bool sorted)
+{
+  if (verbose) {
+    if (num_skipped) {
+      seen << std::endl << "<...>*" << num_skipped;
+    }
+  } else {
+    seen.clear();
+    bool first = true;
+    auto _add = [&](const std::string& k, size_t c) {
+      if (!first) {
+	seen << ",";
+      } else {
+	first = false;
+      }
+      seen << k;
+      if (c > 1) {
+	seen << "*" << c;
+      }
+    };
+    if (sorted) {
+      std::map<std::string, size_t> sorted_seen_counts;
+      for (auto& [k, c] : seen_counts) {
+	sorted_seen_counts.emplace(k, c);
+      }
+      for (auto& [k, c] : sorted_seen_counts) {
+	_add(k, c);
+      }
+    } else {
+      for(auto& [k, c] : seen_counts) {
+        _add(k,c);
+      }
+    }
+    if (num_skipped) {
+      if (!first) {
+	seen << ",";
+      }
+      seen << "...*" << num_skipped;
+    }
+  }
+}
+
+void RocksWBHandler::_dump(const char* op_name, const char* op_short,
+	    uint32_t column_family_id,
+	    const rocksdb::Slice& key_in,
+	    const rocksdb::Slice* value)
+{
+  if (num_seen >= max) {
+    num_skipped++;
+    return;
+  }
+  string prefix;
+  string key;
+  if (column_family_id == 0) {
+    db.split_key(key_in, &prefix, &key);
+  } else {
+    auto it = db.cf_ids_to_prefix.find(column_family_id);
+    ceph_assert(it != db.cf_ids_to_prefix.end());
+    prefix = it->second;
+    key = key_in.ToString();
+  }
+  if (verbose) {
+    ssize_t size = value ? value->size() : -1;
+    seen << std::endl << op_name << "(";
+
+    seen << "prefix = " << prefix;
+    seen << ", key = " << pretty_binary_string(key);
+    if (size != -1)
+      seen << ", val len = " << std::to_string(size);
+    seen << ")";
+  } else {
+    string k = op_short;
+    k += ":";
+    k += prefix;
+    auto [it, found] = seen_counts.emplace(k, 0);
+    it->second++;
+  }
+  num_seen++;
 }

@@ -135,6 +135,61 @@ TEST_P(KVTest, OpenWriteRead) {
   fini();
 }
 
+TEST_P(KVTest, RocksDBDumpTransaction) {
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db.get());
+  if (!rdb) {
+    return;
+  }
+
+  ASSERT_EQ(0, db->create_and_open(cout));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist value;
+    value.append("value");
+    t->set("O", "key", value);
+    value.clear();
+    value.append("value2");
+    t->set("P", "key2", value);
+    value.clear();
+    value.append("value3");
+    t->set("O", "key3", value);
+
+    t->rmkey("O", "A1");
+    t->rmkey("D", "A1");
+    t->rmkey("D", "A2");
+    t->rmkey("D", "A3");
+    t->merge("A", "A5", value);
+    // following txcs to be skipped
+    t->merge("B", "A5", value);
+    t->merge("B", "A5", value);
+
+    auto* _t = dynamic_cast<RocksDBStore::RocksDBTransactionImpl*>(t.get());
+    ASSERT_TRUE(_t != nullptr);
+    RocksWBHandler bat_txc_short(*rdb, false, 8);
+    _t->bat.Iterate(&bat_txc_short);
+    auto seen = bat_txc_short.get_seen(true); // using 'sorted' result to ensure
+                                              // fixed ordering in the result
+    std::cout << "Seen short = " << seen << std::endl;
+    ASSERT_EQ(seen, "DF:D*3,DF:O,MF:A,PF:O*2,PF:P,...*2");
+
+    RocksWBHandler bat_txc_verbose(*rdb, true, 8);
+    _t->bat.Iterate(&bat_txc_verbose);
+    seen = bat_txc_verbose.get_seen();
+    std::cout << "Seen verbose:" << seen << std::endl;
+    ASSERT_EQ(seen,
+      "\nPutCF(prefix = O, key = 'key', val len = 5)"
+      "\nPutCF(prefix = P, key = 'key2', val len = 6)"
+      "\nPutCF(prefix = O, key = 'key3', val len = 6)"
+      "\nDeleteCF(prefix = O, key = 'A1')"
+      "\nDeleteCF(prefix = D, key = 'A1')"
+      "\nDeleteCF(prefix = D, key = 'A2')"
+      "\nDeleteCF(prefix = D, key = 'A3')"
+      "\nMergeCF(prefix = A, key = 'A5', val len = 6)"
+      "\n<...>*2");
+  }
+  fini();
+}
+
 TEST_P(KVTest, PutReopen) {
   ASSERT_EQ(0, db->create_and_open(cout));
   {
