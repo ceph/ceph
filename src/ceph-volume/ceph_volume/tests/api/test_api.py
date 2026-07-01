@@ -48,6 +48,64 @@ class TestVolume:
     def test_is_not_ceph_device(self, dev):
         assert not api.is_ceph_device(dev)
 
+    @pytest.mark.parametrize('ceph_type,expected',
+                             [('block', True),
+                              ('db', True),
+                              ('wal', True),
+                              ('data', False),
+                              ('', False)])
+    def test_volume_is_lvm_objectstore_lv(self, ceph_type, expected):
+        tags = f'ceph.type={ceph_type},ceph.osd_id=0' if ceph_type else 'ceph.osd_id=0'
+        lv = api.Volume(lv_name='vg/lv', lv_tags=tags, lv_path='/dev/vg/lv')
+        assert api.volume_is_lvm_objectstore_lv(lv) is expected
+
+    def test_ceph_volume_lvm_prepare_lv_paths(self):
+        block_lv = api.Volume(
+            lv_name='ceph-vg/osd-block',
+            lv_tags='ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=x,ceph.cluster_fsid=y',
+            lv_path='/dev/ceph-vg/osd-block-uuid',
+        )
+        data_lv = api.Volume(
+            lv_name='ceph-vg/osd-data',
+            lv_tags='ceph.type=data,ceph.osd_id=1',
+            lv_path='/dev/ceph-vg/osd-data',
+        )
+        with patch('ceph_volume.api.lvm.get_lvs', return_value=[block_lv, data_lv]):
+            paths = api.ceph_volume_lvm_prepare_lv_paths()
+        assert '/dev/ceph-vg/osd-block-uuid' in paths
+
+    def test_is_ceph_volume_lvm_prepared_with_path_set(self):
+        paths = {'/dev/ceph-vg/osd-block-uuid'}
+        assert api.is_ceph_volume_lvm_prepared('/dev/ceph-vg/osd-block-uuid', paths)
+        assert not api.is_ceph_volume_lvm_prepared('/dev/sdb', paths)
+        assert not api.is_ceph_volume_lvm_prepared('/dev/sdb', set())
+        assert not api.is_ceph_volume_lvm_prepared('', paths)
+
+    def test_is_ceph_volume_lvm_prepared_true_single_lvs(self):
+        block_lv = api.Volume(
+            lv_name='ceph-vg/osd-block',
+            lv_tags='ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=x,ceph.cluster_fsid=y',
+            lv_path='/dev/ceph-vg/osd-block-uuid',
+        )
+        with patch('ceph_volume.api.lvm.get_lvs', return_value=[block_lv]):
+            assert api.is_ceph_volume_lvm_prepared('/dev/ceph-vg/osd-block-uuid')
+
+    def test_is_ceph_volume_lvm_prepared_false_empty_lvs(self):
+        with patch('ceph_volume.api.lvm.get_lvs', return_value=[]):
+            assert not api.is_ceph_volume_lvm_prepared('/dev/sdb')
+
+    def test_is_ceph_volume_lvm_prepared_false_no_ceph_type(self):
+        data_lv = api.Volume(
+            lv_name='ceph-vg/osd-data',
+            lv_tags='ceph.type=data,ceph.osd_id=0',
+            lv_path='/dev/vg/rawdata',
+        )
+        with patch('ceph_volume.api.lvm.get_lvs', return_value=[data_lv]):
+            assert not api.is_ceph_volume_lvm_prepared('/dev/vg/rawdata')
+
+    def test_is_ceph_volume_lvm_prepared_empty_path(self):
+        assert not api.is_ceph_volume_lvm_prepared('')
+
     def test_no_empty_lv_name(self):
         with pytest.raises(ValueError):
             api.Volume(lv_name='', lv_tags='')
