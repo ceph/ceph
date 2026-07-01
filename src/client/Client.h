@@ -1213,6 +1213,7 @@ protected:
   void wake_up_session_caps(MetaSession *s, bool reconnect);
 
   void wait_on_context_list(std::vector<Context*>& ls);
+  void signal_deferred_context_list(std::vector<Context*>& ls);
   void signal_context_list(std::vector<Context*>& ls) {
     finish_contexts(cct, ls, 0);
   }

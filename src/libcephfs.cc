@@ -2223,7 +2223,7 @@ public:
   LL_CallbackDispatch(CephContext *cct_, struct ceph_ll_io_info *io_info_)
     : cct(cct_), io_info(io_info_) {}
   void finish(int) override {
-    ldout(cct, 10) << "LL_Onfinish dispatching callback"
+    ldout(cct, 10) << "io_correl dispatch callback"
 		   << " io_info=" << io_info
 		   << " priv=" << io_info->priv
 		   << " callback=" << (void*)io_info->callback
@@ -2248,7 +2248,8 @@ private:
       copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &bl, r);
     }
     io_info->result = r;
-    ldout(client->cct, 10) << "LL_Onfinish::finish queuing on client_finisher"
+    ldout(client->cct, 10) << "io_correl LL_Onfinish finish"
+			   << " onfinish=" << this
 			   << " io_info=" << io_info
 			   << " priv=" << io_info->priv
 			   << " callback=" << (void*)io_info->callback
@@ -2278,10 +2279,29 @@ extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmoun
   Client *client = cmount->get_client();
   LL_Onfinish *onfinish = new LL_Onfinish(client, io_info);
 
-  return (client->ll_preadv_pwritev(
+  ldout(client->cct, 10) << "io_correl ceph_ll_nonblocking_readv_writev"
+			 << " io_info=" << io_info
+			 << " priv=" << io_info->priv
+			 << " onfinish=" << onfinish
+			 << " fh=" << io_info->fh
+			 << " off=" << io_info->off
+			 << " write=" << io_info->write
+			 << " fsync=" << io_info->fsync
+			 << dendl;
+
+  int64_t r = client->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
 			io_info->off, io_info->write, onfinish, &onfinish->bl,
-			io_info->fsync, io_info->syncdataonly));
+			io_info->fsync, io_info->syncdataonly);
+
+  ldout(client->cct, 10) << "io_correl ceph_ll_nonblocking_readv_writev return"
+			 << " io_info=" << io_info
+			 << " priv=" << io_info->priv
+			 << " onfinish=" << onfinish
+			 << " r=" << r
+			 << dendl;
+
+  return r;
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

@@ -122,6 +122,7 @@ public:
     finish_contexts(cct, ls, 0);
   }
   void signal_caps_inode(Inode *in);
+  void signal_caps_inode_sync(Inode *in);
 
 private:
   Client *client;

@@ -70,7 +70,9 @@ void ClientCaps::put_cap_ref(Inode *in, int cap)
       if (last & CEPH_CAP_FILE_BUFFER) {
 	for (auto &p : in->cap_snaps)
 	  p.second.dirty_data = 0;
-	signal_context_list(in->waitfor_commit);
+	// _flushed runs on client_finisher.  Defer fsync advancers so we do not
+	// run them inline and starve C_Write_Finisher::finish_io.
+	client->signal_deferred_context_list(in->waitfor_commit);
 	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
         if (!in->is_write_delegated()) {
           ++put_nref;
@@ -700,10 +702,28 @@ void ClientCaps::send_flush_snap(Inode *in, MetaSession *session,
 }
 
 
+void ClientCaps::signal_caps_inode_sync(Inode *in)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
+
+  // Nonblocking fsync advancers may re-queue themselves on
+  // waitfor_caps_pending while we are finishing waitfor_caps.  A single
+  // signal/swap can leave those waiters in waitfor_caps without running
+  // them until the next cap flush ack (which may never come).
+  do {
+    client->signal_deferred_context_list(in->waitfor_caps);
+    if (in->waitfor_caps_pending.empty())
+      break;
+    std::swap(in->waitfor_caps, in->waitfor_caps_pending);
+  } while (true);
+}
+
 void ClientCaps::signal_caps_inode(Inode *in)
 {
-  signal_context_list(in->waitfor_caps);
-  std::swap(in->waitfor_caps, in->waitfor_caps_pending);
+  // handle_cap_flush_ack runs on client_finisher with client_lock held.
+  // Waking cap waiters via finish_contexts() runs each fsync advancer inline
+  // and starves C_Write_Finisher::finish_io on the same finisher queue.
+  signal_caps_inode_sync(in);
 }
 
 void ClientCaps::flush_snaps(Inode *in)
