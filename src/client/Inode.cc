@@ -242,12 +242,27 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
+namespace {
+bool auth_cap_is_live(const Inode *in)
+{
+  if (!in->auth_cap)
+    return false;
+  for (const auto &[mds, cap] : in->caps) {
+    if (&cap == in->auth_cap)
+      return true;
+  }
+  return false;
+}
+} // namespace
+
 bool Inode::cap_is_valid(const Cap &cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
+  if (!cap.session)
+    return false;
   if ((cap.session->cap_gen <= cap.gen)
       && (ceph_clock_now() < cap.session->cap_ttl)) {
     return true;
@@ -268,7 +283,7 @@ int Inode::caps_issued(int *implemented) const
   // exclude caps issued by non-auth MDS, but are been revoking by
   // the auth MDS. The non-auth MDS should be revoking/exporting
   // these caps, but the message is delayed.
-  if (auth_cap)
+  if (auth_cap_is_live(this))
     c &= ~auth_cap->implemented | auth_cap->issued;
 
   if (implemented)
@@ -305,6 +320,9 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 {
   int c = snap_caps;
   int i = 0;
+
+  if (auth_cap && !auth_cap_is_live(this))
+    auth_cap = nullptr;
 
   if ((c & mask) == mask)
     return true;
