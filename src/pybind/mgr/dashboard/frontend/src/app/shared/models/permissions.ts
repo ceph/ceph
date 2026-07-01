@@ -23,6 +23,7 @@ export class Permissions {
   rbdMirroring: Permission;
   rgw: Permission;
   cephfs: Permission;
+  cephfsMirror: Permission;
   manager: Permission;
   log: Permission;
   user: Permission;
@@ -43,6 +44,7 @@ export class Permissions {
     this.rbdMirroring = new Permission(serverPermissions['rbd-mirroring']);
     this.rgw = new Permission(serverPermissions['rgw']);
     this.cephfs = new Permission(serverPermissions['cephfs']);
+    this.cephfsMirror = new Permission(serverPermissions['cephfs-mirror']);
     this.manager = new Permission(serverPermissions['manager']);
     this.log = new Permission(serverPermissions['log']);
     this.user = new Permission(serverPermissions['user']);

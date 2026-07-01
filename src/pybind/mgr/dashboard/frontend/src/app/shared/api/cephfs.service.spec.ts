@@ -135,4 +135,17 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne('api/cephfs/mirror/directory/testfs');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should remove mirror directory using query parameters', () => {
+    const path = '/volumes/Group1/A1/64446b51-d39b-436b-991f-0f8e713067ff';
+    service.removeMirrorDirectory('testfs', path).subscribe();
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/cephfs/mirror/directory' &&
+        request.params.get('fs_name') === 'testfs' &&
+        request.params.get('path') === path
+    );
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.body).toBeNull();
+  });
 });

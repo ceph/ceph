@@ -272,8 +272,9 @@ POOL_MGR_ROLE = Role(
 
 # CephFS manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role(
-    'cephfs-manager', 'allows full permissions for the cephfs scope', {
+    'cephfs-manager', 'allows full permissions for the cephfs and cephfs-mirror scopes', {
         Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.CEPHFS_MIRROR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
         Scope.PROMETHEUS: [_P.READ]
     })
