@@ -2581,7 +2581,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       formatter->flush(*outstream);
     }
-    if (!stdout) {
+    if (!use_stdout) {
       delete outstream;
     }
   }
