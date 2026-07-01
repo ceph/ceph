@@ -1,3 +1,4 @@
+import errno
 import logging
 import os
 import re
@@ -10,6 +11,16 @@ from typing import Dict, List, Any, Union, Optional
 
 
 logger = logging.getLogger(__name__)
+
+_ONE_GIB = 1024 * 1024 * 1024
+BLUESTORE_BDEV_LABEL_OFFSETS = (
+    0,
+    _ONE_GIB,
+    10 * _ONE_GIB,
+    100 * _ONE_GIB,
+    1000 * _ONE_GIB,
+)
+BLUESTORE_BDEV_LABEL_SIGNATURE = b'bluestore block device'
 
 
 # The blkid CLI tool has some oddities which prevents having one common call
@@ -882,21 +893,30 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     return device_facts
 
 def has_bluestore_label(device_path: str) -> bool:
-    isBluestore = False
-    bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
-
-    # throws OSError on failure
     logger.info("opening device {} to check for BlueStore label".format(device_path))
+    sig_len = len(BLUESTORE_BDEV_LABEL_SIGNATURE)
     try:
         with open(device_path, "rb") as fd:
-            # read first 22 bytes looking for bluestore disk signature
-            signature = fd.read(22)
-            if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
-                isBluestore = True
+            for position in BLUESTORE_BDEV_LABEL_OFFSETS:
+                try:
+                    fd.seek(position)
+                except OSError as exc:
+                    err = exc.errno
+                    if err is None or err not in (
+                        errno.EINVAL,
+                        errno.ESPIPE,
+                        errno.ENOTTY,
+                    ):
+                        raise
+                    if position != 0:
+                        continue
+                signature = fd.read(sig_len)
+                if signature == BLUESTORE_BDEV_LABEL_SIGNATURE:
+                    return True
     except IsADirectoryError:
         logger.info(f'{device_path} is a directory, skipping.')
 
-    return isBluestore
+    return False
 
 def has_seastore_label(device_path: str) -> bool:
     is_seastore = False
