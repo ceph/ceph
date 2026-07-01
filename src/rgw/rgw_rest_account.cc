@@ -273,16 +273,16 @@ void RGWOp_Account_Quota_Set::execute(optional_yield y)
     return;
   }
 
-  int32_t quota_max_size = 0;
+  int64_t quota_max_size = 0;
   bool has_quota_max_size = false;
-  RESTArgs::get_int32(s, "max-size", 0, &quota_max_size, &has_quota_max_size);
+  RESTArgs::get_int64(s, "max-size", 0, &quota_max_size, &has_quota_max_size);
   if (has_quota_max_size) {
     op_state.quota_max_size = quota_max_size;
   }
 
-  int32_t quota_max_objects = 0;
+  int64_t quota_max_objects = 0;
   bool has_quota_max_objects = false;
-  RESTArgs::get_int32(s, "max-objects", 0, &quota_max_objects, &has_quota_max_objects);
+  RESTArgs::get_int64(s, "max-objects", 0, &quota_max_objects, &has_quota_max_objects);
   if (has_quota_max_objects) {
     op_state.quota_max_objects = quota_max_objects;
   }
