@@ -12,16 +12,24 @@ from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, CertificateSource
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 from cephadm.schedule import get_placement_hosts
+from cephadm.tlsobject_types import TLSObjectScope
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+# Lookup keys for the cert_mgr store — used to save/retrieve the 5 gRPC cert files.
+NFS_GRPC_SERVER_CERT = 'nfs_grpc_server_cert'
+NFS_GRPC_SERVER_KEY = 'nfs_grpc_server_key'
+NFS_GRPC_CLIENT_CERT = 'nfs_grpc_client_cert'
+NFS_GRPC_CLIENT_KEY = 'nfs_grpc_client_key'
+NFS_GRPC_CA_CERT = 'nfs_grpc_ca_cert'
 
 
 @register_cephadm_service
@@ -114,6 +122,105 @@ class NFSService(CephService):
                         self.mgr.spec_store.save_rank_map(service_name, rank_map)
         self._update_failed_fencing_services(service_name, fence_failed, not fence_failed)
 
+    def _register_grpc_certs(self) -> None:
+        """Register gRPC cert/key names with the cert and key stores."""
+        self.mgr.cert_mgr.cert_store.register_object_name(NFS_GRPC_SERVER_CERT, TLSObjectScope.SERVICE)
+        self.mgr.cert_mgr.key_store.register_object_name(NFS_GRPC_SERVER_KEY, TLSObjectScope.SERVICE)
+        self.mgr.cert_mgr.cert_store.register_object_name(NFS_GRPC_CLIENT_CERT, TLSObjectScope.GLOBAL)
+        self.mgr.cert_mgr.key_store.register_object_name(NFS_GRPC_CLIENT_KEY, TLSObjectScope.GLOBAL)
+        self.mgr.cert_mgr.cert_store.register_object_name(NFS_GRPC_CA_CERT, TLSObjectScope.SERVICE)
+
+    def _get_or_generate_grpc_service_cert(self, cert_name: str, key_name: str,
+                                           cn: str, svc_name: str) -> Tuple[str, str]:
+        """Fetch a SERVICE-scoped cert/key from the store; generate and persist if absent."""
+        cert = self.mgr.cert_mgr.get_cert(cert_name, service_name=svc_name)
+        key = self.mgr.cert_mgr.get_key(key_name, service_name=svc_name)
+        if not (cert and key):
+            creds = self.mgr.cert_mgr.generate_cert([cn], [cn])
+            cert, key = creds.cert, creds.key
+            self.mgr.cert_mgr.save_cert(cert_name, cert, service_name=svc_name)
+            self.mgr.cert_mgr.save_key(key_name, key, service_name=svc_name)
+        return cert, key
+
+    def _get_or_generate_grpc_global_cert(self, cert_name: str, key_name: str,
+                                          cn: str) -> Tuple[str, str]:
+        """Fetch a GLOBAL-scoped client cert/key; generate once for the whole cluster if absent."""
+        cert = self.mgr.cert_mgr.get_cert(cert_name)
+        key = self.mgr.cert_mgr.get_key(key_name)
+        if not (cert and key):
+            creds = self.mgr.cert_mgr.generate_cert([cn], [cn])
+            cert, key = creds.cert, creds.key
+            self.mgr.cert_mgr.save_cert(cert_name, cert)
+            self.mgr.cert_mgr.save_key(key_name, key)
+        return cert, key
+
+    def _get_grpc_certs(self, spec: NFSServiceSpec,
+                        daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str, str]:
+        """Return (server_cert, server_key, client_cert, client_key, ca_cert) PEM strings."""
+        svc_name = spec.service_name()
+
+        if spec.grpc_certificate_source == CertificateSource.INLINE.value:
+            server_creds = self.get_certificates_generic(
+                svc_spec=spec, daemon_spec=daemon_spec,
+                cert_source_attr='grpc_certificate_source',
+                cert_attr='grpc_server_cert', cert_name=NFS_GRPC_SERVER_CERT,
+                key_attr='grpc_server_key', key_name=NFS_GRPC_SERVER_KEY,
+            )
+            client_creds = self.get_certificates_generic(
+                svc_spec=spec, daemon_spec=daemon_spec,
+                cert_source_attr='grpc_certificate_source',
+                cert_attr='grpc_client_cert', cert_name=NFS_GRPC_CLIENT_CERT,
+                key_attr='grpc_client_key', key_name=NFS_GRPC_CLIENT_KEY,
+                ca_cert_attr='grpc_ca_cert', ca_cert_name=NFS_GRPC_CA_CERT,
+            )
+            assert client_creds.ca_cert is not None, \
+                "grpc_ca_cert is required and must be set when using inline certificate source"
+            return (server_creds.cert, server_creds.key,
+                    client_creds.cert, client_creds.key, client_creds.ca_cert)
+
+        # cephadm-signed: server cert per host (with host IP in SAN), client cert per service
+        if spec.ssl:
+            # TLS already generated a per-host server cert — reuse it for gRPC
+            tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, daemon_spec.host)
+            server_cert, server_key = tls_creds.cert, tls_creds.key
+        else:
+            # Register self-signed cert name before accessing the cert store
+            self.mgr.cert_mgr.register_self_signed_cert_key_pair(svc_name)
+            # Generate gRPC server cert per host using same logic as TLS
+            ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            fqdn = self.mgr.get_fqdn(daemon_spec.host)
+            tls_creds = self._get_cephadm_signed_certificates(spec, daemon_spec, [ip], [fqdn], [])
+            server_cert, server_key = tls_creds.cert, tls_creds.key
+        client_cert, client_key = self._get_or_generate_grpc_global_cert(
+            NFS_GRPC_CLIENT_CERT, NFS_GRPC_CLIENT_KEY, 'nfs-grpc-client')
+        ca_cert = self.mgr.cert_mgr.get_root_ca()
+        return (server_cert, server_key, client_cert, client_key, ca_cert)
+
+    def get_client_files(self) -> Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]]:
+        """Deploy gRPC client certs to mgr hosts so they are accessible from cephadm shell at /etc/ceph/grpc/"""
+        import hashlib
+        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
+        try:
+            client_cert = self.mgr.cert_mgr.get_cert(NFS_GRPC_CLIENT_CERT)
+            client_key  = self.mgr.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY)
+            ca_cert     = self.mgr.cert_mgr.get_root_ca()
+            if not (client_cert and client_key and ca_cert):
+                return client_files
+            for daemon in self.mgr.cache.get_daemons_by_type('mgr'):
+                host = daemon.hostname
+                client_files.setdefault(host, {})
+                for path, content, mode in [
+                    ('/var/lib/ceph/nfs_grpc-client-certs/ca.crt',     ca_cert,     0o644),
+                    ('/var/lib/ceph/nfs_grpc-client-certs/client.crt', client_cert, 0o644),
+                    ('/var/lib/ceph/nfs_grpc-client-certs/client.key', client_key,  0o600),
+                ]:
+                    data = content.encode('utf-8')
+                    digest = ''.join('%02x' % c for c in hashlib.sha256(data).digest())
+                    client_files[host][path] = (mode, 0, 0, data, digest)
+        except Exception as e:
+            logger.warning('Failed to calc gRPC client files: %s', e)
+        return client_files
+
     def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
         from nfs.cluster import create_ganesha_pool
 
@@ -136,6 +243,13 @@ class NFSService(CephService):
         deps.append(f'tls_debug: {nfs_spec.tls_debug}')
         deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        deps.append(f'grpc_certs_dir: {nfs_spec.grpc_certs_dir}')
+        if nfs_spec.grpc_certificate_source == CertificateSource.INLINE.value:
+            for field in ['grpc_server_cert', 'grpc_server_key',
+                          'grpc_client_cert', 'grpc_client_key', 'grpc_ca_cert']:
+                val = getattr(nfs_spec, field, None)
+                if val:
+                    deps.append(f'{field}: {utils.config_hash(val)}')
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -262,7 +376,8 @@ class NFSService(CephService):
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
-                "ceph_nodes": ceph_nodes
+                "ceph_nodes": ceph_nodes,
+                "grpc_certs_dir": spec.grpc_certs_dir,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -285,6 +400,9 @@ class NFSService(CephService):
                 out.close()
             return output
 
+        # Register gRPC cert names with CertMgr
+        self._register_grpc_certs()
+
         # generate the cephadm config json
         def get_cephadm_config() -> Dict[str, Any]:
             config: Dict[str, Any] = {}
@@ -303,6 +421,12 @@ class NFSService(CephService):
                     'tls_key.pem': tls_creds.key,
                     'tls_ca_cert.pem': tls_creds.ca_cert,
                 })
+            server_cert, server_key, client_cert, client_key, ca_cert = self._get_grpc_certs(spec, daemon_spec)
+            config['files'].update({
+                'grpc_server.crt': server_cert,
+                'grpc_server.key': server_key,
+                'grpc_ca.crt': ca_cert,
+            })
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,

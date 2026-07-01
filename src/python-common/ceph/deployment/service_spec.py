@@ -1423,6 +1423,13 @@ class NFSServiceSpec(ServiceSpec):
                  tls_min_version: Optional[str] = None,
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
+                 grpc_certificate_source: Optional[str] = None,
+                 grpc_server_cert: Optional[str] = None,
+                 grpc_server_key: Optional[str] = None,
+                 grpc_client_cert: Optional[str] = None,
+                 grpc_client_key: Optional[str] = None,
+                 grpc_ca_cert: Optional[str] = None,
+                 grpc_certs_dir: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1462,6 +1469,16 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_ktls = tls_ktls
         self.tls_debug = tls_debug
         self.tls_min_version = tls_min_version
+
+        # gRPC fields (server↔server internal cluster communication).
+        self.grpc_certificate_source = grpc_certificate_source or CertificateSource.CEPHADM_SIGNED.value
+        self.grpc_server_cert = grpc_server_cert
+        self.grpc_server_key = grpc_server_key
+        self.grpc_client_cert = grpc_client_cert
+        self.grpc_client_key = grpc_client_key
+        self.grpc_ca_cert = grpc_ca_cert
+        # Directory inside the container where gRPC cert files are written.
+        self.grpc_certs_dir = grpc_certs_dir or '/etc/ganesha/grpc'
 
     def get_colocation_port_fields(self) -> List[str]:
         """Return port fields for colocation; include rdma_port when RDMA is enabled."""
@@ -1576,6 +1593,16 @@ class NFSServiceSpec(ServiceSpec):
                 if key.endswith('iops') and not isinstance(value, int):
                     raise SpecValidationError(
                         f"Invalid NFS spec: IOPS '{key}' should be an integer")
+
+        # gRPC certificate validation — inline mode requires all 5 cert fields.
+        if self.grpc_certificate_source == CertificateSource.INLINE.value:
+            grpc_field_names = ['grpc_server_cert', 'grpc_server_key',
+                                'grpc_client_cert', 'grpc_client_key', 'grpc_ca_cert']
+            grpc_fields = [getattr(self, f) for f in grpc_field_names]
+            if any(grpc_fields) and not all(grpc_fields):
+                raise SpecValidationError(
+                    f'Either none or all of {grpc_field_names} attributes must be set'
+                )
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:

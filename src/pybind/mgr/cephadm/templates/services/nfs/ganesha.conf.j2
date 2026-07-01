@@ -93,4 +93,10 @@ TLS_CONFIG{
 }
 
 {% endif %}
+GRPC {
+        GRPC_Server_Cert = "{{ grpc_certs_dir }}/server.crt";
+        GRPC_Server_Key  = "{{ grpc_certs_dir }}/server.key";
+        GRPC_CA_Cert     = "{{ grpc_certs_dir }}/ca.crt";
+}
+
 %url    {{ url }}

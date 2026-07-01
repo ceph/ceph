@@ -4952,3 +4952,4 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+

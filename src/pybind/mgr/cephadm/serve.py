@@ -1372,6 +1372,14 @@ class CephadmServe:
         else:
             client_files = {}
 
+        for svc in service_registry.get_all_services():
+            if hasattr(svc, 'get_client_files'):
+                try:
+                    for host, files in svc.get_client_files().items():
+                        client_files.setdefault(host, {}).update(files)
+                except Exception as e:
+                    self.log.warning(f'unable to get client files from {svc}: {e}')
+
         @forall_hosts
         def _write_files(host: str) -> None:
             self._write_client_files(client_files, host)
