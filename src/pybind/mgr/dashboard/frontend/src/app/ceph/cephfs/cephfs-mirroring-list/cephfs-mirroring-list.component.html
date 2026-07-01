@@ -3,22 +3,20 @@
      class="cds-mt-6">
   <span class="cds--type-heading-03"
         i18n>Jump in</span>
-  <div cdsGrid
-       class="padding-inline-0 jump-in-grid"
-       [useCssGrid]="true"
-       [narrow]="true"
-       [fullWidth]="true">
-    @for (tile of jumpInTiles; track tile.title) {
-      <div cdsCol
-           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
-        <cd-clickable-tile
-          [title]="tile.title"
-          [description]="tile.description"
-          [icon]="tile.icon"
-          (tileClick)="tile.action()">
-        </cd-clickable-tile>
-      </div>
-    }
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 4, lg: 8}">
+    <div
+      cdsStack="horizontal"
+      [gap]="4">
+      @for (tile of jumpInTiles; track tile.title) {
+          <cd-clickable-tile
+            [title]="tile.title"
+            [description]="tile.description"
+            [icon]="tile.icon"
+            (tileClick)="tile.action()">
+          </cd-clickable-tile>
+      }
+    </div>
   </div>
 </div>
 
