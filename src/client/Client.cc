@@ -11604,6 +11604,23 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
+static void append_iovec_to_bufferlist(bufferlist& bl, const struct iovec *iov,
+                                       int iovcnt, size_t max_len)
+{
+  size_t total_appended = 0;
+  for (int i = 0; i < iovcnt; i++) {
+    if (iov[i].iov_len == 0)
+      continue;
+    size_t len = iov[i].iov_len;
+    if (max_len > 0 && total_appended + len > max_len)
+      len = max_len - total_appended;
+    bl.append((const char *)iov[i].iov_base, len);
+    total_appended += len;
+    if (max_len > 0 && total_appended >= max_len)
+      break;
+  }
+}
+
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                        int iovcnt, int64_t offset,
                                        bool write, bool clamp_to_int,
@@ -11630,7 +11647,6 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
          * 32-bit signed integers. Clamp the I/O sizes in those functions so
          * that we don't do I/Os larger than the values we can return.
          */
-        bufferlist data;
         if (clamp_to_int) {
 #if defined(__linux__)
           /* We can't return bytes written larger than INT_MAX, clamp size to
@@ -11644,25 +11660,10 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 #else
           totallen = std::min(totallen, (size_t)INT_MAX);
 #endif
-          size_t total_appended = 0;
-          for (int i = 0; i < iovcnt; i++) {
-            if (iov[i].iov_len > 0) {
-              if (total_appended + iov[i].iov_len >= totallen) {
-                data.append((const char *)iov[i].iov_base, totallen - total_appended);
-                break;
-              } else {
-                data.append((const char *)iov[i].iov_base, iov[i].iov_len);
-                total_appended += iov[i].iov_len;
-              }
-            }
-          }
-        } else {
-          for (int i = 0; i < iovcnt; i++) {
-            data.append((const char *)iov[i].iov_base, iov[i].iov_len);
-          }
         }
 
-        int64_t w = _write(fh, offset, totallen, std::move(data), onfinish, do_fsync, syncdataonly);
+        int64_t w = _write(fh, offset, totallen, {}, iov, iovcnt,
+                           onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
@@ -12004,6 +12005,22 @@ Client::WriteEncMgr::~WriteEncMgr()
 {
 }
 
+void Client::WriteEncMgr::set_deferred_iov(const struct iovec *iov, int iovcnt)
+{
+  defer_iov = iov;
+  defer_iovcnt = iovcnt;
+}
+
+void Client::WriteEncMgr::ensure_bl()
+{
+  if (!defer_iov || bl.length() > 0)
+    return;
+  append_iovec_to_bufferlist(bl, defer_iov, defer_iovcnt, size);
+  defer_iov = nullptr;
+  defer_iovcnt = 0;
+  pbl = &bl;
+}
+
 int Client::WriteEncMgr::init()
 {
 #if defined(__linux__)
@@ -12058,6 +12075,8 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
 #if defined(__linux__)
   if (!denc)
     return do_write();
+
+  ensure_bl();
 #else
     return do_write();
 #endif
@@ -12250,6 +12269,7 @@ int Client::WriteEncMgr_Buffered::do_write()
   InodeOCState oc(in);
   {
     ceph::unique_unlock<ceph::TrackedLock> cl_drop(clnt->client_lock);
+    ensure_bl();
     r = clnt->objectcacher->file_write(oc.oset, &oc.layout, oc.snapc,
                                        offset, size, *pbl, ceph::real_clock::now(),
                                        0, iofinish,
@@ -12266,15 +12286,26 @@ int Client::WriteEncMgr_NotBuffered::do_write()
   ldout(cct, 10) << __func__ << dendl;
   clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-  clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-                           offset, size, *pbl, ceph::real_clock::now(), 0,
-                           in->truncate_size, in->truncate_seq,
-                           iofinish);
+  if (async) {
+    ceph::unique_unlock<ceph::TrackedLock> cl_drop(clnt->client_lock);
+    ensure_bl();
+    clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+                             offset, size, *pbl, ceph::real_clock::now(), 0,
+                             in->truncate_size, in->truncate_seq,
+                             iofinish);
+  } else {
+    ensure_bl();
+    clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+                             offset, size, *pbl, ceph::real_clock::now(), 0,
+                             in->truncate_size, in->truncate_seq,
+                             iofinish);
+  }
 
   return 0;
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
+                       const struct iovec *iov, int iovcnt,
 	               Context *onfinish, bool do_fsync, bool syncdataonly)
 {
   ceph_assert(client_lock.is_locked_by_me());
@@ -12345,12 +12376,28 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     ceph_assert(in->inline_version > 0);
   }
 
+  if (bl.length() == 0 && iov) {
+    if (!onfinish || in->inline_version < CEPH_INLINE_NONE) {
+      append_iovec_to_bufferlist(bl, iov, iovcnt, size);
+    }
+  }
+
   int want, have;
   if (f->mode & CEPH_FILE_MODE_LAZY)
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
+  else if (onfinish && (f->flags & O_DIRECT))
+    // Async O_DIRECT writes go to the OSD; do not wait on Fb caps.
+    want = 0;
   else
     want = CEPH_CAP_FILE_BUFFER;
-  int r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
+  int r;
+  if (onfinish) {
+    r = try_get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have);
+    if (r == -EAGAIN)
+      r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
+  } else {
+    r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
+  }
   if (r < 0)
     return r;
 
@@ -12381,7 +12428,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 						      offset, size, bl,
 						      !!onfinish);
   }
-
+  if (onfinish && iov && bl.length() == 0)
+    enc_mgr->set_deferred_iov(iov, iovcnt);
 
   r = enc_mgr->init();
   if (r < 0) {
