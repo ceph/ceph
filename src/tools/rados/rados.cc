@@ -4091,7 +4091,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     ret = PoolDump(file_fd).dump(&io_ctx);
 
-    if (file_fd != STDIN_FILENO) {
+    if (file_fd != STDOUT_FILENO) {
       VOID_TEMP_FAILURE_RETRY(::close(file_fd));
     }
 
