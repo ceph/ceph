@@ -84,6 +84,10 @@ using std::chrono::seconds;
     ASSERT_TRUE(passed);          \
   } while(0)
 
+static inline bool accurate_diff_supported() {
+  return getenv("ERASURE_POOL") == nullptr;
+}
+
 void register_test_librbd() {
 }
 
@@ -7406,6 +7410,9 @@ private:
     uint64_t extent_len = whole_object ?
       round_up_to(object_off + len, block_size) :
       round_up_to(object_off + len, block_size) - extent_off;
+    if (!accurate_diff_supported()) {
+      extent_len = round_up_to(object_off + len, block_size);
+    }
 
     rbd_image_info_t info;
     ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
@@ -7435,8 +7442,12 @@ private:
     ASSERT_EQ(0, rbd_diff_iterate2(image, NULL, 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
@@ -7445,10 +7456,15 @@ private:
     ASSERT_EQ(0, rbd_diff_iterate2(image, NULL, 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     ASSERT_EQ(0, rbd_snap_create(image, "snap3"));
@@ -7457,28 +7473,42 @@ private:
     ASSERT_EQ(0, rbd_diff_iterate2(image, NULL, 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 2. snap1 -> HEAD
     ASSERT_EQ(0, rbd_diff_iterate2(image, "snap1", 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 3. snap2 -> HEAD
     ASSERT_EQ(0, rbd_diff_iterate2(image, "snap2", 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 4. snap3 -> HEAD
@@ -7493,28 +7523,42 @@ private:
     ASSERT_EQ(0, rbd_diff_iterate2(image, NULL, 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 6. snap1 -> snap3
     ASSERT_EQ(0, rbd_diff_iterate2(image, "snap1", 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 7. snap2 -> snap3
     ASSERT_EQ(0, rbd_diff_iterate2(image, "snap2", 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 8. snap3 -> snap3
@@ -7529,16 +7573,24 @@ private:
     ASSERT_EQ(0, rbd_diff_iterate2(image, NULL, 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 10. snap1 -> snap2
     ASSERT_EQ(0, rbd_diff_iterate2(image, "snap1", 0, size, true, whole_object,
                                    vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 11. snap2 -> snap2
@@ -7587,6 +7639,9 @@ private:
     uint64_t extent_len = whole_object ?
       round_up_to(object_off + len, block_size) :
       round_up_to(object_off + len, block_size) - extent_off;
+    if (!accurate_diff_supported()) {
+      extent_len = round_up_to(object_off + len, block_size);
+    }
 
     librbd::image_info_t info;
     ASSERT_EQ(0, image.stat(info, sizeof(info)));
@@ -7617,8 +7672,12 @@ private:
     ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     ASSERT_EQ(0, image.snap_create("snap2"));
@@ -7627,10 +7686,15 @@ private:
     ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     ASSERT_EQ(0, image.snap_create("snap3"));
@@ -7639,28 +7703,42 @@ private:
     ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 2. snap1 -> HEAD
     ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 3. snap2 -> HEAD
     ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 4. snap3 -> HEAD
@@ -7675,28 +7753,42 @@ private:
     ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 6. snap1 -> snap3
     ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(2u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[1]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[1]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[1]);
+    }
     extents.clear();
 
     // 7. snap2 -> snap3
     ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off2, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off2 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 8. snap3 -> snap3
@@ -7711,16 +7803,24 @@ private:
     ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 10. snap1 -> snap2
     ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, whole_object,
                                      vector_iterate_cb, &extents));
     ASSERT_EQ(1u, extents.size());
-    ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
-              extents[0]);
+    if (!accurate_diff_supported()) {
+      ASSERT_EQ(diff_extent(off1, extent_len, true, object_size), extents[0]);
+    } else {
+      ASSERT_EQ(diff_extent(off1 + extent_off, extent_len, true, object_size),
+                extents[0]);
+    }
     extents.clear();
 
     // 11. snap2 -> snap2
