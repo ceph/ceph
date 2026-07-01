@@ -1481,6 +1481,24 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out) if out else {}
 
+    @EndpointDoc("Remove a directory path from snapshot mirroring",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Directory path to remove from mirroring'),
+                 })
+    @Endpoint('DELETE', path='/directory', query_params=['fs_name', 'path'])
+    @DeletePermission
+    def remove_directory(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to remove mirroring path {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
     @EndpointDoc("List snapshot mirrored directories",
                  parameters={
                      'fs_name': (str, 'File system name'),

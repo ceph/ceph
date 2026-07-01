@@ -4,18 +4,27 @@ import {
   OnDestroy,
   TemplateRef,
   ViewChild,
-  ViewEncapsulation
+  ViewEncapsulation,
+  inject
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { Icons, ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { MirrorDirStatus, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 interface MirrorPath {
   path: string;
@@ -58,9 +67,18 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   @ViewChild('currentSyncSnapshotTpl', { static: true })
   currentSyncSnapshotTpl!: TemplateRef<unknown>;
 
+  private cephfsService = inject(CephfsService);
+  private route = inject(ActivatedRoute);
+  private formatterService = inject(FormatterService);
+  private authStorageService = inject(AuthStorageService);
+  private cdsModalService = inject(ModalCdsService);
+  private taskWrapper = inject(TaskWrapperService);
+
   columns: CdTableColumn[] = [];
   mirrorPaths: MirrorPath[] = [];
   selection = new CdTableSelection();
+  tableActions: CdTableAction[] = [];
+  permission = this.authStorageService.getPermissions().cephfsMirror;
   selectedPath: MirrorPath | null = null;
   sidePanelOpen = false;
   fsName: string = '';
@@ -71,15 +89,9 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   private subscriptions = new Subscription();
   private mirrorPathsSubscription?: Subscription;
 
-  constructor(
-    private cephfsService: CephfsService,
-    private snapshotScheduleService: CephfsSnapshotScheduleService,
-    private route: ActivatedRoute,
-    private formatterService: FormatterService
-  ) {}
-
   ngOnInit(): void {
     this.initializeColumns();
+    this.initializeTableActions();
     this.fetchFsName();
   }
 
@@ -122,6 +134,48 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         sortable: true
       }
     ];
+  }
+
+  initializeTableActions(): void {
+    this.tableActions = [
+      {
+        name: $localize`Remove path`,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removePathModal(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
+      }
+    ];
+  }
+
+  updateSelection(selection: CdTableSelection): void {
+    this.selection = selection;
+  }
+
+  removePathModal(): void {
+    const path = this.selection.first().path;
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
+      itemDescription: $localize`mirror path`,
+      itemNames: [path],
+      actionDescription: 'remove',
+      submitActionObservable: () =>
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('cephfs/mirroring/path/remove', {
+              fsName: this.fsName,
+              path
+            }),
+            call: this.cephfsService.removeMirrorDirectory(this.fsName, path).pipe(
+              tap(() => {
+                if (this.selectedPath?.path === path) {
+                  this.closeSidePanel();
+                }
+                this.loadMirrorPaths();
+              })
+            )
+          })
+    });
   }
 
   private fetchFsName(): void {

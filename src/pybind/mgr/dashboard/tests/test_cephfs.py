@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import urllib.parse
 from collections import defaultdict
 
 try:
@@ -277,6 +278,37 @@ class CephFSMirrorTest(ControllerTestCase):
         self.assertIn('Failed to add mirroring path', response.get('detail', ''))
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_add_dir', fs_name, path)
+
+    def test_remove_directory_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {}
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._delete(
+            f'/api/cephfs/mirror/directory?fs_name={fs_name}&path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
+
+    def test_remove_directory_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'directory not tracked'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._delete(
+            f'/api/cephfs/mirror/directory?fs_name={fs_name}&path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to remove mirroring path', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
 
     def test_list_directories_success(self):
         fs_name = 'test_fs'
