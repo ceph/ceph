@@ -176,6 +176,12 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 	}
 	break;
       case ceph::os::Transaction::OP_OMAP_RMKEYRANGE:
+	{
+	std::string first = i.decode_string();
+	std::string last = i.decode_string();
+	t_pg->omap_rmkeyrange(i.get_oid(op->oid).hobj, first, last);
+	}
+	break;
       case ceph::os::Transaction::OP_OMAP_SETHEADER:
 	{
 	ceph::bufferlist bl;
