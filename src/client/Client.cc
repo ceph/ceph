@@ -11551,6 +11551,11 @@ void Client::C_Write_Finisher::C_FlushRangeFinish::finish(int fr)
   cwf->finish_io_complete(r);
 }
 
+void Client::C_Write_Finisher::C_FsyncFinish::finish(int r)
+{
+  cwf->finish_fsync(r);
+}
+
 void Client::C_Write_Finisher::finish_io(int r)
 {
   ClientLockIfNeeded lock(clnt);
@@ -11652,8 +11657,8 @@ bool Client::C_Write_Finisher::try_complete()
 
   if (onuninlinefinished && iofinished && !fsync_finished && iofinished_r >= 0) {
     // Done with I/O AND uninline, but we want to do fsync
-    CWF_fsync_finish *fsync_f = new CWF_fsync_finish(this);
-    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(clnt, in, syncdataonly, fsync_f);
+    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(
+      clnt, in, syncdataonly, &fsync_finish_ctx);
 
     // Kick fsync off... and all will magically complete eventually...
     ldout(clnt->cct, 10) << "io_correl CWF kickoff fsync"
@@ -12499,7 +12504,10 @@ void Client::C_nonblocking_fsync_state::advance()
                            << dendl;
       // ------------  here is a state machine break point
       return;
-    } else {
+    } else if (!clnt->cct->_conf->client_oc) {
+      // Match Client::_fsync(): with client_oc we already waited on our flush
+      // above; only block on inode-wide FILE_BUFFER refs when objectcacher is
+      // disabled.
       // FIXME: this can starve
       if (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
         ldout(clnt->cct, 10) << "ino " << in->ino << " has "
@@ -12514,6 +12522,12 @@ void Client::C_nonblocking_fsync_state::advance()
         progress = 1;
         return;
       }
+    } else {
+      ldout(clnt->cct, 10) << "ino " << in->ino
+                           << " client_oc flush done, skipping inode-wide"
+                           << " FILE_BUFFER wait ("
+                           << in->cap_refs[CEPH_CAP_FILE_BUFFER]
+                           << " refs remain)" << dendl;
     }
 
     // skip and fall through
