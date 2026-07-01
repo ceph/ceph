@@ -1239,6 +1239,14 @@ class TestIngressService:
             '        name = "client.nfs.foo.test.0.0-rgw";\n'
             '}\n'
             '\n'
+            'GRPC {\n'
+            '        GRPC_Server_Cert = /etc/ganesha/certs/server.crt;\n'
+            '        GRPC_Server_Key  = /etc/ganesha/certs/server.key;\n'
+            '        GRPC_Client_Cert = /etc/ganesha/certs/client.crt;\n'
+            '        GRPC_Client_Key  = /etc/ganesha/certs/client.key;\n'
+            '        GRPC_CA_Cert     = /etc/ganesha/certs/ca.crt;\n'
+            '}\n'
+            '\n'
             "%url    rados://.nfs/foo/conf-nfs.foo"
         )
         nfs_expected_conf = {
@@ -1330,6 +1338,12 @@ class TestIngressService:
                 rank=0,
             ),
         )
+        # gRPC cert files are always auto-generated; verify they exist
+        # and remove them before comparing the rest of the config.
+        for fname in ['grpc_server.crt', 'grpc_server.key',
+                      'grpc_client.crt', 'grpc_client.key', 'grpc_ca.crt']:
+            assert fname in nfs_generated_conf['files'], f'Missing gRPC file: {fname}'
+            nfs_generated_conf['files'].pop(fname)
         assert nfs_generated_conf == nfs_expected_conf
 
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
