@@ -906,7 +906,12 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
         self.fs.wait_for_daemons()
 
         for _ in range(30):
-            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id="b")
+            try:
+                subtrees = self.fs.rank_asok(["get", "subtrees"], rank=1)
+            except Exception as e:
+                log.warning("Error getting subtrees from rank 1: %s", e)
+                time.sleep(1)
+                continue
             for st in subtrees:
                 if "dir_rank1" in st.get("dir", {}).get("path", ""):
                     log.info("dir_rank1 exported to rank 1")
@@ -919,14 +924,19 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
         
         Finds the subtree whose path is the longest prefix of the target path
         and returns the MDS that is authoritative for that subtree.
+        Uses rank-based lookups so it works regardless of daemon naming.
         """
         target = path.rstrip("/")
         if not target:
             target = "/"
+        status = self.fs.status()
         for _ in range(30):
-            for mds_id in ["a", "b"]:
+            for rank in range(self.fs.get_var("max_mds", status=status)):
                 try:
-                    subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=mds_id)
+                    info = self.fs.get_rank(rank=rank, status=status)
+                    mds_id = info['name']
+                    subtrees = self.fs.rank_asok(["get", "subtrees"],
+                                                 rank=rank, status=status)
                     best_match = None
                     best_match_len = -1
                     for st in subtrees:
@@ -938,7 +948,6 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                                 best_match = st
                                 best_match_len = len(st_path)
                     if best_match:
-                        # dir_auth is a string like "0" or "1"
                         dir_auth_str = best_match.get("dir", {}).get("dir_auth", "-1")
                         try:
                             auth = int(dir_auth_str)
@@ -946,16 +955,15 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                             auth = -1
                         if auth < 0:
                             continue
-                        status = self.fs.mds_asok(["status"], mds_id=mds_id)
-                        mds_rank = status.get("whoami", -1)
-                        if mds_rank >= 0 and mds_rank == auth:
+                        if rank == auth:
                             st_path = best_match.get("dir", {}).get("path", "")
                             log.info("Auth MDS for %s is %s (rank %d, subtree %s)",
                                      path, mds_id, auth, st_path)
                             return mds_id
                 except Exception as e:
-                    log.warning("Error checking subtrees on mds.%s: %s", mds_id, e)
+                    log.warning("Error checking subtrees on rank %d: %s", rank, e)
             time.sleep(1)
+            status = self.fs.status()
         self.fail("Could not determine auth MDS for %s" % path)
 
     def tearDown(self):
@@ -1272,9 +1280,14 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         ]
         for dir_name, target_rank in expected_exports:
             for _ in range(30):
-                # Check subtrees on the target MDS
-                mds_id = "a" if target_rank == 0 else "b"
-                subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=mds_id)
+                try:
+                    subtrees = self.fs.rank_asok(["get", "subtrees"],
+                                                 rank=target_rank)
+                except Exception as e:
+                    log.warning("Error getting subtrees from rank %d: %s",
+                                target_rank, e)
+                    time.sleep(1)
+                    continue
                 found = False
                 for st in subtrees:
                     path = st.get("dir", {}).get("path", "")
