@@ -1198,6 +1198,9 @@ paths:
                   type: string
                 child_pool_name:
                   type: string
+                clone_by_snap_id:
+                  default: false
+                  type: boolean
                 configuration:
                   type: string
                 data_pool:
