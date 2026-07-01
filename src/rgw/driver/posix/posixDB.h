@@ -30,8 +30,6 @@ namespace rgw { namespace store {
 class POSIXUserDB;
 class POSIXAccountDB;
 
-struct POSIXAccountDBOpAccountInfo : DBOpAccountInfo {};
-
 struct POSIXUserDBOpUserInfo : DBOpUserInfo {};
 
 struct POSIXUserDBOpInfo : DBOpInfo {};
@@ -41,6 +39,8 @@ struct POSIXUserDBOpUserPrepareInfo : DBOpUserPrepareInfo {};
 struct POSIXUserDBOpPrepareInfo : DBOpPrepareInfo {};
 
 struct POSIXUserDBOpPrepareParams : DBOpPrepareParams {};
+
+struct POSIXAccountDBOpAccountInfo : DBOpAccountInfo {};
 
 struct POSIXAccountDBOpInfo : DBOpInfo {};
 
@@ -151,6 +151,8 @@ class RemovePOSIXUserOp: public SQLRemoveUser {};
 class POSIXUserDB : public SQLiteDB {
   private:
     const std::string db_name;
+    const std::string lc_head_table;
+    const std::string lc_entry_table;
     rgw::sal::Driver* driver;
 
   protected:
@@ -166,6 +168,8 @@ class POSIXUserDB : public SQLiteDB {
 
     POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
+		lc_head_table(db_name+"_lc_head_table"),
+		lc_entry_table(db_name+"_lc_entry_table"),
 		cct(_cct),
 		dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend: ")
                 { DB::set_context(cct); }
@@ -180,7 +184,9 @@ class POSIXUserDB : public SQLiteDB {
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
                                   DBOpPrepareParams &p_params,
                                   DBOpParams* params) override { return 0; }
-    virtual int createLCTables(const DoutPrefixProvider *dpp) override { return 0; }
+    virtual int createLCTables(const DoutPrefixProvider *dpp) override { return SQLiteDB::createLCTables(dpp); }
+    const std::string getLCHeadTable() { return lc_head_table; }
+    const std::string getLCEntryTable() { return lc_entry_table; }
 
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
