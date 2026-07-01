@@ -8,7 +8,19 @@
     [autoReload]="5000"
     [toolHeader]="true"
     [searchableObjects]="true"
+    [showInlineActions]="false"
+    selectionType="single"
+    (updateSelection)="updateSelection($event)"
     (fetchData)="loadMirrorPaths()">
+
+    <cd-table-actions
+      [permission]="permission"
+      [selection]="selection"
+      class="table-actions"
+      id="cephfs-actions"
+      [tableActions]="tableActions"
+    >
+    </cd-table-actions>
 
     <ng-template
       #pathTpl
