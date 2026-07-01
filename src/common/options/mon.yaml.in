@@ -120,6 +120,16 @@ options:
   desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
   services:
   - mon
+- name: mon_nvmeofgw_max_down_gws
+  type: uint
+  level: advanced
+  default: 1
+  desc: ok-to-stop GW command checks that there are not more than this number of gateways
+    unavailable to process I/O.
+  long_desc: This prevents all gateways being stopped at the same time during an upgrade.
+    Set to 0 to disable this check.
+  services:
+  - mon
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced
