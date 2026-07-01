@@ -4,7 +4,7 @@
 S3 Bucket Notifications Compatibility
 =====================================
 
-Ceph's `Bucket Notifications`_ API follows `AWS S3 Bucket Notifications API`_.
+Ceph's :ref:`radosgw-notifications` API follows `AWS S3 Bucket Notifications API`_.
 However, some differences exist, as listed below.
 
 
@@ -193,5 +193,3 @@ We also have the following extensions to topic configuration:
 .. _AWS Simple Notification Service API: https://docs.aws.amazon.com/sns/latest/api/API_Operations.html
 .. _AWS S3 Bucket Notifications API: https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
 .. _Event Message Structure: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
-.. _`Bucket Notifications`: ../notifications
-.. _`boto3 SDK filter extensions`: https://github.com/ceph/ceph/tree/main/examples/rgw/boto3
