@@ -82,9 +82,10 @@ local g = import 'grafonnet/grafana.libsonnet';
         )
         .addTarget($.addTargetSchema(
           'max(ceph_hardware_health)',
-          legendFormat='__auto'
+          legendFormat='Health'
         ))
         + {
+          description: 'Overall hardware health across all hosts',
           fieldConfig: {
             defaults: {
               mappings: [
@@ -116,8 +117,9 @@ local g = import 'grafonnet/grafana.libsonnet';
         ])
         .addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{sensor_name=~".*CPU_TEMP"})',
-          legendFormat='__auto'
-        )),
+          legendFormat='CPU'
+        ))
+        + { description: 'Highest CPU temperature across all hosts' },
 
         // BMC Versions
         $.pieChartPanel(
@@ -220,8 +222,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 2, x: 0, y: 5 }
         ).addTarget($.addTargetSchema(
           'count(count by(hostname) (ceph_hardware_health))',
-          legendFormat='__auto'
-        )),
+          legendFormat='Hosts'
+        ))
+        + { description: 'Total hosts with hardware monitoring' },
 
         // Drives
         $.addStatPanel(
@@ -231,8 +234,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 2, x: 2, y: 5 }
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_storage_capacity_bytes)',
-          legendFormat='__auto'
-        )),
+          legendFormat='Drives'
+        ))
+        + { description: 'Total storage drives detected' },
 
         // NVMe Temp
         $.addGaugePanel(
@@ -250,8 +254,9 @@ local g = import 'grafonnet/grafana.libsonnet';
         ])
         .addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{sensor_name=~"NVME.*_TEMP"})',
-          legendFormat='__auto'
-        )),
+          legendFormat='NVMe'
+        ))
+        + { description: 'Highest NVMe drive temperature across all hosts' },
       ] },
 
       // Row 2: Host Overview
@@ -264,9 +269,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 3, w: 2, x: 0, y: 2 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_health{hostname=~"$hostname",category="power"})',
-          legendFormat='__auto'
+          legendFormat='Power'
         ))
         + {
+          description: 'Power supply health status',
           fieldConfig: {
             defaults: {
               mappings: [
@@ -287,9 +293,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 2, y: 2 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*MB_TEMP.*"})',
-          legendFormat='__auto'
+          legendFormat='Motherboard'
         ))
         + {
+          description: 'Highest motherboard temperature',
           fieldConfig+: { defaults+: { thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: '#EAB839', value: 70 }, { color: 'red', value: 80 }] } } },
           options+: { colorMode: 'none', graphMode: 'area' },
         },
@@ -302,9 +309,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 5, y: 2 }
         ).addTarget($.addTargetSchema(
           'avg(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*CPU_TEMP"})',
-          legendFormat='__auto'
+          legendFormat='CPU'
         ))
         + {
+          description: 'Average CPU temperature',
           fieldConfig+: { defaults+: { max: 85, min: 0, thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: '#EAB839', value: 80 }, { color: 'semi-dark-red', value: 90 }] } } },
           options+: { colorMode: 'none', graphMode: 'area' },
         },
@@ -317,9 +325,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 8, y: 2 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*DIMM.*_TEMP"})',
-          legendFormat='__auto'
+          legendFormat='DIMM'
         ))
         + {
+          description: 'Highest DIMM temperature',
           fieldConfig+: { defaults+: { max: 88, min: 0, thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'yellow', value: 70 }, { color: 'semi-dark-red', value: 80 }] } } },
           options+: { colorMode: 'none', graphMode: 'area' },
         },
@@ -332,9 +341,12 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 11, y: 2 }
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_fan_rpm{hostname=~"$hostname", fan_name=~"PSU.*"})',
-          legendFormat='__auto'
+          legendFormat='PSU Fans'
         ))
-        + { options+: { colorMode: 'none', graphMode: 'none' } },
+        + {
+          description: 'Number of PSU fans detected',
+          options+: { colorMode: 'none', graphMode: 'none' },
+        },
 
         // AVG PSU Temperature
         $.addStatPanel(
@@ -344,9 +356,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 14, y: 2 }
         ).addTarget($.addTargetSchema(
           'avg(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~"PSU.*_TEMP.*"})',
-          legendFormat='__auto'
+          legendFormat='PSU'
         ))
         + {
+          description: 'Average power supply temperature',
           fieldConfig+: { defaults+: { color: { fixedColor: 'blue', mode: 'fixed' }, max: 100, min: 0, thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'yellow', value: 80 }, { color: 'semi-dark-red', value: 90 }] } } },
           options+: { colorMode: 'none', graphMode: 'area' },
         },
@@ -359,9 +372,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 17, y: 2 }
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_storage_capacity_bytes{hostname=~"$hostname", protocol="NVMe"})',
-          legendFormat='__auto'
+          legendFormat='NVMe'
         ))
         + {
+          description: 'Number of NVMe drives detected',
           fieldConfig+: { defaults+: { color: { fixedColor: 'blue', mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: '#EAB839', value: 70 }, { color: 'semi-dark-red', value: 78 }] } } },
           options+: { colorMode: 'none', graphMode: 'none' },
         },
@@ -374,9 +388,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 4, w: 3, x: 20, y: 2 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~"NVME.*"})',
-          legendFormat='__auto'
+          legendFormat='NVMe'
         ))
         + {
+          description: 'Highest NVMe drive temperature',
           fieldConfig+: { defaults+: { color: { fixedColor: 'blue', mode: 'thresholds' }, max: 85, min: 0, thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: '#EAB839', value: 70 }, { color: 'semi-dark-red', value: 78 }] } } },
           options+: { colorMode: 'none', graphMode: 'area' },
         },
@@ -389,9 +404,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 3, w: 2, x: 0, y: 5 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_health{hostname=~"$hostname",category="network"})',
-          legendFormat='__auto'
+          legendFormat='Network'
         ))
         + {
+          description: 'Network adapter health status',
           fieldConfig: {
             defaults: {
               mappings: [
@@ -412,9 +428,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 3, w: 2, x: 0, y: 8 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_health{hostname=~"$hostname",category="fans"})',
-          legendFormat='__auto'
+          legendFormat='Cooling'
         ))
         + {
+          description: 'Cooling fans health status',
           fieldConfig: {
             defaults: {
               mappings: [
@@ -435,9 +452,10 @@ local g = import 'grafonnet/grafana.libsonnet';
           gridPosition={ h: 3, w: 2, x: 0, y: 11 }
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_health{hostname=~"$hostname",category="storage"})',
-          legendFormat='__auto'
+          legendFormat='Drives'
         ))
         + {
+          description: 'Storage drives health status',
           fieldConfig: {
             defaults: {
               mappings: [
@@ -467,7 +485,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         )
         .addTarget($.addTargetSchema(
           'ceph_hardware_storage_capacity_bytes{hostname=~"$hostname"}',
-          legendFormat='__auto',
+          legendFormat='',
           instant=true
         ) + { format: 'table' })
         .addTransformations([
@@ -509,7 +527,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         )
         .addTarget($.addTargetSchema(
           'ceph_hardware_firmware_info{hostname=~"$hostname"}',
-          legendFormat='__auto',
+          legendFormat='',
           instant=true
         ) + { format: 'table' })
         .addTransformations([
