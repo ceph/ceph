@@ -57,6 +57,8 @@ class Finisher {
   /// Queue for contexts for which complete(0) will be called.
   std::vector<std::pair<Context*,int>> finisher_queue;
   std::vector<std::pair<Context*,int>> in_progress_queue;
+  /// Items in in_progress_queue; updated only by the worker thread.
+  std::atomic<size_t> in_progress_count{0};
 
   const std::string thread_name;
 
@@ -128,10 +130,8 @@ class Finisher {
   /// Items waiting or currently being processed by the worker thread.
   size_t queue_size() {
     const std::lock_guard l{finisher_lock};
-    size_t n = finisher_queue.size();
-    if (finisher_running)
-      n += in_progress_queue.size();
-    return n;
+    return finisher_queue.size() +
+      in_progress_count.load(std::memory_order_relaxed);
   }
 
   pid_t get_tid() const { return finisher_tid; }
