@@ -15457,18 +15457,6 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_CREATE_UNMANAGED_SNAP:
     {
-      if (pp.is_migration_target()) {
-        snapid_t src_snap_seq = 0;
-        if (pending_inc.new_pools.count(*pp.migration_src)) {
-          src_snap_seq = pending_inc.new_pools[*pp.migration_src].snap_seq;
-        } else if (osdmap.have_pg_pool(*pp.migration_src)) {
-          src_snap_seq = osdmap.get_pg_pool(*pp.migration_src)->snap_seq;
-        }
-        if (src_snap_seq > pp.snap_seq) {
-          pp.set_flag(pg_pool_t::FLAG_SELFMANAGED_SNAPS);
-          pp.set_snap_seq(src_snap_seq);
-        }
-      }
       uint64_t snapid = pp.add_unmanaged_snap(
 	osdmap.require_osd_release < ceph_release_t::octopus);
       encode(snapid, reply_data);

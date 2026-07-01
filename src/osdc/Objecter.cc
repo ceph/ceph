@@ -4536,11 +4536,6 @@ void Objecter::allocate_selfmanaged_snap(
 {
   unique_lock wl(rwlock);
   ldout(cct, 10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
-  const pg_pool_t *p = osdmap->get_pg_pool(pool);
-  if (p && p->is_migration_src()) {
-    pool = *p->migration_target;
-    ldout(cct, 10) << "allocate_selfmanaged_snap; redirecting to migration_target pool: " << pool << dendl;
-  }
   auto op = new PoolOp;
   op->tid = ++last_tid;
   op->pool = pool;
@@ -4596,11 +4591,6 @@ void Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
   unique_lock wl(rwlock);
   ldout(cct, 10) << "delete_selfmanaged_snap; pool: " << pool << "; snap: "
 		 << snap << dendl;
-  const pg_pool_t *p = osdmap->get_pg_pool(pool);
-  if (p && p->is_migration_src()) {
-    pool = *p->migration_target;
-    ldout(cct, 10) << "delete_selfmanaged_snap; redirecting to migration_target pool: " << pool << dendl;
-  }
   auto op = new PoolOp;
   op->tid = ++last_tid;
   op->pool = pool;
