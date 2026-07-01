@@ -142,6 +142,13 @@ add_executable(unittest_rgw_compression
 add_ceph_unittest(unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression ${rgw_libs})
 
+# unittest_rgw_cache
+add_executable(unittest_rgw_cache
+  test_rgw_cache.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cache)
+target_link_libraries(unittest_rgw_cache ${rgw_libs})
+
 # unittest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
