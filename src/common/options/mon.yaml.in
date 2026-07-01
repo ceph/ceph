@@ -120,6 +120,13 @@ options:
   desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
   services:
   - mon
+- name: mon_nvmeofgw_active_gw_percentage
+  type: uint
+  level: advanced
+  default: 75
+  desc: The minimal percent of active gateways to approve stop GW command
+  services:
+  - mon
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced

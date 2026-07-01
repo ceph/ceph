@@ -299,6 +299,33 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
   return 0;
 }
 
+bool NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key)
+{
+  uint32_t num_gws = created_gws[group_key].size();
+  uint32_t num_active_gws = 0;
+  for (auto& gws_states: created_gws[group_key]) {
+    auto& state = gws_states.second;
+    auto gw_id = gws_states.first;
+    if (state.availability == gw_availability_t::GW_AVAILABLE) {
+      for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
+        if (state_itr.second == gw_states_per_group_t::GW_ACTIVE_STATE) {
+          num_active_gws ++;
+          break;
+        }
+      }
+    }
+  }
+  uint64_t percent_active_gws =
+           g_conf().get_val<uint64_t>("mon_nvmeofgw_active_gw_percentage");
+  dout(10) << "num gws " << num_gws << " num active gws " << num_active_gws
+           << " percentage " << percent_active_gws << dendl;
+  if (num_gws > 0 && (100 * num_active_gws >= percent_active_gws * num_gws)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool NVMeofGwMap::validate_number_locations(int num_gws, int num_locations)
 {
   return true; // TODO: add validation in the separate PR
