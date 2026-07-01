@@ -649,7 +649,7 @@ static int do_put(IoCtx& io_ctx,
   }
   ret = 0;
  out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
@@ -684,7 +684,7 @@ static int do_append(IoCtx& io_ctx,
   }
   ret = 0;
 out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
