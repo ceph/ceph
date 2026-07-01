@@ -1574,25 +1574,25 @@ public:
                           int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category,
                           std::list<rgw_obj_index_key>* remove_objs,
-                          uint16_t bilog_flags,
+                          uint16_t bilog_flags, optional_yield y,
                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_add(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                            BucketShard& bs, const rgw_obj& obj, std::string& tag,
                            int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key>* remove_objs,
-                           uint16_t bilog_flags,
+                           uint16_t bilog_flags, optional_yield y,
                            rgw_zone_set* zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_del(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                            BucketShard& bs, std::string& tag,
                            int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime,
                            std::list<rgw_obj_index_key>* remove_objs,
-                           uint16_t bilog_flags,
+                           uint16_t bilog_flags, optional_yield y,
                            rgw_zone_set* zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_cancel(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                               BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key>* remove_objs,
-                              uint16_t bilog_flags,
+                              uint16_t bilog_flags, optional_yield y,
                               rgw_zone_set* zones_trace = nullptr, bool log_op = true);
 
   // create a FIFO bilog batch writer for the active log generation of
