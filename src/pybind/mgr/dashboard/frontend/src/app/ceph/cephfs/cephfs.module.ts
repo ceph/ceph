@@ -38,7 +38,6 @@ import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirrori
 import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
-import { CephfsMirroringFsSchedulesComponent } from './cephfs-mirroring-fs-schedules/cephfs-mirroring-fs-schedules.component';
 import { CephfsGenerateTokenComponent } from './cephfs-generate-token/cephfs-generate-token.component';
 import { CephfsDownloadTokenComponent } from './cephfs-download-token/cephfs-download-token.component';
 import { CephfsSetupMirroringComponent } from './cephfs-setup-mirroring/cephfs-setup-mirroring.component';
@@ -150,7 +149,6 @@ import FolderIcon16 from '@carbon/icons/es/folder/16';
     CephfsMirroringFsTabsComponent,
     CephfsMirroringFsOverviewComponent,
     CephfsMirroringFsMirrorPathsComponent,
-    CephfsMirroringFsSchedulesComponent,
     CephfsGenerateTokenComponent,
     CephfsDownloadTokenComponent,
     CephfsSetupMirroringComponent,
