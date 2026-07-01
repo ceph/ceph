@@ -23,12 +23,12 @@
     <ng-template
       #syncStatusTpl
       let-row="data.row">
-      <div class="d-flex align-items-center">
+      <div class="vertical-align">
         <cd-icon
           [type]="getSyncStatusIcon(row.syncStatus)"
           [ngClass]="['cds-mr-2', getSyncStatusClass(row.syncStatus)]">
         </cd-icon>
-        <span>{{ row.syncStatus | titlecase }}</span>
+        <span class="cds--type-body-01">{{ row.syncStatus | titlecase }}</span>
       </div>
     </ng-template>
 
@@ -37,121 +37,205 @@
       let-row="data.row">
       <div>
         <div>{{ row.currentSyncSnapshot }}</div>
-        <div *ngIf="row.currentSyncEta" class="cds--type-helper-text-01">
-          Time remaining: {{ row.currentSyncEta }}
-        </div>
+        @if (row.currentSyncEta) {
+          <div class="cds--type-helper-text-01">
+            Time remaining: {{ row.currentSyncEta }}
+          </div>
+        }
       </div>
     </ng-template>
   </cd-table>
 </div>
 
-<cd-side-panel
-  *ngIf="selectedPath"
-  [expanded]="sidePanelOpen"
-  [headerText]="selectedPath.path"
-  size="xl"
-  (closed)="closeSidePanel()">
-  <div class="panel-content">
-    <div class="side-panel-content">
-    <cds-tabs type="line">
-      <cds-tab heading="Details"
-               i18n-heading>
-        <div class="cds-p-4">
-          <!-- Replication status section -->
-          <div class="cds-mb-6">
-            <h5 class="cds--type-heading-compact-01 cds-mb-4"
-                i18n>Replication status</h5>
+@if (selectedPath) {
+  <cd-side-panel
+    [expanded]="sidePanelOpen"
+    [headerText]="selectedPath.path"
+    size="xl"
+    (closed)="closeSidePanel()">
+    <div class="panel-content">
+      <cds-tabs type="line">
+        <cds-tab heading="Details"
+                 i18n-heading>
+          <div class="cds-p-4">
+            <div class="cds-mb-6">
+              <h5 class="cds--type-heading-compact-01 cds-mb-4"
+                  i18n>Replication status</h5>
 
-            <div class="cds-mb-4">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Sync status</div>
-              <div class="d-flex align-items-center">
-                <cd-icon
-                  [type]="getSyncStatusIcon(selectedPath.syncStatus)"
-                  [ngClass]="['cds-mr-2', getSyncStatusClass(selectedPath.syncStatus)]">
-                </cd-icon>
-                <span class="cds--type-body-01">{{ selectedPath.syncStatus | titlecase }}</span>
+              <div class="cds-mb-4">
+                <div class="cds--type-label-01 cds-mb-2"
+                     i18n>Sync status</div>
+                <div class="vertical-align">
+                  <cd-icon
+                    [type]="selectedPathSyncStatusIcon"
+                    [ngClass]="['cds-mr-2', selectedPathSyncStatusClass]">
+                  </cd-icon>
+                  <span class="cds--type-body-01">{{ selectedPathSyncStatusLabel }}</span>
+                </div>
+              </div>
+
+              <div class="cds-mb-4">
+                <div class="cds--type-label-01 cds-mb-2"
+                     i18n>Current snapshot</div>
+                <div class="cds--type-body-01">{{ selectedPath.currentSyncSnapshot }}</div>
+              </div>
+
+              <div class="cds-mb-4">
+                <div class="cds--type-label-01 cds-mb-2"
+                     i18n>Last replicated snapshot</div>
+                <div class="cds--type-body-01">{{ selectedPath.lastSyncedSnapshot }}</div>
               </div>
             </div>
 
-            <div class="cds-mb-4">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Current snapshot</div>
-              <div class="cds--type-body-01">{{ selectedPath.currentSyncSnapshot }}</div>
-            </div>
+            @if (showSelectedPathProgress) {
+              <div class="cds-mb-6">
+                <hr>
 
-            <div class="cds-mb-4">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Last replicated snapshot</div>
-              <div class="cds--type-body-01">{{ selectedPath.lastSyncedSnapshot }}</div>
-            </div>
-          </div>
+                <h5 class="cds--type-heading-compact-01 cds-mb-4"
+                    i18n>Current snapshot progress</h5>
 
-          <!-- Current snapshot progress section -->
-          <div class="cds-mb-6"
-                *ngIf="selectedPath.syncStatus === 'syncing' && selectedPath.syncProgress !== undefined">
-            <hr>
+                <div class="cds-mb-4">
+                  <div class="cds--type-body-01 cds-mb-2">
+                    <strong>{{ selectedPath.syncProgress }}% synced</strong>
+                  </div>
+                  <cds-progress-bar
+                    [max]="100"
+                    [value]="selectedPath.syncProgress || 0"
+                    status="active"
+                    type="inline"
+                    size="small">
+                  </cds-progress-bar>
+                </div>
 
-            <h5 class="cds--type-heading-compact-01 cds-mb-4"
-                i18n>Current snapshot progress</h5>
+                @if (selectedPath.filesSynced !== undefined && selectedPath.totalFiles !== undefined) {
+                  <div class="cds-mb-4">
+                    <div class="cds--type-label-01 cds-mb-2"
+                         i18n>Files Synced</div>
+                    <div class="cds--type-body-01">{{ selectedPath.filesSynced }}/{{ selectedPath.totalFiles }}</div>
+                  </div>
+                }
 
-            <div class="cds-mb-4">
-              <div class="cds--type-body-01 cds-mb-2">
-                <strong>{{ selectedPath.syncProgress }}% synced</strong>
+                @if (selectedPath.bytesSynced !== undefined && selectedPath.totalBytes !== undefined) {
+                  <div class="cds-mb-4">
+                    <div class="cds--type-label-01 cds-mb-2"
+                         i18n>Bytes Synced</div>
+                    <div class="cds--type-body-01">{{ selectedPath.bytesSynced | dimlessBinary }}/{{ selectedPath.totalBytes | dimlessBinary }}</div>
+                  </div>
+                }
+
+                @if (selectedPath.currentSyncEta) {
+                  <div class="cds-mb-4">
+                    <div class="cds--type-label-01 cds-mb-2"
+                         i18n>Estimated time remaining</div>
+                    <div class="cds--type-body-01">{{ selectedPath.currentSyncEta }}</div>
+                  </div>
+                }
               </div>
-              <cds-progress-bar
-                [max]="100"
-                [value]="selectedPath.syncProgress || 0"
-                status="active"
-                type="inline"
-                size="small">
-              </cds-progress-bar>
-            </div>
+            }
+          </div>
+        </cds-tab>
 
-            <div class="cds-mb-4"
-                 *ngIf="selectedPath.filesSynced !== undefined && selectedPath.totalFiles !== undefined">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Files Synced</div>
-              <div class="cds--type-body-01">{{ selectedPath.filesSynced }}/{{ selectedPath.totalFiles }}</div>
-            </div>
-
-            <div class="cds-mb-4"
-                 *ngIf="selectedPath.bytesSynced !== undefined && selectedPath.totalBytes !== undefined">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Bytes Synced</div>
-              <div class="cds--type-body-01">{{ selectedPath.bytesSynced | dimlessBinary }}/{{ selectedPath.totalBytes | dimlessBinary }}</div>
-            </div>
-
-            <div class="cds-mb-4"
-                 *ngIf="selectedPath.currentSyncEta">
-              <div class="cds--type-label-01 cds-mb-2"
-                   i18n>Estimated time remaining</div>
-              <div class="cds--type-body-01">{{ selectedPath.currentSyncEta }}</div>
+        <cds-tab heading="Snapshots"
+                 i18n-heading>
+          <div class="cds-p-4">
+            <div class="cds--type-body-01"
+                 i18n>
+              Snapshot information will be displayed here.
             </div>
           </div>
-        </div>
-      </cds-tab>
+        </cds-tab>
 
-      <cds-tab heading="Snapshots"
-               i18n-heading>
-        <div class="cds-p-4">
-          <div class="cds--type-body-01"
-               i18n>
-            Snapshot information will be displayed here.
-          </div>
-        </div>
-      </cds-tab>
+        <cds-tab heading="Schedule policy"
+                 i18n-heading>
+          <div class="cds-p-4">
+            <span class="cds--type-heading-compact-01 cds-mb-6"
+                  i18n>Total policies applied to path:</span>
+            <span class="cds-mb-6">{{ schedulePolicies.length }}</span>
 
-      <cds-tab heading="Schedule policy"
-               i18n-heading>
-        <div class="cds-p-4">
-          <div class="cds--type-body-01"
-               i18n>
-            Schedule policy information will be displayed here.
+            @if (schedulePoliciesLoading) {
+              <cds-inline-loading
+                [isActive]="true"
+                loadingText="Loading schedule policies"
+                i18n-loadingText>
+              </cds-inline-loading>
+            } @else {
+              @if (!schedulePolicies.length) {
+                <div class="cds-mt-6">
+                  <span class="cds--type-body-01"
+                        i18n>
+                    No schedule policies applied to this path.
+                  </span>
+                </div>
+              }
+
+              @for (policy of schedulePolicies; track policy.removeId; let last = $last) {
+                <div class="cds-mb-6">
+                  <div class="cds--type-heading-03 cds-mb-5 cds-mt-6">
+                    {{ policy.scheduleCopy || policy.scheduleText }}
+                  </div>
+
+                  <div cdsRow
+                       class="cds-mb-6">
+                    <div class="cds-mb-5 cds--col">
+                      <div class="cds--type-label-01 cds-mb-2"
+                           i18n>Schedule</div>
+                      <div class="cds--type-body-01">{{ policy.scheduleText }}</div>
+                    </div>
+
+                    <div class="cds-mb-5 cds--col">
+                      <div class="cds--type-label-01 cds-mb-2"
+                           i18n>Retention</div>
+                      <div class="cds--type-body-01">{{ policy.retentionText }}</div>
+                    </div>
+
+                    <div class="cds-mb-5 cds--col">
+                      <div class="cds--type-label-01 cds-mb-2"
+                           i18n>Status</div>
+                      <div class="vertical-align">
+                        <cd-icon
+                          [type]="policy.statusIcon || 'warning'"
+                          class='cds-mr-2'>
+                        </cd-icon>
+                        <span class="cds--type-body-01">{{ policy.statusLabel }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div cdsRow>
+                    <div class="cds-mb-5 cds--col">
+                      <div class="cds--type-label-01 cds-mb-2"
+                           i18n>Last sync</div>
+                      <div class="cds--type-body-01">{{ formatScheduleDate(policy.last) }}</div>
+                    </div>
+
+                    <div class="cds-mb-5 cds--col">
+                      <div class="cds--type-label-01 cds-mb-2"
+                           i18n>Next sync</div>
+                      <div class="cds--type-body-01">{{ policy.nextSync }}</div>
+                    </div>
+
+                    <div class="cds--col"></div>
+                  </div>
+
+                  <button cdsButton="tertiary"
+                          size="md"
+                          type="button"
+                          [disabled]="removingSchedule === policy.removeId"
+                          (click)="removeSchedulePolicy(policy)">
+                    <span i18n>Remove schedule</span>
+                    <cd-icon type="trash"
+                             class="cds--btn__icon">
+                    </cd-icon>
+                  </button>
+
+                  @if (!last) {
+                    <hr class="cds-mt-6">
+                  }
+                </div>
+              }
+            }
           </div>
-        </div>
-      </cds-tab>
-    </cds-tabs>
+        </cds-tab>
+      </cds-tabs>
     </div>
-  </div>
-</cd-side-panel>
+  </cd-side-panel>
+}
