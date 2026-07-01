@@ -796,6 +796,10 @@ public:
     return std::unique_lock<ceph::ReentrantLock>(cache_lock);
   }
 
+  bool finisher_am_self() const {
+    return finisher.am_self();
+  }
+
   void wait_for_flush_callbacks() {
     // Never block the finisher thread on its own queue (e.g. _put_inode from a
     // flush completion callback).

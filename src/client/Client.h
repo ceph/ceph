@@ -1878,8 +1878,17 @@ private:
   class C_Write_Finisher : public Context {
   public:
     void finish_io(int r);
+    void queue_finish_io(int r);
     void finish_onuninline(int r);
     void finish_fsync(int r);
+
+    class C_FlushRangeFinish : public Context {
+      C_Write_Finisher *cwf;
+      int r;
+    public:
+      C_FlushRangeFinish(C_Write_Finisher *c, int _r) : cwf(c), r(_r) {}
+      void finish(int fr) override;
+    };
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
                      bool is_file_write, Fh *f, Inode *in,
@@ -1929,6 +1938,7 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
+    void finish_io_complete(int r);
     bool try_complete();
   };
 
@@ -1939,7 +1949,7 @@ private:
       : CWF(nullptr) {}
 
     void finish(int r) override {
-      CWF->finish_io(r);
+      CWF->queue_finish_io(r);
     }
   };
 
@@ -2309,6 +2319,7 @@ private:
   Finisher interrupt_finisher;
   Finisher remount_finisher;
   Finisher async_ino_releasor;
+  Finisher client_finisher;
   Finisher objecter_finisher;
 
   ceph::coarse_mono_time last_cap_renew;
