@@ -107,7 +107,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
   const PGLog &pg_log;
 
-  static PGTransactionUPtr transate_transaction(
+  static PGTransactionUPtr translate_transaction(
     ceph::os::Transaction&& t,
     crimson::osd::ObjectContextRef &&obc)
   {
@@ -248,7 +248,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
               const PGLog &pg_log,
        ECCommon::RMWPipeline& rmw_pipeline)
     : Op(rmw_pipeline),
-      t(transate_transaction(std::move(t), std::move(obc))),
+      t(translate_transaction(std::move(t), std::move(obc))),
       pg_log(pg_log) {
   }
 
