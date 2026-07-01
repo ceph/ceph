@@ -4289,3 +4289,17 @@ def test_dedup_filter_bucket_exec():
 
     log.info("dedup_filter_bucket_exec: filter_mode_allow")
     dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=True)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_gen_files():
+    min_size=4*KB
+    max_size=8*KB
+    num_files=256*KB
+    files = []
+
+    if not os.path.isdir(OUT_DIR):
+        log.info("os.mkdir(%s)", OUT_DIR)
+        os.mkdir(OUT_DIR)
+
+    gen_files_in_range_single_copy(files, num_files, min_size, max_size)

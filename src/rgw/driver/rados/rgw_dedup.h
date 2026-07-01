@@ -133,12 +133,19 @@ namespace rgw::dedup {
                                              work_shard_t        worker_id,
                                              work_shard_t        num_work_shards,
                                              worker_stats_t     *p_worker_stats /*IN-OUT*/);
-    int  objects_ingress_single_work_shard(work_shard_t worker_id,
+    int  objects_ingress_single_work_shard(disk_block_array_t &disk_arr,
+                                           work_shard_t worker_id,
                                            work_shard_t num_work_shards,
                                            md5_shard_t num_md5_shards,
                                            worker_stats_t *p_worker_stats,
                                            uint8_t *raw_mem,
                                            uint64_t raw_mem_size);
+
+    int  phase2_fine_fan_out(work_shard_t worker_id,
+                             md5_shard_t num_md5_shards,
+                             worker_stats_t *p_worker_stats,
+                             uint8_t *raw_mem,
+                             uint64_t raw_mem_size);
     int  f_ingress_work_shard(unsigned shard_id,
                               uint8_t *raw_mem,
                               uint64_t raw_mem_size,

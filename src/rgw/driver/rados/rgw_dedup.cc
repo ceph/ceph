@@ -417,6 +417,11 @@ namespace rgw::dedup {
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
     d_split_head = cct->_conf->rgw_dedup_split_obj_head;
     d_min_mem_allocation_mb = cct->_conf->rgw_dedup_min_mem_allocation_mb;
+#if 0
+    // REMOVE-ME: debug mode to force B^2 ingress
+    // More than 1M objects will force B^2 ingress
+    // d_min_mem_allocation_mb = 8;
+#endif
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
                        << "::d_split_head=" << d_split_head
@@ -2143,7 +2148,7 @@ namespace rgw::dedup {
     *p_slab_count = 0;
     while (has_more) {
       bufferlist bl;
-      int ret = load_slab(d_dedup_cluster_ioctx, bl, md5_shard, worker_id, slab_id, dpp);
+      int ret = load_slab(d_dedup_cluster_ioctx, bl, md5_shard, worker_id, slab_id, dpp, false);
       if (unlikely(ret < 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR::Failed loading object!! md5_shard=" << md5_shard
                           << ", worker_id=" << worker_id << ", slab_id=" << slab_id
@@ -2712,7 +2717,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::objects_ingress_single_work_shard(work_shard_t worker_id,
+  int Background::objects_ingress_single_work_shard(disk_block_array_t &disk_arr,
+                                                    work_shard_t worker_id,
                                                     work_shard_t num_work_shards,
                                                     md5_shard_t num_md5_shards,
                                                     worker_stats_t *p_worker_stats,
@@ -2729,8 +2735,7 @@ namespace rgw::dedup {
                         << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
-                                p_worker_stats, num_md5_shards);
+
     bool has_more = true;
     // iterate over all buckets
     while (ret == 0 && has_more) {
@@ -2783,6 +2788,100 @@ namespace rgw::dedup {
     return ret;
   }
 
+
+  //---------------------------------------------------------------------------
+  // Phase 2: for each coarse group, read CS slabs back and re-fan-out into
+  // final S slabs using disk_block_array_t in PHASE2_FINE mode.
+  int Background::phase2_fine_fan_out(work_shard_t worker_id,
+                                      md5_shard_t num_md5_shards,
+                                      worker_stats_t *p_worker_stats,
+                                      uint8_t *raw_mem,
+                                      uint64_t raw_mem_size)
+  {
+    char block_buff[sizeof(disk_block_t)];
+    uint32_t num_groups = DIV_ROUND_UP(num_md5_shards, d_fan_out_B);
+
+    for (uint32_t g = 0; g < num_groups; g++) {
+      if (d_ctl.should_stop()) {
+        return -ECANCELED;
+      }
+      ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
+                         << "::group=" << g << "/" << num_groups << dendl;
+
+      disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
+                                  p_worker_stats, num_md5_shards,
+                                  d_fan_out_B, g,
+                                  disk_block_array_t::mode_t::PHASE2_FINE);
+
+      // Read CS Coarse slabs for this (worker_id, group g)
+      bool has_more_slabs = true;
+      for (uint32_t slab_id = 0; has_more_slabs; slab_id++) {
+        bufferlist bl;
+        int ret = load_slab(d_dedup_cluster_ioctx, bl, g, worker_id,
+                            slab_id, dpp, true /*is_coarse*/);
+        if (ret != 0 || bl.length() == 0) {
+          break;
+        }
+
+        // Iterate blocks in this CS slab (same pattern as dedup-phase slab reading)
+        auto bl_itr = bl.cbegin();
+        bool has_more_blocks = true;
+        for (uint16_t block_num = 0;
+             block_num < DISK_BLOCK_COUNT && has_more_blocks;
+             block_num++)
+        {
+          const char *p = get_next_data_ptr(bl_itr, block_buff,
+                                            sizeof(block_buff), dpp);
+          disk_block_t *p_disk_block = (disk_block_t*)p;
+          disk_block_header_t *p_header = p_disk_block->get_header();
+          p_header->deserialize();
+          if (unlikely(p_header->verify(block_num, dpp) != 0)) {
+            ldpp_dout(dpp, 1) << __func__ << "::ERR: bad block in CS slab"
+                              << "::group=" << g << "::slab=" << slab_id
+                              << "::block=" << block_num << dendl;
+            continue;
+          }
+
+          if (p_header->rec_count == 0) {
+            has_more_slabs = false;
+            break;
+          }
+
+          for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
+            unsigned offset = p_header->rec_offsets[rec_id];
+            disk_record_t rec(p + offset);
+
+            disk_rec_id_t rec_addr;
+            auto *p_seq = disk_arr.get_shard_block_seq(rec.s.md5_low);
+            int add_ret = p_seq->add_record(d_dedup_cluster_ioctx, &rec, &rec_addr);
+            if (unlikely(add_ret != 0)) {
+              ldpp_dout(dpp, 1) << __func__ << "::ERR: add_record failed in phase2"
+                                << "::group=" << g << "::slab=" << slab_id << dendl;
+            }
+            p_worker_stats->egress_records++;
+          }
+
+          has_more_blocks = (p_header->offset == BLOCK_MAGIC);
+        }
+      }
+
+      // Flush S slabs for this group
+      disk_arr.flush_output_buffers(dpp, d_dedup_cluster_ioctx);
+
+      // Delete CS slabs for this (worker_id, group g)
+      for (uint32_t slab_id = 0; ; slab_id++) {
+        disk_rec_id_t rec_addr(worker_id, slab_id, 0);
+        std::string oid(rec_addr.get_coarse_slab_name(g));
+        int ret = d_dedup_cluster_ioctx.remove(oid);
+        if (ret != 0) {
+          break;
+        }
+      }
+    }
+
+    return 0;
+  }
+
   //---------------------------------------------------------------------------
   int Background::remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count)
   {
@@ -2809,11 +2908,38 @@ namespace rgw::dedup {
                                        work_shard_t num_work_shards,
                                        md5_shard_t num_md5_shards)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << worker_id << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << worker_id
+                       << "::num_groups=" << d_num_groups << dendl;
     utime_t start_time = ceph_clock_now();
     worker_stats_t worker_stats;
-    int ret = objects_ingress_single_work_shard(worker_id, num_work_shards, num_md5_shards,
-                                                &worker_stats,raw_mem, raw_mem_size);
+    int ret;
+    disk_block_array_t::mode_t mode = (d_num_groups == 0 ?
+                                       disk_block_array_t::mode_t::SINGLE_PASS :
+                                       disk_block_array_t::mode_t::PHASE1_COARSE);
+    disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
+                                &worker_stats, num_md5_shards,
+                                d_fan_out_B, 0 /*group_id unused*/, mode);
+
+
+    if (d_num_groups == 0) {
+      // Single-pass: route directly to S slabs
+      ret = objects_ingress_single_work_shard(disk_arr, worker_id, num_work_shards,
+                                              num_md5_shards, &worker_stats, raw_mem, raw_mem_size);
+    }
+    else {
+      // Two-pass: phase 1 (BI -> CoarseSlab), then phase 2 (CS -> S)
+
+      // Phase 1: scan BI shard, route records into G coarse group slabs (CS prefix).
+      // Same bucket iteration as objects_ingress_single_work_shard() but uses
+      // disk_block_array_t in PHASE1_COARSE mode (G buffers, group_id = md5_shard / B).
+      ret = objects_ingress_single_work_shard(disk_arr, worker_id, num_work_shards,
+                                              num_md5_shards, &worker_stats, raw_mem, raw_mem_size);
+      if (ret == 0) {
+        ret = phase2_fine_fan_out(worker_id, num_md5_shards,
+                                  &worker_stats, raw_mem, raw_mem_size);
+      }
+    }
+
     if (ret == 0) {
       worker_stats.duration = ceph_clock_now() - start_time;
       worker_stats.bidx_throttle_sleep_events = d_ctl.bucket_index_throttle.get_sleep_events();

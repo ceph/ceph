@@ -369,6 +369,7 @@ namespace rgw::dedup {
     this->egress_records += other.egress_records;
     this->egress_blocks += other.egress_blocks;
     this->egress_slabs += other.egress_slabs;
+    this->egress_coarse_slabs += other.egress_coarse_slabs;
     this->write_slab_failure += other.write_slab_failure;
     this->bidx_throttle_sleep_events += other.bidx_throttle_sleep_events;
     this->bidx_throttle_sleep_time_usec += other.bidx_throttle_sleep_time_usec;
@@ -401,6 +402,9 @@ namespace rgw::dedup {
       f->dump_unsigned("Egress Records count", this->egress_records);
       f->dump_unsigned("Egress Blocks count", this->egress_blocks);
       f->dump_unsigned("Egress Slabs count", this->egress_slabs);
+      if (this->egress_coarse_slabs) {
+        f->dump_unsigned("Egress Coarse Slabs count", this->egress_coarse_slabs);
+      }
       f->dump_unsigned("Single part obj count", this->single_part_objs);
       f->dump_unsigned("Multipart obj count", this->multipart_objs);
       if (this->small_multipart_obj) {
@@ -510,6 +514,7 @@ namespace rgw::dedup {
     encode(w.ingress_skip_filtered_storage_class, bl);
 
     encode(w.duration, bl);
+    encode(w.egress_coarse_slabs, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -539,6 +544,7 @@ namespace rgw::dedup {
     decode(w.ingress_skip_filtered_storage_class, bl);
 
     decode(w.duration, bl);
+    decode(w.egress_coarse_slabs, bl);
     DECODE_FINISH(bl);
   }
 

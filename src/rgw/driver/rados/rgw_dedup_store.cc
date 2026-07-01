@@ -376,7 +376,7 @@ namespace rgw::dedup {
                                      md5_shard_t md5_shard,
                                      worker_stats_t *p_stats_in)
   {
-    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in);
+    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in, false);
   }
 
   //---------------------------------------------------------------------------
@@ -384,12 +384,14 @@ namespace rgw::dedup {
                                   disk_block_t *p_arr_in,
                                   work_shard_t worker_id,
                                   md5_shard_t md5_shard,
-                                  worker_stats_t *p_stats_in)
+                                  worker_stats_t *p_stats_in,
+                                  bool coarse)
   {
     dpp          = dpp_in;
     p_arr        = p_arr_in;
     d_worker_id  = worker_id;
     d_md5_shard  = md5_shard;
+    d_coarse     = coarse;
     p_stats      = p_stats_in;
     p_curr_block = nullptr;
     d_slab_id    = 0;
@@ -556,17 +558,19 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int load_slab(librados::IoCtx &ioctx,
                 bufferlist &bl_out,
-                md5_shard_t md5_shard,
+                shard_t shard,
                 work_shard_t worker_id,
                 uint32_t slab_id,
-                const DoutPrefixProvider* dpp)
+                const DoutPrefixProvider* dpp,
+                bool is_coarse)
   {
     disk_rec_id_t rec_addr(worker_id, slab_id, 0);
-    std::string oid(rec_addr.get_slab_name(md5_shard));
+    std::string oid = is_coarse
+      ? rec_addr.get_coarse_slab_name(shard)
+      : rec_addr.get_slab_name(shard);
     ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
-                       << ", md5_shard=" << (uint32_t)md5_shard
-                       << ", slab_id=" << slab_id
-                       << ":: oid=" << oid << dendl;
+                       << "::shard/group=" << shard << "::slab_id=" << slab_id
+                       << "::oid=" << oid << dendl;
 #ifndef DEBUG_FRAGMENTED_BUFFERLIST
     int ret = ioctx.read(oid, bl_out, 0, 0);
     if (ret > 0) {
@@ -599,15 +603,19 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int store_slab(librados::IoCtx &ioctx,
                  bufferlist &bl,
-                 md5_shard_t md5_shard,
+                 shard_t shard,
                  work_shard_t worker_id,
                  uint32_t slab_id,
-                 const DoutPrefixProvider* dpp)
+                 const DoutPrefixProvider* dpp,
+                 bool is_coarse)
   {
     disk_rec_id_t rec_addr(worker_id, slab_id, 0);
-    std::string oid(rec_addr.get_slab_name(md5_shard));
-    ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len="
-                       << bl.length() << dendl;
+    std::string oid = is_coarse
+      ? rec_addr.get_coarse_slab_name(shard)
+      : rec_addr.get_slab_name(shard);
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
+                       << "::shard/group=" << shard << "::slab_id=" << slab_id
+                       << "::oid=" << oid << "::len=" << bl.length() << dendl;
     ceph_assert(bl.length());
 
     int ret = ioctx.write_full(oid, bl);
@@ -627,13 +635,17 @@ namespace rgw::dedup {
   {
     unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
-    int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_slab_id, dpp);
+    int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_slab_id, dpp, d_coarse);
     if (unlikely(ret != 0)) {
       p_stats->write_slab_failure++;
     }
 
     d_slab_id++;
-    p_stats->egress_slabs++;
+    if (d_coarse) {
+      p_stats->egress_coarse_slabs++;
+    } else {
+      p_stats->egress_slabs++;
+    }
     slab_reset();
     return ret;
   }
@@ -707,23 +719,52 @@ namespace rgw::dedup {
                                          uint64_t raw_mem_size,
                                          work_shard_t worker_id,
                                          worker_stats_t *p_stats,
-                                         md5_shard_t num_md5_shards)
+                                         md5_shard_t num_md5_shards,
+                                         uint32_t fan_out_B,
+                                         uint32_t group_id,
+                                         mode_t mode)
   {
     d_num_md5_shards = num_md5_shards;
     d_worker_id = worker_id;
-    d_disk_arr.resize(num_md5_shards);
+    d_fan_out_B = fan_out_B;
+    d_group_id  = group_id;
+    d_mode      = mode;
+
+    uint32_t num_buffers;
+    if (mode == mode_t::SINGLE_PASS) {
+      num_buffers = num_md5_shards;
+    }
+    else if (mode == mode_t::PHASE1_COARSE) {
+      // G = ceil(num_md5_shards / B) coarse group buffers
+      num_buffers = DIV_ROUND_UP(num_md5_shards, fan_out_B);
+    } else {
+      // Phase 2: B shards in this group (last group may be shorter)
+      uint32_t first_shard = group_id * fan_out_B;
+      uint32_t last_shard  = std::min(first_shard + fan_out_B, (uint32_t)num_md5_shards);
+      num_buffers = last_shard - first_shard;
+    }
+
+    d_disk_arr.resize(num_buffers);
     disk_block_t *p     = (disk_block_t *)raw_mem;
     disk_block_t *p_end = (disk_block_t *)(raw_mem + raw_mem_size);
+    bool coarse = (mode == mode_t::PHASE1_COARSE);
 
-    for (unsigned md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+    for (unsigned i = 0; i < num_buffers; i++) {
       ldpp_dout(dpp, 20) << __func__ << "::p=" << p << "::p_end=" << p_end << dendl;
       if (p + DISK_BLOCK_COUNT <= p_end) {
-        d_disk_arr[md5_shard].activate(dpp, p, d_worker_id, md5_shard, p_stats);
+        // In coarse mode, d_md5_shard stores the group_id for CS slab naming.
+        // In fine mode, d_md5_shard stores the actual md5 shard for S slab naming.
+        md5_shard_t shard_id = i;
+        if (mode == mode_t::PHASE2_FINE) {
+          shard_id = (group_id * fan_out_B + i);
+        }
+        d_disk_arr[i].activate(dpp, p, d_worker_id, shard_id, p_stats, coarse);
         p += DISK_BLOCK_COUNT;
+
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: buffer overflow! "
-                          << "::md5_shard=" << md5_shard << "/" << d_num_md5_shards
+                          << "::buffer=" << i << "/" << num_buffers
                           << "::raw_mem_size=" << raw_mem_size << dendl;
         ldpp_dout(dpp, 1) << __func__
                           << "::sizeof(disk_block_t)=" << sizeof(disk_block_t)
@@ -737,10 +778,10 @@ namespace rgw::dedup {
   void disk_block_array_t::flush_output_buffers(const DoutPrefixProvider* dpp,
                                                 librados::IoCtx &ioctx)
   {
-    for (md5_shard_t md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+    for (uint32_t i = 0; i < d_disk_arr.size(); i++) {
       ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
-                         << d_worker_id<< ", md5_shard=" << md5_shard << dendl;
-      d_disk_arr[md5_shard].flush_disk_records(ioctx);
+                         << d_worker_id << ", idx=" << i << dendl;
+      d_disk_arr[i].flush_disk_records(ioctx);
     }
   }
 } // namespace rgw::dedup

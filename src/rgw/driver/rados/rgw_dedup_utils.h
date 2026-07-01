@@ -184,6 +184,7 @@ namespace rgw::dedup {
     uint64_t egress_records = 0;
     uint64_t egress_blocks = 0;
     uint64_t egress_slabs = 0;
+    uint64_t egress_coarse_slabs = 0;
     uint64_t write_slab_failure = 0;
     uint64_t bidx_throttle_sleep_events = 0;
     uint64_t bidx_throttle_sleep_time_usec = 0;

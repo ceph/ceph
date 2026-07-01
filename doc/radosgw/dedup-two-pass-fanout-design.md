@@ -124,79 +124,78 @@ probes per lookup with linear probing.
 
 ## Phases
 
-### Current Flow
+### Single-Pass Flow (num_md5_shards <= B)
 ```
-setup() → ingress → work_shards_barrier → dedup → md5_shards_barrier → cleanup
-```
-
-### New Flow
-```
-setup() → pass1_ingress → pass1_barrier → pass2_fan_out → pass2_barrier → dedup → md5_shards_barrier → cleanup
+setup() → ingress(BI → S slabs) → work_shards_barrier → dedup → md5_shards_barrier → cleanup
 ```
 
-**pass1_barrier:** Polls `GRP.TK.` tokens via `all_shard_tokens_completed()`
-until all coarse groups have been written (completed, timed-out, or
-corrupted). Groups whose owners crash or stall are skipped after heartbeat
-timeout (30s), same as today's worker barrier.
-
-**pass2_barrier:** Uses the same `work_shards_barrier()` mechanism — polls
-`WRK.TK.` tokens via `all_shard_tokens_completed()` until all workers have
-finished fan-out. This is the same barrier the dedup phase has always waited
-on, so dedup sees exactly the same `WRK.TK.` + `S`-prefix interface
-regardless of whether one or two passes ran.
-
-**Crash recovery:** Follows the current model. The barrier detects timed-out
-members and proceeds without them. Any incomplete coarse or final slabs from
-crashed workers are simply missing data — the dedup phase runs on whatever
-was successfully written. The dedup pool is deleted at cycle end
-(`safe_pool_delete`), cleaning up all slab objects (both `CS` and `S` prefixes).
-
-When `num_md5_shards <= B`, pass 1 is skipped entirely — the system goes
-straight to ingress using `WRK.TK.` tokens and `S`-prefix slabs, identical
-to today's single-pass behavior. `cluster::reset()` is called with
-`num_group_tokens = 0`, so no `GRP.TK.` tokens are created. Most
-small-to-medium systems will take this path.
-
-For testing, a compile-time override forces the two-pass path even on small
-systems:
-
-```cpp
-// Define to force two-pass fan-out regardless of system size (testing only)
-#define DEDUP_FORCE_TWO_PASS
+### Two-Pass Flow (num_md5_shards > B)
+```
+setup() → per-worker { phase1(BI → CS) + phase2(CS → S) } → work_shards_barrier → dedup → md5_shards_barrier → cleanup
 ```
 
-When `DEDUP_FORCE_TWO_PASS` is defined, B is artificially capped to 2
-buffers, so even a small system with 4 MD5 shards will run 2 passes
-(pass 1: fan out into 2 groups of 2, pass 2: split each group into 2
-shards). This must never be enabled in production.
+Each worker processes its assigned BI shard in two internal phases
+without inter-worker coordination between phases. Only a single
+`work_shards_barrier` is needed at the end of ingress.
 
-### Pass 1: Coarse Ingress
+**Crash recovery:** Follows the current model. The barrier detects
+timed-out members and proceeds without them. Any incomplete coarse or
+final slabs from crashed workers are simply missing data — the dedup
+phase runs on whatever was successfully written. The dedup pool is
+deleted at cycle end (`safe_pool_delete`), cleaning up all slab objects
+(both `CS` and `S` prefixes).
 
-- Use B output buffers as coarse ranges
-- `G = ceil(num_md5_shards / B)` coarse ranges (but all B buffers are used)
-- Each record's routing: `md5_shard = md5_low % num_md5_shards`, then
-  `coarse_index = md5_shard % B`
-- Records are written to coarse-range slabs (`CS` prefix) on RADOS
-- Memory: B × 2 MB (reusing the single allocation)
-- Each worker grabs `GRP.TK.` tokens (one per coarse group) and processes
-  BI shards into coarse ranges
+When `num_md5_shards <= B`, the two-pass logic is skipped entirely — the
+system routes records directly to final S slabs, identical to today's
+single-pass behavior. Most small-to-medium systems will take this path.
 
-### Pass 2: Fine Fan-Out
+For testing, set `rgw_dedup_min_mem_allocation_mb = 8` to force a small
+allocation (B=4), which triggers the two-pass path even on small systems.
 
-RGW instances compete for `WRK.TK.` tokens (one per worker), same
-lock/grab pattern as MD5 tokens. The instance that locks a token owns
-that worker's share of the fan-out exclusively.
+### Groups
 
-For each coarse range, the worker:
+Groups are **contiguous ranges** of B shards:
 
-1. Read its slabs from RADOS (one slab at a time, sequential reads)
-2. For each record, recompute `md5_shard = md5_low % num_md5_shards`
-   and write to the correct per-shard slab (`S` prefix)
-3. After all records are re-fanned, delete the coarse-range slabs
-4. Mark the `WRK.TK.` token as completed
+```
+G = ceil(num_md5_shards / B)
 
-Output buffers per coarse range = at most `ceil(num_md5_shards / B)` shards
-per range, which fits in the single allocation.
+group 0:  shards [0      .. B-1]
+group 1:  shards [B      .. 2B-1]
+group 2:  shards [2B     .. 3B-1]
+  ...
+group G-1: shards [(G-1)*B .. num_md5_shards-1]   (last group may be smaller)
+```
+
+### Phase 1: Coarse Ingress (BI -> CS slabs)
+
+Each worker scans its assigned BI shard and fans out records into G
+coarse-group slabs (CS prefix):
+
+- Allocate **G output buffers** from raw_mem (G <= B, so fits)
+- For each record:
+  `md5_shard = md5_low % num_md5_shards`
+  `group_id  = md5_shard / B`
+- Write record to `CS` slab for `group_id` via `get_coarse_slab_name(group_id)`
+- After scanning all BI entries, flush all G buffers
+
+### Phase 2: Fine Fan-Out (CS -> S slabs)
+
+After phase 1 completes, the same worker iterates over each group and
+re-fans its CS slabs into final per-shard S slabs:
+
+For each group `g` in [0, G):
+1. Allocate **B output buffers** for the B md5 shards in group g
+   (buffer `i` maps to md5 shard `g*B + i`; last group may use fewer)
+2. Read back CS slabs for (worker_id, group g) from RADOS
+3. For each record:
+   `md5_shard  = md5_low % num_md5_shards`
+   `buffer_idx = md5_shard - g * B`
+4. Write record to S slab via buffer at `buffer_idx`
+5. Flush output buffers (writes final S slabs)
+6. Delete CS slabs for this group
+
+Memory: reuses the same raw_mem allocation. Phase 2 processes one group
+at a time, needing at most B output buffers (exactly the allocation size).
 
 ### Dedup Phase (unchanged)
 
@@ -221,7 +220,6 @@ duplicates.
 | Slab               | `S%05X.%02X.%05X`            | SFFFFF.FF.FFFFF | 16 B  |
 | MD5 shard token    | `MD5.TK.` + `%05x`           | MD5.TK.fffff    | 13 B  |
 | Worker shard token | `WRK.TK.` + `%05x`           | WRK.TK.fffff    | 13 B  |
-| Group shard token  | `GRP.TK.` + `%05x`           | GRP.TK.fffff    | 13 B  |
 | Coarse group slab  | `CS%03X.%02X.%06X`           | CSFFF.FF.FFFFFF | 16 B  |
 
 All fit within the existing `BUFF_SIZE = 16` byte limit.
@@ -475,10 +473,37 @@ table_entry_t::value_t:
   sizeof(value_t) = 8 bytes (unchanged)
   sizeof(table_entry_t) = 32 bytes (unchanged)
 
+disk_block_seq_t::d_coarse:
+  bool d_coarse = false;  // set by activate(coarse=true) for Phase 1
+  flush() dispatches to store_coarse_slab() when d_coarse is true,
+  store_slab() otherwise.
+
 disk_block_array_t:
-  d_disk_arr[MAX_MD5_SHARD]  → d_disk_arr[MAX_FAN_OUT_BUFFERS]
-  MAX_FAN_OUT_BUFFERS = 512  (matching max B from 1GB allocation)
-  Stack frame: ~20 KB (512 × 40) instead of ~80 KB
+  d_disk_arr: std::vector<disk_block_seq_t>  (dynamically sized)
+  mode_t enum: SINGLE_PASS, PHASE1_COARSE, PHASE2_FINE
+  d_fan_out_B, d_group_id, d_mode: routing state
+
+  Constructor (single-pass):
+    disk_block_array_t(dpp, raw_mem, raw_mem_size, worker_id,
+                       p_stats, num_md5_shards)
+    num_buffers = num_md5_shards, route: md5_shard = md5_low % N
+
+  Constructor (two-pass):
+    disk_block_array_t(dpp, raw_mem, raw_mem_size, worker_id,
+                       p_stats, num_md5_shards, fan_out_B, group_id, mode)
+    Phase 1: num_buffers = G = ceil(N/B), route: idx = md5_shard / B
+    Phase 2: num_buffers = B (or less for last group),
+             route: idx = md5_shard - group_id * B
+
+  get_shard_block_seq(md5_low):
+    md5_shard = md5_low % num_md5_shards
+    SINGLE_PASS:    idx = md5_shard
+    PHASE1_COARSE:  idx = md5_shard / B
+    PHASE2_FINE:    idx = md5_shard - group_id * B
+
+store_coarse_slab() / load_coarse_slab(): (new)
+  Same as store_slab() / load_slab() but use get_coarse_slab_name(group_id)
+  for CS-prefix OIDs.
 
 SLAB_NAME_FORMAT: "SLB.%03X.%02X.%04X" → "S%05X.%02X.%05X"
 COARSE_SLAB_NAME_FORMAT: (new) "CS%03X.%02X.%06X"
@@ -527,11 +552,25 @@ Background::setup():
   - Calls calc_fan_out_params() → d_raw_mem_size, d_fan_out_B, d_num_groups,
     num_md5_shards, num_work_shards
 
+Background::f_ingress_work_shard():
+  - Branches on d_num_groups:
+    d_num_groups == 0 → objects_ingress_single_work_shard() (single-pass)
+    d_num_groups >  0 → phase1_coarse_ingress() then phase2_fine_fan_out()
+
+Background::phase1_coarse_ingress():
+  - Same BI scan loop as objects_ingress_single_work_shard()
+  - Uses disk_block_array_t in PHASE1_COARSE mode (G buffers)
+  - Routes records by group_id = md5_shard / B
+
+Background::phase2_fine_fan_out():
+  - For each group g in [0, G):
+    1. Create disk_block_array_t in PHASE2_FINE mode (B buffers)
+    2. Read CS slabs via load_coarse_slab() for (worker_id, group g)
+    3. Deserialize blocks/records, route to S slabs (buffer_idx = md5_shard - g*B)
+    4. Flush S slabs, delete CS slabs for this group
+
 Background::run():
   - Allocates d_raw_mem_size bytes (computed in setup)
-  - If num_md5_shards <= B: single-pass ingress (BI → S slabs)
-  - If num_md5_shards > B: per-worker two-phase ingress
-    phase 1: BI → CS slabs (coarse), phase 2: CS → S slabs (final)
   - Both paths use WRK.TK. tokens + work_shards_barrier
 ```
 
@@ -589,9 +628,11 @@ Benefits:
    `rgw_dedup_min_mem_allocation_mb` (default 64 MB) and doubles until
    B² >= num_md5_shards. Systems exceeding 2048 MB are rejected.
 
-3. **Routing formula**: Coarse routing uses modulo arithmetic
-   (`md5_shard % B`), which works correctly for uneven divisions —
-   some coarse ranges simply get one more shard than others.
+3. **Routing formula**: Coarse routing uses contiguous ranges
+   (`group_id = md5_shard / B`), mapping each group to a contiguous
+   block of B shards. The last group may be smaller if N is not
+   divisible by B. Fine routing within a group uses
+   `buffer_idx = md5_shard - group_id * B`.
 
 4. **Crash recovery**: No new phase tracking in `dedup_epoch_t`. Follows the
    current model: barriers detect timed-out/crashed members and proceed

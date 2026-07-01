@@ -216,17 +216,19 @@ namespace rgw::dedup {
 
   int load_slab(librados::IoCtx &ioctx,
                 bufferlist &bl,
-                md5_shard_t md5_shard,
+                shard_t shard,
                 work_shard_t worker_id,
                 uint32_t slab_id,
-                const DoutPrefixProvider* dpp);
+                const DoutPrefixProvider* dpp,
+                bool is_coarse);
 
   int store_slab(librados::IoCtx &ioctx,
                  bufferlist &bl,
-                 md5_shard_t md5_shard,
+                 shard_t shard,
                  work_shard_t worker_id,
                  uint32_t slab_id,
-                 const DoutPrefixProvider* dpp);
+                 const DoutPrefixProvider* dpp,
+                 bool is_coarse);
 
   class disk_block_array_t;
   class disk_block_seq_t
@@ -250,7 +252,8 @@ namespace rgw::dedup {
                   disk_block_t *_p_arr,
                   work_shard_t worker_id,
                   md5_shard_t md5_shard,
-                  worker_stats_t *p_stats);
+                  worker_stats_t *p_stats,
+                  bool coarse);
     inline const disk_block_t* last_block() { return &p_arr[DISK_BLOCK_COUNT-1]; }
     int flush(librados::IoCtx &ioctx);
     void slab_reset() {
@@ -267,27 +270,54 @@ namespace rgw::dedup {
     uint16_t        d_block_id    = 0;
     work_shard_t    d_worker_id   = NULL_WORK_SHARD;
     md5_shard_t     d_md5_shard   = NULL_MD5_SHARD;
+    bool            d_coarse      = false;
   };
 
   class disk_block_array_t
   {
   public:
+
+    // Single-pass: num_buffers = num_md5_shards, route by md5_low % N
+    // Phase 1 (coarse): num_buffers = G, route by md5_shard / B → group_id
+    // Phase 2 (fine):   num_buffers = B (or less for last group),
+    //                   route by md5_shard - group_id * B → buffer_idx
+    enum class mode_t { SINGLE_PASS, PHASE1_COARSE, PHASE2_FINE };
     disk_block_array_t(const DoutPrefixProvider* _dpp,
                        uint8_t *raw_mem,
                        uint64_t raw_mem_size,
                        work_shard_t worker_id,
                        worker_stats_t *p_worker_stats,
-                       md5_shard_t num_md5_shards);
+                       md5_shard_t num_md5_shards,
+                       uint32_t fan_out_B = 0,
+                       uint32_t group_id = 0,
+                       mode_t mode = mode_t::SINGLE_PASS);
+
     void flush_output_buffers(const DoutPrefixProvider* dpp,
                               librados::IoCtx &ioctx);
     disk_block_seq_t* get_shard_block_seq(uint64_t md5_low) {
       md5_shard_t md5_shard = md5_low % d_num_md5_shards;
-      return &d_disk_arr[md5_shard];
+      uint32_t idx;
+      switch (d_mode) {
+        case mode_t::PHASE1_COARSE:
+          idx = md5_shard / d_fan_out_B;
+          break;
+        case mode_t::PHASE2_FINE:
+          idx = md5_shard - d_group_id * d_fan_out_B;
+          break;
+        default: // SINGLE_PASS
+          idx = md5_shard;
+          break;
+      }
+      ceph_assert(idx < d_disk_arr.size());
+      return &d_disk_arr[idx];
     }
 
     //private:
     std::vector<disk_block_seq_t> d_disk_arr;
     work_shard_t      d_worker_id;
     md5_shard_t       d_num_md5_shards;
+    uint32_t          d_fan_out_B  = 0;
+    uint32_t          d_group_id   = 0;
+    mode_t            d_mode       = mode_t::SINGLE_PASS;
   };
 } //namespace rgw::dedup
