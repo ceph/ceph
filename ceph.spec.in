@@ -341,14 +341,14 @@ Requires:  %{luarocks_package_name}
 BuildRequires:  hostname
 BuildRequires:  jq
 BuildRequires:	pkgconfig(uuid)
-BuildRequires:	python%{python3_pkgversion}-bcrypt
-BuildRequires:	python%{python3_pkgversion}-requests
-BuildRequires:	python%{python3_pkgversion}-dateutil
-BuildRequires:	python%{python3_pkgversion}-coverage
-BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	python%{python3_pkgversion}dist(bcrypt)
+BuildRequires:	python%{python3_pkgversion}dist(requests)
+BuildRequires:	python%{python3_pkgversion}dist(python-dateutil)
+BuildRequires:	python%{python3_pkgversion}dist(coverage)
+BuildRequires:	python%{python3_pkgversion}dist(pyopenssl)
 BuildRequires:	socat
-BuildRequires:	python%{python3_pkgversion}-asyncssh
-BuildRequires:	python%{python3_pkgversion}-natsort
+BuildRequires:	python%{python3_pkgversion}dist(asyncssh)
+BuildRequires:	python%{python3_pkgversion}dist(natsort)
 %endif
 BuildRequires:	pkgconfig(thrift) >= 0.13.0
 BuildRequires:  pkgconfig(re2)
@@ -395,6 +395,9 @@ BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
 %endif
+BuildRequires:	python%{python3_pkgversion}dist(prettytable)
+BuildRequires:	python%{python3_pkgversion}dist(pyyaml)
+BuildRequires:	python%{python3_pkgversion}dist(sphinx)
 #################################################################################
 # distro-conditional dependencies
 #################################################################################
@@ -411,9 +414,6 @@ BuildRequires:  ninja
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
-BuildRequires:	python%{python3_pkgversion}-PrettyTable
-BuildRequires:	python%{python3_pkgversion}-PyYAML
-BuildRequires:	python%{python3_pkgversion}-Sphinx
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
 BuildRequires:	jsonnet
@@ -427,15 +427,14 @@ BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  CUnit-devel
 BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-prettytable
-BuildRequires:	python%{python3_pkgversion}-pyyaml
-BuildRequires:	python%{python3_pkgversion}-sphinx
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 BuildRequires:	golang
 BuildRequires:	pkgconfig(xmlsec1)
 BuildRequires:	pkgconfig(xmlsec1-openssl)
+BuildRequires:	python%{python3_pkgversion}dist(cherrypy)
+BuildRequires:	python%{python3_pkgversion}dist(routes)
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:	/usr/bin/promtool
 BuildRequires:	libtool-ltdl-devel
@@ -444,10 +443,8 @@ BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
-BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-routes
-BuildRequires:	python%{python3_pkgversion}-scipy
-BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	python%{python3_pkgversion}dist(scipy)
+BuildRequires:	python%{python3_pkgversion}dist(pyopenssl)
 %endif
 BuildRequires:	jsonnet
 %if 0%{?suse_version}
@@ -455,8 +452,6 @@ BuildRequires:	golang-github-prometheus-prometheus
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
-BuildRequires:	python%{python3_pkgversion}-CherryPy
-BuildRequires:	python%{python3_pkgversion}-Routes
 BuildRequires:	python%{python3_pkgversion}-numpy-devel
 %endif
 %endif
@@ -546,27 +541,14 @@ Recommends:     podman >= 2.0.2
 %if 0%{with cephadm_bundling}
 %if 0%{without cephadm_pip_deps}
 # Zipapp built from system RPMs at build time; bundled zipapp is self-contained at runtime.
-# SUSE and RHEL/Fedora use different PyPI RPM names (Jinja2/PyYAML vs jinja2/pyyaml).
-%if 0%{?suse_version}
-BuildRequires: python%{python3_pkgversion}-Jinja2 >= 2.10
-BuildRequires: python%{python3_pkgversion}-PyYAML
-%else
-BuildRequires: python%{python3_pkgversion}-jinja2 >= 2.10
-BuildRequires: python%{python3_pkgversion}-pyyaml
-%endif
-%dnl suse/else: rpm bundle, distinct RPM names only (not duplicate stanzas)
+BuildRequires: python%{python3_pkgversion}dist(jinja2) >= 2.10
+BuildRequires: python%{python3_pkgversion}dist(pyyaml)
 %endif
 %dnl end without cephadm_pip_deps (CEPHADM_BUNDLED_DEPENDENCIES=rpm)
 %else
 # Unbundled cephadm: host must provide yaml and jinja2 at runtime.
-%if 0%{?suse_version}
-Requires: python%{python3_pkgversion}-Jinja2 >= 2.10
-Requires: python%{python3_pkgversion}-PyYAML
-%else
-Requires: python%{python3_pkgversion}-jinja2 >= 2.10
-Requires: python%{python3_pkgversion}-pyyaml
-%endif
-%dnl suse/else: unbundled cephadm (CEPHADM_BUNDLED_DEPENDENCIES=none)
+Requires: python%{python3_pkgversion}dist(jinja2) >= 2.10
+Requires: python%{python3_pkgversion}dist(pyyaml)
 %endif
 %dnl end with cephadm_bundling
 %description -n cephadm
@@ -587,12 +569,7 @@ Requires:	python%{python3_pkgversion}-cephfs = %{_epoch_prefix}%{version}-%{rele
 Requires:	python%{python3_pkgversion}-rgw = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:	python%{python3_pkgversion}-prettytable
-%endif
-%if 0%{?suse_version}
-Requires:	python%{python3_pkgversion}-PrettyTable
-%endif
+Requires:	python%{python3_pkgversion}dist(prettytable)
 %if 0%{with libradosstriper}
 Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -690,26 +667,19 @@ Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
-Requires:       python%{python3_pkgversion}-grpcio
-Requires:       python%{python3_pkgversion}-grpcio-tools
-Requires:       python%{python3_pkgversion}-jmespath
-Requires:       python%{python3_pkgversion}-xmltodict
+Requires:       python%{python3_pkgversion}dist(grpcio)
+Requires:       python%{python3_pkgversion}dist(grpcio-tools)
+Requires:       python%{python3_pkgversion}dist(jmespath)
+Requires:       python%{python3_pkgversion}dist(xmltodict)
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-routes
+Requires:       python%{python3_pkgversion}dist(cherrypy)
+Requires:       python%{python3_pkgversion}dist(routes)
 %if 0%{?weak_deps}
-Recommends:     python%{python3_pkgversion}-saml
+Recommends:     python%{python3_pkgversion}dist(python3-saml)
 %if 0%{?fedora}
-Recommends:     python%{python3_pkgversion}-grpcio
-Recommends:     python%{python3_pkgversion}-grpcio-tools
+Recommends:     python%{python3_pkgversion}dist(grpcio)
+Recommends:     python%{python3_pkgversion}dist(grpcio-tools)
 %endif
-%endif
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Routes
-Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
 %description mgr-dashboard
 ceph-mgr-dashboard is a manager module, providing a web-based application
@@ -724,11 +694,11 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-numpy
+Requires:       python%{python3_pkgversion}dist(numpy)
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-scikit-learn
+Requires:       python%{python3_pkgversion}dist(scikit-learn)
 %endif
-Requires:       python3-scipy
+Requires:       python%{python3_pkgversion}dist(scipy)
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
@@ -739,15 +709,10 @@ BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
-Requires:       python%{python3_pkgversion}-prettytable
-Requires:       python%{python3_pkgversion}-requests
-Requires:       python%{python3_pkgversion}-dateutil
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-pyyaml
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-PyYAML
-%endif
+Requires:       python%{python3_pkgversion}dist(prettytable)
+Requires:       python%{python3_pkgversion}dist(requests)
+Requires:       python%{python3_pkgversion}dist(python-dateutil)
+Requires:       python%{python3_pkgversion}dist(pyyaml)
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -795,8 +760,8 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-kubernetes
-Requires:       python%{python3_pkgversion}-jsonpatch
+Requires:       python%{python3_pkgversion}dist(kubernetes)
+Requires:       python%{python3_pkgversion}dist(jsonpatch)
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr module for orchestration functions using
 a Rook backend.
@@ -808,7 +773,7 @@ Summary:        Ceph Manager module to orchestrate ceph-events to kubernetes' ev
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-kubernetes
+Requires:       python%{python3_pkgversion}dist(kubernetes)
 %description mgr-k8sevents
 ceph-mgr-k8sevents is a ceph-mgr module that sends every ceph-events
 to kubernetes' events API
@@ -822,20 +787,18 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-asyncssh
-Requires:       python%{python3_pkgversion}-bcrypt
-Requires:       python%{python3_pkgversion}-natsort
-Requires:       python%{python3_pkgversion}-pyOpenSSL
+Requires:       python%{python3_pkgversion}dist(asyncssh)
+Requires:       python%{python3_pkgversion}dist(bcrypt)
+Requires:       python%{python3_pkgversion}dist(natsort)
+Requires:       python%{python3_pkgversion}dist(pyopenssl)
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
+Requires:       python%{python3_pkgversion}dist(cherrypy)
+Requires:       python%{python3_pkgversion}dist(jinja2)
 %if 0%{?suse_version}
 Requires:       openssh
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Jinja2
 %endif
 %if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler}
 Requires:       openssh-clients
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-jinja2
 %endif
 %description mgr-cephadm
 ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
@@ -872,7 +835,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
-Recommends:     python%{python3_pkgversion}-influxdb
+Recommends:     python%{python3_pkgversion}dist(influxdb)
 %endif
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
 %description mgr-influx
@@ -970,7 +933,7 @@ Summary:        Ceph Manager module for OSD performance counter queries
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-prettytable
+Requires:       python%{python3_pkgversion}dist(prettytable)
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
 %description mgr-osd-perf-query
 ceph-mgr-osd-perf-query is a ceph-mgr module that exposes OSD
@@ -996,12 +959,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-cherrypy
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-%endif
+Requires:       python%{python3_pkgversion}dist(cherrypy)
 %description mgr-prometheus
 ceph-mgr-prometheus is a ceph-mgr module that exposes cluster metrics
 in Prometheus exposition format.
@@ -1557,14 +1515,11 @@ descriptions, and submitting the command to the appropriate daemon.
 
 %package -n python%{python3_pkgversion}-ceph-common
 Summary:	Python 3 utility libraries for Ceph
+Requires:       python%{python3_pkgversion}dist(pyyaml)
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-pyyaml
 %if %{with pypkg}
 Recommends:     python%{python3_pkgversion}-ceph-smb-ctl
 %endif
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
@@ -1577,8 +1532,8 @@ It also contains utilities used for the cephadm orchestrator.
 %if 0%{with cephfs_shell}
 %package -n cephfs-shell
 Summary:    Interactive shell for Ceph file system
-Requires:   python%{python3_pkgversion}-cmd2
-Requires:   python%{python3_pkgversion}-colorama
+Requires:   python%{python3_pkgversion}dist(cmd2)
+Requires:   python%{python3_pkgversion}dist(colorama)
 Requires:   python%{python3_pkgversion}-cephfs
 %description -n cephfs-shell
 This package contains an interactive tool that allows accessing a Ceph
@@ -1716,8 +1671,8 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-grpcio
-Requires:       python%{python3_pkgversion}-grpcio-reflection
+Requires:       python%{python3_pkgversion}dist(grpcio)
+Requires:       python%{python3_pkgversion}dist(grpcio-reflection)
 %description -n python%{python3_pkgversion}-ceph-smb-ctl
 This package provides a tool to interact with Ceph's SMB Service Remote-Control
 gRPC API as a client.
