@@ -1227,7 +1227,6 @@ class CephadmUpgrade:
         rotated['osd'].extend(osd_ids)
         rotated['mds'].extend(mds_ids)
         self.mgr.set_store('rotated_osd_mds_daemons', json.dumps(rotated))
-        return rotated
 
     def _clear_rotated_daemon_entry(self) -> None:
         self.mgr.set_store('rotated_osd_mds_daemons', None)
