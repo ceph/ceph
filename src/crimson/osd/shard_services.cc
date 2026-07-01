@@ -1093,9 +1093,6 @@ seastar::future<> ShardServices::dispatch_context_transaction(
   LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
   if (ctx.transaction.empty()) {
     DEBUG("empty transaction");
-    co_await crimson::os::with_store_do_transaction(
-      get_store(store_index),
-      col, ceph::os::Transaction{});
     Context* on_commit(
       ceph::os::Transaction::collect_all_contexts(ctx.transaction));
     if (on_commit) {
