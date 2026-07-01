@@ -1129,6 +1129,40 @@ def test_head_bucket_usage():
 
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+def test_head_bucket_usage_multipart_incomplete():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # initiate a multipart upload and upload 2 parts without completing
+    response = client.create_multipart_upload(Bucket=bucket_name, Key='mpu-obj')
+    upload_id = response['UploadId']
+    part_body = 'x' * (5 * 1024 * 1024)
+    for part_num in (1, 2):
+        client.upload_part(Bucket=bucket_name, Key='mpu-obj',
+                           UploadId=upload_id, PartNumber=part_num,
+                           Body=part_body)
+
+    # HEAD bucket with read-stats should show 0 objects: incomplete
+    # multipart parts are not counted as user-visible objects.
+    def add_read_stats_param(request, **kwargs):
+        request.params['read-stats'] = 'true'
+
+    client.meta.events.register('request-created.s3.HeadBucket', add_read_stats_param)
+    client.meta.events.register('after-call.s3.HeadBucket', get_http_response)
+    client.head_bucket(Bucket=bucket_name)
+    hdrs = http_response['headers']
+    assert hdrs['X-RGW-Object-Count'] == '0'
+
+    # ListObjects should also return nothing
+    response = client.list_objects_v2(Bucket=bucket_name)
+    assert response['KeyCount'] == 0
+
+    # cleanup
+    client.abort_multipart_upload(Bucket=bucket_name, Key='mpu-obj',
+                                  UploadId=upload_id)
+
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
 def test_bucket_list_unordered():
     # boto3.set_stream_logger(name='botocore')
     keys_in = ['ado', 'bot', 'cob', 'dog', 'emu', 'fez', 'gnu', 'hex',
