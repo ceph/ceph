@@ -15,6 +15,7 @@ from ceph.deployment.service_spec import (
     IngressSpec,
     IscsiServiceSpec,
     NFSServiceSpec,
+    NodeProxySpec,
     OAuth2ProxySpec,
     PlacementSpec,
     PrometheusSpec,
@@ -335,6 +336,18 @@ def test_osd_unmanaged():
 
     dg_spec = ServiceSpec.from_json(osd_spec)
     assert dg_spec.unmanaged == True
+
+
+def test_node_proxy_unmanaged():
+    node_proxy_spec = {"placement": {"host_pattern": "*"},
+                       "service_name": "node-proxy",
+                       "service_type": "node-proxy",
+                       "unmanaged": True}
+
+    spec = ServiceSpec.from_json(node_proxy_spec)
+    assert isinstance(spec, NodeProxySpec)
+    assert spec.unmanaged is True
+    ServiceSpec.from_json(spec.to_json())
 
 
 @pytest.mark.parametrize("y",
