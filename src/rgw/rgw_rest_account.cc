@@ -233,23 +233,23 @@ public:
 
 /**
  * @brief Sets quota limits for an RGW account
- * 
+ *
  * @param y Optional yield context for coroutine-based async operations
- * 
+ *
  * REST Endpoint:
  *   PUT /admin/account
- * 
+ *
  * Query Parameters:
  *   - quota: (required) Subresource to trigger the put account quota operation
  *   - id: (required) Account ID to set quota for
- *   - quota-type (required): Type of quota to set - "account" or "bucket" 
+ *   - quota-type (required): Type of quota to set - "account" or "bucket"
  *   - max-size: (optional) Maximum storage size in bytes
  *   - max-objects: (optional) Maximum number of objects (-1 for unlimited)
  *   - enabled: (optional) Enable/disable quota enforcement (true/false)
- * 
+ *
  * Example Usage:
  *   PUT /admin/account?quota&id=RGW123&quota-type=account&max-size=1073741824&enabled=true
- * 
+ *
  */
 
 void RGWOp_Account_Quota_Set::execute(optional_yield y)
