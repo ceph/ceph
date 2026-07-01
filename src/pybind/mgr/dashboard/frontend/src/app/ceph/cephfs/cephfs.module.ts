@@ -35,6 +35,7 @@ import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mir
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { CephfsAddMirroringPathComponent } from './cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
 import { MirroringPathsStepComponent } from './cephfs-add-mirroring-path/mirroring-paths-step/mirroring-paths-step.component';
+import { MirroringReviewStepComponent } from './cephfs-add-mirroring-path/mirroring-review-step/mirroring-review-step.component';
 import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
 import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
@@ -155,7 +156,8 @@ import FolderIcon16 from '@carbon/icons/es/folder/16';
     CephfsDownloadTokenComponent,
     CephfsSetupMirroringComponent,
     CephfsAddMirroringPathComponent,
-    MirroringPathsStepComponent
+    MirroringPathsStepComponent,
+    MirroringReviewStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
