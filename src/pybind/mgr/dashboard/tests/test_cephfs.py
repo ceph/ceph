@@ -45,7 +45,7 @@ class CephFsTest(ControllerTestCase):
         self.assertEqual(mds_versions['bar'], ['foo'])
 
 
-class CephFSMirrorTest(ControllerTestCase):
+class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def setup_server(cls):

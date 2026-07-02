@@ -4,6 +4,7 @@ describe('cd-notification classes', () => {
   it('should show empty permissions', () => {
     expect(new Permissions({})).toEqual({
       cephfs: { create: false, delete: false, read: false, update: false },
+      cephfsMirror: { create: false, delete: false, read: false, update: false },
       configOpt: { create: false, delete: false, read: false, update: false },
       grafana: { create: false, delete: false, read: false, update: false },
       hosts: { create: false, delete: false, read: false, update: false },
@@ -46,6 +47,7 @@ describe('cd-notification classes', () => {
     };
     expect(new Permissions(fullyGranted)).toEqual({
       cephfs: { create: true, delete: true, read: true, update: true },
+      cephfsMirror: { create: false, delete: false, read: false, update: false },
       configOpt: { create: true, delete: true, read: true, update: true },
       grafana: { create: true, delete: true, read: true, update: true },
       hosts: { create: true, delete: true, read: true, update: true },

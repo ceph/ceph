@@ -106,8 +106,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
 
     const titleFromParamRoute = this.findRouteWithData(route, 'pageHeaderTitleFromParam');
     const titleFromParam = titleFromParamRoute?.routeConfig?.data?.['pageHeaderTitleFromParam'] as
-      | string
-      | undefined;
+      string | undefined;
 
     if (titleFromParam && titleFromParamRoute?.params[titleFromParam]) {
       try {
@@ -121,8 +120,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     }
 
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
-      | { title?: string; subtitle?: string; description?: string }
-      | undefined;
+      { title?: string; subtitle?: string; description?: string } | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;
     this.pageHeaderSubtitle = pageHeader?.subtitle ?? null;
     this.pageHeaderDescription = pageHeader?.description ?? null;
