@@ -31,7 +31,6 @@ WARN_BUCKET_POS="Warning: --bucket/-b should appear after the subcommand"
 WARN_BUCKET_DUP="Warning: --bucket/-b specified multiple times, using last value"
 WARN_BUCKETID_POS="Warning: --bucket-id should appear after the subcommand"
 WARN_BUCKETID_DUP="Warning: --bucket-id specified multiple times, using last value"
-WARN_UID_POS="Warning: --uid/-i should appear after the subcommand"
 WARN_UID_DUP="Warning: --uid/-i specified multiple times, using last value"
 WARN_TENANT_DUP="Warning: --tenant specified multiple times, using last value"
 WARN_FIX_POS="Warning: --fix should appear after the subcommand"
@@ -454,7 +453,7 @@ check_cluster "chown: nonexistent bucket (exit 2)" 2 "$ERR_CHOWN_NO_BUCKET" -- \
 # global "no user ID" check here.
 check_warns "chown: --bucket before subcommand"          2 "" "$WARN_BUCKET_POS" -- \
   bucket --bucket cli11-no-such-bucket chown --uid cli11_no_such_user
-check_warns "chown: --uid before subcommand"             2 "" "$WARN_UID_POS" -- \
+check_warns "chown: --uid before subcommand"             2 "" -- \
   bucket --uid cli11_no_such_user chown --bucket cli11-no-such-bucket
 check_warns "chown: --marker before subcommand"          2 "" "$WARN_MARKER_POS" -- \
   bucket --marker m chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
@@ -496,7 +495,7 @@ check_cluster "limit check: nonexistent --uid (empty listing, exit 0)" 0 "" -- \
   bucket limit check --uid cli11_no_such_user
 
 # wrong-position warnings (flag before the 'check' leaf); all paths exit 0
-check_warns "limit check: --uid before subcommand"           0 "" "$WARN_UID_POS" -- \
+check_warns "limit check: --uid before subcommand"           0 "" -- \
   bucket --uid cli11_no_such_user limit check
 check_warns "limit check: --warnings-only before subcommand" 0 "" "$WARN_WARNINGS_POS" -- \
   bucket --warnings-only limit check
@@ -1166,10 +1165,10 @@ check_cluster "link: missing both"            22 "$ERR_REQUIRES_USER" -- \
 # wrong position + missing required (warnings fire, then op-layer error)
 check_warns "link: --bucket before bucket, missing --uid"  22 "$ERR_REQUIRES_USER" "$WARN_BUCKET_POS" -- \
   --bucket mybucket bucket link
-check_warns "link: --uid before bucket, missing --bucket"  22 "$ERR_FETCH_BUCKET" "$WARN_UID_POS" -- \
+check_warns "link: --uid before bucket, missing --bucket"  22 "$ERR_FETCH_BUCKET" -- \
   --uid testuser bucket link
-check_warns "link: both before bucket (warns x2, fails on nonexistent)" 2 "" \
-  "$WARN_BUCKET_POS" "$WARN_UID_POS" -- \
+check_warns "link: --bucket + --uid before bucket (1 warn; --uid global, fails on nonexistent)" 2 "" \
+  "$WARN_BUCKET_POS" -- \
   --bucket mybucket --uid testuser bucket link
 
 # stray positional args
@@ -1209,7 +1208,7 @@ check_cluster "unlink: missing both"        22 "$ERR_EINVAL" -- \
 
 check_warns "unlink: --bucket before bucket, missing --uid"   22 "$ERR_EINVAL" "$WARN_BUCKET_POS" -- \
   --bucket mybucket bucket unlink
-check_warns "unlink: --uid before bucket, missing --bucket"   22 "$ERR_EINVAL" "$WARN_UID_POS" -- \
+check_warns "unlink: --uid before bucket, missing --bucket"   22 "$ERR_EINVAL" -- \
   --uid testuser bucket unlink
 
 check "unlink: stray after flags"              22 "ERROR: unexpected argument: 'strayarg'" \
@@ -1384,7 +1383,7 @@ check_warns "list: duplicate --format same level"  0 "" "$WARN_FORMAT_DUP" -- \
   bucket list --format json --format xml
 # --uid is registered on bucket list (to filter by owner)
 # legacy returns -ENOENT from main for an unknown user, so the exit code is 254
-check_warns "list: --uid before bucket"           254 "ERROR: could not find user" "$WARN_UID_POS" -- \
+check_warns "list: --uid before bucket"           254 "ERROR: could not find user" -- \
   --uid testuser_cli11_test bucket list
 check_warns "list: --bucket-id before bucket"     0 "" "$WARN_BUCKETID_POS" -- \
   --bucket-id nonexistent_id_cli11_test bucket list
@@ -1454,7 +1453,7 @@ echo "=== bucket link: wrong-position warnings (cluster) ==="
 # but warnings appear before the action runs.
 check_warns "link: --bucket before bucket (warns, then fails)"  2 "" "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test bucket link --uid testuser_cli11_test
-check_warns "link: --uid before bucket (warns, then fails)"     2 "" "$WARN_UID_POS" -- \
+check_warns "link: --uid before bucket (warns, then fails)"     2 "" -- \
   --uid testuser_cli11_test bucket link --bucket nonexistent_cli11_test
 check_warns "link: duplicate --bucket"  2 "" "$WARN_BUCKET_DUP" -- \
   bucket link --bucket foo --bucket nonexistent_cli11_test --uid testuser_cli11_test
@@ -1468,8 +1467,8 @@ check_warns "link: --bucket-id before bucket"        2 "" "$WARN_BUCKETID_POS" -
   --bucket-id someid_cli11_test bucket link --bucket nonexistent_cli11_test --uid testuser_cli11_test
 check_warns "link: --tenant before bucket"           2 "" -- \
   --tenant foo bucket link --bucket nonexistent_cli11_test --uid testuser_cli11_test
-check_warns "link: --bucket + --uid + --tenant before (2 pos warnings; --tenant global, no warn)" 2 "" \
-  "$WARN_BUCKET_POS" "$WARN_UID_POS" -- \
+check_warns "link: --bucket + --uid + --tenant before (1 pos warning; --tenant and --uid global, no warn)" 2 "" \
+  "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test --uid testuser_cli11_test --tenant foo bucket link
 
 # ============================================================
@@ -1479,7 +1478,7 @@ echo "=== bucket unlink: wrong-position warnings (cluster) ==="
 
 check_warns "unlink: --bucket before bucket (warns, then fails)"  2 "" "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test bucket unlink --uid testuser_cli11_test
-check_warns "unlink: --uid before bucket (warns, then fails)"     2 "" "$WARN_UID_POS" -- \
+check_warns "unlink: --uid before bucket (warns, then fails)"     2 "" -- \
   --uid testuser_cli11_test bucket unlink --bucket nonexistent_cli11_test
 check_warns "unlink: duplicate --bucket"  2 "" "$WARN_BUCKET_DUP" -- \
   bucket unlink --bucket foo --bucket nonexistent_cli11_test --uid testuser_cli11_test
@@ -1487,8 +1486,8 @@ check_warns "unlink: --tenant before bucket"  2 "" -- \
   --tenant foo bucket unlink --bucket nonexistent_cli11_test --uid testuser_cli11_test
 check_warns "unlink: duplicate --uid"         2 "" "$WARN_UID_DUP" -- \
   bucket unlink --uid foo --uid testuser_cli11_test --bucket nonexistent_cli11_test
-check_warns "unlink: --bucket + --uid before (2 pos warnings)" 2 "" \
-  "$WARN_BUCKET_POS" "$WARN_UID_POS" -- \
+check_warns "unlink: --bucket + --uid before (1 pos warning; --uid global, no warn)" 2 "" \
+  "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test --uid testuser_cli11_test bucket unlink
 
 # ============================================================
