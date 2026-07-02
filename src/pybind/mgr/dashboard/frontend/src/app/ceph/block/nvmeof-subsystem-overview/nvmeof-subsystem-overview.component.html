@@ -68,8 +68,7 @@
             <div class="cds--type-label-02">
               <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
               <a cdsLink
-                 [routerLink]="['../hosts']"
-                 [queryParams]="{ group: groupName }"
+                 (click)="openEditHostAccessModal()"
                  [cdsStack]="'horizontal'"
                  class="cds-ml-2"
                  [gap]="1">

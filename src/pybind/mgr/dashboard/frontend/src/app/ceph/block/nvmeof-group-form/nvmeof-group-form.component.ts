@@ -68,6 +68,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)]
       ),
       unmanaged: new UntypedFormControl(false),
+      enable_auth: new UntypedFormControl(false),
       enableEncryption: new UntypedFormControl(false),
       encryptionConfig: new UntypedFormControl(null),
       encryptionKey: new UntypedFormControl(null),
@@ -158,7 +159,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       unmanaged: formValues.unmanaged
     };
 
-    if (formValues.enableEncryption) {
+    if (formValues.enableEncryption || formValues.enable_auth) {
       const encryptionKey = formValues.encryptionKey || formValues.encryptionConfig;
       if (encryptionKey) {
         serviceSpec['encryption_key'] = encryptionKey;

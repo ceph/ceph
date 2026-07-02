@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { forkJoin, Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
@@ -9,6 +10,7 @@ import {
   NO_AUTH,
   getSubsystemAuthStatus
 } from '~/app/shared/models/nvmeof';
+import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofEditAuthenticationComponent } from '../nvmeof-edit-authentication/nvmeof-edit-authentication.component';
@@ -27,27 +29,49 @@ export interface SubsystemDetail {
   styleUrls: ['./nvmeof-subsystem-overview.component.scss'],
   standalone: false
 })
-export class NvmeofSubsystemOverviewComponent implements OnInit {
+export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
   subsystemNQN!: string;
   groupName!: string;
   subsystem!: NvmeofSubsystem;
   details: SubsystemDetail[] = [];
+  private subscriptions = new Subscription();
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private nvmeofService: NvmeofService,
     private modalService: ModalCdsService
   ) {}
 
   ngOnInit() {
-    this.route.parent?.params.subscribe((params) => {
-      this.subsystemNQN = params['subsystem_nqn'];
-      this.fetchIfReady();
-    });
-    this.route.queryParams.subscribe((qp) => {
-      this.groupName = qp['group'];
-      this.fetchIfReady();
-    });
+    this.subscriptions.add(
+      this.route.parent?.params.subscribe((params) => {
+        this.subsystemNQN = params['subsystem_nqn'];
+        this.fetchIfReady();
+      })
+    );
+    this.subscriptions.add(
+      this.route.queryParams.subscribe((qp) => {
+        this.groupName = qp['group'];
+        this.fetchIfReady();
+      })
+    );
+    this.subscriptions.add(
+      this.router.events
+        .pipe(
+          filter(
+            (event): event is NavigationEnd =>
+              event instanceof NavigationEnd && !event.urlAfterRedirects.includes('(modal:')
+          )
+        )
+        .subscribe(() => {
+          this.fetchIfReady();
+        })
+    );
+  }
+
+  ngOnDestroy() {
+    this.subscriptions.unsubscribe();
   }
 
   private fetchIfReady() {
@@ -178,5 +202,12 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
     if (modalRef?.closeChange) {
       modalRef.closeChange.subscribe(() => this.fetchSubsystem());
     }
+  }
+
+  openEditHostAccessModal() {
+    this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'initiator'] } }], {
+      queryParams: { group: this.groupName },
+      relativeTo: this.route.parent
+    });
   }
 }
