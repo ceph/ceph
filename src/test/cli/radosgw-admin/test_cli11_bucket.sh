@@ -33,7 +33,6 @@ WARN_BUCKETID_POS="Warning: --bucket-id should appear after the subcommand"
 WARN_BUCKETID_DUP="Warning: --bucket-id specified multiple times, using last value"
 WARN_UID_POS="Warning: --uid/-i should appear after the subcommand"
 WARN_UID_DUP="Warning: --uid/-i specified multiple times, using last value"
-WARN_TENANT_POS="Warning: --tenant should appear after the subcommand"
 WARN_TENANT_DUP="Warning: --tenant specified multiple times, using last value"
 WARN_FIX_POS="Warning: --fix should appear after the subcommand"
 WARN_FORMAT_POS="Warning: --format should appear after the subcommand"
@@ -395,7 +394,7 @@ check_warns "layout: --bucket-id before subcommand" 2 "" "$WARN_BUCKETID_POS" --
   bucket --bucket-id x layout --bucket cli11-no-such-bucket
 check_warns "layout: --format before subcommand"    2 "" "$WARN_FORMAT_POS" -- \
   bucket --format json layout --bucket cli11-no-such-bucket
-check_warns "layout: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "layout: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t layout --bucket cli11-no-such-bucket
 
 # duplicate-flag warnings (flag specified twice; last value wins)
@@ -438,7 +437,8 @@ check "chown: --bucket-new-name missing value" 114 "--bucket-new-name: 1 require
 
 # --bucket-id is NOT a chown option (the handler never read it); the flag is
 # swallowed and its value trips the stray-positional check (exit 22).
-check "chown: --bucket-id rejected (not a chown option)" 22 "ERROR: unexpected argument: 'x'" \
+check_warns "chown: --bucket-id swallowed+warned (not a chown option)" 22 "ERROR: bucket name not specified" \
+  "Warning: --bucket-id is not a valid option for 'bucket chown'" -- \
   bucket chown --bucket-id x
 
 # handler-level (cluster): bucket_name.empty() is checked inside the action
@@ -458,7 +458,7 @@ check_warns "chown: --uid before subcommand"             2 "" "$WARN_UID_POS" --
   bucket --uid cli11_no_such_user chown --bucket cli11-no-such-bucket
 check_warns "chown: --marker before subcommand"          2 "" "$WARN_MARKER_POS" -- \
   bucket --marker m chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
-check_warns "chown: --tenant before subcommand"          2 "" "$WARN_TENANT_POS" -- \
+check_warns "chown: --tenant before subcommand"          2 "" -- \
   bucket --tenant t chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
 check_warns "chown: --bucket-new-name before subcommand" 2 "" "$WARN_NEWNAME_POS" -- \
   bucket --bucket-new-name nn chown --bucket cli11-no-such-bucket --uid cli11_no_such_user
@@ -573,7 +573,7 @@ check_warns "logging info: --bucket-id before subcommand" 2 "" "$WARN_BUCKETID_P
   bucket --bucket-id x logging info --bucket cli11-no-such-bucket
 check_warns "logging list: --format before subcommand"    2 "" "$WARN_FORMAT_POS" -- \
   bucket --format json logging list --bucket cli11-no-such-bucket
-check_warns "logging info: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "logging info: --tenant before subcommand"    22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t logging info --bucket cli11-no-such-bucket
 
 # duplicate-flag warnings (flag specified twice; last value wins)
@@ -660,7 +660,7 @@ check_warns "rewrite: --max-rewrite-size before subcommand"        2 "" "$WARN_M
   bucket --max-rewrite-size 1 rewrite --bucket cli11-no-such-bucket
 check_warns "rewrite: --min-rewrite-stripe-size before subcommand" 2 "" "$WARN_MINRWSTRIPE_POS" -- \
   bucket --min-rewrite-stripe-size 1 rewrite --bucket cli11-no-such-bucket
-check_warns "rewrite: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "rewrite: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t rewrite --bucket cli11-no-such-bucket
 
 # duplicate-flag warnings (flag specified twice; last value wins)
@@ -680,9 +680,9 @@ check_warns "rewrite: --bucket + --min-rewrite-size before (2 pos warnings)" 2 "
 check_warns "rewrite: pos + duplicate --bucket (2 warns)"                    2 "" \
   "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
   bucket --bucket a rewrite --bucket cli11-no-such-bucket
-check_warns "rewrite: --start-date + --end-date + --tenant before (3 warns)" 22 \
+check_warns "rewrite: --start-date + --end-date + --tenant before (2 warns; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_STARTDATE_POS" "$WARN_ENDDATE_POS" "$WARN_TENANT_POS" -- \
+  "$WARN_STARTDATE_POS" "$WARN_ENDDATE_POS" -- \
   bucket --start-date 2020-01-01 --end-date 2021-01-01 --tenant t rewrite --bucket cli11-no-such-bucket
 
 # ============================================================
@@ -705,7 +705,8 @@ check "set-min-shards: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
 # SPACE form leaks its value token as a stray positional (exit 22) — the known
 # global space-form-value divergence; legacy parsed-and-ignored it. The =form
 # binds the value and is accepted instead (see the cluster cases below).
-check "set-min-shards: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space form)" 234 "ERROR: bucket not specified" \
+  "Warning: --max-entries is not a valid option for 'bucket set-min-shards'" -- \
   bucket set-min-shards --max-entries 5
 
 # missing option value (parse-level, exit 114)
@@ -743,7 +744,8 @@ check_cluster "set-min-shards: unrelated binary flag --fix accepted (exit 2)" 2 
   bucket set-min-shards --fix --bucket cli11-no-such-bucket --num-shards 11
 check_cluster "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- \
   bucket set-min-shards --max-entries=5 --bucket cli11-no-such-bucket --num-shards 11
-check "set-min-shards: unrelated value flag --max-entries 5 (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "set-min-shards: unrelated --max-entries 5 swallowed+warned (space form, +bucket+num-shards)" 2 "" \
+  "Warning: --max-entries is not a valid option for 'bucket set-min-shards'" -- \
   bucket set-min-shards --max-entries 5 --bucket cli11-no-such-bucket --num-shards 11
 
 # wrong-position warnings (flag before the leaf subcommand). The value still
@@ -758,7 +760,7 @@ check_warns "set-min-shards: --bucket-id before subcommand"  2 "" "$WARN_BUCKETI
   bucket --bucket-id x set-min-shards --bucket cli11-no-such-bucket --num-shards 11
 check_warns "set-min-shards: --num-shards before subcommand" 2 "" "$WARN_NUM_SHARDS_POS" -- \
   bucket --num-shards 11 set-min-shards --bucket cli11-no-such-bucket
-check_warns "set-min-shards: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "set-min-shards: --tenant before subcommand"     22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t set-min-shards --bucket cli11-no-such-bucket --num-shards 11
 
 # duplicate-flag warnings (flag specified twice; last value wins)
@@ -776,9 +778,9 @@ check_warns "set-min-shards: --bucket + --num-shards before (2 pos warnings)" 2 
 check_warns "set-min-shards: pos + duplicate --bucket (2 warns)"             2 "" \
   "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
   bucket --bucket a set-min-shards --bucket cli11-no-such-bucket --num-shards 11
-check_warns "set-min-shards: --bucket + --num-shards + --tenant before (3 warns)" 22 \
+check_warns "set-min-shards: --bucket + --num-shards + --tenant before (2 warns; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_BUCKET_POS" "$WARN_NUM_SHARDS_POS" "$WARN_TENANT_POS" -- \
+  "$WARN_BUCKET_POS" "$WARN_NUM_SHARDS_POS" -- \
   bucket --bucket cli11-no-such-bucket --num-shards 11 --tenant t set-min-shards
 
 # ============================================================
@@ -807,7 +809,8 @@ check "object shard: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
 # Unrelated flags differ by TYPE (both registered on the shared root). A value
 # option in SPACE form leaks its value as a stray positional (exit 22); the =form
 # binds the value and is accepted instead (see the cluster cases below).
-check "object shard: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "object shard: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket object shard'" '"shard": 10' -- \
   bucket object shard --object foo --num-shards 11 --max-entries 5
 
 # missing option value (parse-level, exit 114)
@@ -890,7 +893,8 @@ check "shard objects: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket shard objects --fakeflag
 # value option in SPACE form leaks its value as a stray positional (exit 22); the
 # =form binds the value and is accepted instead (see the cluster cases below).
-check "shard objects: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "shard objects: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket shard objects'" '"objs"' -- \
   bucket shard objects --num-shards 4 --max-entries 5
 
 # missing option value (parse-level, exit 114)
@@ -974,7 +978,8 @@ check "resync: no subcommand"                         106 "A subcommand is requi
 check "resync: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket resync encrypted multipart --fakeflag
 # a value option in SPACE form leaks its value as a stray positional (exit 22)
-check "resync: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "resync: unrelated --max-entries 5 swallowed+warned (space form)" 2 "" \
+  "Warning: --max-entries is not a valid option for 'bucket resync encrypted multipart'" -- \
   bucket resync encrypted multipart --bucket cli11chk --max-entries 5 --yes-i-really-mean-it
 
 # missing option value (parse-level, exit 114)
@@ -1017,7 +1022,7 @@ check_warns "resync: --yes-i-really-mean-it before subcommand" 2 "" "$WARN_YIRMI
   bucket --yes-i-really-mean-it resync encrypted multipart --bucket cli11-no-such-bucket
 check_warns "resync: --format before subcommand"   2 "" "$WARN_FORMAT_POS" -- \
   bucket --format json resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
-check_warns "resync: --tenant before subcommand"   22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "resync: --tenant before subcommand"   22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t resync encrypted multipart --bucket cli11-no-such-bucket --yes-i-really-mean-it
 
 # duplicate-flag warnings
@@ -1055,7 +1060,8 @@ check "radoslist: stray before bucket"       22 "ERROR: unexpected argument: 'fo
 check "radoslist: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
   bucket radoslist --fakeflag
 # a value option in SPACE form leaks its value as a stray positional (exit 22)
-check "radoslist: unrelated value flag --max-entries (space form, exit 22)" 22 "ERROR: unexpected argument: '5'" \
+check_warns "radoslist: unrelated --max-entries 5 swallowed+warned (space form)" 0 "" \
+  "Warning: --max-entries is not a valid option for 'bucket radoslist'" -- \
   bucket radoslist --bucket cli11chk --max-entries 5
 
 # missing option value (parse-level, exit 114)
@@ -1101,7 +1107,7 @@ check_warns "radoslist: --rgw-obj-fs before subcommand" 0 "" "$WARN_RGW_OBJ_FS_P
   bucket --rgw-obj-fs ":" radoslist --bucket cli11chk
 check_warns "radoslist: --yes-i-really-mean-it before subcommand" 0 "" "$WARN_YIRMI_POS" -- \
   bucket --yes-i-really-mean-it radoslist --bucket cli11chk
-check_warns "radoslist: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "radoslist: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant t radoslist --bucket cli11chk
 
 # duplicate-flag warnings (flag specified twice; last value wins)
@@ -1347,7 +1353,7 @@ check_warns "list: --bucket/-b before bucket"    2 "ERROR: could not init bucket
 check_warns "list: -b (short) before bucket"     2 "ERROR: could not init bucket" "$WARN_BUCKET_POS" -- \
   -b nonexistent_cli11_test bucket list
 # --tenant without --uid: warning fires, then legacy check rejects it (exit 22)
-check_warns "list: --tenant before bucket"       22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "list: --tenant before bucket"       22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant mytenant bucket list
 # flags that don't affect success: warning fires, command succeeds (exit 0)
 check_warns "list: --format before bucket"       0 "" "$WARN_FORMAT_POS" -- \
@@ -1360,7 +1366,7 @@ check_warns "list: --marker before bucket"       0 "" "$WARN_MARKER_POS" -- \
 # flag between bucket and list
 check_warns "list: --bucket between bucket and list"   2 "ERROR: could not init bucket" "$WARN_BUCKET_POS" -- \
   bucket --bucket nonexistent_cli11_test list
-check_warns "list: --tenant between bucket and list"   22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "list: --tenant between bucket and list"   22 "ERROR: --tenant is set, but there's no user ID" -- \
   bucket --tenant mytenant list
 check_warns "list: --format between bucket and list"   0 "" "$WARN_FORMAT_POS" -- \
   bucket --format json list
@@ -1390,7 +1396,7 @@ check_warns "list: --allow-unordered before bucket" 0 "" "$WARN_ALLOW_UNORDERED_
 # duplicate cross level (position + duplicate)
 check_warns "list: duplicate --bucket cross level"  2 "ERROR: could not init bucket" "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
   --bucket nonexistent1_cli11_test bucket list --bucket nonexistent2_cli11_test
-check_warns "list: duplicate --tenant cross level"  22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" "$WARN_TENANT_DUP" -- \
+check_warns "list: duplicate --tenant cross level"  22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_DUP" -- \
   --tenant foo bucket list --tenant bar
 
 # ============================================================
@@ -1400,7 +1406,7 @@ echo "=== bucket stats: wrong-position warnings (cluster) ==="
 
 check_warns "stats: --bucket before bucket"            2 "" "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test bucket stats
-check_warns "stats: --tenant before bucket"            22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "stats: --tenant before bucket"            22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant mytenant bucket stats
 check_warns "stats: --bucket between bucket and stats" 2 "" "$WARN_BUCKET_POS" -- \
   bucket --bucket nonexistent_cli11_test stats
@@ -1431,9 +1437,9 @@ check_warns "stats: duplicate --format"                        0 "" "$WARN_FORMA
   bucket stats --format json --format xml
 
 # stats multi-warning combinations
-check_warns "stats: --show-restore-stats + --tenant before (2 warns)" 22 \
+check_warns "stats: --show-restore-stats + --tenant before (1 warn; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_SHOWRESTORE_POS" "$WARN_TENANT_POS" -- \
+  "$WARN_SHOWRESTORE_POS" -- \
   --show-restore-stats --tenant foo bucket stats
 check_warns "stats: --bucket + --show-restore-stats before (2 warns)" 2 "" \
   "$WARN_BUCKET_POS" "$WARN_SHOWRESTORE_POS" -- \
@@ -1460,10 +1466,10 @@ check_warns "link: --bucket-new-name before bucket"  2 "" "$WARN_NEWNAME_POS" --
   --bucket-new-name newname bucket link --bucket nonexistent_cli11_test --uid testuser_cli11_test
 check_warns "link: --bucket-id before bucket"        2 "" "$WARN_BUCKETID_POS" -- \
   --bucket-id someid_cli11_test bucket link --bucket nonexistent_cli11_test --uid testuser_cli11_test
-check_warns "link: --tenant before bucket"           2 "" "$WARN_TENANT_POS" -- \
+check_warns "link: --tenant before bucket"           2 "" -- \
   --tenant foo bucket link --bucket nonexistent_cli11_test --uid testuser_cli11_test
-check_warns "link: --bucket + --uid + --tenant before (3 pos warnings)" 2 "" \
-  "$WARN_BUCKET_POS" "$WARN_UID_POS" "$WARN_TENANT_POS" -- \
+check_warns "link: --bucket + --uid + --tenant before (2 pos warnings; --tenant global, no warn)" 2 "" \
+  "$WARN_BUCKET_POS" "$WARN_UID_POS" -- \
   --bucket nonexistent_cli11_test --uid testuser_cli11_test --tenant foo bucket link
 
 # ============================================================
@@ -1477,7 +1483,7 @@ check_warns "unlink: --uid before bucket (warns, then fails)"     2 "" "$WARN_UI
   --uid testuser_cli11_test bucket unlink --bucket nonexistent_cli11_test
 check_warns "unlink: duplicate --bucket"  2 "" "$WARN_BUCKET_DUP" -- \
   bucket unlink --bucket foo --bucket nonexistent_cli11_test --uid testuser_cli11_test
-check_warns "unlink: --tenant before bucket"  2 "" "$WARN_TENANT_POS" -- \
+check_warns "unlink: --tenant before bucket"  2 "" -- \
   --tenant foo bucket unlink --bucket nonexistent_cli11_test --uid testuser_cli11_test
 check_warns "unlink: duplicate --uid"         2 "" "$WARN_UID_DUP" -- \
   bucket unlink --uid foo --uid testuser_cli11_test --bucket nonexistent_cli11_test
@@ -1507,7 +1513,7 @@ check_warns "rm: --inconsistent-index before bucket"         1 "$ERR_INCONSISTEN
 check_warns "rm: --yes-i-really-mean-it + --inconsistent-index before" 0 "" \
   "$WARN_YIRMI_POS" "$WARN_INCONSISTENT_POS" -- \
   --yes-i-really-mean-it --inconsistent-index bucket rm --bucket nonexistent_cli11_test
-check_warns "rm: --tenant before bucket"                     22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "rm: --tenant before bucket"                     22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant foo bucket rm --bucket nonexistent_cli11_test
 check_warns "rm: --purge-objects between bucket and rm"      0 "" "$WARN_PURGE_POS" -- \
   bucket --purge-objects rm --bucket nonexistent_cli11_test
@@ -1521,16 +1527,16 @@ check_warns "rm: --purge-objects + --bypass-gc before (2 pos warnings)" 0 "" \
 check_warns "rm: --bucket + --purge-objects before (2 pos warnings)"    0 "" \
   "$WARN_BUCKET_POS" "$WARN_PURGE_POS" -- \
   --bucket nonexistent_cli11_test --purge-objects bucket rm
-check_warns "rm: --bucket + --tenant + --purge-objects before (3 warns + exit 22)" 22 \
+check_warns "rm: --bucket + --tenant + --purge-objects before (2 warns + exit 22; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_BUCKET_POS" "$WARN_TENANT_POS" "$WARN_PURGE_POS" -- \
+  "$WARN_BUCKET_POS" "$WARN_PURGE_POS" -- \
   --bucket nonexistent_cli11_test --tenant foo --purge-objects bucket rm
 check_warns "rm: 4 pos warnings + inconsistent error" 1 "$ERR_INCONSISTENT" \
   "$WARN_BUCKET_POS" "$WARN_PURGE_POS" "$WARN_BYPASS_POS" "$WARN_INCONSISTENT_POS" -- \
   --bucket nonexistent_cli11_test --purge-objects --bypass-gc --inconsistent-index bucket rm
-check_warns "rm: pos + duplicate + tenant (3 warns)" 22 \
+check_warns "rm: pos + duplicate + tenant (2 warns; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" "$WARN_TENANT_POS" -- \
+  "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
   --bucket foo --tenant bar bucket rm --bucket nonexistent_cli11_test
 
 # ============================================================
@@ -1560,7 +1566,7 @@ check_warns "check: --remove-bad between bucket and check"  0 "" "$WARN_REMOVE_B
   bucket --remove-bad check
 check_warns "check: --check-head-obj-locator before bucket" 22 "ERROR: need to specify bucket name" "$WARN_CHECKHEAD_POS" -- \
   --check-head-obj-locator bucket check
-check_warns "check: --tenant before bucket"                 22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "check: --tenant before bucket"                 22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant foo bucket check
 check_warns "check: duplicate --fix"                        0 "" "$WARN_FIX_DUP" -- \
   bucket check --fix --fix
@@ -1626,9 +1632,9 @@ check "rm: --yes-i-really-mean-it=banana"       0 "Warning: invalid value 'banan
 check_warns "check: --fix + --remove-bad before (2 pos warnings)"       0 "" \
   "$WARN_FIX_POS" "$WARN_REMOVE_BAD_POS" -- \
   --fix --remove-bad bucket check
-check_warns "check: --fix + --remove-bad + --tenant before (3 warnings)" 22 \
+check_warns "check: --fix + --remove-bad + --tenant before (2 warnings; --tenant global, no warn)" 22 \
   "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_FIX_POS" "$WARN_REMOVE_BAD_POS" "$WARN_TENANT_POS" -- \
+  "$WARN_FIX_POS" "$WARN_REMOVE_BAD_POS" -- \
   --fix --remove-bad --tenant foo bucket check
 check_warns "check: pos + duplicate --bucket (2 warns)"                  0 "" \
   "$WARN_BUCKET_POS" "$WARN_BUCKET_DUP" -- \
@@ -1653,10 +1659,10 @@ check_warns "check olh: --bucket before bucket"             0 "" "$WARN_BUCKET_P
   --bucket nonexistent_cli11_test bucket check olh
 check_warns "check olh: --bucket between bucket and check"  0 "" "$WARN_BUCKET_POS" -- \
   bucket --bucket nonexistent_cli11_test check olh
-check_warns "check olh: --tenant before bucket"             22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "check olh: --tenant before bucket"             22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant foo bucket check olh
-check_warns "check olh: --bucket + --tenant before (2 warns)" 22 "ERROR: --tenant is set, but there's no user ID" \
-  "$WARN_BUCKET_POS" "$WARN_TENANT_POS" -- \
+check_warns "check olh: --bucket + --tenant before (1 warn; --tenant global, no warn)" 22 "ERROR: --tenant is set, but there's no user ID" \
+  "$WARN_BUCKET_POS" -- \
   --bucket nonexistent_cli11_test --tenant foo bucket check olh
 
 # olh-specific new flags in wrong position
@@ -1703,7 +1709,7 @@ check_warns "check unlinked: --bucket before bucket"             0 "" "$WARN_BUC
   --bucket nonexistent_cli11_test bucket check unlinked
 check_warns "check unlinked: --bucket between bucket and check"  0 "" "$WARN_BUCKET_POS" -- \
   bucket --bucket nonexistent_cli11_test check unlinked
-check_warns "check unlinked: --tenant before bucket"             22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "check unlinked: --tenant before bucket"             22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant foo bucket check unlinked
 
 # unlinked-specific new flags in wrong position
@@ -1725,7 +1731,7 @@ check_warns "remove: --bucket before bucket"           0 "" "$WARN_BUCKET_POS" -
   --bucket nonexistent_cli11_test bucket remove
 check_warns "remove: --purge-objects before bucket"    0 "" "$WARN_PURGE_POS" -- \
   --purge-objects bucket remove --bucket nonexistent_cli11_test
-check_warns "remove: --tenant before bucket"           22 "ERROR: --tenant is set, but there's no user ID" "$WARN_TENANT_POS" -- \
+check_warns "remove: --tenant before bucket"           22 "ERROR: --tenant is set, but there's no user ID" -- \
   --tenant foo bucket remove --bucket nonexistent_cli11_test
 check_warns "remove: duplicate --bucket"               0 "" "$WARN_BUCKET_DUP" -- \
   bucket remove --bucket foo --bucket nonexistent_cli11_test

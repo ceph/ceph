@@ -3660,41 +3660,66 @@ static std::string option_display_name(const CLI::Option* opt) {
   return name;
 }
 
-// After parsing: warns if any option was placed before the subcommand.
-// Traverses the parsed tree root-downward (via get_subcommands(), which returns
-// only parsed nodes). At each non-leaf node, a hidden option (registered by
-// add_multilevel_option for backward compat) with count() > 0 means the user
-// typed it before the next subcommand — warn. The child lookup confirms the
-// option is a multilevel registration and not some other hidden option.
-static void warn_wrong_position_impl(CLI::App* node, std::set<std::string>& warned) {
-  for (const auto* opt : node->get_options()) {
-    if (!opt->get_group().empty() || opt->count() == 0) {
-      continue;
-    }
-    const std::string primary = "--" + opt->get_single_name();
-    bool on_child = false;
-    for (auto* child : node->get_subcommands()) {
-      if (child->get_option_no_throw(primary)) {
-        on_child = true;
-        break;
-      }
-    }
-    if (!on_child) {
-      continue;
-    }
-    if (warned.insert(primary).second) {
-      cerr << "Warning: " << option_display_name(opt)
-           << " should appear after the subcommand\n";
-    }
+// Space-joined command path for a node, e.g. "bucket limit check".
+// Stops before the root app (which holds the program name, not a command).
+static std::string full_command_name(CLI::App* node) {
+  if (!node || !node->get_parent()) {
+    return {};
   }
-  for (auto* child : node->get_subcommands()) {
-    warn_wrong_position_impl(child, warned);
-  }
+  const std::string parent = full_command_name(node->get_parent());
+  return parent.empty() ? node->get_name() : parent + " " + node->get_name();
 }
 
-void warn_wrong_position(CLI::App* root) {
+// After parsing, warns about flags that a parent command caught instead of the
+// actual command. A correctly-placed flag is caught by the command's own
+// visible option, so it never shows up here; a flag caught by a parent shows up
+// as a hidden group("") copy (added by add_multilevel_option for backward
+// compat) with count() > 0. Whether the command actually has the flag decides
+// the message:
+//   - the command has it   -> it was just typed too early:
+//                             "should appear after the subcommand".
+//   - the command lacks it -> unrelated flag we accept anyway for backward
+//                             compat: "is not a valid option for '<command>'".
+// We ask the command itself, not each child. Under fallthrough()
+// get_option_no_throw() climbs to the parent when the command doesn't own the
+// flag, so we also check the returned option's group: a real (visible) option
+// has a named group, while a hidden copy climbed from an ancestor has group "".
+void warn_wrong_position_and_unrelated_option(CLI::App* root) {
+  // One command is parsed, so follow the parsed chain down to the real command.
+  std::vector<CLI::App*> path;
+  for (CLI::App* n = root; n; ) {
+    path.push_back(n);
+    auto subs = n->get_subcommands();
+    n = subs.empty() ? nullptr : subs.front();
+  }
+  CLI::App* leaf = path.back();
+  if (leaf == root) {
+    return;  // no command was given
+  }
+  const std::string cmd_name = full_command_name(leaf);
+
   std::set<std::string> warned;
-  warn_wrong_position_impl(root, warned);
+  for (CLI::App* node : path) {
+    for (const auto* opt : node->get_options()) {
+      if (!opt->get_group().empty() || opt->count() == 0) {
+        continue;
+      }
+      const std::string primary = "--" + opt->get_single_name();
+      if (!warned.insert(primary).second) {
+        continue;
+      }
+      // Does the actual command own this flag as a real (visible) option?
+      const CLI::Option* owned = leaf->get_option_no_throw(primary);
+      const bool command_has_flag = owned && !owned->get_group().empty();
+      if (command_has_flag) {
+        cerr << "Warning: " << option_display_name(opt)
+             << " should appear after the subcommand\n";
+      } else {
+        cerr << "Warning: " << option_display_name(opt)
+             << " is not a valid option for '" << cmd_name << "'\n";
+      }
+    }
+  }
 }
 
 static void collect_parsed_path(CLI::App* node, std::vector<CLI::App*>& path) {
@@ -3719,10 +3744,16 @@ void warn_duplicates(CLI::App* root) {
       if (!checked.insert(primary).second) {
         continue;
       }
+      // Dedup by pointer: with fallthrough, get_option_no_throw returns the same
+      // global Option* for every node, so count it once (multilevel flags are
+      // distinct objects and still summed).
+      std::set<const CLI::Option*> counted;
       std::size_t total = 0;
       for (auto* node : path) {
         if (auto* option = node->get_option_no_throw(primary)) {
-          total += option->count();
+          if (counted.insert(option).second) {
+            total += option->count();
+          }
         }
       }
       if (total > 1) {
@@ -4115,8 +4146,17 @@ int main(int argc, const char **argv)
     // options while still rejecting truly unknown options, or intentionally
     // tighten behavior to reject irrelevant options too.
     app.allow_extras();
+    // Enable fallthrough on the root so options declared here (globals) are accepted
+    // at any position: before, after, or inside a nested subcommand. fallthrough_ is
+    // INHERITABLE, so every subcommand created below copies it at construction. This
+    // must be set before the first add_subcommand call.
+    app.fallthrough();
 
     constexpr std::string_view tenant_desc = "tenant name";  // shared across command families
+    // radosgw-admin's own global flag (category 1) — owned by CLI11 on the root and
+    // declared once here instead of on every command. This matches the legacy parser,
+    // where --tenant is handled globally in the argument loop for any command.
+    app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
 
     { // script command registrations
       auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
@@ -4136,13 +4176,10 @@ int main(int argc, const char **argv)
 
       add_multilevel_option(script_put, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
       add_multilevel_option(script_put, "--infile",  infile,         infile_desc)->option_text("<file> REQUIRED");
-      add_multilevel_option(script_put, "--tenant",  tenant,         tenant_desc);
 
       add_multilevel_option(script_get, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
-      add_multilevel_option(script_get, "--tenant",  tenant,         tenant_desc);
 
       add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
-      add_multilevel_option(script_rm,  "--tenant",  tenant,         tenant_desc);
 
       script_put->callback(
           [&str_script_ctx, &infile, &tenant,
@@ -4317,7 +4354,6 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
       add_multilevel_option(bucket_list, "--uid,-i",          uid_str,        uid_desc);
       add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_list, "--tenant",          tenant,         tenant_desc);
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
       // CLI11 validates the integer type (including overflow); sets max_entries_specified
       // to mirror the legacy argparse behavior
@@ -4331,7 +4367,6 @@ int main(int argc, const char **argv)
       // bucket stats options
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
       add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_stats, "--tenant",             tenant,             tenant_desc);
       add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
       // CLI11 validates the integer type (including overflow); sets max_entries_specified
       // to mirror the legacy argparse behavior
@@ -4344,18 +4379,15 @@ int main(int argc, const char **argv)
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_link, "--uid,-i",          uid_str,         uid_desc)->option_text("<uid> REQUIRED");
-      add_multilevel_option(bucket_link, "--tenant",          tenant,          tenant_desc);
       add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       // bucket unlink options
       add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_unlink, "--uid,-i",    uid_str,     uid_desc)->option_text("<uid> REQUIRED");
-      add_multilevel_option(bucket_unlink, "--tenant",    tenant,      tenant_desc);
 
       // bucket check options
       add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
-      add_multilevel_option(bucket_check, "--tenant",    tenant,      tenant_desc);
       add_multilevel_binary_flag(bucket_check, "--fix",               fix,                    "besides checking bucket index, will also fix it");
       add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
@@ -4364,7 +4396,6 @@ int main(int argc, const char **argv)
 
       // bucket check olh options
       add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
-      add_multilevel_option(bucket_check_olh, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
@@ -4372,7 +4403,6 @@ int main(int argc, const char **argv)
 
       // bucket check unlinked options
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
-      add_multilevel_option(bucket_check_unlinked, "--tenant",            tenant,             tenant_desc);
       add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
       add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
@@ -4380,7 +4410,6 @@ int main(int argc, const char **argv)
 
       // bucket rm options
       add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_rm, "--tenant",    tenant,      tenant_desc);
       add_multilevel_binary_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it")->ignore_underscore();
       add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC")->ignore_underscore();
       add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency")->ignore_underscore();
@@ -4389,14 +4418,12 @@ int main(int argc, const char **argv)
       // bucket layout options
       add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_layout, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
 
       // bucket chown options
       add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_chown, "--uid,-i",          uid_str,         uid_desc);
       add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
-      add_multilevel_option(bucket_chown, "--tenant",          tenant,          tenant_desc);
       add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       // bucket limit check options
@@ -4407,24 +4434,20 @@ int main(int argc, const char **argv)
       // bucket logging flush options
       add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_logging_flush, "--tenant",    tenant,      tenant_desc);
 
       // bucket logging info options
       add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_logging_info, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
 
       // bucket logging list options
       add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_logging_list, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
 
       // bucket rewrite options
       add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_rewrite, "--tenant",    tenant,      tenant_desc);
       add_multilevel_option(bucket_rewrite, "--format",    format,      format_desc);
       add_multilevel_option(bucket_rewrite, "--start-date,--start-time", start_date,
                             "start date in the format yyyy-mm-dd")->ignore_underscore();
@@ -4450,7 +4473,6 @@ int main(int argc, const char **argv)
       // bucket set-min-shards options
       add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_set_min_shards, "--tenant",     tenant,      tenant_desc);
       // Track whether --num-shards was provided, so the handler can
       // distinguish an omitted option from an explicit value of 0.
       add_multilevel_option(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
@@ -4484,7 +4506,6 @@ int main(int argc, const char **argv)
       // bucket resync encrypted multipart options
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc)->ignore_underscore();
-      add_multilevel_option(bucket_resync_encrypted_multipart, "--tenant",     tenant,     tenant_desc);
       add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
       add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations")->ignore_underscore();
       add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
@@ -4493,11 +4514,10 @@ int main(int argc, const char **argv)
       // rgw_obj_fs is a std::optional; bind a string sink and set it via ->each so it
       // stays unset (no field separator) when --rgw-obj-fs is not given.
       auto register_radoslist_opts =
-          [&bucket_name, &tenant, &max_concurrent_ios, &orphan_stale_secs,
+          [&bucket_name, &max_concurrent_ios, &orphan_stale_secs,
            &rgw_obj_fs_val, &rgw_obj_fs, &yes_i_really_mean_it,
-           &bucket_desc, &tenant_desc](CLI::App* cmd) {
+           &bucket_desc](CLI::App* cmd) {
         add_multilevel_option(cmd, "--bucket,-b", bucket_name, bucket_desc);
-        add_multilevel_option(cmd, "--tenant",    tenant,      tenant_desc);
         add_multilevel_option(cmd, "--max-concurrent-ios", max_concurrent_ios,
                               "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
         add_multilevel_option(cmd, "--orphan-stale-secs", orphan_stale_secs,
@@ -5380,7 +5400,7 @@ int main(int argc, const char **argv)
           cout << app.help();
           return 0;
         }
-        warn_wrong_position(&app);  // RuntimeError exits before reaching the success-path calls below
+        warn_wrong_position_and_unrelated_option(&app);  // RuntimeError exits before reaching the success-path calls below
         warn_duplicates(&app);
         return e.get_exit_code();
       } catch (const CLI::ParseError& e) {
@@ -5396,7 +5416,7 @@ int main(int argc, const char **argv)
       // Any parsed CLI11 command will appear as a subcommand of app.
       cli11_parsed = !app.get_subcommands().empty();
       if (cli11_parsed) {
-        warn_wrong_position(&app);
+        warn_wrong_position_and_unrelated_option(&app);
         warn_duplicates(&app);
 
         // Reject stray positional args for any CLI11-parsed command.
