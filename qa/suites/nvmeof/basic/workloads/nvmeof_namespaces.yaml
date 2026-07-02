@@ -33,6 +33,7 @@ tasks:
       client.1:
         - nvmeof/basic_tests.sh
         - nvmeof/namespace_test.sh
+        - nvmeof/cross_namespace_copy_test.sh
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
