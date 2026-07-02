@@ -1353,10 +1353,10 @@ int DataScan::scan_links()
             inodeno_t ino = inode.inode->ino;
 
 	    if (step == SCAN_INOS) {
-	      // Record inodes that are in stray dirs with nlink == 0.
+	      // Record inodes that are in stray dirs with nlink <= 0.
 	      // Remote dentries pointing to these inodes are stale and
 	      // will be cleaned up during the CHECK_LINK step.
-	      if (MDS_INO_IS_STRAY(dir_ino) && inode.inode->nlink == 0)
+	      if (MDS_INO_IS_STRAY(dir_ino) && inode.inode->nlink <= 0)
 		stale_stray_inodes.insert(ino);
 	      if (used_inos.contains(ino, 1)) {
 		dup_primaries.emplace(
