@@ -1,3 +1,20 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
 .form-item-append {
   margin-top: 1rem;
+}
+
+.date-time-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.date-time-col {
+  flex: 1 1 0;
+  min-width: 200px;
 }
