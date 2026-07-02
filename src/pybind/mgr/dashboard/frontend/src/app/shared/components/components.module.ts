@@ -132,6 +132,8 @@ import Locked16 from '@carbon/icons/es/locked/16';
 import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
 import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
+import Temperature16 from '@carbon/icons/es/temperature/16';
+
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 
 @NgModule({
@@ -314,7 +316,8 @@ export class ComponentsModule {
       Locked16,
       WebServicesCluster20,
       WebServicesCluster32,
-      CloudMonitoring16
+      CloudMonitoring16,
+      Temperature16
     ]);
   }
 }
