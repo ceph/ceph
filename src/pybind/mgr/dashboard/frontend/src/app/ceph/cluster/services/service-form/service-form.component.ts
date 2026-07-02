@@ -1106,8 +1106,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       case 'container':
       case 'snmp-gateway':
       case 'elastic-serach':
-      case 'jaeger-collector':
-      case 'jaeger-query':
+      case 'jaeger':
       case 'smb':
       case 'oauth2-proxy':
       case 'mgmt-gateway':
