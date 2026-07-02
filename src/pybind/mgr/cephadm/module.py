@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from cephadm.acme import ACMEManager
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 
 import string
@@ -451,6 +452,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Cephadm service discovery port'
         ),
         Option(
+            'acme_challenge_port',
+            type='int',
+            default=8766,
+            desc='Cephadm ACME HTTP-01 challenge server port'
+        ),
+        Option(
             'cgroups_split',
             type='bool',
             default=True,
@@ -648,6 +655,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.hw_monitoring = False
             self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
+            self.acme_challenge_port = 0
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
@@ -733,6 +741,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         service_registry.init_services(self)
         self._init_cert_mgr()
+        self.acme_mgr = ACMEManager(self)
 
         self.migration = Migrations(self)
 
@@ -802,6 +811,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
         # register haproxy monitor ssl cert and key
         self.cert_mgr.register_cert_key_pair('ingress', 'haproxy_monitor_ssl_cert', 'haproxy_monitor_ssl_key', TLSObjectScope.SERVICE)
+        # register ACME-managed certificate names for the first supported HTTP-01 consumer
+        self.cert_mgr.register_acme_cert_key_pair('mgmt-gateway', TLSObjectScope.GLOBAL)
         # register per-feature SMB TLS cert names
         for _smb_feature in ['remote_control', 'keybridge']:
             self.cert_mgr.register_cert_key_pair(

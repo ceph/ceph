@@ -4,7 +4,7 @@ from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from ceph.deployment.utils import wrap_ipv6
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
+from ceph.deployment.service_spec import CertificateSource, MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
 from .service_registry import register_cephadm_service
 
@@ -59,6 +59,14 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
+    def get_acme_challenge_endpoints(self) -> List[str]:
+        acme_endpoints = []
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            acme_endpoints.append(f"{wrap_ipv6(addr)}:{self.mgr.acme_challenge_port}")
+        return acme_endpoints
+
     def get_service_discovery_endpoints(self) -> List[str]:
         # the mgmt gateway uses this internally when generating its nginx
         # configuration and the URL prefixes that we publish to the world.
@@ -86,6 +94,11 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
+        if (
+            spec is not None
+            and getattr(spec, 'certificate_source', None) == CertificateSource.ACME.value
+        ):
+            deps.append(f'acme_challenge_port:{mgr.acme_challenge_port}')
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -99,6 +112,8 @@ class MgmtGatewayService(CephadmService):
         grafana_endpoints = self.get_service_endpoints('grafana')
         oauth2_proxy_endpoints = self.get_service_endpoints('oauth2-proxy')
         service_discovery_endpoints = self.get_service_discovery_endpoints()
+        acme_challenge_endpoints = self.get_acme_challenge_endpoints()
+        acme_enabled = svc_spec.certificate_source == CertificateSource.ACME.value
         try:
             grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
             grafana_protocol = grafana_spec.protocol
@@ -111,7 +126,8 @@ class MgmtGatewayService(CephadmService):
             'alertmanager_endpoints': alertmanager_endpoints,
             'grafana_endpoints': grafana_endpoints,
             'oauth2_proxy_endpoints': oauth2_proxy_endpoints,
-            'service_discovery_endpoints': service_discovery_endpoints
+            'service_discovery_endpoints': service_discovery_endpoints,
+            'acme_challenge_endpoints': acme_challenge_endpoints
         }
         server_context = {
             'spec': svc_spec,
@@ -125,6 +141,8 @@ class MgmtGatewayService(CephadmService):
             'alertmanager_endpoints': alertmanager_endpoints,
             'grafana_endpoints': grafana_endpoints,
             'service_discovery_endpoints': service_discovery_endpoints,
+            'acme_challenge_endpoints': acme_challenge_endpoints,
+            'acme_enabled': acme_enabled,
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 

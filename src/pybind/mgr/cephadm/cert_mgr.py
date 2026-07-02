@@ -183,6 +183,7 @@ class CertMgr:
     CEPHADM_CERT_WARNING = 'CEPHADM_CERT_WARNING'
 
     CEPHADM_SIGNED = 'cephadm-signed'
+    ACME = 'acme'
     LABEL_SEPARATOR = "__lbl__"
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
@@ -206,6 +207,19 @@ class CertMgr:
 
     def is_cephadm_signed_object(self, object_name: str) -> bool:
         return object_name.startswith(self.CEPHADM_SIGNED)
+
+    def is_acme_object(self, object_name: str) -> bool:
+        return object_name.startswith(f'{self.ACME}_')
+
+    def acme_cert(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.ACME}_{service_name}{self.LABEL_SEPARATOR}{label}_cert'
+        return f'{self.ACME}_{service_name}_cert'
+
+    def acme_key(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.ACME}_{service_name}{self.LABEL_SEPARATOR}{label}_key'
+        return f'{self.ACME}_{service_name}_key'
 
     def self_signed_cert(self, service_name: str, label: Optional[str] = None) -> str:
         if label:
@@ -257,6 +271,14 @@ class CertMgr:
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
+
+    def register_acme_cert_key_pair(self, service_name: str, scope: TLSObjectScope, label: Optional[str] = None) -> None:
+        self.register_cert_key_pair(
+            service_name,
+            self.acme_cert(service_name, label),
+            self.acme_key(service_name, label),
+            scope,
+        )
 
     def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """
@@ -382,6 +404,33 @@ class CertMgr:
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
                  user_made: bool = False, editable: bool = False, managed_by: Optional[str] = None) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable, managed_by)
+
+    def save_acme_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials,
+                                service_target: Optional[str] = None, host: Optional[str] = None,
+                                label: Optional[str] = None) -> None:
+        acme_cert_name = self.acme_cert(service_name, label)
+        acme_key_name = self.acme_key(service_name, label)
+        self.cert_store.save_tlsobject(
+            acme_cert_name,
+            tls_creds.cert,
+            service_name=service_target,
+            host=host,
+            editable=False,
+            managed_by=TLSObjectManager.ACME.value,
+        )
+        self.key_store.save_tlsobject(
+            acme_key_name,
+            tls_creds.key,
+            service_name=service_target,
+            host=host,
+            editable=False,
+            managed_by=TLSObjectManager.ACME.value,
+        )
+
+    def rm_acme_cert_key_pair(self, service_name: str, service_target: Optional[str] = None,
+                              host: Optional[str] = None, label: Optional[str] = None) -> None:
+        self.rm_cert_if_present(self.acme_cert(service_name, label), service_target, host)
+        self.rm_key_if_present(self.acme_key(service_name, label), service_target, host)
 
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:
@@ -834,6 +883,20 @@ class CertMgr:
         for cert_info, cert_obj in self.get_problematic_certificates():
 
             log_issue(cert_info)
+
+            if cert_obj.managed_by == TLSObjectManager.ACME.value:
+                fixed = False
+                if fix_issues and hasattr(self.mgr, 'acme_mgr'):
+                    fixed = self.mgr.acme_mgr.ensure_renewal(cert_info, cert_obj)
+                if fixed:
+                    svc = self.get_associated_service(cert_info)
+                    if svc:
+                        services_to_reconfig.add(svc)
+                    else:
+                        logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
+                else:
+                    certs_with_issues.append(cert_info)
+                continue
 
             if requires_user_intervention(cert_info, cert_obj):
                 certs_with_issues.append(cert_info)
