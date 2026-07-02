@@ -863,9 +863,7 @@ class ServiceSpec(object):
         'mgmt-gateway',
         'oauth2-proxy',
         'iscsi',
-        'jaeger-agent',
-        'jaeger-collector',
-        'jaeger-query',
+        'jaeger',
         'jaeger-tracing',
         'loki',
         'mds',
@@ -958,9 +956,7 @@ class ServiceSpec(object):
             'pushgateway': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
-            'jaeger-agent': TracingSpec,
-            'jaeger-collector': TracingSpec,
-            'jaeger-query': TracingSpec,
+            'jaeger': TracingSpec,
             'jaeger-tracing': TracingSpec,
             'node-proxy': NodeProxySpec,
             SMBSpec.service_type: SMBSpec,
@@ -3764,18 +3760,18 @@ yaml.add_representer(MONSpec, ServiceSpec.yaml_representer)
 
 
 class TracingSpec(ServiceSpec):
-    SERVICE_TYPES = ['elasticsearch', 'jaeger-collector', 'jaeger-query', 'jaeger-agent']
+    SERVICE_TYPES = ['elasticsearch', 'jaeger']
 
     def __init__(self,
                  service_type: str,
                  es_nodes: Optional[str] = None,
-                 without_query: bool = False,
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
-                 preview_only: bool = False
+                 preview_only: bool = False,
+                 otlp_port: Optional[int] = None,
                  ):
         assert service_type in TracingSpec.SERVICE_TYPES + ['jaeger-tracing']
 
@@ -3784,17 +3780,17 @@ class TracingSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
             networks=networks)
-        self.without_query = without_query
         self.es_nodes = es_nodes
+        self.otlp_port = otlp_port
 
+    # Only the otlp port is configurable at the moment
+    # Future PR to improve to make query UI and ES ports configurable
     def get_port_start(self) -> List[int]:
-        return [self.get_port()]
-
-    def get_port(self) -> int:
-        return {'elasticsearch': 9200,
-                'jaeger-agent': 6799,
-                'jaeger-collector': 14250,
-                'jaeger-query': 16686}[self.service_type]
+        if self.service_type == 'elasticsearch':
+            return [9200]
+        # jaeger: OTLP/gRPC receiver + query UI
+        otlp = self.otlp_port if self.otlp_port else 4317
+        return [otlp, 16686]
 
     def get_tracing_specs(self) -> List[ServiceSpec]:
         assert self.service_type == 'jaeger-tracing'
@@ -3804,10 +3800,8 @@ class TracingSpec(ServiceSpec):
 
         if self.es_nodes:
             del daemons['elasticsearch']
-        if self.without_query:
-            del daemons['jaeger-query']
         if self.placement:
-            daemons.update({'jaeger-collector': self.placement})
+            daemons.update({daemon: self.placement for daemon in daemons})
 
         for daemon, daemon_placement in daemons.items():
             specs.append(TracingSpec(service_type=daemon,
@@ -3816,7 +3810,8 @@ class TracingSpec(ServiceSpec):
                                      unmanaged=self.unmanaged,
                                      config=self.config,
                                      networks=self.networks,
-                                     preview_only=self.preview_only
+                                     preview_only=self.preview_only,
+                                     otlp_port=self.otlp_port,
                                      ))
         return specs
 
