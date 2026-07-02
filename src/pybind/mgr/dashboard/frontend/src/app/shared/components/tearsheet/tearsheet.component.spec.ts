@@ -172,5 +172,18 @@ describe('TearsheetComponent', () => {
       tearsheetComponent.onNext();
       expect(tearsheetComponent.currentStep).toBe(0);
     });
+
+    it('should disable next button when current step is invalid', () => {
+      hostComponent.steps = hostComponent.steps.map((step, i) =>
+        i === 0 ? { ...step, invalid: true } : step
+      );
+      hostFixture.detectChanges();
+      const buttons = hostFixture.debugElement.queryAll(
+        By.css('.tearsheet-footer button[cdsButton="primary"]')
+      );
+      const nextBtn = buttons.find((btn) => btn.nativeElement.textContent.trim() === 'Next');
+      expect(nextBtn).toBeTruthy();
+      expect(nextBtn?.nativeElement.disabled).toBe(true);
+    });
   });
 });
