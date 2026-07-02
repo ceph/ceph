@@ -10,6 +10,7 @@
 #include "ServiceDaemon.h"
 #include "Types.h"
 #include "json_spirit/json_spirit.h"
+#include "Checkpoint.h"
 
 #include <deque>
 #include <functional>
@@ -691,6 +692,7 @@ private:
   std::vector<std::string> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
   std::set<std::string> m_purging_directories;
+  std::set<std::string> m_checkpoint_init_pending;
   MountRef m_local_mount;
   ServiceDaemon *m_service_daemon;
   PeerReplayerAdminSocketHook *m_asok_hook = nullptr;
@@ -765,6 +767,12 @@ private:
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
                      bool is_remote=false);
+
+  void initialize_checkpoints(const std::string &dir_root);
+  void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
+                                const std::string &snap_name);
+  void checkpoint_sync_failed(const std::string &dir_root, uint64_t snap_id,
+                              const std::string &snap_name, int err);
 
   int propagate_snap_deletes(const std::string &dir_root, const std::set<std::string> &snaps);
   int propagate_snap_renames(const std::string &dir_root,
