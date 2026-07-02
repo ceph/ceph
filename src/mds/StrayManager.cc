@@ -475,7 +475,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
   }
 
   // purge?
-  if (in->get_inode()->nlink == 0) {
+  if (in->get_inode()->nlink <= 0) {
     // past snaprealm parents imply snapped dentry remote links.
     // only important for directories.  normal file data snaps are handled
     // by the object store.
@@ -499,7 +499,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
 
       if (!in->remote_parents.empty()) {
 	// unlink any stale remote dentries (both snap and non-snap).
-	// When nlink == 0, the inode has been fully deleted and all
+	// When nlink <= 0, the inode has been fully deleted and all
 	// remote parents are stale.  Snap dentries are created during
 	// snapshot operations; non-snap dentries may remain from
 	// incomplete hardlink cleanup (e.g. after MDS failover).
@@ -635,10 +635,9 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
   CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
   ceph_assert(stray_dnl->is_primary());
   CInode *stray_in = stray_dnl->get_inode();
-  ceph_assert(stray_in->get_inode()->nlink >= 0);
   ceph_assert(stray_in->last == CEPH_NOSNAP);
 
-  if (stray_in->get_inode()->nlink == 0) {
+  if (stray_in->get_inode()->nlink <= 0) {
     /*
      * When nlink reaches 0, the inode has been fully deleted and is
      * pending purge from the stray directory.  Any remote parents that
@@ -646,14 +645,14 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
      * up yet (e.g. after an MDS failover, stale remote dentries may
      * still reside on disk and get loaded during dirfrag fetch).
      *
-     * We must NOT attempt to reintegrate a stray with nlink == 0,
+     * We must NOT attempt to reintegrate a stray with nlink <= 0,
      * because reintegration assumes at least one valid hard link
      * remains.  Instead, just return; the normal _eval_stray path
      * will handle cleanup when it processes this inode via the
-     * nlink == 0 purge path.
+     * nlink <= 0 purge path.
      */
     dout(10) << __func__ << ": stray inode " << *stray_in
-             << " nlink == 0, skipping reintegration" << dendl;
+             << " nlink <= 0, skipping reintegration" << dendl;
     return;
   }
 
