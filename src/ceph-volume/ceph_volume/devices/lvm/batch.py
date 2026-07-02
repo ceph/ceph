@@ -216,6 +216,14 @@ class Batch(object):
             action='store_true'
         )
         parser.add_argument(
+            '--tpm2-pcrs',
+            dest='tpm2_pcrs',
+            help=('PCRs for systemd-cryptenroll --tpm2-pcrs when using --with-tpm '
+                  '(default binds to Secure Boot policy, see systemd-cryptenroll(1)).'),
+            default='7',
+            type=str,
+        )
+        parser.add_argument(
             '--crush-device-class',
             dest='crush_device_class',
             help='Crush device class to assign this OSD to',
@@ -389,6 +397,7 @@ class Batch(object):
             'bluestore',
             'dmcrypt',
             'with_tpm',
+            'tpm2_pcrs',
             'crush_device_class',
             'no_systemd',
             'dmcrypt_format_opts',
