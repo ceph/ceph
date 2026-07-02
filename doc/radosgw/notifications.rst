@@ -305,9 +305,6 @@ Request parameters:
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
 
- - ``kafka-brokers``: A comma-separated list of ``host:port`` of Kafka brokers:
-   these brokers (may contain a broker which is defined in Kafka URI) will be
-   added to Kafka URI to support sending notifications to a Kafka cluster.
  - ``ssl-certificate-location``: The path to a PEM-encoded client certificate
    file to present to the Kafka broker for mutual TLS (mTLS) authentication.
    This enables certificate-based client identity and must be used together

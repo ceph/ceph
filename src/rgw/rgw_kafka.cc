@@ -636,17 +636,17 @@ public:
 
   // connect to a broker, or reuse an existing connection if already connected
   bool connect(connection_id_t& conn_id,
-               const std::string& url,
-               bool use_ssl,
-               bool verify_ssl,
-               boost::optional<const std::string&> ca_location,
-               boost::optional<const std::string&> mechanism,
-               boost::optional<const std::string&> topic_user_name,
-               boost::optional<const std::string&> topic_password,
-               boost::optional<const std::string&> brokers,
-               boost::optional<const std::string&> ssl_certificate,
-               boost::optional<const std::string&> ssl_key,
-               boost::optional<const std::string&> ssl_key_password) {
+          const std::string& url,
+          bool use_ssl,
+          bool verify_ssl,
+          boost::optional<const std::string&> ca_location,
+          boost::optional<const std::string&> mechanism,
+          boost::optional<const std::string&> topic_user_name,
+          boost::optional<const std::string&> topic_password,
+          boost::optional<const std::string&> brokers,
+          boost::optional<const std::string&> ssl_certificate,
+          boost::optional<const std::string&> ssl_key,
+          boost::optional<const std::string&> ssl_key_password) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
