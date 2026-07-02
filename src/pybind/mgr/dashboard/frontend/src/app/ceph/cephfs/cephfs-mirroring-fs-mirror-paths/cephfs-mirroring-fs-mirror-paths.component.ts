@@ -205,21 +205,20 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       itemNames: [path],
       actionDescription: 'remove',
       submitActionObservable: () =>
-        this.taskWrapper
-          .wrapTaskAroundCall({
-            task: new FinishedTask('cephfs/mirroring/path/remove', {
-              fsName: this.fsName,
-              path
-            }),
-            call: this.cephfsService.removeMirrorDirectory(this.fsName, path).pipe(
-              tap(() => {
-                if (this.selectedPath?.path === path) {
-                  this.closeSidePanel();
-                }
-                this.loadMirrorPaths();
-              })
-            )
-          })
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/mirroring/path/remove', {
+            fsName: this.fsName,
+            path
+          }),
+          call: this.cephfsService.removeMirrorDirectory(this.fsName, path).pipe(
+            tap(() => {
+              if (this.selectedPath?.path === path) {
+                this.closeSidePanel();
+              }
+              this.loadMirrorPaths();
+            })
+          )
+        })
     });
   }
 

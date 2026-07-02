@@ -63,19 +63,20 @@
     }
 
     <!--Start date -->
-    <cd-date-time-picker
-      name="Start Date"
-      helperText="The time zone is assumed to be UTC"
-      [control]="snapScheduleForm.get('startDate')"
-      [disabled]="isEdit"></cd-date-time-picker>
-    <span class="invalid-feedback"
-          *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
-          i18n>This field is required.</span>
+    <div class="form-item">
+      <cd-date-time-picker
+        name="Start Date"
+        helperText="The time zone is assumed to be UTC"
+        [control]="snapScheduleForm.get('startDate')"
+        [disabled]="isEdit"></cd-date-time-picker>
+      <span class="invalid-feedback"
+            *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
+            i18n>This field is required.</span>
+    </div>
 
     <!-- Repeat interval -->
-    <div class="form-item form-item-append"
-         cdsRow>
-      <div cdsCol>
+    <div class="form-item form-item-append">
+      <div class="form-col">
         <cds-number [id]="'repeatInterval'"
                     [name]="'repeatInterval'"
                     [formControlName]="'repeatInterval'"
@@ -85,7 +86,7 @@
                     [invalidText]="repeatIntervalError"
                     cdRequiredField="Schedule"></cds-number>
       </div>
-      <div cdsCol>
+      <div class="form-col">
         <cds-select id="repeatFrequency"
                     name="repeatFrequency"
                     formControlName="repeatFrequency"
@@ -117,10 +118,8 @@
     <ng-container formArrayName="retentionPolicies"
                   *ngFor="let retentionPolicy of retentionPolicies.controls; index as i">
       <ng-container [formGroupName]="i">
-        <div cdsRow
-             class="form-item form-item-append">
-          <div cdsCol
-               [columnNumbers]="{lg: 8}">
+        <div class="form-item form-item-append">
+          <div class="form-col">
             <cds-number [id]="'retentionInterval' + i"
                         [name]="'retentionInterval' + i"
                         [formControlName]="'retentionInterval'"
@@ -129,8 +128,7 @@
                         [invalid]="snapScheduleForm.controls['retentionPolicies'].controls[i].invalid && snapScheduleForm.controls['retentionPolicies'].dirty"
                         [invalidText]="retentionPolicyError"></cds-number>
           </div>
-          <div cdsCol
-               [columnNumbers]="{lg: 7}">
+          <div class="form-col">
             <cds-select id="retentionFrequency"
                         name="retentionFrequency"
                         formControlName="retentionFrequency"
@@ -138,12 +136,9 @@
                         *ngIf="retentionFrequencies">
               <option *ngFor="let freq of retentionFrequencies"
                       [value]="freq[1]">{{ freq[0] }}</option>
-
             </cds-select>
           </div>
-          <div cdsCol
-               [columnNumbers]="{lg: 1}"
-               class="item-action-btn">
+          <div class="item-action-btn">
             <cds-icon-button kind="danger"
                              size="sm"
                              (click)="removeRetentionPolicy(i)">

@@ -10,12 +10,11 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
   standalone: false
 })
 export class MirroringReviewStepComponent implements OnInit, TearsheetStep {
-  @Input() destinationCluster = '—';
-  @Input() destinationFilesystem = '—';
+  @Input() fsName = '—';
   @Input() totalPaths = 0;
+  @Input() selectedPaths: string[] = [];
   @Input() snapshotInterval = '—';
   @Input() retention = '—';
-  @Input() existingScheduleCount = 0;
 
   formGroup!: CdFormGroup;
 

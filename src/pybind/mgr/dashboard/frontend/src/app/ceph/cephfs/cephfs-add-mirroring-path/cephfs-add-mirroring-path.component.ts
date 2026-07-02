@@ -16,6 +16,11 @@ import { MirroringPathUtils } from './mirroring-path-utils';
 import { PathSubmitFailure, PathSubmitOutput } from './mirroring-path.model';
 import { MirroringPathsStepComponent } from './mirroring-paths-step/mirroring-paths-step.component';
 import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
+import {
+  RepeaFrequencyPlural,
+  RepeaFrequencySingular
+} from '~/app/shared/enum/repeat-frequency.enum';
+import { RetentionFrequency } from '~/app/shared/enum/retention-frequency.enum';
 
 import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 
@@ -47,6 +52,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     { label: $localize`Review`, invalid: false }
   ];
   isSubmitLoading = false;
+  reviewSelectedPaths: string[] = [];
+  reviewTotalPaths = 0;
+  reviewSnapshotInterval = '—';
+  reviewRetention = '—';
 
   get schedulePath(): string {
     return this.pathsStep?.getSubmitPaths()?.toAdd?.[0] ?? '';
@@ -60,6 +69,65 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     } catch {
       this.fsName = fsName;
     }
+  }
+
+  onStepChanged(event: { current: number }): void {
+    if (event.current >= 1 && event.current < 2) {
+      this.capturePathsReview();
+    }
+    if (event.current === 2) {
+      this.captureScheduleReview();
+    }
+  }
+
+  private capturePathsReview(): void {
+    const { toAdd } = this.pathsStep?.getSubmitPaths() ?? { toAdd: [] };
+    this.reviewSelectedPaths = [...toAdd];
+    this.reviewTotalPaths = toAdd.length;
+  }
+
+  private captureScheduleReview(): void {
+    this.capturePathsReview();
+    this.reviewSnapshotInterval = this.formatSnapshotInterval();
+    this.reviewRetention = this.formatRetention();
+  }
+
+  private formatSnapshotInterval(): string {
+    const form = this.scheduleStep?.snapScheduleForm;
+    if (!form) {
+      return '—';
+    }
+    const interval = form.get('repeatInterval')?.value;
+    const frequency = form.get('repeatFrequency')?.value;
+    if (!interval || !frequency) {
+      return '—';
+    }
+    const freqLabel =
+      interval === 1
+        ? RepeaFrequencySingular[frequency] || frequency
+        : RepeaFrequencyPlural[frequency] || frequency;
+    return `${interval} ${freqLabel}`;
+  }
+
+  private formatRetention(): string {
+    const policies = this.scheduleStep?.retentionPolicies?.controls;
+    if (!policies?.length) {
+      return '—';
+    }
+    const formatted = policies
+      .map((control) => {
+        const interval = control.get('retentionInterval')?.value;
+        const frequency = control.get('retentionFrequency')?.value;
+        if (!interval || !frequency) {
+          return null;
+        }
+        const freqLabel =
+          Object.entries(RetentionFrequency).find(([, value]) => value === frequency)?.[0] ||
+          frequency;
+        return `${interval} ${freqLabel}`;
+      })
+      .filter(Boolean);
+    return formatted.length ? formatted.join(', ') : '—';
   }
 
   onSubmit(): void {
