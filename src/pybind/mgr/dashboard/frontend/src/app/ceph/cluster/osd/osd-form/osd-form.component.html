@@ -6,10 +6,11 @@
   [steps]="steps"
   [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
   (submitRequested)="submit()"
+  (closeRequested)="onCancel()"
   (stepChanged)="populateReviewData()"
   [isSubmitLoading]="isSubmitLoading"
   [submitButtonLabel]="simpleDeployment ? createOsdsLabel : actionLabels.PREVIEW"
-  type="full">
+  type="wide">
 
   <cd-tearsheet-step>
   <div class="osd-tearsheet-content">
@@ -18,7 +19,7 @@
     cdsStack="vertical"
     [gap]="6">
 
-    @if (availDevices?.length === 0) {
+    @if (!hasEligibleDevices) {
     <cd-alert-panel
       type="warning"
       class="osd-alert-block"
@@ -50,7 +51,8 @@
           formControlName="deploymentMode"
           orientation="vertical">
 
-          <cds-radio value="automatic">
+          <cds-radio value="automatic"
+                     [disabled]="!hasEligibleDevices ? true : null">
             <div class="osd-radio-label-wrapper">
               <span
               class="cds--type-body-short-01"
@@ -84,7 +86,7 @@
             <cds-radio
               [value]="optionName"
               [class.cds-mb-5]="!isLast"
-              [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
+              [disabled]="!hasEligibleDevices || !deploymentOptions?.options[optionName].available ? true : null">
 
               <div class="osd-radio-label-wrapper">
               <span class="cds--type-body-short-01">
@@ -104,7 +106,8 @@
         </div>
         }
 
-          <cds-radio value="manual">
+          <cds-radio value="manual"
+                     [disabled]="!hasEligibleDevices ? true : null">
             <div class="osd-radio-label-wrapper">
               <span
               class="cds--type-body-short-01"
@@ -120,6 +123,23 @@
           </cds-radio>
         </cds-radio-group>
       </div>
+    </div>
+
+    <div formGroupName="features">
+      <cds-text-label
+      class="cds--type-heading-compact-02 cds-mb-5"
+      i18n>
+      Features
+      </cds-text-label>
+
+    @for (feature of featureList; track feature.key) {
+      <cds-checkbox
+      [name]="feature.key"
+      formControlName="{{ feature.key }}"
+      (checkedChange)="emitDeploymentSelection()">
+      {{ feature.desc }}
+      </cds-checkbox>
+    }
     </div>
 
     </form>
@@ -235,31 +255,6 @@
   </cd-tearsheet-step>
   }
 
-  <cd-tearsheet-step>
-  <div class="osd-tearsheet-content">
-    <form
-    [formGroup]="form">
-
-    <div formGroupName="features">
-      <cds-text-label
-      class="cds--type-heading-compact-02 cds-mb-5"
-      i18n>
-      Features
-      </cds-text-label>
-
-    @for (feature of featureList; track feature.key) {
-      <cds-checkbox
-      [name]="feature.key"
-      formControlName="{{ feature.key }}"
-      (checkedChange)="emitDeploymentSelection()">
-      {{ feature.desc }}
-      </cds-checkbox>
-    }
-    </div>
-
-    </form>
-  </div>
-  </cd-tearsheet-step>
 
     <cd-tearsheet-step>
     <div class="osd-tearsheet-content">
