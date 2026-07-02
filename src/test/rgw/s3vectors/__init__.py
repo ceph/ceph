@@ -47,6 +47,10 @@ def setup():
         secondary_host = None
         secondary_port = None
 
+    # s3vector backend type (local, s3, or sal)
+    global s3vector_backend
+    s3vector_backend = defaults.get("s3vector_backend", "local")
+
 
 def get_config_host():
     global default_host
@@ -81,6 +85,15 @@ def get_config_host2():
 def get_config_port2():
     global secondary_port
     return secondary_port
+
+
+def get_s3vector_backend():
+    global s3vector_backend
+    return s3vector_backend
+
+
+def is_s3_backend():
+    return get_s3vector_backend() in ("s3", "sal")
 
 
 @pytest.fixture(autouse=True, scope="package")
