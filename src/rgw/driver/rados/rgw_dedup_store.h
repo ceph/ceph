@@ -230,6 +230,83 @@ namespace rgw::dedup {
                  const DoutPrefixProvider* dpp,
                  bool is_coarse);
 
+  //---------------------------------------------------------------------------
+  // Forward-only iterator over all records in a slab sequence.
+  // Encapsulates the slab→block→record traversal with robust error handling
+  // (retry on slab load failure, skip bad blocks) and detailed logging.
+  // Does NOT validate records or handle heartbeat/pause/stop — caller's responsibility.
+  class slab_record_iterator_t
+  {
+  public:
+    struct record_ref_t {
+      disk_record_t  rec;        // deserialized record in host format
+      disk_rec_id_t  rec_addr;   // full address: (worker_id, slab_id, block_id, rec_id)
+    };
+
+    slab_record_iterator_t(const DoutPrefixProvider *dpp,
+                           librados::IoCtx &ioctx,
+                           uint32_t shard_or_group,
+                           work_shard_t worker_id,
+                           bool is_coarse);
+
+    // Advances to the next record.
+    // Returns true if a record is available (access via operator*).
+    // Returns false on EOF or error (distinguish via error()).
+    bool next();
+
+    // Current record — valid only after next() returns true
+    record_ref_t& operator*() { return d_ref; }
+    record_ref_t* operator->() { return &d_ref; }
+
+    // 0 if iteration ended normally (EOF), negative on fatal error
+    int error() const { return d_error; }
+
+    uint32_t slab_count() const { return d_slab_count; }
+    uint32_t failed_block_count() const { return d_failed_block_count; }
+    uint32_t missing_last_block_marker_count() const { return d_missing_last_block_marker; }
+
+  private:
+    bool assign_next_record();
+    bool check_for_more_blocks();
+    bool open_next_block();
+    bool load_next_slab();
+
+    record_ref_t               d_ref;
+    int                        d_error               = 0;
+
+    const DoutPrefixProvider  *dpp;
+    librados::IoCtx           &d_ioctx;
+    uint32_t                   d_shard_or_group;
+    work_shard_t               d_worker_id;
+    bool                       d_is_coarse;
+
+    // slab-level state
+    bufferlist                 d_bl;
+    uint32_t                   d_slab_id             = 0;
+    uint32_t                   d_slab_count          = 0;
+    int                        d_slab_failure_count  = 0;
+    bool                       d_has_more_slabs      = true;
+
+    // block-level state
+    char                       d_block_buff[sizeof(disk_block_t)];
+    bufferlist::const_iterator d_bl_itr;
+    disk_block_header_t       *d_p_header            = nullptr;
+    const char                *d_p_block             = nullptr;
+    uint16_t                   d_block_num           = 0;
+    int                        d_block_failure_count = 0;
+    bool                       d_has_more_blocks     = false;
+
+    // record-level state within current block
+    unsigned                   d_rec_idx             = 0;
+
+    // stats
+    uint32_t                   d_failed_block_count  = 0;
+    uint32_t                   d_missing_last_block_marker = 0;
+
+    static constexpr int MAX_OBJ_LOAD_FAILURE = 3;
+    static constexpr int MAX_BAD_BLOCKS = 2;
+  };
+
   class disk_block_array_t;
   class disk_block_seq_t
   {
@@ -298,15 +375,15 @@ namespace rgw::dedup {
       md5_shard_t md5_shard = md5_low % d_num_md5_shards;
       uint32_t idx;
       switch (d_mode) {
-        case mode_t::PHASE1_COARSE:
-          idx = md5_shard / d_fan_out_B;
-          break;
-        case mode_t::PHASE2_FINE:
-          idx = md5_shard - d_group_id * d_fan_out_B;
-          break;
-        default: // SINGLE_PASS
-          idx = md5_shard;
-          break;
+      case mode_t::PHASE1_COARSE:
+        idx = md5_shard / d_fan_out_B;
+        break;
+      case mode_t::PHASE2_FINE:
+        idx = md5_shard - d_group_id * d_fan_out_B;
+        break;
+      default: // SINGLE_PASS
+        idx = md5_shard;
+        break;
       }
       ceph_assert(idx < d_disk_arr.size());
       return &d_disk_arr[idx];

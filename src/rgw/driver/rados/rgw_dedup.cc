@@ -2137,122 +2137,52 @@ namespace rgw::dedup {
                                     disk_block_seq_t *p_disk_block_seq,
                                     remapper_t *remapper)
   {
-    char block_buff[sizeof(disk_block_t)];
-    const int MAX_OBJ_LOAD_FAILURE = 3;
-    const int MAX_BAD_BLOCKS = 2;
-    bool      has_more = true;
-    uint32_t  slab_id = 0;
-    int       failure_count = 0;
     ldpp_dout(dpp, 20) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
                        << worker_id << ", md5_shard=" << md5_shard << dendl;
-    *p_slab_count = 0;
-    while (has_more) {
-      bufferlist bl;
-      int ret = load_slab(d_dedup_cluster_ioctx, bl, md5_shard, worker_id, slab_id, dpp, false);
-      if (unlikely(ret < 0)) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR::Failed loading object!! md5_shard=" << md5_shard
-                          << ", worker_id=" << worker_id << ", slab_id=" << slab_id
-                          << ", failure_count=" << failure_count << dendl;
-        // skip to the next SLAB stopping after 3 bad object
-        if (failure_count++ < MAX_OBJ_LOAD_FAILURE) {
-          slab_id++;
-          continue;
-        }
-        else {
-          return ret;
-        }
+
+    slab_record_iterator_t iter(dpp, d_dedup_cluster_ioctx, md5_shard, worker_id, false);
+    while (iter.next()) {
+      auto &ref = *iter;
+      disk_rec_id_t disk_block_id(ref.rec_addr.work_shard, ref.rec_addr.slab_id, ref.rec_addr.block_id);
+      int ret = ref.rec.validate(__func__, dpp, disk_block_id, ref.rec_addr.rec_id);
+      if (unlikely(ret != 0)) {
+        p_stats->failed_rec_load++;
+        return ret;
       }
 
-      p_stats->ingress_slabs++;
-      (*p_slab_count)++;
-      failure_count = 0;
-      unsigned slab_rec_count = 0;
-      auto bl_itr = bl.cbegin();
-      for (uint16_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++) {
-        disk_rec_id_t disk_block_id(worker_id, slab_id, block_num);
-        const char *p = get_next_data_ptr(bl_itr, block_buff, sizeof(block_buff),
-                                          dpp);
-        disk_block_t *p_disk_block = (disk_block_t*)p;
-        disk_block_header_t *p_header = p_disk_block->get_header();
-        p_header->deserialize();
-        if (unlikely(p_header->verify(block_num, dpp) != 0)) {
-          p_stats->failed_block_load++;
-          // move to next block until reaching a valid block
-          if (failure_count++ < MAX_BAD_BLOCKS) {
-            continue;
-          }
-          else {
-            ldpp_dout(dpp, 1) << __func__ << "::Skipping slab with too many bad blocks::"
-                              << (int)md5_shard << ", worker_id=" << (int)worker_id
-                              << ", slab_id=" << slab_id << dendl;
-            failure_count = 0;
-            break;
-          }
-        }
-
-        if (p_header->rec_count == 0) {
-          ldpp_dout(dpp, 20) << __func__ << "::Block #" << block_num
-                             << " has an empty header, no more blocks" << dendl;
-          has_more = false;
-          break;
-        }
-
-        for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
-          unsigned offset = p_header->rec_offsets[rec_id];
-          // We deserialize the record inside the CTOR
-          disk_record_t rec(p + offset);
-          ret = rec.validate(__func__, dpp, disk_block_id, rec_id);
-          if (unlikely(ret != 0)) {
-            p_stats->failed_rec_load++;
-            return ret;
-          }
-
-          disk_rec_id_t full_rec_addr(worker_id, slab_id, block_num, rec_id);
-          if (step == STEP_BUILD_TABLE) {
-            add_record_to_dedup_table(p_table, &rec, full_rec_addr, p_stats, remapper);
-            slab_rec_count++;
-          }
+      if (step == STEP_BUILD_TABLE) {
+        add_record_to_dedup_table(p_table, &ref.rec, ref.rec_addr, p_stats, remapper);
+      }
 #ifdef FULL_DEDUP_SUPPORT
-          else if (step == STEP_READ_ATTRIBUTES) {
-            read_object_attribute(p_table, &rec, full_rec_addr, md5_shard,
-                                  p_stats, p_disk_block_seq, remapper);
-            slab_rec_count++;
-          }
-          else if (step == STEP_REMOVE_DUPLICATES) {
-            try_deduping_record(p_table, &rec, full_rec_addr, md5_shard,
-                                p_stats, remapper);
-            slab_rec_count++;
-          }
-#endif // #ifdef FULL_DEDUP_SUPPORT
-          else {
-            ceph_abort("unexpected step");
-          }
-        }
-
-        check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
-                                       p_stats->processed_objects);
-        if (unlikely(d_ctl.should_pause())) {
-          handle_pause_req(__func__);
-        }
-        if (unlikely(d_ctl.should_stop())) {
-          return -ECANCELED;
-        }
-
-        has_more = (p_header->offset == BLOCK_MAGIC);
-        if (!has_more) {
-          ldpp_dout(dpp, 20) << __func__ << "::No more blocks! block_id=" << disk_block_id
-                             << ", rec_count=" << p_header->rec_count << dendl;
-          if (unlikely(p_header->offset != LAST_BLOCK_MAGIC)) {
-            p_stats->missing_last_block_marker++;
-          }
-          break;
-        }
+      else if (step == STEP_READ_ATTRIBUTES) {
+        read_object_attribute(p_table, &ref.rec, ref.rec_addr, md5_shard,
+                              p_stats, p_disk_block_seq, remapper);
       }
-      ldpp_dout(dpp, 20) <<__func__ << "::slab_id=" << slab_id
-                         << ", rec_count=" << slab_rec_count << dendl;
-      slab_id++;
+      else if (step == STEP_REMOVE_DUPLICATES) {
+        try_deduping_record(p_table, &ref.rec, ref.rec_addr, md5_shard,
+                            p_stats, remapper);
+      }
+#endif // #ifdef FULL_DEDUP_SUPPORT
+      else {
+        ceph_abort("unexpected step");
+      }
+
+      check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
+                                     p_stats->processed_objects);
+      if (unlikely(d_ctl.should_pause())) {
+        handle_pause_req(__func__);
+      }
+      if (unlikely(d_ctl.should_stop())) {
+        return -ECANCELED;
+      }
     }
-    return 0;
+
+    *p_slab_count = iter.slab_count();
+    p_stats->ingress_slabs += iter.slab_count();
+    p_stats->failed_block_load += iter.failed_block_count();
+    p_stats->missing_last_block_marker += iter.missing_last_block_marker_count();
+
+    return iter.error();
   }
 
   //---------------------------------------------------------------------------
@@ -2798,7 +2728,6 @@ namespace rgw::dedup {
                                       uint8_t *raw_mem,
                                       uint64_t raw_mem_size)
   {
-    char block_buff[sizeof(disk_block_t)];
     uint32_t num_groups = DIV_ROUND_UP(num_md5_shards, d_fan_out_B);
 
     for (uint32_t g = 0; g < num_groups; g++) {
@@ -2813,55 +2742,28 @@ namespace rgw::dedup {
                                   d_fan_out_B, g,
                                   disk_block_array_t::mode_t::PHASE2_FINE);
 
-      // Read CS Coarse slabs for this (worker_id, group g)
-      bool has_more_slabs = true;
-      for (uint32_t slab_id = 0; has_more_slabs; slab_id++) {
-        bufferlist bl;
-        int ret = load_slab(d_dedup_cluster_ioctx, bl, g, worker_id,
-                            slab_id, dpp, true /*is_coarse*/);
-        if (ret != 0 || bl.length() == 0) {
-          break;
+      // Read CS Coarse slabs for this (worker_id, group g) and fan-out
+      // into fine S slabs. The iterator deserializes records to host format;
+      // add_record() validates and re-serializes to network format for S slabs.
+      slab_record_iterator_t iter(dpp, d_dedup_cluster_ioctx, g, worker_id,
+                                  true /*is_coarse*/);
+      while (iter.next()) {
+        auto &ref = *iter;
+        disk_rec_id_t rec_addr;
+        auto *p_seq = disk_arr.get_shard_block_seq(ref.rec.s.md5_low);
+        int add_ret = p_seq->add_record(d_dedup_cluster_ioctx, &ref.rec, &rec_addr);
+        if (unlikely(add_ret != 0)) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: add_record failed in phase2"
+                            << "::group=" << g << dendl;
         }
+        p_worker_stats->egress_records++;
 
-        // Iterate blocks in this CS slab (same pattern as dedup-phase slab reading)
-        auto bl_itr = bl.cbegin();
-        bool has_more_blocks = true;
-        for (uint16_t block_num = 0;
-             block_num < DISK_BLOCK_COUNT && has_more_blocks;
-             block_num++)
-        {
-          const char *p = get_next_data_ptr(bl_itr, block_buff,
-                                            sizeof(block_buff), dpp);
-          disk_block_t *p_disk_block = (disk_block_t*)p;
-          disk_block_header_t *p_header = p_disk_block->get_header();
-          p_header->deserialize();
-          if (unlikely(p_header->verify(block_num, dpp) != 0)) {
-            ldpp_dout(dpp, 1) << __func__ << "::ERR: bad block in CS slab"
-                              << "::group=" << g << "::slab=" << slab_id
-                              << "::block=" << block_num << dendl;
-            continue;
-          }
-
-          if (p_header->rec_count == 0) {
-            has_more_slabs = false;
-            break;
-          }
-
-          for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
-            unsigned offset = p_header->rec_offsets[rec_id];
-            disk_record_t rec(p + offset);
-
-            disk_rec_id_t rec_addr;
-            auto *p_seq = disk_arr.get_shard_block_seq(rec.s.md5_low);
-            int add_ret = p_seq->add_record(d_dedup_cluster_ioctx, &rec, &rec_addr);
-            if (unlikely(add_ret != 0)) {
-              ldpp_dout(dpp, 1) << __func__ << "::ERR: add_record failed in phase2"
-                                << "::group=" << g << "::slab=" << slab_id << dendl;
-            }
-            p_worker_stats->egress_records++;
-          }
-
-          has_more_blocks = (p_header->offset == BLOCK_MAGIC);
+        check_and_update_worker_heartbeat(worker_id, p_worker_stats->egress_records);
+        if (unlikely(d_ctl.should_pause())) {
+          handle_pause_req(__func__);
+        }
+        if (unlikely(d_ctl.should_stop())) {
+          return -ECANCELED;
         }
       }
 
@@ -2872,11 +2774,16 @@ namespace rgw::dedup {
       for (uint32_t slab_id = 0; ; slab_id++) {
         disk_rec_id_t rec_addr(worker_id, slab_id, 0);
         std::string oid(rec_addr.get_coarse_slab_name(g));
-        int ret = d_dedup_cluster_ioctx.remove(oid);
-        if (ret != 0) {
+        int del_ret = d_dedup_cluster_ioctx.remove(oid);
+        if (del_ret != 0) {
           break;
         }
       }
+
+      if (iter.error()) {
+        return iter.error();
+      }
+
     }
 
     return 0;

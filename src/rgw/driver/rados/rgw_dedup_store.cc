@@ -370,6 +370,171 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  // slab_record_iterator_t
+  //---------------------------------------------------------------------------
+  slab_record_iterator_t::slab_record_iterator_t(const DoutPrefixProvider *_dpp,
+                                                 librados::IoCtx &ioctx,
+                                                 uint32_t shard_or_group,
+                                                 work_shard_t worker_id,
+                                                 bool is_coarse)
+    : dpp(_dpp), d_ioctx(ioctx), d_shard_or_group(shard_or_group),
+      d_worker_id(worker_id), d_is_coarse(is_coarse),
+      d_bl_itr(d_bl.cbegin())
+  {
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
+                       << ", shard_or_group=" << shard_or_group
+                       << ", is_coarse=" << is_coarse << dendl;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::assign_next_record()
+  {
+    unsigned offset = d_p_header->rec_offsets[d_rec_idx];
+    d_ref.rec = disk_record_t(d_p_block + offset);
+    d_ref.rec_addr = disk_rec_id_t(d_worker_id, d_slab_id, d_block_num, d_rec_idx);
+    d_rec_idx++;
+    return true;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::check_for_more_blocks()
+  {
+    bool has_more_blocks = false;
+    has_more_blocks = (d_p_header->offset == BLOCK_MAGIC);
+    if (!has_more_blocks) {
+      ldpp_dout(dpp, 20) << __func__ << "::No more blocks! block_num=" << d_block_num
+                         << ", rec_count=" << d_p_header->rec_count << dendl;
+      if (unlikely(d_p_header->offset != LAST_BLOCK_MAGIC)) {
+        d_missing_last_block_marker++;
+      }
+    }
+    return has_more_blocks;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::open_next_block()
+  {
+    // Try to advance to next block within current slab
+    for ( ; d_block_num < DISK_BLOCK_COUNT && d_has_more_blocks; d_block_num++) {
+      const char *p = get_next_data_ptr(d_bl_itr, d_block_buff,
+                                        sizeof(d_block_buff), dpp);
+      disk_block_t *p_disk_block = (disk_block_t*)p;
+      disk_block_header_t *p_header = p_disk_block->get_header();
+      p_header->deserialize();
+
+      if (p_header->verify(d_block_num, dpp) == 0) {
+        d_block_failure_count = 0;
+        if (unlikely(p_header->rec_count == 0)) {
+          ldpp_dout(dpp, 20) << __func__ << "::Block #" << d_block_num
+                             << " has an empty header, no more blocks" << dendl;
+          d_has_more_slabs = false;
+          break;
+        }
+        else {
+          d_p_header = p_header;
+          // check if there are more blocks after this one
+          d_has_more_blocks = check_for_more_blocks();
+          d_p_block = p;
+          d_rec_idx = 0;
+          return true;
+        }
+      }
+      else { // failed verify()
+        d_failed_block_count++;
+        // skip bad blocks, break from slab after MAX_BAD_BLOCKS consecutive
+        if (d_block_failure_count++ < MAX_BAD_BLOCKS) {
+          continue;
+        }
+        else {
+          ldpp_dout(dpp, 1) << __func__ << "::Skipping slab with too many bad blocks::"
+                            << d_shard_or_group << ", worker_id=" << (int)d_worker_id
+                            << ", slab_id=" << d_slab_id << dendl;
+          d_block_failure_count = 0;
+          break;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::next()
+  {
+    while (true) {
+      if (d_slab_count > 0) {
+        // If we have records remaining in the current block, return the next one
+        if (d_rec_idx < d_p_header->rec_count) {
+          return assign_next_record();
+        }
+
+        // Current block exhausted — check if there are more blocks in this slab
+        if (open_next_block()) {
+          // Restart Rec-Scan for the new Block
+          continue;
+        }
+
+        // finished processing a slab, advance to next
+        ldpp_dout(dpp, 20) << __func__ << "::slab_id=" << d_slab_id << " done" << dendl;
+        d_has_more_blocks = false;
+        d_slab_id++;
+        d_p_header = nullptr;
+      }
+
+      // Current slab exhausted — need to load next slab
+      if (load_next_slab()) {
+        // Restart Rec-Scan for the new SLAB
+        continue;
+      }
+      return false;  // EOF or error (caller checks error())
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  bool slab_record_iterator_t::load_next_slab()
+  {
+    while (d_has_more_slabs) {
+      d_bl.clear();
+      int ret = load_slab(d_ioctx, d_bl, d_shard_or_group, d_worker_id,
+                          d_slab_id, dpp, d_is_coarse);
+      if (unlikely(ret < 0)) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR::Failed loading slab!! shard_or_group="
+                          << d_shard_or_group << ", worker_id=" << (uint32_t)d_worker_id
+                          << ", slab_id=" << d_slab_id
+                          << ", failure_count=" << d_slab_failure_count << dendl;
+        // skip to the next slab, stopping after MAX_OBJ_LOAD_FAILURE consecutive failures
+        if (d_slab_failure_count++ < MAX_OBJ_LOAD_FAILURE) {
+          d_slab_id++;
+          continue;
+        } else {
+          d_error = ret;
+          return false;
+        }
+      }
+
+      d_slab_count++;
+      d_slab_failure_count = 0;
+      d_block_failure_count = 0;
+
+      // Set up block iteration for this slab
+      d_bl_itr = d_bl.cbegin();
+      d_block_num = 0;
+      d_has_more_blocks = true;
+
+      // Read the first block
+      if (open_next_block()) {
+        return true;
+      }
+      // else, continue to next_slab
+      d_slab_id++;
+      d_p_header = nullptr;
+    }
+
+    // EOF — d_error stays 0
+    return false;
+  }
+
+  //---------------------------------------------------------------------------
   disk_block_seq_t::disk_block_seq_t(const DoutPrefixProvider* dpp_in,
                                      disk_block_t *p_arr_in,
                                      work_shard_t worker_id,
