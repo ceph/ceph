@@ -84,6 +84,13 @@ AbstractWriteLog<I>::AbstractWriteLog(
 template <typename I>
 AbstractWriteLog<I>::~AbstractWriteLog() {
   ldout(m_image_ctx.cct, 15) << "enter" << dendl;
+  {
+    std::lock_guard timer_locker(*m_timer_lock);
+    if (m_timer_ctx != nullptr) {
+      m_timer->cancel_event(m_timer_ctx);
+      m_timer_ctx = nullptr;
+    }
+  }
   stop_thread_pool();
   {
     std::lock_guard locker(m_lock);
