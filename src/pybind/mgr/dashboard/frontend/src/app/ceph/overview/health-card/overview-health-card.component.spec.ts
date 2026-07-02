@@ -19,14 +19,15 @@ import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 const MOCK_HW_SUMMARY = {
   total: {
     category: {
-      memory: { total: 8, ok: 8, error: 0 },
-      storage: { total: 4, ok: 3, error: 1 },
-      processors: { total: 2, ok: 2, error: 0 },
-      network: { total: 6, ok: 5, error: 1 },
-      power: { total: 4, ok: 4, error: 0 },
-      fans: { total: 12, ok: 10, error: 2 }
+      memory: { total: 8, ok: 8, warn: 0, critical: 0 },
+      storage: { total: 4, ok: 2, warn: 1, critical: 1 },
+      processors: { total: 2, ok: 2, warn: 0, critical: 0 },
+      network: { total: 6, ok: 4, warn: 1, critical: 1 },
+      power: { total: 4, ok: 4, warn: 0, critical: 0 },
+      fans: { total: 12, ok: 8, warn: 2, critical: 2 },
+      temperatures: { total: 3, ok: 3, warn: 0, critical: 0 }
     },
-    total: { total: 36, ok: 32, error: 4 }
+    total: { total: 39, ok: 31, warn: 4, critical: 4 }
   },
   host: { flawed: 2 }
 };
@@ -37,7 +38,8 @@ const EXPECTED_ICON_MAP: Record<string, string> = {
   processors: 'chip',
   network: 'network1',
   power: 'plug',
-  fans: 'ibmStreamSets'
+  fans: 'ibmStreamSets',
+  temperatures: 'temperature'
 };
 
 describe('OverviewHealthCardComponent', () => {
@@ -104,28 +106,19 @@ describe('OverviewHealthCardComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('hardware sections', () => {
-    it('should emit hardware rows grouped in pairs', (done) => {
-      component.sections$.subscribe((sections) => {
-        expect(sections).not.toBeNull();
-        sections!.forEach((section) => {
-          expect(section.length).toBeLessThanOrEqual(2);
-        });
+  describe('hardware data', () => {
+    it('should emit 7 hardware rows in 4 sections', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        expect(hwData).not.toBeNull();
+        expect(hwData!.sections.length).toBe(4);
+        expect(hwData!.sections.flat().length).toBe(7);
         done();
       });
     });
 
-    it('should limit to 3 groups (6 categories max)', (done) => {
-      component.sections$.subscribe((sections) => {
-        expect(sections).not.toBeNull();
-        expect(sections!.length).toBeLessThanOrEqual(3);
-        done();
-      });
-    });
-
-    it('should map each row to correct icon from HW_ICON_MAP', (done) => {
-      component.sections$.subscribe((sections) => {
-        const rows = sections!.flat();
+    it('should map each row to correct icon from HARDWARE_ICON_MAP', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        const rows = hwData!.sections.flat();
         rows.forEach((row) => {
           expect(row.icon).toBe(EXPECTED_ICON_MAP[row.key]);
         });
@@ -134,41 +127,229 @@ describe('OverviewHealthCardComponent', () => {
     });
 
     it('should map each row to correct label from HardwareNameMapping', (done) => {
-      component.sections$.subscribe((sections) => {
-        const rows = sections!.flat();
+      component.hardwareData$.subscribe((hwData) => {
+        const rows = hwData!.sections.flat();
         rows.forEach((row) => {
-          expect(row.label).toBe(
-            HardwareNameMapping[row.key as keyof typeof HardwareNameMapping]
-          );
+          expect(row.label).toBe(HardwareNameMapping[row.key as keyof typeof HardwareNameMapping]);
         });
         done();
       });
     });
 
-    it('should compute ok and error counts from summary data', (done) => {
-      component.sections$.subscribe((sections) => {
-        const rows = sections!.flat();
+    it('should build statusCounts with correct ok/warn/critical counts', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        const rows = hwData!.sections.flat();
+
         const memoryRow = rows.find((r) => r.key === 'memory');
-        expect(memoryRow?.ok).toBe(8);
-        expect(memoryRow?.error).toBe(0);
+        expect(memoryRow?.statusCounts).toEqual([{ icon: 'success', count: 8 }]);
 
         const storageRow = rows.find((r) => r.key === 'storage');
-        expect(storageRow?.ok).toBe(3);
-        expect(storageRow?.error).toBe(1);
+        expect(storageRow?.statusCounts).toEqual([
+          { icon: 'error', count: 1 },
+          { icon: 'warningAltFilled', count: 1 },
+          { icon: 'success', count: 2 }
+        ]);
 
         const fansRow = rows.find((r) => r.key === 'fans');
-        expect(fansRow?.ok).toBe(10);
-        expect(fansRow?.error).toBe(2);
+        expect(fansRow?.statusCounts).toEqual([
+          { icon: 'error', count: 2 },
+          { icon: 'warningAltFilled', count: 2 },
+          { icon: 'success', count: 8 }
+        ]);
         done();
       });
     });
 
-    it('should include exactly memory, storage, processors, network, power, fans', (done) => {
-      component.sections$.subscribe((sections) => {
-        const keys = sections!.flat().map((r) => r.key);
-        expect(keys).toEqual(['memory', 'storage', 'processors', 'network', 'power', 'fans']);
+    it('should compute correct severity per row', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        const rows = hwData!.sections.flat();
+
+        const memoryRow = rows.find((r) => r.key === 'memory');
+        expect(memoryRow?.severity).toBe(0);
+
+        const storageRow = rows.find((r) => r.key === 'storage');
+        expect(storageRow?.severity).toBe(2);
+
+        const powerRow = rows.find((r) => r.key === 'power');
+        expect(powerRow?.severity).toBe(0);
         done();
       });
+    });
+
+    it('should compute overall severity as worst across all categories', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        expect(hwData!.overallSeverity).toBe('error');
+        done();
+      });
+    });
+
+    it('should include all 7 categories', (done) => {
+      component.hardwareData$.subscribe((hwData) => {
+        const keys = hwData!.sections.flat().map((r) => r.key);
+        expect(keys).toEqual([
+          'memory',
+          'storage',
+          'processors',
+          'network',
+          'power',
+          'fans',
+          'temperatures'
+        ]);
+        done();
+      });
+    });
+  });
+});
+
+describe('OverviewHealthCardComponent (all healthy)', () => {
+  let component: OverviewHealthCardComponent;
+  let fixture: ComponentFixture<OverviewHealthCardComponent>;
+
+  const healthyMock = {
+    total: {
+      category: {
+        memory: { total: 4, ok: 4, warn: 0, critical: 0 },
+        storage: { total: 2, ok: 2, warn: 0, critical: 0 },
+        processors: { total: 1, ok: 1, warn: 0, critical: 0 },
+        network: { total: 2, ok: 2, warn: 0, critical: 0 },
+        power: { total: 2, ok: 2, warn: 0, critical: 0 },
+        fans: { total: 4, ok: 4, warn: 0, critical: 0 },
+        temperatures: { total: 3, ok: 3, warn: 0, critical: 0 }
+      },
+      total: { total: 18, ok: 18, warn: 0, critical: 0 }
+    },
+    host: { flawed: 0 }
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [
+        OverviewHealthCardComponent,
+        CommonModule,
+        ProductiveCardComponent,
+        SkeletonModule,
+        ButtonModule,
+        RouterModule,
+        ComponentsModule,
+        LinkModule,
+        PipesModule
+      ],
+      providers: [
+        {
+          provide: SummaryService,
+          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+        },
+        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+        {
+          provide: AuthStorageService,
+          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+        },
+        {
+          provide: MgrModuleService,
+          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+        },
+        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(healthyMock)) } },
+        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        provideRouter([])
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(OverviewHealthCardComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should report overall severity as success when all healthy', (done) => {
+    component.hardwareData$.subscribe((hwData) => {
+      expect(hwData!.overallSeverity).toBe('success');
+      done();
+    });
+  });
+
+  it('should have only ok statusCounts per row', (done) => {
+    component.hardwareData$.subscribe((hwData) => {
+      hwData!.sections.flat().forEach((row) => {
+        expect(row.statusCounts.length).toBe(1);
+        expect(row.statusCounts[0].icon).toBe('success');
+      });
+      done();
+    });
+  });
+});
+
+describe('OverviewHealthCardComponent (warn only)', () => {
+  let component: OverviewHealthCardComponent;
+  let fixture: ComponentFixture<OverviewHealthCardComponent>;
+
+  const warnMock = {
+    total: {
+      category: {
+        memory: { total: 4, ok: 3, warn: 1, critical: 0 },
+        storage: { total: 2, ok: 2, warn: 0, critical: 0 },
+        processors: { total: 1, ok: 1, warn: 0, critical: 0 },
+        network: { total: 2, ok: 2, warn: 0, critical: 0 },
+        power: { total: 2, ok: 2, warn: 0, critical: 0 },
+        fans: { total: 4, ok: 4, warn: 0, critical: 0 },
+        temperatures: { total: 3, ok: 3, warn: 0, critical: 0 }
+      },
+      total: { total: 18, ok: 17, warn: 1, critical: 0 }
+    },
+    host: { flawed: 1 }
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [
+        OverviewHealthCardComponent,
+        CommonModule,
+        ProductiveCardComponent,
+        SkeletonModule,
+        ButtonModule,
+        RouterModule,
+        ComponentsModule,
+        LinkModule,
+        PipesModule
+      ],
+      providers: [
+        {
+          provide: SummaryService,
+          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+        },
+        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+        {
+          provide: AuthStorageService,
+          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+        },
+        {
+          provide: MgrModuleService,
+          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+        },
+        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(warnMock)) } },
+        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        provideRouter([])
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(OverviewHealthCardComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should report overall severity as warningAltFilled when only warnings', (done) => {
+    component.hardwareData$.subscribe((hwData) => {
+      expect(hwData!.overallSeverity).toBe('warningAltFilled');
+      done();
+    });
+  });
+
+  it('should include warn statusCount for memory row', (done) => {
+    component.hardwareData$.subscribe((hwData) => {
+      const memoryRow = hwData!.sections.flat().find((r) => r.key === 'memory');
+      expect(memoryRow?.statusCounts).toEqual([
+        { icon: 'warningAltFilled', count: 1 },
+        { icon: 'success', count: 3 }
+      ]);
+      done();
     });
   });
 });
@@ -193,18 +374,17 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
       providers: [
         {
           provide: SummaryService,
-          useValue: {
-            summaryData$: of({
-              version: 'ceph version 18.0.0 reef (dev)'
-            })
-          }
+          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
         },
         { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
         {
           provide: AuthStorageService,
           useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
         },
-        { provide: MgrModuleService, useValue: { getConfig: jest.fn(() => of({ hw_monitoring: false })) } },
+        {
+          provide: MgrModuleService,
+          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: false })) }
+        },
         { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
         provideRouter([])
@@ -216,9 +396,9 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
     fixture.detectChanges();
   });
 
-  it('should emit null sections when hw monitoring is disabled', (done) => {
-    component.sections$.subscribe((sections) => {
-      expect(sections).toBeNull();
+  it('should emit null hardwareData when hw monitoring is disabled', (done) => {
+    component.hardwareData$.subscribe((hwData) => {
+      expect(hwData).toBeNull();
       done();
     });
   });
@@ -251,11 +431,7 @@ describe('OverviewHealthCardComponent (no permissions)', () => {
       providers: [
         {
           provide: SummaryService,
-          useValue: {
-            summaryData$: of({
-              version: 'ceph version 18.0.0 reef (dev)'
-            })
-          }
+          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
         },
         { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
         {

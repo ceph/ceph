@@ -1,5 +1,6 @@
 import { ChartTabularData, GaugeChartOptions } from '@carbon/charts-angular';
 import { HealthCheck, HealthSnapshotMap, PgStateCount } from './health.interface';
+import { HardwareNameMapping, HardwareSummary } from '../enum/hardware.enum';
 import _ from 'lodash';
 
 // Types
@@ -68,6 +69,24 @@ export interface HealthCardCheckVM {
 export interface HealthCardSubStateVM {
   value: string;
   severity: string;
+}
+
+export interface HardwareStatusCount {
+  icon: string;
+  count: number;
+}
+
+export interface HardwareRowVM {
+  key: string;
+  label: string;
+  icon: string;
+  severity: Severity;
+  statusCounts: HardwareStatusCount[];
+}
+
+export interface HardwareCardVM {
+  sections: HardwareRowVM[][];
+  overallSeverity: string;
 }
 
 export interface HealthCardVM {
@@ -475,5 +494,61 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
       value: $localize`${hostsAvailable} / ${hostsTotal} available`,
       severity: SeverityIconMap[hostsSev]
     }
+  };
+}
+
+const HARDWARE_ICON_MAP: Record<string, string> = {
+  memory: 'dataEnrichment',
+  storage: 'vmdkDisk',
+  processors: 'chip',
+  network: 'network1',
+  power: 'plug',
+  fans: 'ibmStreamSets',
+  temperatures: 'temperature'
+};
+
+/**
+ * Mapper: Hardware summary -> HardwareCardVM
+ */
+export function buildHardwareCardVM(hwSummary: HardwareSummary): HardwareCardVM | null {
+  const category = hwSummary?.total?.category;
+  if (!category) return null;
+
+  const severities: Severity[] = [];
+
+  const rows = (Object.keys(HardwareNameMapping) as Array<keyof typeof HardwareNameMapping>).map(
+    (key) => {
+      const ok = Number(category?.[key]?.ok ?? 0);
+      const warn = Number(category?.[key]?.warn ?? 0);
+      const critical = Number(category?.[key]?.critical ?? 0);
+
+      const severity: Severity =
+        critical > 0 ? SEVERITY.err : warn > 0 ? SEVERITY.warn : SEVERITY.ok;
+
+      severities.push(severity);
+
+      const statusCounts: HardwareStatusCount[] = [];
+      if (critical > 0) {
+        statusCounts.push({ icon: SeverityIconMap[SEVERITY.err], count: critical });
+      }
+      if (warn > 0) statusCounts.push({ icon: SeverityIconMap[SEVERITY.warn], count: warn });
+      if (ok > 0) statusCounts.push({ icon: SeverityIconMap[SEVERITY.ok], count: ok });
+
+      return {
+        key,
+        label: HardwareNameMapping[key],
+        icon: HARDWARE_ICON_MAP[key],
+        severity,
+        statusCounts
+      };
+    }
+  );
+
+  const sections = _.chunk(rows, 2);
+  const overallSeverity = maxSeverity(...severities);
+
+  return {
+    sections,
+    overallSeverity: SeverityIconMap[overallSeverity]
   };
 }
