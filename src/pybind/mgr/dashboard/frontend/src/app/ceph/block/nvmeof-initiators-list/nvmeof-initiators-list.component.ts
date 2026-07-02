@@ -183,7 +183,11 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
   }
 
   hasAllHostsAllowed(): boolean {
-    return !!this.subsystem?.allow_any_host && this.initiators.length === 0;
+    return (
+      !!this.subsystem?.allow_any_host &&
+      (this.initiators.length === 0 ||
+        this.initiators.some((initiator) => initiator.nqn === ALLOW_ALL_HOST))
+    );
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -195,7 +199,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
       .getInitiators(this.subsystemNQN, this.group)
       .subscribe((response: NvmeofSubsystemInitiator[] | { hosts: NvmeofSubsystemInitiator[] }) => {
         const initiators = Array.isArray(response) ? response : response?.hosts || [];
-        this.initiators = initiators.filter((i) => i.nqn !== ALLOW_ALL_HOST);
+        this.initiators = initiators;
         this.updateAuthStatus();
       });
   }
