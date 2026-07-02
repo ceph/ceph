@@ -55,9 +55,9 @@ class TestSchedule(object):
         assert simple_schedule.start.second == 0
         assert simple_schedule.start.minute == 0
         assert simple_schedule.start.hour == 0
-        assert simple_schedule.start.day == now.day
-        assert simple_schedule.start.month == now.month
-        assert simple_schedule.start.year == now.year
+        assert simple_schedule.start.day == simple_schedule.created.day
+        assert simple_schedule.start.month == simple_schedule.created.month
+        assert simple_schedule.start.year == simple_schedule.created.year
         assert simple_schedule.start.tzinfo == now.tzinfo
 
     def test_created_now(self, simple_schedule):
