@@ -143,8 +143,8 @@ namespace rgw::dedup {
 
     int update_shard_token_heartbeat(rgw::sal::RadosStore *store,
                                      unsigned shard,
-                                     uint64_t count_a,
-                                     uint64_t count_b,
+                                     uint64_t obj_count,
+                                     dedup_step_t step,
                                      const char *prefix);
 
     //---------------------------------------------------------------------------

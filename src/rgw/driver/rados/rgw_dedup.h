@@ -90,14 +90,6 @@ namespace rgw::dedup {
     void resume(rgw::sal::Driver* _driver) override;
 
   private:
-    enum dedup_step_t {
-      STEP_NONE,
-      STEP_BUCKET_INDEX_INGRESS,
-      STEP_BUILD_TABLE,
-      STEP_READ_ATTRIBUTES,
-      STEP_REMOVE_DUPLICATES
-    };
-
     inline uint64_t __calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes);
     inline bool should_split_head(const RGWObjManifest &manifest);
     void remove_created_tail_object(const disk_record_t *p_rec,
@@ -108,15 +100,17 @@ namespace rgw::dedup {
     void work_shards_barrier(work_shard_t num_work_shards);
     void md5_shards_barrier(md5_shard_t num_md5_shards);
     void handle_pause_req(const char* caller);
-    const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
-    void check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
-                                    const char *prefix);
+    void check_and_update_heartbeat(unsigned shard_id, uint64_t obj_count,
+                                    dedup_step_t step, const char *prefix);
 
-    inline void check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
+    inline void check_and_update_worker_heartbeat(work_shard_t worker_id,
+                                                  uint64_t obj_count,
+                                                  dedup_step_t step);
     inline void check_and_update_md5_heartbeat(md5_shard_t md5_id,
-                                               uint64_t load_count,
-                                               uint64_t dedup_count);
+                                               md5_stats_t *p_stats,
+                                               uint64_t rec_count,
+                                               dedup_step_t step);
     int  ingress_bucket_idx_single_object(disk_block_array_t         &disk_arr,
                                           const rgw::sal::Bucket     *bucket,
                                           const rgw_bucket_dir_entry &entry,

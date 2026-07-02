@@ -651,7 +651,7 @@ namespace rgw::dedup {
                  (head_size == rule.stripe_max_size || head_size == obj_size));
 
       if (unlikely(!success)) {
-        ldpp_dout(dpp, 20) << __func__ << "::ERR::d_split_head=" << d_split_head
+        ldpp_dout(dpp, 20) << __func__ << "::d_split_head=" << d_split_head
                            << "::obj_size=" << obj_size
                            << "::head_size=" << head_size
                            << "::rule.part_size=" << rule.part_size
@@ -2111,15 +2111,17 @@ namespace rgw::dedup {
 
 #endif // #ifdef FULL_DEDUP_SUPPORT
   //---------------------------------------------------------------------------
-  const char* Background::dedup_step_name(dedup_step_t step)
+  const char* dedup_step_name(dedup_step_t step)
   {
     static const char* names[] = {"STEP_NONE",
                                   "STEP_BUCKET_INDEX_INGRESS",
+                                  "STEP_BUCKET_INDEX_EGRESS",
                                   "STEP_BUILD_TABLE",
                                   "STEP_READ_ATTRIBUTES",
-                                  "STEP_REMOVE_DUPLICATES"};
+                                  "STEP_REMOVE_DUPLICATES",
+                                  "STEP_DONE"};
     static const char* undefined_step = "UNDEFINED_STEP";
-    if (step >= STEP_NONE && step <= STEP_REMOVE_DUPLICATES) {
+    if (step >= STEP_NONE && step <= STEP_DONE) {
       return names[step];
     }
     else {
@@ -2139,7 +2141,7 @@ namespace rgw::dedup {
   {
     ldpp_dout(dpp, 20) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
                        << worker_id << ", md5_shard=" << md5_shard << dendl;
-
+    uint64_t  rec_count = 0;
     slab_record_iterator_t iter(dpp, d_dedup_cluster_ioctx, md5_shard, worker_id, false);
     while (iter.next()) {
       auto &ref = *iter;
@@ -2149,7 +2151,7 @@ namespace rgw::dedup {
         p_stats->failed_rec_load++;
         return ret;
       }
-
+      rec_count++;
       if (step == STEP_BUILD_TABLE) {
         add_record_to_dedup_table(p_table, &ref.rec, ref.rec_addr, p_stats, remapper);
       }
@@ -2167,8 +2169,7 @@ namespace rgw::dedup {
         ceph_abort("unexpected step");
       }
 
-      check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
-                                     p_stats->processed_objects);
+      check_and_update_md5_heartbeat(md5_shard, p_stats, rec_count, step);
       if (unlikely(d_ctl.should_pause())) {
         handle_pause_req(__func__);
       }
@@ -2269,8 +2270,10 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void Background::check_and_update_heartbeat(unsigned shard_id, uint64_t count_a,
-                                              uint64_t count_b, const char *prefix)
+  void Background::check_and_update_heartbeat(unsigned shard_id,
+                                              uint64_t obj_count,
+                                              dedup_step_t step,
+                                              const char *prefix)
   {
     utime_t now = ceph_clock_now();
     utime_t time_elapsed = now - d_heart_beat_last_update;
@@ -2278,24 +2281,36 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::max_elapsed_sec="
                          << d_heart_beat_max_elapsed_sec << dendl;
       d_heart_beat_last_update = now;
-      d_cluster.update_shard_token_heartbeat(store, shard_id, count_a, count_b,
+      d_cluster.update_shard_token_heartbeat(store, shard_id, obj_count, step,
                                              prefix);
     }
   }
 
   //---------------------------------------------------------------------------
   void Background::check_and_update_worker_heartbeat(work_shard_t worker_id,
-                                                     int64_t ingress_obj_count)
+                                                     uint64_t obj_count,
+                                                     dedup_step_t step)
   {
-    check_and_update_heartbeat(worker_id, ingress_obj_count, 0, WORKER_SHARD_PREFIX);
+    check_and_update_heartbeat(worker_id, obj_count, step, WORKER_SHARD_PREFIX);
   }
 
   //---------------------------------------------------------------------------
   void Background::check_and_update_md5_heartbeat(md5_shard_t md5_id,
-                                                  uint64_t load_count,
-                                                  uint64_t dedup_count)
+                                                  md5_stats_t *p_stats,
+                                                  uint64_t rec_count,
+                                                  dedup_step_t step)
   {
-    check_and_update_heartbeat(md5_id, load_count, dedup_count, MD5_SHARD_PREFIX);
+    uint64_t obj_count = 0;
+    if (step == STEP_BUILD_TABLE) {
+      obj_count = p_stats->loaded_objects;
+    }
+    else if (step == STEP_READ_ATTRIBUTES) {
+      obj_count = p_stats->processed_objects;
+    }
+    else {
+      obj_count = rec_count;
+    }
+    check_and_update_heartbeat(md5_id, obj_count, step, MD5_SHARD_PREFIX);
   }
 
   //---------------------------------------------------------------------------
@@ -2338,7 +2353,8 @@ namespace rgw::dedup {
     uint32_t obj_count = 0;
 
     while (current_shard < num_shards ) {
-      check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj);
+      check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj,
+                                        STEP_BUCKET_INDEX_INGRESS);
       if (unlikely(d_ctl.should_pause())) {
         handle_pause_req(__func__);
       }
@@ -2758,7 +2774,8 @@ namespace rgw::dedup {
         }
         p_worker_stats->egress_records++;
 
-        check_and_update_worker_heartbeat(worker_id, p_worker_stats->egress_records);
+        check_and_update_worker_heartbeat(worker_id, p_worker_stats->egress_records,
+                                          STEP_BUCKET_INDEX_EGRESS);
         if (unlikely(d_ctl.should_pause())) {
           handle_pause_req(__func__);
         }

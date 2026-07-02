@@ -404,6 +404,7 @@ namespace rgw::dedup {
     if (!has_more_blocks) {
       ldpp_dout(dpp, 20) << __func__ << "::No more blocks! block_num=" << d_block_num
                          << ", rec_count=" << d_p_header->rec_count << dendl;
+      d_has_more_slabs = false;
       if (unlikely(d_p_header->offset != LAST_BLOCK_MAGIC)) {
         d_missing_last_block_marker++;
       }
@@ -469,6 +470,8 @@ namespace rgw::dedup {
         }
 
         // Current block exhausted — check if there are more blocks in this slab
+        ldpp_dout(dpp, 20) << __func__ << "::bloc_num=" << d_block_num << " done" << dendl;
+        d_block_num++;
         if (open_next_block()) {
           // Restart Rec-Scan for the new Block
           continue;

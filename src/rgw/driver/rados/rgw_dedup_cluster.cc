@@ -48,7 +48,6 @@ namespace rgw::dedup {
                                  bufferlist bl_arr[],
                                  struct shard_progress_t *sp_arr);
 
-  const uint64_t SP_ALL_OBJECTS = ULLONG_MAX;
   const uint64_t SP_NO_OBJECTS  = 0ULL;
   const char* SHARD_PROGRESS_ATTR = "shard_progress";
 
@@ -208,8 +207,8 @@ namespace rgw::dedup {
   struct shard_progress_t {
     shard_progress_t() {
       // init an empty object
-      this->progress_a = SP_NO_OBJECTS;
-      this->progress_b = SP_NO_OBJECTS;
+      this->obj_count = SP_NO_OBJECTS;
+      this->step = STEP_NONE;
       this->completed  = false;
 
       // set all timers to now
@@ -220,19 +219,19 @@ namespace rgw::dedup {
       // owner and stats_bl are empty until set
     }
 
-    shard_progress_t(uint64_t _progress_a,
-                     uint64_t _progress_b,
+    shard_progress_t(uint64_t _obj_count,
+                     dedup_step_t _step,
                      bool _completed,
                      const std::string &_owner,
                      const bufferlist  &_stats_bl) : owner(_owner), stats_bl(_stats_bl) {
-      this->progress_a  = _progress_a;
-      this->progress_b  = _progress_b;
-      this->completed   = _completed;
+      this->obj_count = _obj_count;
+      this->step      = _step;
+      this->completed = _completed;
 
       utime_t now = ceph_clock_now();
       this->update_time = now;
 
-      if (_progress_a == SP_NO_OBJECTS && _progress_b == SP_NO_OBJECTS) {
+      if (_obj_count == SP_NO_OBJECTS && _step == STEP_NONE) {
         this->creation_time = now;
       }
       if (_completed) {
@@ -241,7 +240,7 @@ namespace rgw::dedup {
     }
 
     bool is_completed() const {
-      if (this->progress_b == SP_ALL_OBJECTS) {
+      if (this->step == STEP_DONE) {
         ceph_assert(this->completed);
         return true;
       }
@@ -255,8 +254,8 @@ namespace rgw::dedup {
       return (this->creation_time == this->update_time);
     }
 
-    uint64_t    progress_a;
-    uint64_t    progress_b;
+    uint64_t    obj_count;
+    dedup_step_t step;
     bool        completed;
     utime_t     update_time;
     utime_t     creation_time;
@@ -269,7 +268,7 @@ namespace rgw::dedup {
   std::ostream& operator<<(std::ostream &out, shard_progress_t& sp)
   {
     out << (sp.completed ? " + ::" : " - ::");
-    out << sp.owner << "::[" << sp.progress_a << ", " << sp.progress_b << "]";
+    out << sp.owner << "::[" << sp.obj_count << ", " << sp.step << "]";
     out << "::creation: " << sp.creation_time;
     out << "::update: " << sp.update_time;
     out << "::completion: " << sp.completion_time;
@@ -280,8 +279,8 @@ namespace rgw::dedup {
   void encode(const shard_progress_t& sp, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);
-    encode(sp.progress_a, bl);
-    encode(sp.progress_b, bl);
+    encode(sp.obj_count, bl);
+    encode((uint32_t)sp.step, bl);
     encode(sp.completed, bl);
     encode(sp.creation_time, bl);
     encode(sp.completion_time, bl);
@@ -295,8 +294,10 @@ namespace rgw::dedup {
   void decode(shard_progress_t & sp, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
-    decode(sp.progress_a, bl);
-    decode(sp.progress_b, bl);
+    decode(sp.obj_count, bl);
+    uint32_t temp;
+    decode(temp, bl);
+    sp.step = (dedup_step_t)temp;
     decode(sp.completed, bl);
     decode(sp.creation_time, bl);
     decode(sp.completion_time, bl);
@@ -547,8 +548,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int cluster::update_shard_token_heartbeat(rgw::sal::RadosStore *store,
                                             unsigned shard,
-                                            uint64_t count_a,
-                                            uint64_t count_b,
+                                            uint64_t obj_count,
+                                            dedup_step_t step,
                                             const char *prefix)
   {
     librados::IoCtx ctl_ioctx;
@@ -560,7 +561,7 @@ namespace rgw::dedup {
     shard_token_oid sto(prefix, shard);
     std::string oid(sto.get_buff(), sto.get_buff_size());
     bufferlist empty_bl;
-    shard_progress_t sp(count_a, count_b, false, d_cluster_id, empty_bl);
+    shard_progress_t sp(obj_count, step, false, d_cluster_id, empty_bl);
     sp.creation_time = d_token_creation_time;
     bufferlist sp_bl;
     encode(sp, sp_bl);
@@ -584,7 +585,7 @@ namespace rgw::dedup {
     std::string oid(sto.get_buff(), sto.get_buff_size());
     ldpp_dout(dpp, 10) << __func__ << "::" << prefix << "::" << oid << dendl;
 
-    shard_progress_t sp(obj_count, SP_ALL_OBJECTS, true, d_cluster_id, bl);
+    shard_progress_t sp(obj_count, STEP_DONE, true, d_cluster_id, bl);
     sp.creation_time = d_token_creation_time;
     bufferlist sp_bl;
     encode(sp, sp_bl);
@@ -649,7 +650,7 @@ namespace rgw::dedup {
       }
       ldpp_dout(dpp, 10) << __func__ << "::successfully locked " << oid << dendl;
       bufferlist empty_bl;
-      shard_progress_t sp(SP_NO_OBJECTS, SP_NO_OBJECTS, false, d_cluster_id, empty_bl);
+      shard_progress_t sp(SP_NO_OBJECTS, STEP_NONE, false, d_cluster_id, empty_bl);
       d_token_creation_time = sp.creation_time;
       bufferlist sp_bl;
       encode(sp, sp_bl);
@@ -915,8 +916,8 @@ namespace rgw::dedup {
       Formatter::ObjectSection object_section{*fmt, "shard_progress"};
       fmt->dump_unsigned("shard_id", shard);
       fmt->dump_string("owner", sp_arr[shard].owner);
-      fmt->dump_unsigned("progress_a", sp_arr[shard].progress_a);
-      fmt->dump_unsigned("progress_b", sp_arr[shard].progress_b);
+      fmt->dump_unsigned("objects", sp_arr[shard].obj_count);
+      fmt->dump_string("step", dedup_step_name(sp_arr[shard].step));
       fmt->dump_stream("last updated") << sp_arr[shard].update_time;
       utime_t elapsed = sp_arr[shard].update_time - sp_arr[shard].creation_time;
       fmt->dump_unsigned("time elapsed (sec)", elapsed.tv.tv_sec);

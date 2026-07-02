@@ -394,4 +394,14 @@ namespace rgw::dedup {
     }
   }
 
+  enum dedup_step_t {
+    STEP_NONE,
+    STEP_BUCKET_INDEX_INGRESS,
+    STEP_BUCKET_INDEX_EGRESS,
+    STEP_BUILD_TABLE,
+    STEP_READ_ATTRIBUTES,
+    STEP_REMOVE_DUPLICATES,
+    STEP_DONE
+  };
+  const char* dedup_step_name(dedup_step_t step);
 } //namespace rgw::dedup
