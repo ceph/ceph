@@ -127,7 +127,8 @@ export enum Icons {
   inProgress = 'in-progress',
   arrowDown = 'arrow--down',
   locked = 'locked', // Access denied, locked state
-  cloudMonitoring = 'cloud--monitoring'
+  cloudMonitoring = 'cloud--monitoring',
+  temperature = 'temperature'
 }
 
 export enum IconSize {
