@@ -457,6 +457,23 @@ CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep
 
 option(WITH_CPUTRACE "Enable Cputrace support via the admin socket" OFF)
 
+set(CEPH_WITH_SEASTAR_SANITIZER OFF)
+if(WITH_CRIMSON)
+  if(DEFINED Seastar_SANITIZE)
+    set(CEPH_SEASTAR_SANITIZE "${Seastar_SANITIZE}")
+  else()
+    set(CEPH_SEASTAR_SANITIZE "DEFAULT")
+  endif()
+  set(CEPH_SEASTAR_SANITIZER_TRUE_VALUES ON yes Yes YES true True TRUE)
+  set(CEPH_SEASTAR_SANITIZER_DEFAULT_VALUES DEFAULT default Default)
+  if("${CEPH_SEASTAR_SANITIZE}" IN_LIST CEPH_SEASTAR_SANITIZER_TRUE_VALUES)
+    set(CEPH_WITH_SEASTAR_SANITIZER ON)
+  elseif("${CEPH_SEASTAR_SANITIZE}" IN_LIST CEPH_SEASTAR_SANITIZER_DEFAULT_VALUES AND
+      CMAKE_BUILD_TYPE MATCHES "^(Debug|Sanitize|Fuzz)$")
+    set(CEPH_WITH_SEASTAR_SANITIZER ON)
+  endif()
+endif()
+
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
   "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
@@ -474,9 +491,10 @@ if(ALLOCATOR)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
-elseif(WITH_ASAN)
-  # Force libc: tcmalloc/jemalloc still export operator new/delete even when the
-  # sanitizer shadows malloc, so sanitizer-allocated memory is freed via tcmalloc and SIGSEGVs.
+elseif(WITH_ASAN OR CEPH_WITH_SEASTAR_SANITIZER)
+  # Force libc: tcmalloc/jemalloc still export operator new/delete even when a
+  # sanitizer shadows malloc. Crimson Debug/Sanitize/Fuzz builds also pick up
+  # ASan from Seastar's default sanitizer policy, even if WITH_ASAN is OFF.
   set(ALLOCATOR "libc")
 else(ALLOCATOR)
   find_package(gperftools 2.6.2)
