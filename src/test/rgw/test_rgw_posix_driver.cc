@@ -2189,7 +2189,8 @@ TEST_F(POSIXVerObjectTest, DeleteCurVersion)
   EXPECT_TRUE(sf::is_regular_file(op2));
   EXPECT_TRUE(sf::exists(op3));
   EXPECT_TRUE(sf::is_regular_file(op3));
-  EXPECT_FALSE(sf::exists(ops));
+  // a temporary 0 byte file exists to represent a delete marker
+  EXPECT_TRUE(sf::exists(ops));
   EXPECT_TRUE(sf::is_symlink(ops));
   /* Need to find a way to get the correct version */
   //EXPECT_EQ(sf::read_symlink(ops), dfname);
