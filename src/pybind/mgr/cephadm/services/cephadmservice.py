@@ -519,7 +519,6 @@ class CephadmService(metaclass=ABCMeta):
             logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
             return EMPTY_TLS_CREDENTIALS
 
-
     def _get_acme_certificates(
         self,
         svc_spec: ServiceSpec,
@@ -544,6 +543,14 @@ class CephadmService(metaclass=ABCMeta):
         key = self.mgr.cert_mgr.get_key(acme_key_name, service_name, host)
         if cert and key:
             return TLSCredentials(cert=cert, key=key)
+
+        if hasattr(self.mgr, 'acme_mgr'):
+            self.mgr.acme_mgr.ensure_certificate(
+                service_name,
+                acme_cert_name,
+                acme_key_name,
+                getattr(svc_spec, 'acme', {}),
+            )
 
         logger.info(
             "ACME certificate for service %s is not available yet; using temporary cephadm-signed certificate",

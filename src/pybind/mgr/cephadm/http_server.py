@@ -61,7 +61,6 @@ class CephadmHttpServer(threading.Thread):
         self._service_discovery_port = value
         self.restart()
 
-
     @property
     def acme_challenge_port(self) -> int:
         return self._acme_challenge_port
@@ -164,7 +163,6 @@ class CephadmHttpServer(threading.Thread):
                 logger=self.mgr.log
             )
 
-
             # start ACME HTTP-01 challenge server
             acme_config, acme_ssl_info = self.acme_challenges.configure()
             self.acme_adapter = _mount_server(
@@ -176,7 +174,6 @@ class CephadmHttpServer(threading.Thread):
                 ssl_info=acme_ssl_info,
                 logger=self.mgr.log
             )
-
 
         try:
             start_servers()

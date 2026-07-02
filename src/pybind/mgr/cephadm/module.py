@@ -458,6 +458,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Cephadm ACME HTTP-01 challenge server port'
         ),
         Option(
+            'acme_profiles',
+            type='str',
+            default='',
+            desc=(
+                'JSON object describing cluster-level ACME profiles. Example: '
+                '{"profiles":{"default":{"directory_url":"https://acme-staging-v02.api.letsencrypt.org/directory",'
+                '"email":"admin@example.com","terms_of_service_agreed":true}}}'
+            )
+        ),
+        Option(
             'cgroups_split',
             type='bool',
             default=True,
@@ -656,6 +666,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
             self.acme_challenge_port = 0
+            self.acme_profiles = ''
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10

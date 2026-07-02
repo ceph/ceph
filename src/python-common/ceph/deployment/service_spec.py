@@ -1346,6 +1346,13 @@ class ServiceSpec(object):
                 raise SpecValidationError(
                     f"When using certificate_source '{CertificateSource.ACME.value}', an acme config block is required."
                 )
+
+            # Service-level ACME config intentionally only requires the domain
+            # list. CA/account settings such as directory_url, email, account_name
+            # and terms_of_service_agreed may come from a cluster-level ACME
+            # profile and can be overridden here when needed. Full profile
+            # resolution happens in cephadm.acme.ACMEManager, where mgr module
+            # options are available.
             domains = acme_cfg.get('domains')
             if not isinstance(domains, list) or not domains or not all(isinstance(d, str) and d.strip() for d in domains):
                 raise SpecValidationError(
@@ -1361,12 +1368,24 @@ class ServiceSpec(object):
                     pass
                 else:
                     raise SpecValidationError('ACME HTTP-01 domains must be DNS names, not IP addresses.')
+
+            profile = acme_cfg.get('profile')
+            if profile is not None and (not isinstance(profile, str) or not profile.strip()):
+                raise SpecValidationError("ACME 'profile' must be a non-empty string when provided.")
             directory_url = acme_cfg.get('directory_url')
-            if directory_url is not None and not isinstance(directory_url, str):
-                raise SpecValidationError("ACME 'directory_url' must be a string when provided.")
+            if directory_url is not None and (not isinstance(directory_url, str) or not directory_url.strip()):
+                raise SpecValidationError("ACME 'directory_url' must be a non-empty string when provided.")
             email = acme_cfg.get('email')
             if email is not None and not isinstance(email, str):
                 raise SpecValidationError("ACME 'email' must be a string when provided.")
+            terms_agreed = acme_cfg.get('terms_of_service_agreed')
+            if terms_agreed is not None and terms_agreed is not True:
+                raise SpecValidationError(
+                    "ACME 'terms_of_service_agreed' must be true when provided."
+                )
+            account_name = acme_cfg.get('account_name')
+            if account_name is not None and (not isinstance(account_name, str) or not account_name.strip()):
+                raise SpecValidationError("ACME 'account_name' must be a non-empty string when provided.")
 
 
     def validate(self) -> None:

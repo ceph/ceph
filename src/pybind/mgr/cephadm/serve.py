@@ -169,7 +169,6 @@ class CephadmServe:
                 self.log.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
                 self.mgr.service_action('reconfig', svc)
 
-
     def _process_acme_orders(self) -> None:
         if not hasattr(self.mgr, 'acme_mgr'):
             return
