@@ -5,7 +5,7 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectManager, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
@@ -293,6 +293,50 @@ TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
 
 
 class TestCertMgr(object):
+
+    def test_cert_managed_by_migration_from_user_made(self):
+        user_cert = Cert.from_json({'cert': 'user-cert', 'user_made': True, 'editable': False})
+        cephadm_cert = Cert.from_json({'cert': 'cephadm-cert', 'user_made': False, 'editable': False})
+
+        assert user_cert.managed_by == TLSObjectManager.USER.value
+        assert user_cert.user_made is True
+        assert user_cert.to_json()['managed_by'] == TLSObjectManager.USER.value
+        assert user_cert.to_json()['user_made'] is True
+
+        assert cephadm_cert.managed_by == TLSObjectManager.CEPHADM.value
+        assert cephadm_cert.user_made is False
+        assert cephadm_cert.to_json()['managed_by'] == TLSObjectManager.CEPHADM.value
+        assert cephadm_cert.to_json()['user_made'] is False
+
+    def test_key_managed_by_migration_from_user_made(self):
+        user_key = PrivKey.from_json({'key': 'user-key', 'user_made': True, 'editable': False})
+        cephadm_key = PrivKey.from_json({'key': 'cephadm-key', 'user_made': False, 'editable': False})
+
+        assert user_key.managed_by == TLSObjectManager.USER.value
+        assert user_key.user_made is True
+        assert cephadm_key.managed_by == TLSObjectManager.CEPHADM.value
+        assert cephadm_key.user_made is False
+
+    def test_tlsobject_managed_by_acme_round_trip(self):
+        cert = Cert('acme-cert', managed_by=TLSObjectManager.ACME.value, editable=False)
+        key = PrivKey('acme-key', managed_by=TLSObjectManager.ACME.value, editable=False)
+
+        assert cert.user_made is False
+        assert key.user_made is False
+        assert Cert.from_json(cert.to_json()).managed_by == TLSObjectManager.ACME.value
+        assert PrivKey.from_json(key.to_json()).managed_by == TLSObjectManager.ACME.value
+
+    def test_cert_info_uses_managed_by_for_signed_by_and_description(self):
+        cert_info = CertInfo(
+            'acme_cert',
+            'target',
+            is_valid=False,
+            error_info='expired',
+            managed_by=TLSObjectManager.ACME.value,
+        )
+
+        assert cert_info.signed_by == TLSObjectManager.ACME.value
+        assert 'acme-managed' in cert_info.get_status_description()
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
