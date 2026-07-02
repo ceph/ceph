@@ -184,8 +184,8 @@ class ThreadSafeLRUCacheDictTest(TestCase):
 
 
 MOCK_HW_FULLREPORT = {
-    'at3n2.tuc.stglabs.ibm.com': {
-        'host': 'at3n2.tuc.stglabs.ibm.com',
+    'host.example.com': {
+        'host': 'host.example.com',
         'sn': '11S03NK990YM30ZP58E02X',
         'status': {
             'storage': {'Self': {
@@ -298,7 +298,7 @@ class HardwareMetricsTest(TestCase):
             'hardware_firmware_info': Metric(
                 'gauge', 'hardware_firmware_info', '', HW_FIRMWARE_LABELS),
         }
-        self.hostname = 'at3n2.tuc.stglabs.ibm.com'
+        self.hostname = 'host.example.com'
         self.data = MOCK_HW_FULLREPORT[self.hostname]
         self.status = self.data['status']
         self.module._hw_get_health_value = Module._hw_get_health_value.__get__(self.module)
