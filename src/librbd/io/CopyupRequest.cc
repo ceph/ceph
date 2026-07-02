@@ -23,9 +23,11 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Utils.h"
 
+#include <boost/asio/steady_timer.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
+#include <chrono>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
@@ -157,7 +159,17 @@ void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req,
 
 template <typename I>
 void CopyupRequest<I>::send() {
-  read_from_parent();
+  // Delay the parent read by 5 seconds to widen the coalescing window:
+  // other write ops that hit the same object_no during this interval will
+  // call append_request() and piggy-back onto this copyup instead of
+  // triggering an independent one.  The window closes when
+  // handle_read_from_parent() calls disable_append_requests().
+  auto timer = std::make_shared<boost::asio::steady_timer>(
+    m_image_ctx->asio_engine->get_io_context(),
+    std::chrono::seconds(5));
+  timer->async_wait([this, timer](const boost::system::error_code&) {
+    read_from_parent();
+  });
 }
 
 template <typename I>
