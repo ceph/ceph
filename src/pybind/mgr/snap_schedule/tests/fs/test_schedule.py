@@ -62,11 +62,7 @@ class TestSchedule(object):
 
     def test_created_now(self, simple_schedule):
         now = datetime.datetime.now(datetime.timezone.utc)
-        assert simple_schedule.created.minute == now.minute
-        assert simple_schedule.created.hour == now.hour
-        assert simple_schedule.created.day == now.day
-        assert simple_schedule.created.month == now.month
-        assert simple_schedule.created.year == now.year
+        assert abs((now - simple_schedule.created).total_seconds()) < 5
         assert simple_schedule.created.tzinfo == now.tzinfo
 
     def test_repeat_valid(self, simple_schedule):
