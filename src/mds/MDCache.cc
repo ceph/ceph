@@ -5928,11 +5928,13 @@ Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
       dout(15) << " chose lock states on " << *in << dendl;
     }
 
-    auto it =
-      cap_reconnect_waiters.find(in->ino());
-    if (it != cap_reconnect_waiters.end()) {
-      mds->queue_waiters(it->second);
-      cap_reconnect_waiters.erase(it);
+    if (!cap_imports.count(in->ino())) {
+      auto it =
+        cap_reconnect_waiters.find(in->ino());
+      if (it != cap_reconnect_waiters.end()) {
+        mds->queue_waiters(it->second);
+        cap_reconnect_waiters.erase(it);
+      }
     }
   }
   return cap;
