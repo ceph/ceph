@@ -328,6 +328,11 @@ protected:
 
   ContextWQ m_work_queue;
 
+  /* Joins the tp_pwl workers. Every most-derived destructor must call
+   * this before destroying any members a worker may still touch; the
+   * call in ~AbstractWriteLog is only a backstop and runs too late to
+   * protect derived members. Safe to call more than once. */
+  void stop_thread_pool();
   void wake_up();
 
   void update_entries(

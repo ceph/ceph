@@ -84,7 +84,7 @@ AbstractWriteLog<I>::AbstractWriteLog(
 template <typename I>
 AbstractWriteLog<I>::~AbstractWriteLog() {
   ldout(m_image_ctx.cct, 15) << "enter" << dendl;
-  m_thread_pool.stop();
+  stop_thread_pool();
   {
     std::lock_guard locker(m_lock);
     ceph_assert(m_deferred_ios.size() == 0);
@@ -96,6 +96,11 @@ AbstractWriteLog<I>::~AbstractWriteLog() {
     m_cache_state = nullptr;
   }
   ldout(m_image_ctx.cct, 15) << "exit" << dendl;
+}
+
+template <typename I>
+void AbstractWriteLog<I>::stop_thread_pool() {
+  m_thread_pool.stop();
 }
 
 template <typename I>

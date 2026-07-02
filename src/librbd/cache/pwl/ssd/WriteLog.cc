@@ -63,6 +63,7 @@ WriteLog<I>::WriteLog(
 
 template <typename I>
 WriteLog<I>::~WriteLog() {
+  this->stop_thread_pool();
   delete m_builderobj;
 }
 
