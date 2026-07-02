@@ -90,6 +90,10 @@ class Options(object):
     ALERTMANAGER_API_SSL_VERIFY = Setting(True, [bool])
     PROM_ALERT_CREDENTIAL_CACHE_TTL = Setting(60, [int])
 
+    # Loki settings
+    LOKI_API_HOST = Setting('', [str])
+    LOKI_API_SSL_VERIFY = Setting(True, [bool])
+
     # iSCSI management settings
     ISCSI_API_SSL_VERIFICATION = Setting(True, [bool])
 
