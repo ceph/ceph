@@ -2483,6 +2483,35 @@ if cluster_running; then
 fi
 
 # ============================================================
+# ceph global flags are consumed by rgw_global_init (ceph_argparse early_args +
+# md_config) BEFORE CLI11 parses, so CLI11 never sees them and cannot reject them
+# as "unexpected argument" / "invalid flag". Regression: space-form values (e.g.
+# --rgw-zone foo) used to strand as a stray positional and get rejected. One
+# global per parsing tier, in space and = form, plus no-value and pre-command.
+# object shard is a local computation (exit 0, prints "shard": 10), so a global
+# that leaked to CLI11 would instead surface as exit != 0 + "unexpected argument".
+# ============================================================
+echo ""
+echo "=== ceph globals stripped before CLI11 (no cluster) ==="
+_SHARD='bucket object shard --object foo --num-shards 11'
+check "global tier1 --cluster (space) stripped"            0 '"shard": 10' $_SHARD --cluster ceph
+check "global tier1 --cluster=ceph (= form) stripped"      0 '"shard": 10' $_SHARD --cluster=ceph
+check "global tier1 --no-config-file (no value) stripped"  0 '"shard": 10' $_SHARD --no-config-file
+check "global tier2 -d (no value) stripped"                0 '"shard": 10' $_SHARD -d
+check "global tier3 --rgw-zone (space) stripped [regression]" 0 '"shard": 10' $_SHARD --rgw-zone default
+check "global tier3 --rgw-zone=default (= form) stripped"   0 '"shard": 10' $_SHARD --rgw-zone=default
+check "global tier3 --debug-rgw (space) stripped"          0 '"shard": 10' $_SHARD --debug-rgw 5
+check "global tier3 --debug-rgw=5 (= form) stripped"       0 '"shard": 10' $_SHARD --debug-rgw=5
+check "global --rgw-zone default before command stripped"  0 '"shard": 10' --rgw-zone default $_SHARD
+
+echo ""
+echo "=== ceph globals stripped before CLI11 (cluster) ==="
+check_cluster "global --rgw-zone default (space) on bucket list"        0 "" -- bucket list --rgw-zone default
+check_cluster "global --rgw-zone=default (= form) on bucket list"       0 "" -- bucket list --rgw-zone=default
+check_cluster "global --debug-rgw 5 (space) on bucket list"             0 "" -- bucket list --debug-rgw 5
+check_cluster "global --rgw-zone default before command on bucket list" 0 "" -- --rgw-zone default bucket list
+
+# ============================================================
 echo ""
 echo "========================================"
 echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"

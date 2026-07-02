@@ -4097,18 +4097,23 @@ int main(int argc, const char **argv)
   bool cli11_non_master_op = false;
 
   {
-    // TODO: remove once --help is fully replaced by CLI11. When removing,
-    // also drop the argc modification and change app.parse(new_argc, argv)
-    // back to app.parse(argc, argv), and restore require_subcommand(1).
+    // Feed CLI11 the ceph-stripped args: rgw_global_init() above already removed
+    // every ceph global (--conf, --rgw-zone, --id, --name, --cluster, ...) from
+    // `args`, so CLI11 never sees them and can't misparse or reject them — the
+    // same vector the legacy flag loop below iterates. We also drop the
+    // radosgw-admin-only --cli11-help here (ceph leaves it in `args`).
+    // TODO: drop the --cli11-help filtering once --help is fully replaced by CLI11.
     bool show_cli11_help = false;
-    int new_argc = 1;
-    for (int i = 1; i < argc; ++i) {
-      if (std::string_view(argv[i]) == "--cli11-help") {
+    std::vector<const char*> cli_argv;
+    cli_argv.push_back(argv[0]);  // program name for CLI11's parser
+    for (const char* a : args) {
+      if (std::string_view(a) == "--cli11-help") {
         show_cli11_help = true;
       } else {
-        argv[new_argc++] = argv[i];
+        cli_argv.push_back(a);
       }
     }
+    const int new_argc = static_cast<int>(cli_argv.size());
 
     // Transitional: the bucket subtree is half-migrated. Route the command to
     // CLI11 or the legacy parser by the first recognized word after "bucket".
@@ -4124,11 +4129,11 @@ int main(int argc, const char **argv)
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
-        if (std::string_view(argv[i]) != "bucket" && std::string_view(argv[i]) != "buckets") {
+        if (std::string_view(cli_argv[i]) != "bucket" && std::string_view(cli_argv[i]) != "buckets") {
           continue;
         }
         for (int j = i + 1; j < new_argc; ++j) {
-          std::string_view word(argv[j]);
+          std::string_view word(cli_argv[j]);
           if (migrated_bucket_leaves.count(word)) {
             break;
           }
@@ -5384,9 +5389,9 @@ int main(int argc, const char **argv)
     // Skip CLI11 for legacy-owned commands so it can't reject them or mis-match
     // a later migrated leaf; the legacy find_command path below handles them.
     if (!route_bucket_to_legacy) {
-      // TODO: change back to app.parse(argc, argv) once --cli11-help is removed
+      // cli_argv is the ceph-stripped args (globals removed) minus --cli11-help.
       try {
-        app.parse(new_argc, argv);
+        app.parse(new_argc, cli_argv.data());
       } catch (const CLI::RuntimeError& e) {
         // If --cli11-help was requested, a callback may have thrown RuntimeError
         // because required options were missing. Show help instead of the error.
