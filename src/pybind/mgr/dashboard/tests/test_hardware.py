@@ -2,8 +2,8 @@ import unittest
 from unittest import mock
 
 from ..exceptions import DashboardException
-from ..services.hardware import HardwareService, STATUS_OK, STATUS_UNKNOWN
-
+from ..services.hardware import STATUS_CRITICAL, STATUS_OK, STATUS_UNKNOWN, \
+    STATUS_WARNING, HardwareService
 
 MOCK_HARDWARE_DATA = {
     'memory': {
@@ -117,10 +117,35 @@ MOCK_NON_DICT_COMPONENT = {
     }
 }
 
+MOCK_WARNING_STATUS_DATA = {
+    'host1': {
+        'SystemBoard': {
+            'DIMM.Socket.A1': {
+                'description': 'DIMM DDR5',
+                'status': {'health': 'OK'}
+            },
+            'DIMM.Socket.A2': {
+                'description': 'DIMM DDR5',
+                'status': {'health': 'Warning'}
+            },
+            'DIMM.Socket.A3': {
+                'description': 'DIMM DDR5',
+                'status': {'health': 'Critical'}
+            }
+        }
+    }
+}
+
 
 class HardwareConstantsTest(unittest.TestCase):
     def test_status_ok_value(self):
         self.assertEqual(STATUS_OK, 'OK')
+
+    def test_status_warning_value(self):
+        self.assertEqual(STATUS_WARNING, 'Warning')
+
+    def test_status_critical_value(self):
+        self.assertEqual(STATUS_CRITICAL, 'Critical')
 
     def test_status_unknown_value(self):
         self.assertEqual(STATUS_UNKNOWN, 'Unknown')
@@ -154,7 +179,7 @@ class HardwareValidateCategoriesTest(unittest.TestCase):
 
 class HardwareGetSummaryTest(unittest.TestCase):
     def _mock_common(self, data_map):
-        def side_effect(category, hostname=None):
+        def side_effect(category, _hostname=None):
             return data_map.get(category, {})
         return side_effect
 
@@ -168,7 +193,8 @@ class HardwareGetSummaryTest(unittest.TestCase):
         cat = result['total']['category']['memory']
         self.assertEqual(cat['total'], 3)
         self.assertEqual(cat['ok'], 3)
-        self.assertEqual(cat['error'], 0)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 0)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
     def test_dict_status_health_mixed(self, mock_instance):
@@ -180,7 +206,8 @@ class HardwareGetSummaryTest(unittest.TestCase):
         cat = result['total']['category']['storage']
         self.assertEqual(cat['total'], 2)
         self.assertEqual(cat['ok'], 1)
-        self.assertEqual(cat['error'], 1)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 1)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
     def test_string_status_format(self, mock_instance):
@@ -193,10 +220,11 @@ class HardwareGetSummaryTest(unittest.TestCase):
         result = HardwareService.get_summary(categories=['memory'])
         cat = result['total']['category']['memory']
         self.assertEqual(cat['ok'], 1)
-        self.assertEqual(cat['error'], 1)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 1)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
-    def test_missing_status_treated_as_unknown(self, mock_instance):
+    def test_missing_status_not_counted_as_critical(self, mock_instance):
         fake_client = mock.Mock()
         fake_client.hardware.common = self._mock_common(
             {'memory': MOCK_MISSING_STATUS_DATA}
@@ -206,10 +234,11 @@ class HardwareGetSummaryTest(unittest.TestCase):
         result = HardwareService.get_summary(categories=['memory'])
         cat = result['total']['category']['memory']
         self.assertEqual(cat['ok'], 0)
-        self.assertEqual(cat['error'], 1)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 0)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
-    def test_non_dict_component_treated_as_unknown(self, mock_instance):
+    def test_non_dict_component_not_counted_as_critical(self, mock_instance):
         fake_client = mock.Mock()
         fake_client.hardware.common = self._mock_common(
             {'memory': MOCK_NON_DICT_COMPONENT}
@@ -219,7 +248,8 @@ class HardwareGetSummaryTest(unittest.TestCase):
         result = HardwareService.get_summary(categories=['memory'])
         cat = result['total']['category']['memory']
         self.assertEqual(cat['ok'], 0)
-        self.assertEqual(cat['error'], 1)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 0)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
     def test_flawed_host_detected(self, mock_instance):
@@ -254,7 +284,8 @@ class HardwareGetSummaryTest(unittest.TestCase):
         totals = result['total']['total']
         self.assertEqual(totals['total'], 9)
         self.assertEqual(totals['ok'], 8)
-        self.assertEqual(totals['error'], 1)
+        self.assertEqual(totals['warn'], 0)
+        self.assertEqual(totals['critical'], 1)
 
     @mock.patch('dashboard.services.hardware.OrchClient.instance')
     def test_empty_data_returns_zeros(self, mock_instance):
@@ -266,4 +297,20 @@ class HardwareGetSummaryTest(unittest.TestCase):
         cat = result['total']['category']['memory']
         self.assertEqual(cat['total'], 0)
         self.assertEqual(cat['ok'], 0)
-        self.assertEqual(cat['error'], 0)
+        self.assertEqual(cat['warn'], 0)
+        self.assertEqual(cat['critical'], 0)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_warning_status_counted_separately(self, mock_instance):
+        fake_client = mock.Mock()
+        fake_client.hardware.common = self._mock_common(
+            {'memory': MOCK_WARNING_STATUS_DATA}
+        )
+        mock_instance.return_value = fake_client
+
+        result = HardwareService.get_summary(categories=['memory'])
+        cat = result['total']['category']['memory']
+        self.assertEqual(cat['total'], 3)
+        self.assertEqual(cat['ok'], 1)
+        self.assertEqual(cat['warn'], 1)
+        self.assertEqual(cat['critical'], 1)

@@ -72,7 +72,7 @@
 
   &-hardware-sections {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     column-gap: var(--cds-spacing-03);
     width: 100%;
     margin-top: var(--cds-spacing-03);
