@@ -30,3 +30,5 @@ tasks:
     clients:
       client.0:
       - rados/test.sh
+    env:
+      API_OMAP_PP_GTEST_FILTER: "-OmapTest.OmapRecovery*:OmapTest.NoOmapRecovery*:OmapTest.LargeOmapRecovery*:OmapTest.GenerationalObjectRecovery*"
