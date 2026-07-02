@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "common/ceph_context.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -129,7 +130,8 @@ class WebCache {
   std::unordered_map<Key, Node> _lookup;
   SieveQueue _sieve_queue;
   Node* _sieve_hand;
-  mutable std::shared_mutex _cache_mutex;
+  mutable ceph::shared_mutex _cache_mutex =
+      ceph::make_shared_mutex("WebCache::_cache_mutex");
 
  protected:
   // sieve_evict removes the next node using the SIEVE algorithm from
@@ -218,7 +220,7 @@ class WebCache {
 
   friend std::ostream& operator<<(
       std::ostream& os, const WebCache<Key, Value>& cache) {
-    std::shared_lock<std::shared_mutex> lock(cache._cache_mutex);
+    std::shared_lock lock(cache._cache_mutex);
     const auto now = ceph::real_clock::now();
     os << "$" << cache._name << "[";
 
@@ -354,14 +356,14 @@ PerfCounters* WebCache<Key, Value>::initialize_perf_counters(
 
 template <typename Key, typename Value>
 size_t WebCache<Key, Value>::size() const {
-  std::shared_lock<std::shared_mutex> lock(_cache_mutex);
+  std::shared_lock lock(_cache_mutex);
   ceph_assert(_lookup.size() == _sieve_queue.size());
   return _lookup.size();
 }
 
 template <typename Key, typename Value>
 size_t WebCache<Key, Value>::clear() {
-  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  std::lock_guard lock(_cache_mutex);
   perf_inc(Metric::clear);
   const size_t size_before = _sieve_queue.size();
   _sieve_queue.clear();
@@ -378,7 +380,7 @@ template <typename Key, typename Value>
 ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
   // cache hit - fast under read lock
   {
-    std::shared_lock<std::shared_mutex> lock(_cache_mutex);
+    std::shared_lock lock(_cache_mutex);
     if (auto search = _lookup.find(key); search != _lookup.end()) {
       perf_inc(Metric::hit);
       search->second.visited = true;
@@ -387,7 +389,7 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
   }
   // miss, take unique lock
   {
-    std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+    std::lock_guard lock(_cache_mutex);
     return insert_or_existing_unmutexed(key, value).expires_at;
   }
 }
@@ -396,7 +398,7 @@ template <typename Key, typename Value>
 WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
     const Key& key, ValuePtr new_val) {
   {
-    std::shared_lock<std::shared_mutex> cache_lock(_cache_mutex);
+    std::shared_lock cache_lock(_cache_mutex);
     auto maybe_value = lookup_unmutexed(key);
     if (maybe_value.has_value()) {
       perf_inc(Metric::hit);
@@ -406,7 +408,7 @@ WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
 
   // miss, take unique lock
   {
-    std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+    std::lock_guard lock(_cache_mutex);
     return insert_or_existing_unmutexed(key, new_val).value;
   }
 }
@@ -414,7 +416,7 @@ WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
 template <typename Key, typename Value>
 bool WebCache<Key, Value>::update_ttl_if(
     const Key& key, const ValuePtr& val, ceph::timespan new_ttl) {
-  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  std::lock_guard lock(_cache_mutex);
   if (auto search = _lookup.find(key);
       (search != _lookup.end() && search->second.value == val)) {
     search->second.expires_at = ceph::real_clock::now() + new_ttl;
@@ -426,7 +428,7 @@ bool WebCache<Key, Value>::update_ttl_if(
 template <typename Key, typename Value>
 bool WebCache<Key, Value>::remove_if(
     const Key& key, const ValuePtr& expected_val) {
-  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  std::lock_guard lock(_cache_mutex);
   if (auto search = _lookup.find(key);
       (search != _lookup.end() && search->second.value == expected_val)) {
     auto [_, hand_moved] =
@@ -500,7 +502,7 @@ WebCache<Key, Value>::sieve_remove_unmutexed(
 template <typename Key, typename Value>
 std::optional<typename WebCache<Key, Value>::ValuePtr>
 WebCache<Key, Value>::lookup(const Key& key) {
-  std::shared_lock<std::shared_mutex> lock(_cache_mutex);
+  std::shared_lock lock(_cache_mutex);
   auto result = lookup_unmutexed(key);
   if (result.has_value()) {
     perf_inc(Metric::hit);
@@ -537,7 +539,7 @@ typename WebCache<Key, Value>::Node* WebCache<Key, Value>::sieve_expire_erase_un
 
 template <typename Key, typename Value>
 size_t WebCache<Key, Value>::expire_erase() {
-  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  std::lock_guard lock(_cache_mutex);
   const auto expiration_cutoff = ceph::real_clock::now();
   const auto lookup_size_before = _lookup.size();
   SieveQueue expired;
