@@ -46,15 +46,17 @@
             </div>
           </div>
         </div>
-        <div class="cds--col-lg-2 cds--col-md-1 cds--col-sm-1">
-          <cds-icon-button kind="ghost"
-                           size="sm"
-                           (click)="$event.stopPropagation(); removePath(i)">
-            <cd-icon type="trash"
-                     size="16"
-                     class="cds--btn__icon"></cd-icon>
-          </cds-icon-button>
-        </div>
+        @if (paths.length > 1) {
+          <div class="cds--col-lg-2 cds--col-md-1 cds--col-sm-1">
+            <cds-icon-button kind="ghost"
+                             size="sm"
+                             (click)="$event.stopPropagation(); removePath(i)">
+              <cd-icon type="trash"
+                       size="16"
+                       class="cds--btn__icon"></cd-icon>
+            </cds-icon-button>
+          </div>
+        }
       </div>
 
       @if (entry.expanded && entry.levels.length) {
