@@ -3796,6 +3796,7 @@ int main(int argc, const char **argv)
   rgw_user user_id_arg;
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
+  std::string uid_str;  // CLI11 binding for --uid; rgw_user has no operator>>
   string user_ns;
   string account_name;
   rgw_account_id account_id;
@@ -4153,10 +4154,11 @@ int main(int argc, const char **argv)
     app.fallthrough();
 
     constexpr std::string_view tenant_desc = "tenant name";  // shared across command families
-    // radosgw-admin's own global flag (category 1) — owned by CLI11 on the root and
-    // declared once here instead of on every command. This matches the legacy parser,
-    // where --tenant is handled globally in the argument loop for any command.
+    // radosgw-admin's own global flags (category 1, identity) — owned by CLI11 on the
+    // root and declared once here instead of on every command. Matches the legacy parser,
+    // where --tenant and -i/--uid are handled globally for any command.
     app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
+    app.add_option("--uid,-i",  uid_str, "user id")->take_last();
 
     { // script command registrations
       auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
@@ -4294,12 +4296,9 @@ int main(int argc, const char **argv)
     } // script command registrations
 
     // --- bucket commands ---
-    std::string uid_str;  // CLI11 binding for --uid; rgw_user has no operator>>
-
     { // bucket command registrations
       constexpr std::string_view bucket_desc      = "Specify the bucket name. Also used by the quota command.";
       constexpr std::string_view bucket_id_desc   = "bucket id";
-      constexpr std::string_view uid_desc         = "user id";
       constexpr std::string_view format_desc      = "specify output format for certain operations: xml, json (default: json)";
       constexpr std::string_view max_entries_desc = "max entries for listing operations";
       constexpr std::string_view marker_desc      = "object name marker to specify where listing begins (default: start from beginning)";
@@ -4352,7 +4351,6 @@ int main(int argc, const char **argv)
 
       // bucket list options
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
-      add_multilevel_option(bucket_list, "--uid,-i",          uid_str,        uid_desc);
       add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
       // CLI11 validates the integer type (including overflow); sets max_entries_specified
@@ -4378,13 +4376,11 @@ int main(int argc, const char **argv)
 
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_link, "--uid,-i",          uid_str,         uid_desc)->option_text("<uid> REQUIRED");
       add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       // bucket unlink options
       add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_unlink, "--uid,-i",    uid_str,     uid_desc)->option_text("<uid> REQUIRED");
 
       // bucket check options
       add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
@@ -4422,12 +4418,10 @@ int main(int argc, const char **argv)
 
       // bucket chown options
       add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
-      add_multilevel_option(bucket_chown, "--uid,-i",          uid_str,         uid_desc);
       add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
       add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc)->ignore_underscore();
 
       // bucket limit check options
-      add_multilevel_option(bucket_limit_check, "--uid,-i", uid_str, uid_desc);
       add_multilevel_binary_flag(bucket_limit_check, "--warnings-only", warnings_only,
                                  "list only buckets nearing or over the current max objects per shard value")->ignore_underscore();
 
