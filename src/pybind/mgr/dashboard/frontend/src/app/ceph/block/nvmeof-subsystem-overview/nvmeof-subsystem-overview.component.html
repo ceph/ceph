@@ -54,9 +54,23 @@
         i18n
         >Hosts allowed</span
       >
-      <span class="cds--type-body-compact-01">{{
-        subsystem.allow_any_host ? 'Any host' : 'Restricted'
-      }}</span>
+      <div>
+        <span class="cds--type-body-compact-01">{{
+          subsystem.allow_any_host ? 'Any host' : 'Restricted'
+        }}</span>
+        <a
+          cdsLink
+          class="cds-ml-2"
+          tabindex="0"
+          (click)="openEditHostAccessModal()"
+          (keydown.enter)="openEditHostAccessModal()"
+          [cdsStack]="'horizontal'"
+          [gap]="1"
+        >
+          <span i18n>Edit</span>
+          <cd-icon type="edit"></cd-icon>
+        </a>
+      </div>
     </div>
 
     <div class="detail-item">
