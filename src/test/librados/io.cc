@@ -270,7 +270,6 @@ TEST_P(LibRadosIo, XattrIter) {
 }
 
 TEST_P(LibRadosIoEC, SimpleWrite) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -279,7 +278,6 @@ TEST_P(LibRadosIoEC, SimpleWrite) {
 }
 
 TEST_P(LibRadosIoEC, RoundTrip) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -295,7 +293,6 @@ TEST_P(LibRadosIoEC, RoundTrip) {
 }
 
 TEST_P(LibRadosIoEC, OverlappingWriteRoundTrip) {
-  SKIP_IF_CRIMSON();
   int bsize = alignment;
   int dbsize = bsize * 2;
   char *buf = (char *)new char[dbsize];
@@ -320,7 +317,6 @@ TEST_P(LibRadosIoEC, OverlappingWriteRoundTrip) {
 }
 
 TEST_P(LibRadosIoEC, WriteFullRoundTrip) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[64];
   char buf3[128];
@@ -334,7 +330,6 @@ TEST_P(LibRadosIoEC, WriteFullRoundTrip) {
 }
 
 TEST_P(LibRadosIoEC, AppendRoundTrip) {
-  SKIP_IF_CRIMSON();
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
   char *buf3 = (char *)new char[alignment *2];
@@ -363,7 +358,6 @@ TEST_P(LibRadosIoEC, AppendRoundTrip) {
 }
 
 TEST_P(LibRadosIoEC, TruncTest) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
@@ -379,7 +373,6 @@ TEST_P(LibRadosIoEC, TruncTest) {
 }
 
 TEST_P(LibRadosIoEC, RemoveTest) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
@@ -390,7 +383,6 @@ TEST_P(LibRadosIoEC, RemoveTest) {
 }
 
 TEST_P(LibRadosIoEC, XattrsRoundTrip) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -404,7 +396,6 @@ TEST_P(LibRadosIoEC, XattrsRoundTrip) {
 }
 
 TEST_P(LibRadosIoEC, RmXattr) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -428,7 +419,6 @@ TEST_P(LibRadosIoEC, RmXattr) {
 }
 
 TEST_P(LibRadosIoEC, XattrIter) {
-  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";

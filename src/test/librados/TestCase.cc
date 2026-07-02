@@ -174,7 +174,6 @@ rados_t RadosTestEC::s_cluster = NULL;
 
 void RadosTestEC::SetUpTestCase()
 {
-  SKIP_IF_CRIMSON();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name()); 
   pool_name_default = get_temp_pool_name(pool_prefix);
   pool_name_fast = get_temp_pool_name(pool_prefix);
@@ -187,7 +186,6 @@ void RadosTestEC::SetUpTestCase()
 
 void RadosTestEC::TearDownTestCase()
 {
-  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, destroy_ec_pool(pool_name_default, &s_cluster));
   ASSERT_EQ(0, destroy_ec_pool(pool_name_fast, &s_cluster));
   ASSERT_EQ(0, destroy_ec_pool(pool_name_fast_split, &s_cluster));
@@ -196,8 +194,6 @@ void RadosTestEC::TearDownTestCase()
 
 void RadosTestEC::SetUp()
 {
-  SKIP_IF_CRIMSON();
-
   const auto& params = GetParam();
   bool fast_ec = std::get<0>(params);
   bool split_ops = std::get<1>(params);
@@ -223,7 +219,6 @@ void RadosTestEC::SetUp()
 
 void RadosTestEC::TearDown()
 {
-  SKIP_IF_CRIMSON();
   if (cleanup) {
     cleanup_default_namespace(ioctx);
     cleanup_namespace(ioctx, nspace);
