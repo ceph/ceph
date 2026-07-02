@@ -9655,7 +9655,7 @@ int BlueStore::_umount_readonly()
 
 int BlueStore::_mount()
 {
-  dout(5) << __func__ << " path " << path << dendl;
+  dout(1) << __func__ << " path " << path << dendl;
 
   {
     int r = read_meta_conf_check_env();
@@ -9694,7 +9694,11 @@ int BlueStore::_mount()
     return -EINVAL;
   }
 
-  dout(5) << __func__ << "::NCB::calling open_db_and_around(read/write)" << dendl;
+  dout(1) << __func__
+          << " v2 = " << use_write_v2
+	  << " segment_size = " << segment_size
+	  << " esb = " << elastic_shared_blobs
+          << dendl;
   int r = _open_db_and_around(false);
   if (r < 0) {
     return r;
