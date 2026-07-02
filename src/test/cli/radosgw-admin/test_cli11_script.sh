@@ -24,7 +24,6 @@ SKIP=0
 # Full warning/error message constants
 WARN_CTX_POS="Warning: --context should appear after the subcommand"
 WARN_INFILE_POS="Warning: --infile should appear after the subcommand"
-WARN_TENANT_POS="Warning: --tenant should appear after the subcommand"
 WARN_CTX_DUP="Warning: --context specified multiple times, using last value"
 WARN_INFILE_DUP="Warning: --infile specified multiple times, using last value"
 WARN_TENANT_DUP="Warning: --tenant specified multiple times, using last value"
@@ -188,7 +187,7 @@ check_warns "put: --context before script"  0 "" "$WARN_CTX_POS" -- \
   --context prerequest script put --infile /dev/null
 check_warns "put: --infile before script"   0 "" "$WARN_INFILE_POS" -- \
   --infile /dev/null script put --context prerequest
-check_warns "put: --tenant before script"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "put: --tenant before script"   0 "" -- \
   --tenant mytenant script put --context prerequest --infile /dev/null
 
 # flag between script and put (1 warning)
@@ -196,7 +195,7 @@ check_warns "put: --context between script and put"  0 "" "$WARN_CTX_POS" -- \
   script --context prerequest put --infile /dev/null
 check_warns "put: --infile between script and put"   0 "" "$WARN_INFILE_POS" -- \
   script --infile /dev/null put --context prerequest
-check_warns "put: --tenant between script and put"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "put: --tenant between script and put"   0 "" -- \
   script --tenant mytenant put --context prerequest --infile /dev/null
 
 # duplicate flags same level (1 warning)
@@ -224,17 +223,17 @@ check_warns "put: 3 warnings (position + context dup + infile dup)"  0 "" \
 
 # 3 warnings + error: position + context dup + tenant dup + missing --infile
 check_warns "put: 3 warnings + missing --infile"  22 "$ERR_INFILE_MISSING" \
-  "$WARN_CTX_POS" "$WARN_TENANT_POS" "$WARN_CTX_DUP" "$WARN_TENANT_DUP" -- \
+  "$WARN_CTX_POS" "$WARN_CTX_DUP" "$WARN_TENANT_DUP" -- \
   --context prerequest --tenant foo script put --context background --tenant bar
 
 # 4 warnings: position + context dup + infile dup + tenant dup
 check_warns "put: 4 warnings (position + context dup + infile dup + tenant dup)"  0 "" \
-  "$WARN_CTX_POS" "$WARN_INFILE_POS" "$WARN_TENANT_POS" "$WARN_CTX_DUP" "$WARN_INFILE_DUP" "$WARN_TENANT_DUP" -- \
+  "$WARN_CTX_POS" "$WARN_INFILE_POS" "$WARN_CTX_DUP" "$WARN_INFILE_DUP" "$WARN_TENANT_DUP" -- \
   --context prerequest --infile /dev/null --tenant foo script put --context prerequest --infile /dev/null --tenant bar
 
 # 4 warnings + error: position + context dup + infile dup + tenant dup + background+tenant conflict
 check_warns "put: 4 warnings + background+tenant error"  22 "ERROR: cannot specify tenant in background context" \
-  "$WARN_CTX_POS" "$WARN_INFILE_POS" "$WARN_TENANT_POS" "$WARN_CTX_DUP" "$WARN_INFILE_DUP" "$WARN_TENANT_DUP" -- \
+  "$WARN_CTX_POS" "$WARN_INFILE_POS" "$WARN_CTX_DUP" "$WARN_INFILE_DUP" "$WARN_TENANT_DUP" -- \
   --context background --infile /dev/null --tenant foo script put --context background --infile /dev/null --tenant bar
 
 # stray positional args
@@ -265,13 +264,13 @@ check "get: --context missing value" 114 "$ERR_CTX_VALUE" \
 # flag before subcommand (1 warning)
 check_warns "get: --context before script"  0 "" "$WARN_CTX_POS" -- \
   --context prerequest script get
-check_warns "get: --tenant before script"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "get: --tenant before script"   0 "" -- \
   --tenant mytenant script get --context prerequest
 
 # flag between script and get (1 warning)
 check_warns "get: --context between script and get"  0 "" "$WARN_CTX_POS" -- \
   script --context prerequest get
-check_warns "get: --tenant between script and get"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "get: --tenant between script and get"   0 "" -- \
   script --tenant mytenant get --context prerequest
 
 # duplicate flags same level (1 warning)
@@ -300,8 +299,9 @@ check "get: stray between script and get" 22 "ERROR: unexpected argument: 'extra
 check "get: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
   script get --context prerequest --fakeflag
 
-# --infile not registered on get
-check "get: --infile not registered"  22 "ERROR: unexpected argument: '/dev/null'" \
+# --infile not registered on get: swallowed via fallthrough + warned (backward compat)
+check_warns "get: --infile swallowed+warned (not registered)"  0 "" \
+  "Warning: --infile is not a valid option for 'script get'" -- \
   script get --infile /dev/null --context prerequest
 
 # ============================================================
@@ -320,13 +320,13 @@ check "rm: --context missing value"  114 "$ERR_CTX_VALUE" \
 # flag before subcommand (1 warning)
 check_warns "rm: --context before script"  0 "" "$WARN_CTX_POS" -- \
   --context prerequest script rm
-check_warns "rm: --tenant before script"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "rm: --tenant before script"   0 "" -- \
   --tenant mytenant script rm --context prerequest
 
 # flag between script and rm (1 warning)
 check_warns "rm: --context between script and rm"  0 "" "$WARN_CTX_POS" -- \
   script --context prerequest rm
-check_warns "rm: --tenant between script and rm"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "rm: --tenant between script and rm"   0 "" -- \
   script --tenant mytenant rm --context prerequest
 
 # duplicate flags same level (1 warning)
@@ -338,7 +338,7 @@ check_warns "rm: duplicate --tenant same level"   0 "" "$WARN_TENANT_DUP" -- \
 # duplicate cross level (2 warnings: position + duplicate)
 check_warns "rm: duplicate --context cross level"  0 "" "$WARN_CTX_POS" "$WARN_CTX_DUP" -- \
   --context prerequest script rm --context background
-check_warns "rm: duplicate --tenant cross level"   0 "" "$WARN_TENANT_POS" "$WARN_TENANT_DUP" -- \
+check_warns "rm: duplicate --tenant cross level"   0 "" "$WARN_TENANT_DUP" -- \
   --tenant foo script rm --context prerequest --tenant bar
 
 # stray positional args
@@ -369,13 +369,13 @@ check "remove: --context missing value"  114 "$ERR_CTX_VALUE" \
 # flag before subcommand (1 warning)
 check_warns "remove: --context before script"  0 "" "$WARN_CTX_POS" -- \
   --context prerequest script remove
-check_warns "remove: --tenant before script"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "remove: --tenant before script"   0 "" -- \
   --tenant mytenant script remove --context prerequest
 
 # flag between script and remove (1 warning)
 check_warns "remove: --context between script and remove"  0 "" "$WARN_CTX_POS" -- \
   script --context prerequest remove
-check_warns "remove: --tenant between script and remove"   0 "" "$WARN_TENANT_POS" -- \
+check_warns "remove: --tenant between script and remove"   0 "" -- \
   script --tenant mytenant remove --context prerequest
 
 # duplicate flags same level (1 warning)
@@ -387,7 +387,7 @@ check_warns "remove: duplicate --tenant same level"   0 "" "$WARN_TENANT_DUP" --
 # duplicate cross level (2 warnings: position + duplicate)
 check_warns "remove: duplicate --context cross level"  0 "" "$WARN_CTX_POS" "$WARN_CTX_DUP" -- \
   --context prerequest script remove --context background
-check_warns "remove: duplicate --tenant cross level"   0 "" "$WARN_TENANT_POS" "$WARN_TENANT_DUP" -- \
+check_warns "remove: duplicate --tenant cross level"   0 "" "$WARN_TENANT_DUP" -- \
   --tenant foo script remove --context prerequest --tenant bar
 
 # stray positional args
