@@ -877,7 +877,7 @@ prepare_conf() {
 EOF
     if [ "$with_jaeger" -eq 1 ] ; then
         wconf <<EOF
-        jaeger_agent_port = 6831
+        jaeger_agent_port = 4317
 EOF
     fi
     if [ "$lockdep" -eq 1 ] ; then
@@ -2138,13 +2138,9 @@ echo ""
 if [ $with_jaeger -eq 1 ]; then
     debug echo "Enabling jaegertracing..."
     docker_service run -d --name jaeger \
-  -p 5775:5775/udp \
-  -p 6831:6831/udp \
-  -p 6832:6832/udp \
-  -p 5778:5778 \
-  -p 16686:16686 \
-  -p 14268:14268 \
-  -p 14250:14250 \
+    -p 16686:16686 \
+    -p 4317:4317 \
+    -p 4318:4318 \
   quay.io/jaegertracing/all-in-one
 fi
 
