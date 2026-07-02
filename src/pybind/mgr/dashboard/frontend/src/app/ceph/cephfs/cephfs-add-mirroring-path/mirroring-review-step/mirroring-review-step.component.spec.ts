@@ -23,12 +23,11 @@ describe('MirroringReviewStepComponent', () => {
   });
 
   it('should initialise with default values', () => {
-    expect(component.destinationCluster).toBe('—');
-    expect(component.destinationFilesystem).toBe('—');
+    expect(component.fsName).toBe('—');
     expect(component.totalPaths).toBe(0);
+    expect(component.selectedPaths).toEqual([]);
     expect(component.snapshotInterval).toBe('—');
     expect(component.retention).toBe('—');
-    expect(component.existingScheduleCount).toBe(0);
   });
 
   it('should have an empty formGroup', () => {
@@ -36,20 +35,18 @@ describe('MirroringReviewStepComponent', () => {
     expect(Object.keys(component.formGroup.controls)).toHaveLength(0);
   });
 
-  it('should accept input values', () => {
-    component.destinationCluster = 'remote-cluster';
-    component.destinationFilesystem = 'remote-fs';
-    component.totalPaths = 3;
-    component.snapshotInterval = 'Every 2 hours';
-    component.retention = '7 daily';
-    component.existingScheduleCount = 5;
+  it('should accept review summary inputs', () => {
+    component.fsName = 'testfs';
+    component.totalPaths = 2;
+    component.selectedPaths = ['/volumes/g1/sv1', '/volumes/g1/sv2'];
+    component.snapshotInterval = '2 weeks';
+    component.retention = '7 Daily';
     fixture.detectChanges();
 
-    expect(component.destinationCluster).toBe('remote-cluster');
-    expect(component.destinationFilesystem).toBe('remote-fs');
-    expect(component.totalPaths).toBe(3);
-    expect(component.snapshotInterval).toBe('Every 2 hours');
-    expect(component.retention).toBe('7 daily');
-    expect(component.existingScheduleCount).toBe(5);
+    expect(component.fsName).toBe('testfs');
+    expect(component.totalPaths).toBe(2);
+    expect(component.selectedPaths).toEqual(['/volumes/g1/sv1', '/volumes/g1/sv2']);
+    expect(component.snapshotInterval).toBe('2 weeks');
+    expect(component.retention).toBe('7 Daily');
   });
 });

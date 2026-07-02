@@ -329,23 +329,6 @@ export class CephfsSnapshotscheduleFormComponent
       .join('|');
   }
 
-  getScheduleSummary(): string {
-    if (!this.snapScheduleForm) {
-      return '';
-    }
-
-    const values = this.snapScheduleForm.getRawValue() as SnapshotScheduleFormValue;
-    const schedule = this.parseSchedule(values?.repeatInterval, values?.repeatFrequency);
-    const retention = this.parseRetentionPolicies(values?.retentionPolicies);
-    const parts = [$localize`Every ${schedule}`];
-
-    if (retention) {
-      parts.push($localize`Retention: ${retention}`);
-    }
-
-    return parts.join(' · ');
-  }
-
   buildCreatePayload(targetPath?: string): Record<string, unknown> {
     const values = this.snapScheduleForm.getRawValue() as SnapshotScheduleFormValue;
     const path = targetPath ?? values.directory;
@@ -447,7 +430,7 @@ export class CephfsSnapshotscheduleFormComponent
       const repeatFrequency = frm.get('repeatFrequency');
       const repeatInterval = frm.get('repeatInterval');
       const directoryPath = this.hideDirectory
-        ? directory?.getRawValue?.() ?? directory?.value
+        ? (directory?.getRawValue?.() ?? directory?.value)
         : directory?.value;
 
       if (this.isEdit) {

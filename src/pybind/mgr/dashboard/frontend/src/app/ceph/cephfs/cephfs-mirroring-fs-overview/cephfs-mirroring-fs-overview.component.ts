@@ -123,7 +123,7 @@ export class CephfsMirroringFsOverviewComponent {
       },
       destination: {
         clusterName: daemonInfo.clusterName,
-        siteName: daemonInfo.peerUuid ? peers[daemonInfo.peerUuid]?.site_name ?? '-' : '-',
+        siteName: daemonInfo.peerUuid ? (peers[daemonInfo.peerUuid]?.site_name ?? '-') : '-',
         destinationFsName: daemonInfo.destinationFsName,
         fsid: daemonInfo.fsid,
         monitorEndpoint: daemonInfo.monitorEndpoint
@@ -144,9 +144,7 @@ export class CephfsMirroringFsOverviewComponent {
     };
   }
 
-  private extractLatestSync(
-    status: MirrorStatusResponse
-  ): {
+  private extractLatestSync(status: MirrorStatusResponse): {
     syncingPaths: number;
     info: MirroringFsSyncInfo;
   } {

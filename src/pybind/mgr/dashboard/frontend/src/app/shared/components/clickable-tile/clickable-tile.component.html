@@ -1,11 +1,15 @@
 <cds-clickable-tile (click)="tileClick.emit()">
-  <div cdsStack="vertical"
-       gap="5">
+  <div
+    cdsStack="vertical"
+    gap="5"
+  >
     <div>
       <p class="cds--type-heading-compact-01">{{ title }}</p>
       <p class="cds--type-body-compact-01">{{ description }}</p>
     </div>
-    <cd-icon [type]="icon"
-             size="24"></cd-icon>
+    <cd-icon
+      [type]="icon"
+      size="24"
+    ></cd-icon>
   </div>
 </cds-clickable-tile>

@@ -1,28 +1,50 @@
 @if (open && !generatedToken) {
-  <cds-modal size="md"
-             [open]="true"
-             (overlaySelected)="onCancel()">
-    <cds-modal-header (closeSelect)="onCancel()"
-                      i18n>Ceph filesystem mirroring
+  <cds-modal
+    size="md"
+    [open]="true"
+    (overlaySelected)="onCancel()"
+  >
+    <cds-modal-header
+      (closeSelect)="onCancel()"
+      i18n
+      >Ceph filesystem mirroring
     </cds-modal-header>
 
     <section cdsModalContent>
-      <div class="cds--type-heading-03 cds-mb-5"
-           i18n>Prepare cluster to receive data</div>
+      <div
+        class="cds--type-heading-03 cds-mb-5"
+        i18n
+      >
+        Prepare cluster to receive data
+      </div>
 
-      <div class="cds--type-body-compact-01 cds-mb-5"
-           i18n>Generate a bootstrap token to use on the source cluster and establish a mirroring relationship,
-        enabling this cluster to receive replicated data.</div>
+      <div
+        class="cds--type-body-compact-01 cds-mb-5"
+        i18n
+      >
+        Generate a bootstrap token to use on the source cluster and establish a mirroring
+        relationship, enabling this cluster to receive replicated data.
+      </div>
 
       <div class="cds-mb-5">
         <cd-alert-panel type="info">
-          <div [cdsStack]="'vertical'"
-               [gap]="2">
-            <div class="cds--type-heading-compact-01"
-                 i18n>How to use this secure token</div>
-            <div class="cds--type-body-compact-01"
-                 i18n>Once you've generated the token, send it to the source cluster's administrator to finish
-              the setup.</div>
+          <div
+            [cdsStack]="'vertical'"
+            [gap]="2"
+          >
+            <div
+              class="cds--type-heading-compact-01"
+              i18n
+            >
+              How to use this secure token
+            </div>
+            <div
+              class="cds--type-body-compact-01"
+              i18n
+            >
+              Once you've generated the token, send it to the source cluster's administrator to
+              finish the setup.
+            </div>
           </div>
         </cd-alert-panel>
       </div>
@@ -30,17 +52,30 @@
       <div class="cds-mb-5">
         <form [formGroup]="tokenForm">
           <div class="form-item cds-mb-5">
-            <cds-select formControlName="filesystem"
-                        label="Destination filesystem"
-                        i18n-label
-                        helperText="Filesystem you want to receive data to from the source cluster. Mirroring will be enabled on this filesystem."
-                        i18n-helperText
-                        id="filesystem"
-                        [invalid]="tokenForm.controls['filesystem'].invalid && tokenForm.controls['filesystem'].touched"
-                        [invalidText]="fsError">
-              <option value="" i18n>Select a destination filesystem</option>
-              <option *ngFor="let fs of filesystems"
-                      [value]="fs.name">{{ fs.name }}</option>
+            <cds-select
+              formControlName="filesystem"
+              label="Destination filesystem"
+              i18n-label
+              helperText="Filesystem you want to receive data to from the source cluster. Mirroring will be enabled on this filesystem."
+              i18n-helperText
+              id="filesystem"
+              [invalid]="
+                tokenForm.controls['filesystem'].invalid && tokenForm.controls['filesystem'].touched
+              "
+              [invalidText]="fsError"
+            >
+              <option
+                value=""
+                i18n
+              >
+                Select a destination filesystem
+              </option>
+              <option
+                *ngFor="let fs of filesystems"
+                [value]="fs.name"
+              >
+                {{ fs.name }}
+              </option>
             </cds-select>
             <ng-template #fsError>
               <span i18n>This field is required.</span>
@@ -50,30 +85,42 @@
           <div class="form-item cds-mb-5">
             <div class="cds-input-group">
               <div class="fit-content">
-                <cds-text-label cdRequiredField="Username"
-                                i18n>
-                  <input cdsText
-                         value="client."
-                         readonly
-                         name="client_prefix" />
+                <cds-text-label
+                  cdRequiredField="Username"
+                  i18n
+                >
+                  <input
+                    cdsText
+                    value="client."
+                    readonly
+                    name="client_prefix"
+                  />
                 </cds-text-label>
               </div>
-              <cds-text-label labelInputID="username"
-                              [helperText]="usernameHelper"
-                              [invalid]="tokenForm.controls['username'].invalid && tokenForm.controls['username'].touched"
-                              [invalidText]="usernameError">
+              <cds-text-label
+                labelInputID="username"
+                [helperText]="usernameHelper"
+                [invalid]="
+                  tokenForm.controls['username'].invalid && tokenForm.controls['username'].touched
+                "
+                [invalidText]="usernameError"
+              >
                 &#8203;
-                <input cdsText
-                       type="text"
-                       id="username"
-                       name="username"
-                       formControlName="username"
-                       placeholder="Enter or select an existing username"
-                       i18n-placeholder
-                       [invalid]="tokenForm.controls['username'].invalid && tokenForm.controls['username'].touched"
-                       [ngbTypeahead]="searchUsername"
-                       (focus)="usernameFocus$.next(tokenForm.controls['username'].value || '')"
-                       #usernameTypeahead="ngbTypeahead">
+                <input
+                  cdsText
+                  type="text"
+                  id="username"
+                  name="username"
+                  formControlName="username"
+                  placeholder="Enter or select an existing username"
+                  i18n-placeholder
+                  [invalid]="
+                    tokenForm.controls['username'].invalid && tokenForm.controls['username'].touched
+                  "
+                  [ngbTypeahead]="searchUsername"
+                  (focus)="usernameFocus$.next(tokenForm.controls['username'].value || '')"
+                  #usernameTypeahead="ngbTypeahead"
+                />
               </cds-text-label>
             </div>
             <ng-template #usernameHelper>
@@ -81,35 +128,46 @@
             </ng-template>
             <ng-template #usernameError>
               @if (tokenForm.controls['username'].hasError('required')) {
-              <span i18n>This field is required.</span>
+                <span i18n>This field is required.</span>
               }
               @if (tokenForm.controls['username'].hasError('forbiddenClientPrefix')) {
-              <span i18n>Do not include 'client.' prefix. Enter only the entity suffix.</span>
+                <span i18n>Do not include 'client.' prefix. Enter only the entity suffix.</span>
               }
               @if (tokenForm.controls['username'].hasError('invalidChars')) {
-              <span i18n>Only letters, numbers, underscores, and hyphens are allowed.</span>
+                <span i18n>Only letters, numbers, underscores, and hyphens are allowed.</span>
               }
             </ng-template>
           </div>
 
           <div class="form-item cds-mb-5">
-            <cds-text-label for="sitename"
-                            cdRequiredField="Sitename"
-                            [helperText]="sitenameHelper"
-                            [invalid]="tokenForm.controls['sitename'].invalid && tokenForm.controls['sitename'].touched"
-                            [invalidText]="sitenameError"
-                            i18n>Sitename
-              <input cdsText
-                     type="text"
-                     id="sitename"
-                     name="sitename"
-                     formControlName="sitename"
-                     placeholder="Enter a sitename"
-                     i18n-placeholder
-                     [invalid]="tokenForm.controls['sitename'].invalid && tokenForm.controls['sitename'].touched">
+            <cds-text-label
+              for="sitename"
+              cdRequiredField="Sitename"
+              [helperText]="sitenameHelper"
+              [invalid]="
+                tokenForm.controls['sitename'].invalid && tokenForm.controls['sitename'].touched
+              "
+              [invalidText]="sitenameError"
+              i18n
+              >Sitename
+              <input
+                cdsText
+                type="text"
+                id="sitename"
+                name="sitename"
+                formControlName="sitename"
+                placeholder="Enter a sitename"
+                i18n-placeholder
+                [invalid]="
+                  tokenForm.controls['sitename'].invalid && tokenForm.controls['sitename'].touched
+                "
+              />
             </cds-text-label>
             <ng-template #sitenameHelper>
-              <span i18n>A unique name for this storage site. Used by the primary cluster to identify this replication target.</span>
+              <span i18n
+                >A unique name for this storage site. Used by the primary cluster to identify this
+                replication target.</span
+              >
             </ng-template>
             <ng-template #sitenameError>
               <span i18n>This field is required.</span>
@@ -125,7 +183,8 @@
       [form]="tokenForm"
       [disabled]="tokenForm.invalid || isGenerating"
       [submitText]="submitText"
-      [modalForm]="true">
+      [modalForm]="true"
+    >
     </cd-form-button-panel>
   </cds-modal>
 }
@@ -136,6 +195,7 @@
     [token]="generatedToken"
     [siteName]="tokenForm.value.sitename"
     [filesystemName]="tokenForm.value.filesystem"
-    (closed)="onCancel()">
+    (closed)="onCancel()"
+  >
   </cd-cephfs-download-token>
 }
