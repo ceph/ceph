@@ -180,7 +180,7 @@ describe('NvmeofInitiatorsListComponent', () => {
     expect(getSubsystemSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('should filter ALLOW_ALL_HOST from array response', fakeAsync(() => {
+  it('should include ALLOW_ALL_HOST from array response', fakeAsync(() => {
     spyOn(nvmeofService, 'getInitiators').and.returnValue(
       of([
         { nqn: ALLOW_ALL_HOST, use_dhchap: false },
@@ -191,7 +191,10 @@ describe('NvmeofInitiatorsListComponent', () => {
     component.listInitiators();
     tick();
 
-    expect(component.initiators).toEqual([{ nqn: 'nqn.2016-06.io.spdk:host2', use_dhchap: false }]);
+    expect(component.initiators).toEqual([
+      { nqn: ALLOW_ALL_HOST, use_dhchap: false },
+      { nqn: 'nqn.2016-06.io.spdk:host2', use_dhchap: false }
+    ]);
   }));
 
   it('should support hosts-wrapper response from getInitiators', fakeAsync(() => {
@@ -207,6 +210,23 @@ describe('NvmeofInitiatorsListComponent', () => {
     component.listInitiators();
     tick();
 
-    expect(component.initiators).toEqual([{ nqn: 'nqn.2016-06.io.spdk:host3', use_dhchap: true }]);
+    expect(component.initiators).toEqual([
+      { nqn: ALLOW_ALL_HOST, use_dhchap: false },
+      { nqn: 'nqn.2016-06.io.spdk:host3', use_dhchap: true }
+    ]);
+  }));
+
+  it('should set allowAllHosts to true when wildcard initiator exists', fakeAsync(() => {
+    const allowAllSubsystem = { ...mockSubsystem, allow_any_host: true };
+    spyOn(nvmeofService, 'getInitiators').and.returnValue(
+      of([{ nqn: ALLOW_ALL_HOST, use_dhchap: false }])
+    );
+    spyOn(nvmeofService, 'getSubsystem').and.returnValue(of(allowAllSubsystem));
+
+    component.listInitiators();
+    component.getSubsystem();
+    tick();
+
+    expect(component.allowAllHosts).toBe(true);
   }));
 });
