@@ -1,14 +1,15 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ActivatedRoute } from '@angular/router';
-import { of } from 'rxjs';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { of, Subject } from 'rxjs';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { GridModule, TilesModule } from 'carbon-components-angular';
+import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
 
 import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystem, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
 
@@ -16,6 +17,9 @@ describe('NvmeofSubsystemOverviewComponent', () => {
   let component: NvmeofSubsystemOverviewComponent;
   let fixture: ComponentFixture<NvmeofSubsystemOverviewComponent>;
   let nvmeofService: NvmeofService;
+  let router: Router;
+  let activatedRoute: ActivatedRoute;
+  let routerEvents$: Subject<any>;
 
   const mockSubsystem: NvmeofSubsystem = {
     nqn: 'nqn.2016-06.io.spdk:cnode1',
@@ -29,7 +33,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     enable_ha: true,
     allow_any_host: true,
     gw_group: 'gateway-prod',
-    psk: 'some-key'
+    has_dhchap_key: true
   };
 
   const defaultActivatedRoute = {
@@ -54,7 +58,8 @@ describe('NvmeofSubsystemOverviewComponent', () => {
         SharedModule,
         NgbTooltipModule,
         TilesModule,
-        GridModule
+        GridModule,
+        LayoutModule
       ],
       providers: [
         { provide: ActivatedRoute, useValue: activatedRoute },
@@ -78,6 +83,8 @@ describe('NvmeofSubsystemOverviewComponent', () => {
   }
 
   beforeEach(async () => {
+    routerEvents$ = new Subject<any>();
+
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemOverviewComponent],
       imports: [
@@ -86,7 +93,8 @@ describe('NvmeofSubsystemOverviewComponent', () => {
         SharedModule,
         NgbTooltipModule,
         TilesModule,
-        GridModule
+        GridModule,
+        LayoutModule
       ],
       providers: [
         { provide: ActivatedRoute, useValue: defaultActivatedRoute },
@@ -95,6 +103,13 @@ describe('NvmeofSubsystemOverviewComponent', () => {
           useValue: {
             getSubsystem: jest.fn().mockReturnValue(of(mockSubsystem)),
             getInitiators: jest.fn().mockReturnValue(of([]))
+          }
+        },
+        {
+          provide: Router,
+          useValue: {
+            events: routerEvents$.asObservable(),
+            navigate: jest.fn().mockResolvedValue(true)
           }
         }
       ]
@@ -105,6 +120,8 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     fixture = TestBed.createComponent(NvmeofSubsystemOverviewComponent);
     component = fixture.componentInstance;
     nvmeofService = TestBed.inject(NvmeofService);
+    router = TestBed.inject(Router);
+    activatedRoute = TestBed.inject(ActivatedRoute);
     fixture.detectChanges();
   });
 
@@ -188,4 +205,30 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     });
     expect(f.nativeElement.textContent).toContain('Unidirectional');
   }));
+
+  it('should open host access edit modal route when edit is clicked', () => {
+    const navigateSpy = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+    component.groupName = 'group1';
+    component.openEditHostAccessModal();
+
+    expect(navigateSpy).toHaveBeenCalledWith(
+      [{ outlets: { modal: [URLVerbs.ADD, 'initiator'] } }],
+      {
+        queryParams: { group: 'group1' },
+        relativeTo: activatedRoute.parent
+      }
+    );
+  });
+
+  it('should refresh subsystem on non-modal navigation end', () => {
+    (nvmeofService.getSubsystem as jest.Mock).mockClear();
+
+    routerEvents$.next(new NavigationEnd(1, '/nvmeof/(modal:add)', '/nvmeof/(modal:add)'));
+    expect(nvmeofService.getSubsystem).not.toHaveBeenCalled();
+
+    routerEvents$.next(
+      new NavigationEnd(2, '/nvmeof/subsystems/overview', '/nvmeof/subsystems/overview')
+    );
+    expect(nvmeofService.getSubsystem).toHaveBeenCalledWith('nqn.2016-06.io.spdk:cnode1', 'group1');
+  });
 });

@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { Component, forwardRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { ControlValueAccessor, ReactiveFormsModule, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -16,7 +17,6 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { USER } from '~/app/shared/constants/app.constants';
 import {
   CheckboxModule,
@@ -39,6 +39,26 @@ class MockPoolService {
   }
 }
 
+// Stub for the standalone TextLabelListComponent which imports a non-standalone
+// NgModule (ComponentsModule) making it incompatible with TestBed's DynamicTestModule.
+// The stub registers NG_VALUE_ACCESSOR so formControlName='custom_sans' resolves.
+@Component({
+  selector: 'cd-text-label-list',
+  template: '',
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      useExisting: forwardRef(() => TextLabelListStubComponent),
+      multi: true
+    }
+  ]
+})
+class TextLabelListStubComponent implements ControlValueAccessor {
+  writeValue() {}
+  registerOnChange() {}
+  registerOnTouched() {}
+}
+
 describe('ServiceFormComponent', () => {
   let component: ServiceFormComponent;
   let fixture: ComponentFixture<ServiceFormComponent>;
@@ -47,7 +67,7 @@ describe('ServiceFormComponent', () => {
   let formHelper: FormHelper;
 
   configureTestBed({
-    declarations: [ServiceFormComponent],
+    declarations: [ServiceFormComponent, TextLabelListStubComponent],
     providers: [NgbActiveModal, { provide: PoolService, useClass: MockPoolService }],
     imports: [
       HttpClientTestingModule,
@@ -60,8 +80,7 @@ describe('ServiceFormComponent', () => {
       NumberModule,
       ModalModule,
       CheckboxModule,
-      RadioModule,
-      TextLabelListComponent
+      RadioModule
     ]
   });
 
@@ -572,6 +591,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('certificateType', 'external');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');

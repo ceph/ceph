@@ -197,23 +197,23 @@ describe('NvmeofNamespacesListComponent', () => {
 
   it('should default to first group and keep default placeholder when groups exist', () => {
     component.group = null;
-    component.gwGroups = [{ content: 'g1', selected: false }] as any;
+    component.groupHandler.gwGroups = [{ content: 'g1', selected: false }] as any;
 
-    component.updateGroupSelectionState();
+    (component.groupHandler as any).updateGroupSelectionState();
 
     expect(component.group).toBe('g1');
-    expect(component.gwGroupsEmpty).toBe(false);
-    expect(component.gwGroupPlaceholder).toBe('Enter group name');
+    expect(component.groupHandler.gwGroupsEmpty).toBe(false);
+    expect(component.groupHandler.gwGroupPlaceholder).toBe('Enter group name');
   });
 
   it('should set error placeholder and call preventDefault on group fetch failure', () => {
     const preventDefault = jasmine.createSpy('preventDefault');
 
-    component.handleGatewayGroupsError({ preventDefault });
+    (component.groupHandler as any).handleGatewayGroupsError({ preventDefault });
 
-    expect(component.gwGroups).toEqual([]);
-    expect(component.gwGroupsEmpty).toBe(true);
-    expect(component.gwGroupPlaceholder).toBe('Unable to fetch Gateway groups');
+    expect(component.groupHandler.gwGroups).toEqual([]);
+    expect(component.groupHandler.gwGroupsEmpty).toBe(true);
+    expect(component.groupHandler.gwGroupPlaceholder).toBe('Unable to fetch Gateway groups');
     expect(preventDefault).toHaveBeenCalled();
   });
 
