@@ -1226,6 +1226,10 @@ rgw
         Optional string. The RGW user ID that owns the bucket. If not provided,
         the system will automatically determine the bucket owner and fetch the
         necessary credentials.
+    credential_ref
+        Optional string. The ``rgw_credential_id`` value of a
+        ``ceph.smb.rgw.credential`` resource that contains RGW access and
+        secret key values needed to use the given bucket.
 
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
@@ -1465,9 +1469,9 @@ intent
     If ``removed`` all following fields are optional
 user_id
     Required string. The RGW user ID that owns the credentials
-access_key
+access_key_id
     Required string. The RGW access key for authentication
-secret_key
+secret_access_key
     Required string. The RGW secret key for authentication
 linked_to_cluster:
     Optional. A string containing a cluster ID. If set, the resource may only
