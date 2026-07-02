@@ -158,6 +158,11 @@ list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)
 
+if(WITH_RADOSGW_LANCEDB)
+  list(APPEND librgw_common_srcs
+    rgw_sal_wrapper.cc)
+endif()
+
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
           services/svc_bi_rados.cc
@@ -424,6 +429,24 @@ if(WITH_RADOSGW_LANCEDB)
   add_dependencies(rgw_common lancedb-c)
   install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+  # Create imported library target for liblancedb_rgw_store (SAL wrapper)
+  add_library(lancedb_rgw_store SHARED IMPORTED)
+  set_target_properties(lancedb_rgw_store PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+    IMPORTED_NO_SONAME TRUE
+  )
+  # Note: Do NOT link rgw_common -> lancedb_rgw_store here because it creates
+  # a circular dependency (lancedb_rgw_store needs rgw_sal_wrapper symbols from
+  # rgw_common). Instead, link lancedb_rgw_store directly to executables
+  # after rgw_common so the linker can resolve all symbols.
+  target_include_directories(rgw_common PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
+  )
+  add_dependencies(rgw_common lancedb-rgw-store)
+  install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 set(rgw_a_srcs
@@ -541,6 +564,10 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_include_directories(radosgw PUBLIC Arrow::Arrow)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_LANCEDB)
+  target_compile_definitions(rgw_common PUBLIC WITH_RADOSGW_LANCEDB)
+endif()
+
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
@@ -595,6 +622,10 @@ if(WITH_RADOSGW_FDB)
 
 endif(WITH_RADOSGW_FDB)
 
+if(WITH_RADOSGW_LANCEDB)
+  target_link_libraries(radosgw PRIVATE lancedb_rgw_store)
+endif()
+
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -638,6 +669,10 @@ endif(WITH_RADOSGW_POSIX AND NOT WITH_RADOSGW_RADOS)
 if(WITH_RADOSGW_ARROW_FLIGHT)
   target_link_libraries(radosgw-admin ${ARROW_LIBRARIES} ${ARROW_FLIGHT_LIBRARIES})
 endif(WITH_RADOSGW_ARROW_FLIGHT)
+
+if(WITH_RADOSGW_LANCEDB)
+  target_link_libraries(radosgw-admin lancedb_rgw_store)
+endif()
 
 if(WITH_RADOSGW_RADOS)
 install(TARGETS radosgw-admin DESTINATION bin)

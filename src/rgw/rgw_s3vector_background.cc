@@ -18,7 +18,12 @@
 #include <string>
 #include <unordered_map>
 #include "rgw_sal.h"
+#include "rgw_s3vector.h"
 #include "lancedb.h"
+
+#ifdef WITH_RADOSGW_LANCEDB
+#include "lancedb_rgw_store.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -181,20 +186,30 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
-              if (sessions.find(table_name.first) == sessions.end()) {
-                //create session if not exist, otherwise just ignore
-                //Can define session options in the future if needed, for now just create with default options for cache sizes
-                LanceDBSession* session = lancedb_session_new(nullptr);
-                if (session) {
-                  sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
-                  ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
-                }
-                else {
-                  ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
-                }
+              if (sessions.find(table_name.first) != sessions.end()) {
+                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
                 return;
               }
-              ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
+
+              const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
+              const auto backend_type = get_backend_type(backend_str);
+              LanceDBSession* session = nullptr;
+
+              // To pass custom LanceDBSessionOptions for cache sizes etc.
+              const LanceDBSessionOptions* options = nullptr;
+
+              if (is_sal_backend(backend_type)) {
+                session = create_sal_session(this, options);
+              } else {
+                session = lancedb_session_new(options);
+              }
+              if (!session) {
+                ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
+                return;
+              }
+              ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
+
+              sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
               return;
             }
           case message_t::Op::SESSION_DELETE:
@@ -335,6 +350,10 @@ public:
     return it->second;
   }
   
+  rgw::sal::Driver* get_driver() const {
+    return driver;
+  }
+
   Manager(CephContext* _cct, rgw::sal::Driver* _driver) :
     cct(_cct),
     work_guard(boost::asio::make_work_guard(io_context)),
@@ -407,6 +426,20 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& buc
     return false;
   }
   return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_DELETE);
+}
+
+rgw::sal::Driver* get_driver() {
+  if (!s_manager) {
+    return nullptr;
+  }
+  return s_manager->get_driver();
+}
+
+const DoutPrefixProvider* get_dpp() {
+  if (!s_manager) {
+    return nullptr;
+  }
+  return s_manager.get();
 }
 
 } // namespace rgw::s3vector

@@ -11,6 +11,8 @@
 #include "common/async/yield_context.h"
 #include <boost/algorithm/string/predicate.hpp>
 
+struct LanceDBSession;
+
 namespace ceph {
 class Formatter;
 }
@@ -85,6 +87,10 @@ inline bool is_sal_backend(BackendType type) {
 inline bool is_s3_backend(BackendType type) {
   return type == BackendType::S3;
 }
+
+// Create a LanceDB session with RGW SAL provider
+LanceDBSession* create_sal_session(const DoutPrefixProvider* dpp,
+    const void* options = nullptr);
 
 /*
   {
