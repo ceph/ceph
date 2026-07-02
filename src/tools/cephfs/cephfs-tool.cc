@@ -210,6 +210,7 @@ struct AsyncIOContext {
   std::atomic<bool>* stop_signal_ptr;
   ThreadStats* stats_ptr;
   std::counting_semaphore<>* semaphore_ptr;
+  std::atomic<int>* active_callbacks;
 };
 
 // Callback for async I/O completion
@@ -230,6 +231,9 @@ static void async_io_callback(struct ceph_ll_io_info* cb_info) {
   ctx->completed.store(true, std::memory_order_release);
   if (ctx->semaphore_ptr) {
     ctx->semaphore_ptr->release();
+  }
+  if (ctx->active_callbacks) {
+    ctx->active_callbacks->fetch_sub(1, std::memory_order_release);
   }
 }
 
@@ -560,6 +564,7 @@ bench_async_write_worker(
 
   // Semaphore for queue depth management
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
+  std::atomic<int> active_callbacks{0};
 
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
@@ -576,6 +581,7 @@ bench_async_write_worker(
     ctx->stop_signal_ptr = &stop_signal;
     ctx->stats_ptr = &stats;
     ctx->semaphore_ptr = &queue_semaphore;
+    ctx->active_callbacks = &active_callbacks;
     io_queue.push_back(std::move(ctx));
   }
 
@@ -698,8 +704,10 @@ bench_async_write_worker(
       available_ctx->io_info.result = 0;
 
       // Submit async I/O
+      active_callbacks.fetch_add(1, std::memory_order_relaxed);
       int64_t submit_rc = ceph_ll_nonblocking_readv_writev(cmount, &available_ctx->io_info);
       if (submit_rc < 0) {
+        active_callbacks.fetch_sub(1, std::memory_order_relaxed);
         ss << "Thread " << thread_id << " async write submit error: " << strerror(-submit_rc) << std::endl;
         stats.errors++;
         stop_signal = true;
@@ -755,12 +763,15 @@ bench_async_write_worker(
     }
   }
 
-  // Wait for ALL outstanding I/Os to complete before exiting thread
-  // This includes any operations that may still be in flight
+  // Wait for ALL outstanding I/Os to complete before exiting thread.
+  // completed may be set before the finisher callback returns.
   for (auto& ctx : io_queue) {
-    while (!ctx->completed.load()) {
+    while (!ctx->completed.load(std::memory_order_acquire)) {
       std::this_thread::yield();
     }
+  }
+  while (active_callbacks.load(std::memory_order_acquire) > 0) {
+    std::this_thread::yield();
   }
 }
 
@@ -889,6 +900,7 @@ bench_async_read_worker(
 
   // Semaphore for queue depth management
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
+  std::atomic<int> active_callbacks{0};
 
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
@@ -903,6 +915,7 @@ bench_async_read_worker(
     ctx->stop_signal_ptr = &stop_signal;
     ctx->stats_ptr = &stats;
     ctx->semaphore_ptr = &queue_semaphore;
+    ctx->active_callbacks = &active_callbacks;
     io_queue.push_back(std::move(ctx));
   }
 
@@ -1012,8 +1025,10 @@ bench_async_read_worker(
       available_ctx->io_info.result = 0;
 
       // Submit async I/O
+      active_callbacks.fetch_add(1, std::memory_order_relaxed);
       int64_t submit_rc = ceph_ll_nonblocking_readv_writev(cmount, &available_ctx->io_info);
       if (submit_rc < 0) {
+        active_callbacks.fetch_sub(1, std::memory_order_relaxed);
         ss << "Thread " << thread_id << " async read submit error: " << strerror(-submit_rc) << std::endl;
         stats.errors++;
         stop_signal = true;
@@ -1028,7 +1043,8 @@ bench_async_read_worker(
 
     // Wait for all outstanding I/Os to complete for this file
     for (auto& ctx : io_queue) {
-      while (!ctx->completed.load() && ctx->fh == fh && !stop_signal) {
+      while (!ctx->completed.load(std::memory_order_acquire) &&
+             ctx->fh == fh && !stop_signal) {
         std::this_thread::yield();
       }
     }
@@ -1072,12 +1088,15 @@ bench_async_read_worker(
     }
   }
 
-  // Wait for ALL outstanding I/Os to complete before exiting thread
-  // This includes any readahead operations that may have been triggered
+  // Wait for ALL outstanding I/Os to complete before exiting thread.
+  // completed may be set before the finisher callback returns.
   for (auto& ctx : io_queue) {
-    while (!ctx->completed.load()) {
+    while (!ctx->completed.load(std::memory_order_acquire)) {
       std::this_thread::yield();
     }
+  }
+  while (active_callbacks.load(std::memory_order_acquire) > 0) {
+    std::this_thread::yield();
   }
 
   // Now it's safe to release all inode references
