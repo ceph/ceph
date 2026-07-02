@@ -219,24 +219,19 @@ describe('OsdFormComponent', () => {
         OsdDeploymentOptions.THROUGHPUT,
         OsdDeploymentOptions.IOPS
       ]);
-      expect(component.steps).toHaveLength(3);
-      expect(component.steps.map((step) => step.label)).toEqual([
-        'Deployment Options',
-        'Features',
-        'Review'
-      ]);
+      expect(component.steps).toHaveLength(2);
+      expect(component.steps.map((step) => step.label)).toEqual(['Deployment Options', 'Review']);
     });
 
     it('should expand and collapse steps when deployment mode changes', () => {
       component.form.get('deploymentMode').setValue('manual');
       fixture.detectChanges();
 
-      expect(component.steps).toHaveLength(5);
+      expect(component.steps).toHaveLength(4);
       expect(component.steps.map((step) => step.label)).toEqual([
         'Deployment Options',
         'Select data devices',
         'Select DB/WAL devices (optional)',
-        'Features',
         'Review'
       ]);
       expect(fixture.nativeElement.textContent).toContain('Select data devices');
@@ -245,12 +240,8 @@ describe('OsdFormComponent', () => {
       component.form.get('deploymentMode').setValue('automatic');
       fixture.detectChanges();
 
-      expect(component.steps).toHaveLength(3);
-      expect(component.steps.map((step) => step.label)).toEqual([
-        'Deployment Options',
-        'Features',
-        'Review'
-      ]);
+      expect(component.steps).toHaveLength(2);
+      expect(component.steps.map((step) => step.label)).toEqual(['Deployment Options', 'Review']);
       expect(fixture.nativeElement.textContent).not.toContain('Select data devices');
       expect(fixture.nativeElement.textContent).not.toContain('Select DB/WAL devices (optional)');
     });
@@ -273,6 +264,13 @@ describe('OsdFormComponent', () => {
       expect(text).toContain('Cost/Capacity-optimized');
       expect(text).toContain('Throughput-optimized');
       expect(text).toContain('IOPS-optimized');
+    });
+
+    it('should mark the first step invalid when no eligible devices are available', () => {
+      expect(component.hasEligibleDevices).toBe(false);
+      expect(component.steps[0].invalid).toBe(true);
+      expect(component.form.get('deploymentMode').disabled).toBe(true);
+      expect(component.form.get('deploymentOption').disabled).toBe(true);
     });
 
     it('should only disable the options that are not available', () => {
