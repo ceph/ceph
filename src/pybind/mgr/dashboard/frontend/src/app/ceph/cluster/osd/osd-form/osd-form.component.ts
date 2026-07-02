@@ -8,6 +8,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
+import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -94,6 +95,8 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   @Output() osdCreated: EventEmitter<void> = new EventEmitter();
 
+  @Output() cancelled: EventEmitter<void> = new EventEmitter();
+
   icons = Icons;
 
   form!: CdFormGroup;
@@ -140,6 +143,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private router: Router,
+    private location: Location,
     private formatterService: FormatterService,
     private modalService: ModalService,
     private osdService: OsdService,
@@ -158,20 +162,54 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     this.createForm();
   }
 
+  get hasEligibleDevices(): boolean {
+    return this.allDevices.length > 0;
+  }
+
   private getStepsForMode(mode: string): Array<Step> {
+    const firstStepInvalid = !this.hasEligibleDevices;
+    const subsequentStepDisabled = !this.hasEligibleDevices;
     return mode !== 'manual'
       ? [
-          { label: STEP_LABELS.DEPLOYMENT, invalid: false },
-          { label: STEP_LABELS.FEATURES, invalid: false },
-          { label: STEP_LABELS.REVIEW, invalid: false }
+          { label: STEP_LABELS.DEPLOYMENT, invalid: firstStepInvalid },
+          { label: STEP_LABELS.REVIEW, invalid: false, disabled: subsequentStepDisabled }
         ]
       : [
-          { label: STEP_LABELS.DEPLOYMENT, invalid: false },
-          { label: STEP_LABELS.DATA, invalid: false },
-          { label: STEP_LABELS.DB_WAL, invalid: false },
-          { label: STEP_LABELS.FEATURES, invalid: false },
-          { label: STEP_LABELS.REVIEW, invalid: false }
+          { label: STEP_LABELS.DEPLOYMENT, invalid: firstStepInvalid },
+          { label: STEP_LABELS.DATA, invalid: false, disabled: subsequentStepDisabled },
+          { label: STEP_LABELS.DB_WAL, invalid: false, disabled: subsequentStepDisabled },
+          { label: STEP_LABELS.REVIEW, invalid: false, disabled: subsequentStepDisabled }
         ];
+  }
+
+  private updateFirstStepInvalid() {
+    const invalid = !this.hasEligibleDevices;
+    const subsequentStepDisabled = !this.hasEligibleDevices;
+    const unchanged =
+      this.steps[0]?.invalid === invalid &&
+      this.steps.slice(1).every((step) => step.disabled === subsequentStepDisabled);
+    if (unchanged) {
+      return;
+    }
+    this.steps = this.steps.map((step, i) => {
+      if (i === 0) {
+        return { ...step, invalid };
+      }
+      return { ...step, disabled: subsequentStepDisabled };
+    });
+  }
+
+  private updateDeploymentControlsAvailability() {
+    const deploymentMode = this.form.get('deploymentMode');
+    const deploymentOption = this.form.get('deploymentOption');
+    if (!this.hasEligibleDevices) {
+      deploymentMode?.disable({ emitEvent: false });
+      deploymentOption?.disable({ emitEvent: false });
+    } else {
+      deploymentMode?.enable({ emitEvent: false });
+      deploymentOption?.enable({ emitEvent: false });
+    }
+    this.updateFirstStepInvalid();
   }
 
   private createEmptyReviewDeviceSelection(): ReviewDeviceSelection {
@@ -232,6 +270,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   private updateSteps() {
     const mode = this.form?.get('deploymentMode')?.value ?? 'automatic';
     this.steps = this.getStepsForMode(mode);
+    this.updateFirstStepInvalid();
   }
 
   ngOnInit() {
@@ -311,11 +350,13 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
         this.availDevices = [...this.allDevices];
+        this.updateDeploymentControlsAvailability();
         this.loadingReady();
       },
       () => {
         this.allDevices = [];
         this.availDevices = [];
+        this.updateDeploymentControlsAvailability();
         this.loadingError();
       }
     );
@@ -454,6 +495,14 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       this.dbDeviceSelectionGroups,
       'dbSlots'
     );
+  }
+
+  onCancel() {
+    if (this.hideTitle) {
+      this.cancelled.emit();
+      return;
+    }
+    this.location.back();
   }
 
   private navigateAfterCreate() {
