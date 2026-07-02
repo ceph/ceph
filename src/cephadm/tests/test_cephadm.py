@@ -3169,7 +3169,7 @@ class TestJaeger:
 
     def test_single_es(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-collector:1.29'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.single_es_node_conf)
             ctx.fsid = fsid
@@ -3183,17 +3183,17 @@ class TestJaeger:
                 c,
                 True, True
             )
-            with open(f'/var/lib/ceph/{fsid}/jaeger-collector.daemon_id/unit.run', 'r') as f:
+            with open(f'/var/lib/ceph/{fsid}/jaeger.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200 quay.io/jaegertracing/jaeger-collector:1.29')
+                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200 quay.io/jaegertracing/jaeger:2.17.0')
 
     def test_multiple_es(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-collector:1.29'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.multiple_es_nodes_conf)
             ctx.fsid = fsid
-            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger', 'daemon_id')
             c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
@@ -3203,13 +3203,13 @@ class TestJaeger:
                 c,
                 True, True
             )
-            with open(f'/var/lib/ceph/{fsid}/jaeger-collector.daemon_id/unit.run', 'r') as f:
+            with open(f'/var/lib/ceph/{fsid}/jaeger.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200,http://192.168.0.2:9300 quay.io/jaegertracing/jaeger-collector:1.29')
+                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200,http://192.168.0.2:9300 quay.io/jaegertracing/jaeger:2.17.0')
 
-    def test_jaeger_agent(self, cephadm_fs):
+    def test_jaeger(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-agent:1.29'], list_networks={}) as ctx:
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
             import json
             ctx.config_json = json.dumps(self.agent_conf)
             ctx.fsid = fsid
@@ -3225,7 +3225,7 @@ class TestJaeger:
             )
             with open(f'/var/lib/ceph/{fsid}/jaeger-agent.daemon_id/unit.run', 'r') as f:
                 run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('quay.io/jaegertracing/jaeger-agent:1.29 --reporter.grpc.host-port=test:14250 --processor.jaeger-compact.server-host-port=6799')
+                assert run_cmd.endswith('quay.io/jaegertracing/jaeger:2.17.0 --reporter.grpc.host-port=test:14250 --processor.jaeger-compact.server-host-port=4713')
 
 class TestRescan(fake_filesystem_unittest.TestCase):
 

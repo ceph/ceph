@@ -46,14 +46,8 @@ class DefaultImages(Enum):
     ELASTICSEARCH = _create_image(
         'quay.io/omrizeneva/elasticsearch:6.8.23', 'elasticsearch'
     )
-    JAEGER_COLLECTOR = _create_image(
-        'quay.io/jaegertracing/jaeger-collector:1.29', 'jaeger_collector'
-    )
-    JAEGER_AGENT = _create_image(
-        'quay.io/jaegertracing/jaeger-agent:1.29', 'jaeger_agent'
-    )
-    JAEGER_QUERY = _create_image(
-        'quay.io/jaegertracing/jaeger-query:1.29', 'jaeger_query'
+    JAEGER = _create_image(
+        'quay.io/jaegertracing/jaeger:2.17.0', 'jaeger'
     )
     SAMBA = _create_image(
         'quay.io/samba.org/samba-server:devbuilds-centos-any', 'samba'
@@ -91,8 +85,6 @@ class NonCephImageServiceTypes(Enum):
     nvmeof = 'nvmeof'
     snmp_gateway = 'snmp-gateway'
     elasticsearch = 'elasticsearch'
-    jaeger_collector = 'jaeger-collector'
-    jaeger_query = 'jaeger-query'
-    jaeger_agent = 'jaeger-agent'
+    jaeger = 'jaeger'
     samba = 'smb'
     oauth2_proxy = 'oauth2-proxy'

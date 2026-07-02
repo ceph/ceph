@@ -198,9 +198,7 @@ class ServiceType(enum.Enum):
     nvmeof = 'nvmeof'
     snmp_gateway = 'snmp-gateway'
     elasticsearch = 'elasticsearch'
-    jaeger_agent = 'jaeger-agent'
-    jaeger_collector = 'jaeger-collector'
-    jaeger_query = 'jaeger-query'
+    jaeger = 'jaeger'
 
 
 class ServiceAction(enum.Enum):
