@@ -1,42 +1,34 @@
 @if (allowAllHosts) {
   <cd-alert-panel
-    class="cds-mb-4"
-    type="info"
-    [showTitle]="false">
-    <div cdsStack="horizontal"
-         gap="2">
-      <div cdsStack="vertical"
-           gap="2">
-        <strong i18n>Host access: All hosts allowed</strong>
-        <p
-          class="cds-mb-0 cds-mt-1"
-          i18n
-        >
-          Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
-        </p>
-      </div>
-      <a cdsLink
-         class="cds-ml-3"
-         (click)="openAddInitiatorForm(true)"
-         i18n>Edit host access</a>
-    </div>
-  </cd-alert-panel>
-} @else {
-  <cd-table [data]="initiators"
-            columnMode="flex"
-            (fetchData)="listInitiators()"
-            [columns]="initiatorColumns"
-            selectionType="multiClick"
-            (updateSelection)="updateSelection($event)">
-    <div class="table-actions">
-      <cd-table-actions [permission]="permission"
-                        [selection]="selection"
-                        class="btn-group"
-                        [tableActions]="tableActions">
-      </cd-table-actions>
-    </div>
-  </cd-table>
+  class="cds-mb-4"
+  type="warning"
+  [showTitle]="false">
+  <div cdsStack="vertical"
+       gap="1">
+    <strong class="cds-mb-1"
+            i18n>All hosts allowed</strong>
+    <p class="cds-mb-0"
+       i18n>
+      Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
+    </p>
+  </div>
+</cd-alert-panel>
 }
+
+<cd-table [data]="initiators"
+          columnMode="flex"
+          (fetchData)="listInitiators()"
+          [columns]="initiatorColumns"
+          selectionType="multiClick"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions">
+    <cd-table-actions [permission]="permission"
+                      [selection]="selection"
+                      class="btn-group"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
+</cd-table>
 
 <ng-template #hostNqnTpl
              let-row="data.row">
