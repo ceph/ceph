@@ -1,0 +1,24 @@
+# {{ cephadm_managed }}
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [jaeger_storage_exporter]
+extensions:
+  jaeger_storage:
+    backends:
+      some_storage:
+        elasticsearch:
+          server_urls: [{{ es_urls }}]
+  jaeger_query:
+    storage:
+      traces: some_storage
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:{{ otlp_port }}"
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: some_storage
