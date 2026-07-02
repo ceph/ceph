@@ -3105,6 +3105,7 @@ class MonitoringSpec(ServiceSpec):
                  certificate_source: Optional[str] = None,
                  ssl: Optional[bool] = True,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -3132,6 +3133,12 @@ class MonitoringSpec(ServiceSpec):
 
         self.service_type = service_type
         self.port = port
+
+        # whether ports daemons for this service bind to should
+        # bind to only the networks listed in networks param, or
+        # to all networks. Defaults to false which is saying to bind
+        # on all networks.
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
@@ -3700,6 +3707,8 @@ class CephExporterSpec(ServiceSpec):
                  ssl: Optional[bool] = True,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ):
@@ -3712,6 +3721,7 @@ class CephExporterSpec(ServiceSpec):
             placement=placement,
             unmanaged=unmanaged,
             preview_only=preview_only,
+            networks=networks,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args)
 
@@ -3721,6 +3731,8 @@ class CephExporterSpec(ServiceSpec):
         self.port = port
         self.prio_limit = prio_limit
         self.stats_period = stats_period
+        # if true, bind only to an IP in `networks` rather than all interfaces
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
     def get_port_start(self) -> List[int]:
         return [self.port or 9926]
