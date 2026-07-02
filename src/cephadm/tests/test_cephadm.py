@@ -3474,72 +3474,83 @@ class TestSysctl:
         ]
 
 class TestJaeger:
-    single_es_node_conf = {
-        'elasticsearch_nodes': 'http://192.168.0.1:9200'}
-    multiple_es_nodes_conf = {
-        'elasticsearch_nodes': 'http://192.168.0.1:9200,http://192.168.0.2:9300'}
-    agent_conf = {
-        'collector_nodes': 'test:14250'}
+    @staticmethod
+    def _make_config_blobs(es_urls: str, port: str = '4317') -> dict:
+        config_yaml = (
+            'service:\n'
+            '  extensions: [jaeger_storage, jaeger_query]\n'
+            '  pipelines:\n'
+            '    traces:\n'
+            '      receivers: [otlp]\n'
+            '      exporters: [jaeger_storage_exporter]\n'
+            'extensions:\n'
+            '  jaeger_storage:\n'
+            '    backends:\n'
+            '      some_storage:\n'
+            '        elasticsearch:\n'
+            f'          server_urls: [{es_urls}]\n'
+            '  jaeger_query:\n'
+            '    storage:\n'
+            '      traces: some_storage\n'
+            'receivers:\n'
+            '  otlp:\n'
+            '    protocols:\n'
+            '      grpc:\n'
+            f'        endpoint: "0.0.0.0:{port}"\n'
+            'exporters:\n'
+            '  jaeger_storage_exporter:\n'
+            '    trace_storage: some_storage\n'
+        )
+        return {'files': {'config.yaml': config_yaml}}
 
     def test_single_es(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-collector:1.29'], list_networks={}) as ctx:
-            import json
-            ctx.config_json = json.dumps(self.single_es_node_conf)
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
+            ctx.config_blobs = self._make_config_blobs('http://192.168.0.1:9200')
             ctx.fsid = fsid
-            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger', 'daemon_id')
             c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
-            _cephadm.deploy_daemon_units(
-                ctx,
-                ident,
-                0, 0,
-                c,
-                True, True
-            )
-            with open(f'/var/lib/ceph/{fsid}/jaeger-collector.daemon_id/unit.run', 'r') as f:
-                run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200 quay.io/jaegertracing/jaeger-collector:1.29')
+            _cephadm.deploy_daemon_units(ctx, ident, 0, 0, c, True, True)
+            config_path = f'/var/lib/ceph/{fsid}/jaeger.daemon_id/etc/jaeger/config.yaml'
+            with open(config_path, 'r') as f:
+                content = f.read()
+            assert 'server_urls: [http://192.168.0.1:9200]' in content
+            assert 'endpoint: "0.0.0.0:4317"' in content
 
     def test_multiple_es(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-collector:1.29'], list_networks={}) as ctx:
-            import json
-            ctx.config_json = json.dumps(self.multiple_es_nodes_conf)
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
+            ctx.config_blobs = self._make_config_blobs(
+                'http://192.168.0.1:9200,http://192.168.0.2:9300'
+            )
             ctx.fsid = fsid
-            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger', 'daemon_id')
             c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
-            _cephadm.deploy_daemon_units(
-                ctx,
-                ident,
-                0, 0,
-                c,
-                True, True
-            )
-            with open(f'/var/lib/ceph/{fsid}/jaeger-collector.daemon_id/unit.run', 'r') as f:
-                run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('SPAN_STORAGE_TYPE=elasticsearch -e ES_SERVER_URLS=http://192.168.0.1:9200,http://192.168.0.2:9300 quay.io/jaegertracing/jaeger-collector:1.29')
+            _cephadm.deploy_daemon_units(ctx, ident, 0, 0, c, True, True)
+            config_path = f'/var/lib/ceph/{fsid}/jaeger.daemon_id/etc/jaeger/config.yaml'
+            with open(config_path, 'r') as f:
+                content = f.read()
+            assert 'server_urls: [http://192.168.0.1:9200,http://192.168.0.2:9300]' in content
+            assert 'endpoint: "0.0.0.0:4317"' in content
 
-    def test_jaeger_agent(self, cephadm_fs):
+    def test_custom_port(self, cephadm_fs):
         fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
-        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger-agent:1.29'], list_networks={}) as ctx:
-            import json
-            ctx.config_json = json.dumps(self.agent_conf)
+        with with_cephadm_ctx(['--image=quay.io/jaegertracing/jaeger:2.17.0'], list_networks={}) as ctx:
+            ctx.config_blobs = self._make_config_blobs(
+                'http://192.168.0.1:9200', port='9999'
+            )
             ctx.fsid = fsid
-            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-agent', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger', 'daemon_id')
             c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
-            _cephadm.deploy_daemon_units(
-                ctx,
-                ident,
-                0, 0,
-                c,
-                True, True
-            )
-            with open(f'/var/lib/ceph/{fsid}/jaeger-agent.daemon_id/unit.run', 'r') as f:
-                run_cmd = f.readlines()[-1].rstrip()
-                assert run_cmd.endswith('quay.io/jaegertracing/jaeger-agent:1.29 --reporter.grpc.host-port=test:14250 --processor.jaeger-compact.server-host-port=6799')
+            _cephadm.deploy_daemon_units(ctx, ident, 0, 0, c, True, True)
+            config_path = f'/var/lib/ceph/{fsid}/jaeger.daemon_id/etc/jaeger/config.yaml'
+            with open(config_path, 'r') as f:
+                content = f.read()
+            assert 'server_urls: [http://192.168.0.1:9200]' in content
+            assert 'endpoint: "0.0.0.0:9999"' in content
 
 class TestRescan(fake_filesystem_unittest.TestCase):
 

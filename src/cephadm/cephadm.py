@@ -790,6 +790,10 @@ def create_daemon_dirs(
         ceph_exporter = CephExporter.init(ctx, fsid, ident.daemon_id)
         ceph_exporter.create_daemon_dirs(data_dir, uid, gid)
 
+    elif daemon_type == 'jaeger':
+        tracing = Tracing.create(ctx, ident)
+        tracing.create_daemon_dirs(data_dir, uid, gid)
+
     else:
         daemon = daemon_form_create(ctx, ident)
         if isinstance(daemon, ContainerDaemonForm):
