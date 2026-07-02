@@ -1063,11 +1063,11 @@ namespace rgw {
 	    fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	/* need initial ref from LRU (fast path) */
 
-	/* XXX LRU::ref() always returns true */
+	/* ref() returns false if fh is mid-eviction (evict_block() set
+	 * evicting and dropped the lane lock before calling reclaim());
+	 * retry, the racing eviction will finish and fh_cache.find_latch()
+	 * will no longer find this handle. */
         if (unlikely(! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL))) {
-
-          ceph_assert(0); /* XXX not reached */
-
           lat.lock->unlock();
 	  if (likely(! fh_locked))
 	    fh->mtx.unlock();
