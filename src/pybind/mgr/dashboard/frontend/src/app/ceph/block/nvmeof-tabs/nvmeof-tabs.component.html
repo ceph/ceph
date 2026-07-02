@@ -2,16 +2,18 @@
   <fieldset>
     <legend class="cds-mb-5">
       <h1 class="cds--type-heading-04">NVMe over Fabrics (TCP)</h1>
-      <p class="cds--type-body-01" i18n>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</p>
+      <p
+        class="cds--type-body-01"
+        i18n>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</p>
     </legend>
   </fieldset>
 
   @if (showSetupCards) {
   <cd-nvmeof-setup-cards
-                         [hasGatewayGroups]="hasGatewayGroups"
-                         [hasSubsystems]="hasSubsystems"
-                         [hasNamespaces]="hasNamespaces"
-                         [isAllConfigured]="isAllConfigured">
+    [hasGatewayGroups]="hasGatewayGroups"
+    [hasSubsystems]="hasSubsystems"
+    [hasNamespaces]="hasNamespaces"
+    [isAllConfigured]="isAllConfigured">
   </cd-nvmeof-setup-cards>
   }
 

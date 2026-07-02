@@ -10,15 +10,15 @@
   }
 
   &__step-row {
-    display: flex;
     align-items: baseline;
+    display: flex;
     gap: var(--cds-spacing-03);
   }
 
   &__info {
-    display: flex;
     align-items: center;
-    margin-top: auto;
+    display: flex;
     gap: var(--cds-spacing-03);
+    margin-top: auto;
   }
 }

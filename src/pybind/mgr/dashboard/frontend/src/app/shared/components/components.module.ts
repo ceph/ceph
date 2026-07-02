@@ -25,6 +25,7 @@ import {
   GridModule,
   AccordionModule,
   LoadingModule,
+  LayoutModule,
   ModalModule,
   InputModule,
   CheckboxModule,
@@ -41,7 +42,6 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
-  LayoutModule,
   TilesModule,
   ThemeModule
 } from 'carbon-components-angular';
@@ -171,8 +171,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ChartsModule,
     TagModule,
     LinkModule,
-    LayerModule,
     LayoutModule,
+    LayerModule,
     TilesModule,
     ThemeModule
   ],

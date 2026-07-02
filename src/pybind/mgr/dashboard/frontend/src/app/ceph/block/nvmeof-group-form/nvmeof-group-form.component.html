@@ -72,21 +72,27 @@
         ></cd-nvmeof-gateway-node>
       </div>
       </div>
-      <div cdsRow class="form-item cds-mb-0">
+      <div
+        cdsRow
+        class="form-item cds-mb-0">
         <div cdsCol>
           <cds-tile [cdsLayer]="1">
             <!-- Encryption -->
-            <div cdsRow class="form-item">
+            <div cdsRow
+                 class="form-item">
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal">
-                  <label class="cds--type-label-01" 
-                         i18n>Enable encryption</label>
-                  <cds-tag type="green"
-                           size="sm"
-                           i18n>Recommended</cds-tag>
+                  <label
+                    class="cds--type-label-01"
+                    i18n>Enable encryption</label>
+                  <cds-tag
+                    type="green"
+                    size="sm"
+                    i18n>Recommended</cds-tag>
                 </div>
-                <cds-checkbox id="enableEncryption" 
-                              formControlName="enableEncryption">
+                <cds-checkbox
+                  id="enableEncryption"
+                  formControlName="enableEncryption">
                   <span
                   class="cds--type-body-01"
                   i18n>Secures group metadata and unlocks advanced authentication features.</span>
@@ -94,21 +100,23 @@
               </div>
             </div>
 
-        @if (!groupForm.controls.enableEncryption.value) {
-        <div cdsRow 
-             class="cds-mt-2">
-          <div cdsCol>
-            <cd-alert-panel type="warning"
-                            spacingClass="mb-0"
-                            i18n>
-             <span class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP or mTLS authentication.</span> 
-            </cd-alert-panel>
-          </div>
-        </div>
-        }
+            @if (!groupForm.controls.enableEncryption.value) {
+            <div cdsRow
+                 class="cds-mt-2">
+              <div cdsCol>
+                <cd-alert-panel
+                  type="warning"
+                  spacingClass="mb-0"
+                  i18n>
+                  <span class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP or mTLS authentication.</span>
+                </cd-alert-panel>
+              </div>
+            </div>
+            }
 
             @if (groupForm.controls.enableEncryption.value) {
-            <div cdsRow class="form-item">
+            <div cdsRow
+                 class="form-item">
               <div cdsCol>
                 <cds-textarea-label
                   labelInputID="encryptionKey"
@@ -134,14 +142,20 @@
             }
           </cds-tile>
 
-          <cds-tile [cdsLayer]="1"
-                    class="cds-mt-3">
-            <div cdsRow class="form-item">
+          <cds-tile
+            [cdsLayer]="1"
+            class="cds-mt-3">
+            <div cdsRow
+                 class="form-item">
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal cds-mb-3">
-                  <label class="cds--type-label-01" i18n>Enable Mutual TLS (mTLS)</label>
+                  <label
+                    class="cds--type-label-01"
+                    i18n>Enable Mutual TLS (mTLS)</label>
                 </div>
-                <cds-checkbox id="enableMtls" formControlName="enableMtls">
+                <cds-checkbox
+                  id="enableMtls"
+                  formControlName="enableMtls">
                   <span
                   class="cds--type-body-01"
                   i18n>Use mutual TLS (mTLS) to encrypt control and monitoring commands exchanged with NVMe-oF gateways.</span>
@@ -150,12 +164,15 @@
             </div>
 
             @if (!groupForm.controls.enableMtls.value) {
-            <div cdsRow class="cds-mt-3">
+            <div
+              cdsRow
+              class="cds-mt-3">
               <div cdsCol>
-                <cd-alert-panel type="warning"
-                                spacingClass="mb-0"
-                                class="cds--type-heading-01"
-                                i18n>
+                <cd-alert-panel
+                  type="warning"
+                  spacingClass="mb-0"
+                  class="cds--type-heading-01"
+                  i18n>
                   Disabling mTLS leaves gateway control and monitoring communication unencrypted.
                 </cd-alert-panel>
               </div>
@@ -163,10 +180,11 @@
             }
 
             @if (groupForm.controls.enableMtls.value) {
-            <div cdsRow class="form-item">
+            <div cdsRow
+                 class="form-item">
               <div cdsCol>
-                <label class="cds--label fw-bold" 
-                i18n>Choose Certificate Authority</label>
+                <label class="cds--label fw-bold"
+                       i18n>Choose Certificate Authority</label>
                 <cds-radio-group
                   formControlName="certificateType"
                   orientation="horizontal"
@@ -237,7 +255,7 @@
               #rootCAFileInput
               type="file"
               accept=".pem,.crt,.cer"
-              style="display: none"
+              class="hidden-file-input"
               (change)="onFileUpload($event, 'rootCACert')"
             />
           </div>
@@ -283,7 +301,7 @@
               #clientCertFileInput
               type="file"
               accept=".pem,.crt,.cer"
-              style="display: none"
+              class="hidden-file-input"
               (change)="onFileUpload($event, 'clientCert')"
             />
           </div>
@@ -329,7 +347,7 @@
               #clientKeyFileInput
               type="file"
               accept=".pem,.key"
-              style="display: none"
+              class="hidden-file-input"
               (change)="onFileUpload($event, 'clientKey')"
             />
           </div>
@@ -375,7 +393,7 @@
               #serverCertFileInput
               type="file"
               accept=".pem,.crt,.cer"
-              style="display: none"
+              class="hidden-file-input"
               (change)="onFileUpload($event, 'serverCert')"
             />
           </div>
@@ -421,7 +439,7 @@
               #serverKeyFileInput
               type="file"
               accept=".pem,.key"
-              style="display: none"
+              class="hidden-file-input"
               (change)="onFileUpload($event, 'serverKey')"
             />
           </div>
@@ -445,7 +463,8 @@
       </div>
       }
 
-      <div cdsRow class="cds-mt-5">
+      <div cdsRow
+           class="cds-mt-5">
         <cd-form-button-panel
           (submitActionEvent)="onSubmit()"
           [form]="groupForm"

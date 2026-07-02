@@ -5,7 +5,7 @@ cd-nvmeof-gateway-node-add-modal {
   }
 
   .cds--modal-header {
-    border-bottom: none;
+    border-bottom: 0;
   }
 
   .cds--modal-content {
@@ -14,9 +14,9 @@ cd-nvmeof-gateway-node-add-modal {
   }
 
   cd-table {
-    display: block;
     background-color: var(--cds-layer);
     border: 1px solid var(--cds-border-subtle-01);
+    display: block;
     margin: 0 var(--cds-spacing-05) var(--cds-spacing-05);
   }
 }

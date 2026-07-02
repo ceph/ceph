@@ -34,7 +34,12 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
-import { CephServiceSpec, CertificateType, QatOptions, QatSepcs } from '~/app/shared/models/service.interface';
+import {
+  CephServiceSpec,
+  CertificateType,
+  QatOptions,
+  QatSepcs
+} from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
@@ -215,6 +220,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         })
       ],
       enable_mtls: [false],
+      certificateType: [null],
       root_ca_cert: [
         null,
         [
@@ -1096,35 +1102,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  private updateRgwPlacementControlsState(): void {
-    this.toggleFormControlState('realm_name', this.editing || this.realmList.length === 0);
-    this.toggleFormControlState('zonegroup_name', this.editing || this.zonegroupList.length === 0);
-    this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
-  }
-
-  private updateGrafanaPasswordControlState(
-    serviceType = this.serviceForm?.get('service_type')?.value
-  ): void {
-    this.toggleFormControlState(
-      'grafana_admin_password',
-      this.editing && serviceType === 'grafana'
-    );
-  }
-
-  private toggleFormControlState(controlName: string, disabled: boolean): void {
-    const control = this.serviceForm.get(controlName);
-    if (!control) {
-      return;
-    }
-    if (disabled && control.enabled) {
-      control.disable({ emitEvent: false });
-      return;
-    }
-    if (!disabled && control.disabled) {
-      control.enable({ emitEvent: false });
-    }
-  }
-
   onPlacementChange(selected: string) {
     if (selected === 'label') {
       this.serviceForm.get('count').setValue(null);
@@ -1260,7 +1237,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               serviceSpec['custom_sans'] = values['custom_sans'];
             }
           }
-          if (values['certificateType'] === CertificateType.external) {
+          if (values['certificateType'] !== CertificateType.internal) {
             serviceSpec['pool'] = values['pool'];
             serviceSpec['service_id'] = `${values['pool']}.${values['group']}`;
             serviceSpec['root_ca_cert'] = values['root_ca_cert'];

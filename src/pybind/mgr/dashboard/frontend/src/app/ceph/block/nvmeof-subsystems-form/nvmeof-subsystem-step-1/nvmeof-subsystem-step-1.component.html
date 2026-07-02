@@ -36,9 +36,9 @@
                  [invalid]="nqnRef.isInvalid">
         </cds-text-label>
         @if (nqnRef.isInvalid) {
-          @for (err of formGroup.get('nqn')?.errors | keyvalue; track err.key) {
-            <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
-          }
+        @for (err of formGroup.get('nqn')?.errors | keyvalue; track err.key) {
+        <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+        }
         }
       </div>
       <div cdsRow
@@ -60,9 +60,12 @@
       <div cdsRow
            class="form-item">
         <fieldset class="cds--fieldset">
-          <legend class="cds--label" 
-                  i18n>Listeners</legend>
-          <p class="cds--form__helper-text" i18n>Determine where and how hosts can connect to the subsystem over the network.</p>
+          <legend
+            class="cds--label"
+            i18n>Listeners</legend>
+          <p
+            class="cds--form__helper-text"
+            i18n>Determine where and how hosts can connect to the subsystem over the network.</p>
           <cds-radio-group
             formControlName="listenerMode"
             orientation="horizontal">

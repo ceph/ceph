@@ -50,156 +50,31 @@
       </cds-table-toolbar-search>
       <!-- end search -->
       <!-- column filters -->
-       @if (columnFilters.length !== 0 || customFilter) {
-        <div cdsPopover
-             [isOpen]="openFilterPopover"
-             [autoAlign]="true"
-             [caret]="false">
-          <cds-icon-button
-            kind="ghost"
-            class="toolbar-action"
-            (click)="toggleFilterPopover()"
-            data-testid="filter-button">
-            <svg [cdsIcon]="icons.filter"
-                 [size]="icons.size16"
-                 class="cds--toolbar-action__icon"></svg>
-          </cds-icon-button>
-          <cds-popover-content [cdsLayer]="0">
-            <div cdsStack="horizontal" class="filter--header">
-              <span class="cds--type-heading-03" i18n>Filters</span>
-              <cds-icon-button kind="ghost"
-                              size="sm"
-                              (click)="toggleFilterPopover()">
-                <cd-icon type="destroy"></cd-icon>
-              </cds-icon-button>
-            </div>
-            <div
-              cdsGrid
-              [fullWidth]="true"
-              [condensed]="true"
-              [narrow]="true">
-            @if (columnFilters.length !== 0) {
-            @for (filter of columnFilters; track filter.column.name; let i = $index) {
-            <div
-              cdsRow
-              [cdsLayer]="2"
-              class="cds-mt-4">
-
-              <!-- filter names column -->
-              <div
-                cdsCol
-                [columnNumbers]="{sm: 4, md: 4}">
-                <cds-text-label>Filter
-                  <input cdsText
-                         readonly
-                         size="md"
-                         [id]="'filter_key_' + i"
-                         [name]="'filter_key_' + i"
-                         [value]="filter.column.name">
-                </cds-text-label>
-              </div>
-
-              <!-- filter values column -->
-              <div
-                cdsCol
-                [columnNumbers]="{sm: 4, md: 4}">
-                <cds-select (valueChange)="onChangeFilter($event, filter)"
-                            [id]="'filter_value_' + i"
-                            label="Value"
-                            size="md"
-                            [attr.data-testid]="'filter-select-' + filter.column.name"
-                            i18n-label>
-                  <option i18n>Any</option>
-                  @for (option of filter.options; track option.raw) {
-                    <option [value]="option.raw"
-                            [selected]="option.raw === selectedFilters[filter.column.name]">
-                      {{ option.formatted }}
-                    </option>
-                  }
-
-                </cds-select>
-              </div>
-            </div>
-          }}
-          @if (customFilter) {
-          @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
-            @if (isCustomFilterString) {
-              <div cdsRow
-                   class="cds-mt-4 cds--type-body-02">
-                Filter {{ customFilter }}:
-              </div>
-            }
-            <div cdsRow
-                 [cdsLayer]="1"
-                 class="cds-mt-4">
-              <div cdsCol
-                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
-                <cds-text-label>Key
-                  <input cdsText
-                         size="md"
-                         [id]="'filter_key_' + i"
-                         [value]="filter.key"
-                         (input)="filter.key = $any($event.target).value">
-                </cds-text-label>
-              </div>
-
-              <div cdsCol
-                   [columnNumbers]="{sm: 4, md: 3, lg: 7}">
-                <cds-text-label>Value
-                  <input cdsText
-                         size="md"
-                         [id]="'filter_value_' + i"
-                         [value]="filter.value"
-                         (input)="filter.value = $any($event.target).value">
-                </cds-text-label>
-            </div>
-
-            @if (i !== 0) {
-            <div cdsCol
-                 [columnNumbers]="{sm: 2, md: 2, lg: 2}"
-                class="cds-mt-6">
-              <cds-icon-button kind="ghost"
-                               size="sm"
-                               (click)="removeCustomFilter(filter.id)">
-                <cd-icon type="trash"></cd-icon>
-              </cds-icon-button>
-            </div>
-            }
-          </div>
-          }
-            @if (stagedCustomFilters.length < 5) {
-            <div cdsRow
-                class="cds-mt-4">
-              <div cdsCol>
-                <button
-                  cdsButton="tertiary"
-                  size="md"
-                  (click)="addCustomFilter()">Add new filter rule +</button>
-              </div>
-            </div>
-            }
-          }
-          </div>
-
-          <div class="filter--footer">
-            <button cdsButton="secondary"
-                    size="lg"
-                    data-testid="clear-filters"
-                    (click)="onClearFilters()">
-              <ng-container i18n>Clear all</ng-container>
-            </button>
-
-            <button cdsButton="primary"
-                    size="lg"
-                    data-testid="apply-filters"
-                    [disabled]="isApplyFilterDisabled"
-                    (click)="onSubmitFilter()">
-              <ng-container i18n>Apply</ng-container>
-            </button>
-          </div>
-          </cds-popover-content>
+      <ng-container *ngIf="columnFilters.length !== 0">
+        <div class="d-inline-flex position-relative">
+          <svg cdsIcon="filter"
+               size="16"
+               class="align-self-center mb-2"></svg>
         </div>
-      }
+        <cds-select (valueChange)="onSelectFilter($event)"
+                    display="inline"
+                    id="filter_name">
+          <ng-container *ngFor="let filter of columnFilters">
+            <option [value]="filter.column.name"
+                    [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
+          </ng-container>
+        </cds-select>
+        <cds-select (valueChange)="onChangeFilter($event)"
+                    display="inline"
+                    id="filter_option">
+          <option *ngIf="!selectedFilter.value"
+                  i18n>Any</option>
+          <ng-container *ngFor="let option of selectedFilter.options">
+            <option [value]="option.raw"
+                    [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
+          </ng-container>
+        </cds-select>
+      </ng-container>
       <!-- end column filters -->
       <!-- refresh button -->
       <cds-icon-button
@@ -458,13 +333,13 @@
              let-row="data.row"
              let-value="data.value">
   @if (row.cdExecuting) {
-    <cds-inline-loading></cds-inline-loading>
+  <cds-inline-loading></cds-inline-loading>
   }
   <span [ngClass]="column?.customTemplateConfig?.valueClass || ''">
     {{ value }}
   </span>
   @if (row.cdExecuting) {
-    <span [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
+  <span [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
   }
 </ng-template>
 <ng-template #classAddingTpl

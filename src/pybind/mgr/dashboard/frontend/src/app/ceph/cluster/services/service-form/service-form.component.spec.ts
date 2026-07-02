@@ -511,6 +511,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
+        formHelper.setValue('pool', 'rbd');
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');

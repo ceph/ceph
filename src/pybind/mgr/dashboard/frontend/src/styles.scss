@@ -236,10 +236,10 @@ input:-webkit-autofill:active {
   .cds--list-box,
   input[role='combobox'],
   input {
-    border-bottom: none !important;
+    border-bottom: 0;
   }
 
   .cds--text-input__field-wrapper {
-    border-bottom: none !important;
+    border-bottom: 0;
   }
 }
