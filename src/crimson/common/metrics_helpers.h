@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 
 #include <seastar/core/scollectd_api.hh>
