@@ -329,32 +329,20 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
   delta_handler_t &&delta_handler)
 {
   LOG_PREFIX(Journal::replay);
-  return sm_group.find_journal_segment_headers(
-  ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)]
-    (auto &&segment_headers) mutable -> replay_ret {
-    INFO("got {} segments", segment_headers.size());
-    return seastar::do_with(
-      std::move(delta_handler),
-      replay_segments_t(),
-      replay_stats_t(),
-      [this, segment_headers=std::move(segment_headers), FNAME]
-      (auto &handler, auto &segments, auto &stats) mutable -> replay_ret {
-	return prep_replay_segments(std::move(segment_headers)
-	).safe_then([this, &handler, &segments, &stats](auto replay_segs) mutable {
-	  segments = std::move(replay_segs);
-	  return crimson::do_for_each(segments,[this, &handler, &stats](auto i) mutable {
-	    return replay_segment(i.first, i.second, handler, stats);
-	  });
-        }).safe_then([&stats, FNAME] {
-          INFO("replay done, record_groups={}, records={}, "
-               "alloc_deltas={}, dirty_deltas={}",
-               stats.num_record_groups,
-               stats.num_records,
-               stats.num_alloc_deltas,
-               stats.num_dirty_deltas);
-        });
-      });
-  });
+  auto handler = std::move(delta_handler);
+  auto segment_headers = co_await sm_group.find_journal_segment_headers();
+  INFO("got {} segments", segment_headers.size());
+  replay_stats_t stats;
+  auto segments = co_await prep_replay_segments(std::move(segment_headers));
+  for (auto &[seq, header] : segments) {
+    co_await replay_segment(seq, header, handler, stats);
+  }
+  INFO("replay done, record_groups={}, records={}, "
+       "alloc_deltas={}, dirty_deltas={}",
+       stats.num_record_groups,
+       stats.num_records,
+       stats.num_alloc_deltas,
+       stats.num_dirty_deltas);
 }
 
 seastar::future<> SegmentedJournal::flush(OrderingHandle &handle)
