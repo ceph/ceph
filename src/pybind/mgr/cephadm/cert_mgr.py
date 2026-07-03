@@ -255,8 +255,16 @@ class CertMgr:
                 raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
         else:
             self.ssl_certs.generate_root_cert(addr=ip)
-            self.cert_store.save_tlsobject(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
-            self.key_store.save_tlsobject(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
+            self.cert_store.save_tlsobject(
+                self.CEPHADM_ROOT_CA_CERT,
+                self.ssl_certs.get_root_cert(),
+                managed_by=TLSObjectManager.CEPHADM,
+            )
+            self.key_store.save_tlsobject(
+                self.CEPHADM_ROOT_CA_KEY,
+                self.ssl_certs.get_root_key(),
+                managed_by=TLSObjectManager.CEPHADM,
+            )
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
@@ -408,12 +416,26 @@ class CertMgr:
                                        label: Optional[str] = None) -> None:
         ss_cert_name = self.self_signed_cert(service_name, label)
         ss_key_name = self.self_signed_key(service_name, label)
-        self.cert_store.save_tlsobject(ss_cert_name, tls_creds.cert, host=host, user_made=False)
-        self.key_store.save_tlsobject(ss_key_name, tls_creds.key, host=host, user_made=False)
+        self.cert_store.save_tlsobject(
+            ss_cert_name,
+            tls_creds.cert,
+            host=host,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        self.key_store.save_tlsobject(
+            ss_key_name,
+            tls_creds.key,
+            host=host,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
 
     def _is_inline_saved_tlsobject(self, obj: Optional[TLSObjectProtocol]) -> bool:
-        # Inline-saved credentials are persisted as user_made=True but editable=False.
-        return bool(obj and getattr(obj, 'user_made', False) and not getattr(obj, 'editable', True))
+        # Inline-saved credentials are persisted as managed_by=user but editable=False.
+        return bool(
+            obj
+            and getattr(obj, 'managed_by', TLSObjectManager.CEPHADM) == TLSObjectManager.USER
+            and not getattr(obj, 'editable', True)
+        )
 
     def rm_inline_saved_cert_key_pair(
         self,

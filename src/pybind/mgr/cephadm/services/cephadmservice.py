@@ -42,7 +42,12 @@ from ceph.cephadm.d3n_types import (
 )
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
-from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
+from cephadm.tlsobject_types import (
+    TLSObjectScope,
+    TLSCredentials,
+    EMPTY_TLS_CREDENTIALS,
+    TLSObjectManager,
+)
 from cephadm.ssl_cert_utils import extract_ips_and_fqdns_from_cert
 
 if TYPE_CHECKING:
@@ -490,10 +495,28 @@ class CephadmService(metaclass=ABCMeta):
         # Save TLS credentials
         if needs_ca:
             assert ca_cert_name and ca_cert
-            self.mgr.cert_mgr.save_cert(ca_cert_name, ca_cert, service_name, host, user_made=True)
+            self.mgr.cert_mgr.save_cert(
+                ca_cert_name,
+                ca_cert,
+                service_name,
+                host,
+                managed_by=TLSObjectManager.USER,
+            )
         assert cert and key
-        self.mgr.cert_mgr.save_cert(cert_name, cert, service_name, host, user_made=True)
-        self.mgr.cert_mgr.save_key(key_name, key, service_name, host, user_made=True)
+        self.mgr.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            host,
+            managed_by=TLSObjectManager.USER,
+        )
+        self.mgr.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            host,
+            managed_by=TLSObjectManager.USER,
+        )
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def _get_certificates_from_certmgr_store(
@@ -625,8 +648,8 @@ class CephadmService(metaclass=ABCMeta):
         svc_name = spec.service_name()
         host = daemon_spec.host
 
-        # Inline-saved certs/keys are persisted in the certmgr store as user_made=True
-        # but editable=False. These should be garbage-collected once the service no
+        # Inline-saved certs/keys are persisted in the certmgr store as
+        # managed_by=user but editable=False. These should be garbage-collected once the service no
         # longer uses INLINE.
         if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
             self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(

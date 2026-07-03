@@ -18,6 +18,7 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
+from cephadm.tlsobject_types import TLSObjectManager
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -4054,8 +4055,22 @@ Then run the following:
             self._raise_non_editable_cert_error(cert_name, consumer, service_name, hostname)
 
         key_name = cert_name.replace('_cert', '_key')
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
+        self.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
+        self.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
         return "Certificate/key pair set correctly"
 
     @handle_orch_error
@@ -4077,7 +4092,14 @@ Then run the following:
             if not cert_info.is_operationally_valid():
                 raise OrchestratorError(cert_info.get_status_description())
 
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
+        self.cert_mgr.save_cert(
+            cert_name,
+            cert,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+            editable=True,
+        )
         return f'Certificate for {cert_name} set correctly'
 
     @handle_orch_error
@@ -4088,7 +4110,13 @@ Then run the following:
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> str:
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        self.cert_mgr.save_key(
+            key_name,
+            key,
+            service_name,
+            hostname,
+            managed_by=TLSObjectManager.USER,
+        )
         return f'Key for {key_name} set correctly'
 
     @handle_orch_error

@@ -710,6 +710,13 @@ class TestCertMgr(object):
         assert cm.get_cert(cert_name, host=host) == CEPHADM_SELF_GENERATED_CERT_1
         assert cm.get_key(key_name, host=host) == CEPHADM_SELF_GENERATED_KEY_2048
 
+        cert_obj = cm.cert_store.get_tlsobject(cert_name, host=host)
+        key_obj = cm.key_store.get_tlsobject(key_name, host=host)
+        assert cert_obj is not None
+        assert key_obj is not None
+        assert cert_obj.managed_by == TLSObjectManager.CEPHADM
+        assert key_obj.managed_by == TLSObjectManager.CEPHADM
+
         # Scope detection for cephadm-signed objects should be HOST
         assert cm.get_cert_scope(cert_name) == TLSObjectScope.HOST
         assert cm.get_key_scope(key_name) == TLSObjectScope.HOST
