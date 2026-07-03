@@ -5,11 +5,16 @@ from typing import (Any,
                     Optional,
                     TYPE_CHECKING,
                     Type,
-                    Callable)
+                    Callable,
+                    Union)
 import json
 import logging
 
-from cephadm.tlsobject_types import TLSObjectProtocol, TLSObjectException, TLSObjectScope, TLSObjectTarget
+from cephadm.tlsobject_types import (TLSObjectProtocol,
+                                     TLSObjectException,
+                                     TLSObjectScope,
+                                     TLSObjectTarget,
+                                     TLSObjectManager)
 
 
 if TYPE_CHECKING:
@@ -143,11 +148,17 @@ class TLSObjectStore():
                        tlsobject: str,
                        service_name: Optional[str] = None,
                        host: Optional[str] = None,
-                       user_made: bool = False,
-                       editable: bool = False) -> None:
+                       user_made: Optional[bool] = None,
+                       editable: bool = False,
+                       managed_by: Optional[Union[TLSObjectManager, str]] = None) -> None:
 
         self._validate_tlsobject_name(obj_name, service_name, host)
-        tlsobject = self.tlsobject_class(tlsobject, user_made, editable)
+        tlsobject = self.tlsobject_class(
+            tlsobject,
+            user_made=user_made,
+            editable=editable,
+            managed_by=managed_by,
+        )
         scope, target = self.get_tlsobject_scope_and_target(obj_name, service_name, host)
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             self.objects_by_name[obj_name][target] = tlsobject

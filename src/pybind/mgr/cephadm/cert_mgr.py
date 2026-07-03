@@ -6,7 +6,13 @@ from enum import Enum
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
+from cephadm.tlsobject_types import (Cert,
+                                     PrivKey,
+                                     TLSObjectScope,
+                                     TLSObjectException,
+                                     TLSObjectProtocol,
+                                     TLSCredentials,
+                                     TLSObjectManager)
 from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
@@ -357,12 +363,30 @@ class CertMgr:
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None,
-                  user_made: bool = False, editable: bool = False) -> None:
-        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
+                  user_made: Optional[bool] = None, editable: bool = False,
+                  managed_by: Optional[Union[TLSObjectManager, str]] = None) -> None:
+        self.cert_store.save_tlsobject(
+            cert_name,
+            cert,
+            service_name=service_name,
+            host=host,
+            user_made=user_made,
+            editable=editable,
+            managed_by=managed_by,
+        )
 
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
-                 user_made: bool = False, editable: bool = False) -> None:
-        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
+                 user_made: Optional[bool] = None, editable: bool = False,
+                 managed_by: Optional[Union[TLSObjectManager, str]] = None) -> None:
+        self.key_store.save_tlsobject(
+            key_name,
+            key,
+            service_name=service_name,
+            host=host,
+            user_made=user_made,
+            editable=editable,
+            managed_by=managed_by,
+        )
 
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:

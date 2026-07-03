@@ -699,6 +699,30 @@ class TestCertMgr(object):
         _set_store.assert_has_calls(expected_calls)
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_cert_mgr_save_cert_and_key_accept_managed_by(self, _set_store, cephadm_module: CephadmOrchestrator):
+        cephadm_module.cert_mgr.save_cert(
+            'nfs_ssl_cert',
+            'vault-cert',
+            service_name='nfs.foo',
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cephadm_module.cert_mgr.save_key(
+            'nfs_ssl_key',
+            'vault-key',
+            service_name='nfs.foo',
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        cert_obj = cephadm_module.cert_mgr.cert_store.get_tlsobject('nfs_ssl_cert', service_name='nfs.foo')
+        key_obj = cephadm_module.cert_mgr.key_store.get_tlsobject('nfs_ssl_key', service_name='nfs.foo')
+        assert cert_obj is not None
+        assert key_obj is not None
+        assert cert_obj.managed_by == TLSObjectManager.VAULT
+        assert key_obj.managed_by == TLSObjectManager.VAULT
+        assert cert_obj.user_made is False
+        assert key_obj.user_made is False
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_key_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
         expected_ls = {
             'nvmeof_ssl_key': {
@@ -1980,21 +2004,40 @@ class TestCertMgr(object):
 class MockTLSObject(TLSObjectProtocol):
     STORAGE_PREFIX = "mocktls"
 
-    def __init__(self, data: str = "", user_made: bool = False, editable: bool = False):
+    def __init__(self, data: str = "", user_made=None, editable: bool = False, managed_by=None):
         self.data = data
-        self.user_made = user_made
+        if managed_by is not None:
+            self.managed_by = TLSObjectManager(managed_by)
+        elif user_made is not None:
+            self.managed_by = managed_by_from_user_made(user_made)
+        else:
+            self.managed_by = TLSObjectManager.CEPHADM
         self.editable = editable
+
+    @property
+    def user_made(self):
+        return user_made_from_managed_by(self.managed_by)
 
     def __bool__(self):
         return bool(self.data)
 
     @staticmethod
     def to_json(obj):
-        return {"data": obj.data, "user_made": obj.user_made, "editable": obj.editable}
+        return {
+            "data": obj.data,
+            "managed_by": obj.managed_by.value,
+            "user_made": obj.user_made,
+            "editable": obj.editable,
+        }
 
     @staticmethod
     def from_json(json_data):
-        return MockTLSObject(json_data["data"], json_data["user_made"], json_data["editable"])
+        return MockTLSObject(
+            json_data["data"],
+            json_data.get("user_made"),
+            json_data.get("editable", False),
+            json_data.get("managed_by"),
+        )
 
 
 class MockCephadmOrchestrator:
@@ -2027,6 +2070,45 @@ class TestTLSObjectStore(unittest.TestCase):
         obj = self.store.get_tlsobject("per_service1", service_name="my_service")
         self.assertIsNotNone(obj)
         self.assertEqual(obj.data, "my_cert_data")
+
+    def test_save_tlsobject_legacy_user_made_true_sets_user_manager(self):
+        self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service", user_made=True)
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.USER)
+        self.assertTrue(obj.user_made)
+
+    def test_save_tlsobject_legacy_user_made_false_sets_cephadm_manager(self):
+        self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service", user_made=False)
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.CEPHADM)
+        self.assertFalse(obj.user_made)
+
+    def test_save_tlsobject_managed_by_vault(self):
+        self.store.save_tlsobject(
+            "per_service1",
+            "my_cert_data",
+            service_name="my_service",
+            managed_by=TLSObjectManager.VAULT,
+        )
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.VAULT)
+        self.assertFalse(obj.user_made)
+
+    def test_save_tlsobject_managed_by_takes_precedence_over_user_made(self):
+        self.store.save_tlsobject(
+            "per_service1",
+            "my_cert_data",
+            service_name="my_service",
+            user_made=True,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        obj = self.store.get_tlsobject("per_service1", service_name="my_service")
+        self.assertIsNotNone(obj)
+        self.assertEqual(obj.managed_by, TLSObjectManager.VAULT)
+        self.assertFalse(obj.user_made)
 
     def test_remove_tlsobject(self):
         self.store.save_tlsobject("per_host1", "cert_data", host="my_host")
