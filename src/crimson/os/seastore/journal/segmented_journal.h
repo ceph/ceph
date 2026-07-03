@@ -83,10 +83,7 @@ private:
   WritePipeline* write_pipeline = nullptr;
 
   /// return ordered vector of segments to replay
-  using replay_segments_t = std::vector<
-    std::pair<journal_seq_t, segment_header_t>>;
-  using prep_replay_segments_fut = replay_ertr::future<
-    replay_segments_t>;
+  using prep_replay_segments_fut = replay_ertr::future<>;
   prep_replay_segments_fut prep_replay_segments(
     std::vector<std::pair<segment_id_t, segment_header_t>> segments);
 
@@ -100,15 +97,18 @@ private:
     std::size_t num_records = 0;
     std::size_t num_alloc_deltas = 0;
     std::size_t num_dirty_deltas = 0;
-  };
+  } stats;
+
+  using replay_segments_t = std::vector<
+    std::pair<journal_seq_t, segment_header_t>>;
+  replay_segments_t replay_segments;
 
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
     journal_seq_t start,             ///< [in] starting addr, seq
     segment_header_t header,         ///< [in] segment header
-    delta_handler_t &delta_handler,  ///< [in] processes deltas in order
-    replay_stats_t &stats            ///< [out] replay stats
+    scan_delta_handler_t &delta_handler  ///< [in] processes deltas in order
   );
 
   journal_seq_t get_dirty_tail() const final {
@@ -121,9 +121,7 @@ private:
 
   replay_ret scan_valid_record_delta(
     scan_delta_handler_t &&delta_handler,
-    journal_seq_t tail) final {
-    return replay_ertr::now();
-  }
+    journal_seq_t tail) final;
 };
 
 }
