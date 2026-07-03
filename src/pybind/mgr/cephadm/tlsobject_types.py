@@ -33,6 +33,24 @@ class TLSObjectScope(str, Enum):
         return self.value
 
 
+class TLSObjectManager(str, Enum):
+    USER = 'user'
+    CEPHADM = 'cephadm'
+    VAULT = 'vault'
+    ACME = 'acme'
+
+    def __str__(self) -> str:
+        return self.value
+
+
+def managed_by_from_user_made(user_made: bool) -> TLSObjectManager:
+    return TLSObjectManager.USER if user_made else TLSObjectManager.CEPHADM
+
+
+def user_made_from_managed_by(managed_by: TLSObjectManager) -> bool:
+    return managed_by == TLSObjectManager.USER
+
+
 class TLSCredentials(NamedTuple):
     cert: str
     key: str

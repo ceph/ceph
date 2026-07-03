@@ -5,7 +5,16 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
+from cephadm.tlsobject_types import (
+    Cert,
+    PrivKey,
+    TLSObjectException,
+    TLSObjectManager,
+    TLSObjectProtocol,
+    TLSCredentials,
+    managed_by_from_user_made,
+    user_made_from_managed_by,
+)
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
@@ -293,6 +302,22 @@ TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
 
 
 class TestCertMgr(object):
+
+    @pytest.mark.parametrize('user_made, managed_by', [
+        (True, TLSObjectManager.USER),
+        (False, TLSObjectManager.CEPHADM),
+    ])
+    def test_managed_by_from_user_made(self, user_made, managed_by):
+        assert managed_by_from_user_made(user_made) == managed_by
+
+    @pytest.mark.parametrize('managed_by, user_made', [
+        (TLSObjectManager.USER, True),
+        (TLSObjectManager.CEPHADM, False),
+        (TLSObjectManager.VAULT, False),
+        (TLSObjectManager.ACME, False),
+    ])
+    def test_user_made_from_managed_by(self, managed_by, user_made):
+        assert user_made_from_managed_by(managed_by) == user_made
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
