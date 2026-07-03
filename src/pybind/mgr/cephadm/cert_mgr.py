@@ -290,7 +290,6 @@ class CertMgr:
     def rm_vault_token(self) -> None:
         self.set_vault_token(None)
 
-
     def _vault_metadata_target(self, cert_name: str, service_name: Optional[str] = None,
                                host: Optional[str] = None) -> Optional[str]:
         scope = self.get_cert_scope(cert_name)
@@ -313,6 +312,20 @@ class CertMgr:
         target = self._vault_metadata_target(cert_name, service_name, host)
         return self.vault_cert_metadata_store.remove(cert_name, target)
 
+    def _vault_metadata_matches_target(self, metadata: VaultCertificateMetadata,
+                                       service_name: Optional[str] = None,
+                                       host: Optional[str] = None) -> bool:
+        if metadata.scope == TLSObjectScope.SERVICE:
+            return service_name is not None and metadata.target == service_name
+        if metadata.scope == TLSObjectScope.HOST:
+            return host is not None and metadata.target == host
+        return service_name is None and host is None
+
+    def rm_vault_certificate_metadata_by_key(self, key_name: str, service_name: Optional[str] = None,
+                                             host: Optional[str] = None) -> None:
+        for metadata in list(self.vault_cert_metadata_store.list()):
+            if metadata.key_name == key_name and self._vault_metadata_matches_target(metadata, service_name, host):
+                self.vault_cert_metadata_store.remove(metadata.cert_name, metadata.target)
 
     def _ensure_vault_issue_target(self, cert_name: str, key_name: str,
                                    service_name: Optional[str] = None,
@@ -430,16 +443,15 @@ class CertMgr:
                 editable=False,
             )
 
-        resolved_config = self.get_vault_issuer_config()
         metadata = VaultCertificateMetadata(
             cert_name=cert_name,
             key_name=key_name,
             ca_cert_name=ca_cert_name if creds.ca_cert else None,
             scope=scope,
             target=target,
-            pki_mount=pki_mount or resolved_config.pki_mount,
-            role=role or resolved_config.role,
-            ttl=ttl or resolved_config.ttl,
+            pki_mount=pki_mount or config.pki_mount,
+            role=role or config.role,
+            ttl=ttl or config.ttl,
             common_name=common_name,
             alt_names=alt_names or [],
             ip_sans=ip_sans or [],
@@ -658,7 +670,10 @@ class CertMgr:
         return removed
 
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
-        return self.key_store.rm_tlsobject(key_name, service_name, host)
+        removed = self.key_store.rm_tlsobject(key_name, service_name, host)
+        if removed:
+            self.rm_vault_certificate_metadata_by_key(key_name, service_name, host)
+        return removed
 
     def rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
         self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)
@@ -1011,9 +1026,11 @@ class CertMgr:
             if not self._supports_auto_fix(cert_obj):
                 return False
 
-            # This certificate is managed by an issuer that supports auto-fix.
-            if not cert_info.is_valid:
-                # Remove the invalid certificate to force regeneration
+            # Cephadm-managed invalid certs are removed to force regeneration by
+            # the existing service certificate path. External issuers such as
+            # Vault must never remove old material before a replacement has been
+            # issued successfully, so they renew in-place instead.
+            if not cert_info.is_valid and cert_obj.managed_by == TLSObjectManager.CEPHADM:
                 tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
                 logger.info(
                     f'Removing invalid certificate for {cert_info.cert_name} to trigger regeneration '
@@ -1021,7 +1038,7 @@ class CertMgr:
                 )
                 self.cert_store.rm_tlsobject(cert_info.cert_name, tlsobj_target.service, tlsobj_target.host)
                 return True
-            elif cert_info.is_close_to_expiration:
+            elif not cert_info.is_valid or cert_info.is_close_to_expiration:
                 return self._renew_certificate(cert_info, cert_obj)
             else:
                 return False
@@ -1047,20 +1064,27 @@ class CertMgr:
                 certs_with_issues.append(cert_info)
                 continue
 
-            if fix_issues and trigger_auto_fix(cert_info, cert_obj):
-                svc = self.get_associated_service(cert_info)
-                if svc:
-                    services_to_reconfig.add(svc)
-                else:
-                    logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
+            if fix_issues:
+                if trigger_auto_fix(cert_info, cert_obj):
+                    svc = self.get_associated_service(cert_info)
+                    if svc:
+                        services_to_reconfig.add(svc)
+                    else:
+                        logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
+                elif not cert_info.is_operationally_valid():
+                    # Auto-fix was possible in principle but failed (for example,
+                    # Vault was unreachable or renewal metadata is missing). Keep
+                    # the old material and report the problem so the user is warned
+                    # and certmgr retries on the next periodic check.
+                    certs_with_issues.append(cert_info)
 
         # Clear previously reported issues as we are newly checking all the certificates
         self.certificates_health_report = []
 
         # All problematic certificates have been processed. certs_with_issues now only
-        # contains certificates that couldn't be fixed either because they are user-made
-        # or automated rotation is disabled. In these cases, health warning or error
-        # is raised to notify the user.
+        # contains certificates that couldn't be fixed either because they are not
+        # auto-fixable, because issuer renewal failed, or automated rotation is disabled.
+        # In these cases, health warning or error is raised to notify the user.
         self._notify_certificates_health_status(certs_with_issues)
 
         return list(services_to_reconfig), certs_with_issues
