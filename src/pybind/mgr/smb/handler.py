@@ -1176,6 +1176,11 @@ def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     cluster_global_opts['smb ports'] = str(_smb_port(cluster))
     _set_debug_level(cluster_global_opts, conf)
 
+    # Disable NFS ACE handling for macOS compatibility
+    # See https://tracker.ceph.com/issues/78052 for rationale and follow-up.
+    if cluster.is_macos_compatibility_enabled:
+        cluster_global_opts['fruit:nfs_aces'] = 'no'
+
     # Check if cluster has RGW shares and add global RGW options
     has_rgw_shares = any(share.resource.rgw for share in conf.shares)
     if has_rgw_shares:

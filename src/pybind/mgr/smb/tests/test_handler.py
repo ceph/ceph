@@ -1824,3 +1824,91 @@ def test_apply_share_with_qos(thandler):
     assert share_dict['cephfs']['qos']['write_bw_limit'] == "2097152"
     assert share_dict['cephfs']['qos']['read_burst_mult'] == 20
     assert share_dict['cephfs']['qos']['write_burst_mult'] == 15
+
+
+def test_generate_config_macos_compat(thandler):
+    """Test that macOS compatibility adds fruit:nfs_aces = no to global config."""
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'client_compat': 'macos',
+                'user_group_settings': [
+                    {
+                        'source_type': 'empty',
+                    }
+                ],
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'MacShare',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    assert cfg
+    # Verify fruit:nfs_aces is set to 'no' in global options
+    assert cfg['globals']['foo']['options']['fruit:nfs_aces'] == 'no'
+    # Verify VFS modules include fruit and streams_xattr
+    share_vfs = cfg['shares']['MacShare']['options']['vfs objects']
+    assert 'fruit' in share_vfs
+    assert 'streams_xattr' in share_vfs
+
+
+def test_generate_config_default_compat(thandler):
+    """Test that default compatibility does not add fruit:nfs_aces."""
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'client_compat': 'default',
+                'user_group_settings': [
+                    {
+                        'source_type': 'empty',
+                    }
+                ],
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'DefaultShare',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    assert cfg
+    # Verify fruit:nfs_aces is NOT in global options
+    assert 'fruit:nfs_aces' not in cfg['globals']['foo']['options']
+    # Verify VFS modules do NOT include fruit and streams_xattr
+    share_vfs = cfg['shares']['DefaultShare']['options']['vfs objects']
+    assert 'fruit' not in share_vfs
+    assert 'streams_xattr' not in share_vfs
