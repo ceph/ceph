@@ -18,7 +18,7 @@ from cephadm.tlsobject_types import (
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
-from cephadm.vault import VaultIssuerConfig
+from cephadm.vault import VaultClientError, VaultIssuerConfig, VaultPKIClient
 
 EXPIRED_CERT = """
 -----BEGIN CERTIFICATE-----
@@ -2343,6 +2343,157 @@ class TestVaultIssuerConfig(unittest.TestCase):
         cm.rm_vault_token()
         assert mgr.store[CertMgr.VAULT_TOKEN_STORE_KEY] is None
         assert cm.get_vault_token() is None
+
+
+class TestVaultPKIClient(unittest.TestCase):
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode('utf-8')
+
+    def _config(self, **kwargs):
+        values = {
+            'addr': 'https://vault.example.com:8200/',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'ca_cert': None,
+            'verify_tls': True,
+        }
+        values.update(kwargs)
+        return VaultIssuerConfig(**values)
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_posts_to_vault_and_parses_response(self, m_urlopen):
+        m_urlopen.return_value = self.FakeResponse({
+            'data': {
+                'certificate': '---CERT---',
+                'private_key': '---KEY---',
+                'ca_chain': ['---CA1---', '---CA2---'],
+            }
+        })
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        creds = client.issue_certificate(
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+        )
+
+        assert creds.cert == '---CERT---'
+        assert creds.key == '---KEY---'
+        assert creds.ca_cert == '---CA1---\n---CA2---'
+        request = m_urlopen.call_args[0][0]
+        assert request.full_url == 'https://vault.example.com:8200/v1/pki/issue/ceph-rgw'
+        assert request.get_method() == 'POST'
+        assert request.get_header('X-vault-token') == 's.vault-token'
+        payload = json.loads(request.data.decode('utf-8'))
+        assert payload == {
+            'common_name': 'rgw.example.com',
+            'ttl': '720h',
+            'alt_names': 'rgw.example.com,rgw.internal',
+            'ip_sans': '10.0.0.10',
+        }
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_allows_mount_role_and_ttl_overrides(self, m_urlopen):
+        m_urlopen.return_value = self.FakeResponse({
+            'data': {
+                'certificate': '---CERT---',
+                'private_key': '---KEY---',
+                'issuing_ca': '---CA---',
+            }
+        })
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        creds = client.issue_certificate(
+            common_name='dashboard.example.com',
+            ttl='24h',
+            mount='pki-int',
+            role='ceph-dashboard',
+        )
+
+        assert creds.ca_cert == '---CA---'
+        request = m_urlopen.call_args[0][0]
+        assert request.full_url == 'https://vault.example.com:8200/v1/pki-int/issue/ceph-dashboard'
+        payload = json.loads(request.data.decode('utf-8'))
+        assert payload == {
+            'common_name': 'dashboard.example.com',
+            'ttl': '24h',
+        }
+
+    def test_issue_certificate_requires_config_and_token(self):
+        client = VaultPKIClient(self._config(addr=None), 's.vault-token')
+        with pytest.raises(VaultClientError, match='addr'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        client = VaultPKIClient(self._config(), None)
+        with pytest.raises(VaultClientError, match='token'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        client = VaultPKIClient(self._config(), 's.vault-token')
+        with pytest.raises(VaultClientError, match='common_name'):
+            client.issue_certificate(common_name='  ')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_rejects_missing_response_fields(self, m_urlopen):
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        m_urlopen.return_value = self.FakeResponse({'data': {'private_key': '---KEY---'}})
+        with pytest.raises(VaultClientError, match='certificate'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        m_urlopen.return_value = self.FakeResponse({'data': {'certificate': '---CERT---'}})
+        with pytest.raises(VaultClientError, match='private_key'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+        m_urlopen.return_value = self.FakeResponse({'no_data': {}})
+        with pytest.raises(VaultClientError, match='data'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_vault_http_errors(self, m_urlopen):
+        from io import BytesIO
+        from urllib.error import HTTPError
+
+        m_urlopen.side_effect = HTTPError(
+            'https://vault.example.com:8200/v1/pki/issue/ceph-rgw',
+            400,
+            'Bad Request',
+            {},
+            BytesIO(json.dumps({'errors': ['role not allowed']}).encode('utf-8')),
+        )
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        with pytest.raises(VaultClientError, match='HTTP 400: role not allowed'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_invalid_json(self, m_urlopen):
+        class InvalidJsonResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'not-json'
+
+        m_urlopen.return_value = InvalidJsonResponse()
+        client = VaultPKIClient(self._config(), 's.vault-token')
+
+        with pytest.raises(VaultClientError, match='invalid JSON'):
+            client.issue_certificate(common_name='rgw.example.com')
 
 
 class TestTLSObjectStore(unittest.TestCase):
