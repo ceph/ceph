@@ -50,7 +50,6 @@ export interface CephServiceAdditionalSpec {
   server_cert: string;
   server_key: string;
   rgw_frontend_ssl_certificate: string;
-  certificate_source: string;
   ssl: boolean;
   ssl_cert: string;
   ssl_certificate: string;
