@@ -1737,6 +1737,11 @@ class RgwService(CephService):
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
+        """
+        SMB and NFS services embed librgw. If the RGW service capabilities are
+        updated, verify whether the same changes are required for these
+        services as well.
+        """
         keyring = self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
                                              ['mon', 'allow *',
                                               'mgr', 'allow rw',
