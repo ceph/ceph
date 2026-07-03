@@ -15,6 +15,7 @@ from cephadm.tlsobject_types import (Cert,
                                      TLSObjectManager)
 from cephadm.tlsobject_store import TLSObjectStore
 from cephadm.vault import VaultIssuerConfig
+from cephadm.cert_metadata import VaultCertificateMetadata, VaultCertificateMetadataStore
 from cephadm.cert_issuer import CertificateIssuer, build_certificate_issuers
 
 if TYPE_CHECKING:
@@ -211,6 +212,7 @@ class CertMgr:
             TLSObjectScope.GLOBAL: {},
         }
         self.certificate_issuers: Dict[TLSObjectManager, CertificateIssuer] = build_certificate_issuers()
+        self.vault_cert_metadata_store = VaultCertificateMetadataStore(self.mgr)
 
     def is_cephadm_signed_object(self, object_name: str) -> bool:
         return object_name.startswith(self.CEPHADM_SIGNED)
@@ -244,6 +246,7 @@ class CertMgr:
         self.cert_store.load()
         self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.is_cephadm_signed_object)
         self.key_store.load()
+        self.vault_cert_metadata_store.load()
         self._initialize_root_ca(self.mgr.get_mgr_ip())
 
     def load(self) -> None:
@@ -286,6 +289,29 @@ class CertMgr:
 
     def rm_vault_token(self) -> None:
         self.set_vault_token(None)
+
+
+    def _vault_metadata_target(self, cert_name: str, service_name: Optional[str] = None,
+                               host: Optional[str] = None) -> Optional[str]:
+        scope = self.get_cert_scope(cert_name)
+        if scope == TLSObjectScope.SERVICE:
+            return service_name
+        if scope == TLSObjectScope.HOST:
+            return host
+        return None
+
+    def save_vault_certificate_metadata(self, metadata: VaultCertificateMetadata) -> None:
+        self.vault_cert_metadata_store.save(metadata)
+
+    def get_vault_certificate_metadata(self, cert_name: str, service_name: Optional[str] = None,
+                                       host: Optional[str] = None) -> Optional[VaultCertificateMetadata]:
+        target = self._vault_metadata_target(cert_name, service_name, host)
+        return self.vault_cert_metadata_store.get(cert_name, target)
+
+    def rm_vault_certificate_metadata(self, cert_name: str, service_name: Optional[str] = None,
+                                      host: Optional[str] = None) -> bool:
+        target = self._vault_metadata_target(cert_name, service_name, host)
+        return self.vault_cert_metadata_store.remove(cert_name, target)
 
     def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """
@@ -492,7 +518,10 @@ class CertMgr:
                 logger.info("Skipping CA cert removal for %r — exists but is not inline-saved (editable=True) (%s)", ca_cert_name, context)
 
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
-        return self.cert_store.rm_tlsobject(cert_name, service_name, host)
+        removed = self.cert_store.rm_tlsobject(cert_name, service_name, host)
+        if removed:
+            self.rm_vault_certificate_metadata(cert_name, service_name, host)
+        return removed
 
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         return self.key_store.rm_tlsobject(key_name, service_name, host)

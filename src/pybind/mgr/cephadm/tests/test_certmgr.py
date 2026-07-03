@@ -19,6 +19,11 @@ from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSO
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
 from cephadm.vault import VaultClientError, VaultIssuerConfig, VaultPKIClient
+from cephadm.cert_metadata import (
+    VAULT_CERT_METADATA_STORE_PREFIX,
+    VaultCertificateMetadata,
+    VaultCertificateMetadataStore,
+)
 
 EXPIRED_CERT = """
 -----BEGIN CERTIFICATE-----
@@ -2314,6 +2319,147 @@ class MockCephadmOrchestrator:
 
     def get_store_prefix(self, prefix):
         return {k: v for k, v in self.store.items() if k.startswith(prefix)}
+
+
+class TestVaultCertificateMetadata(unittest.TestCase):
+
+    def _metadata(self, **kwargs):
+        values = {
+            'cert_name': 'rgw_ssl_cert',
+            'key_name': 'rgw_ssl_key',
+            'ca_cert_name': 'rgw_ssl_ca_cert',
+            'scope': TLSObjectScope.SERVICE,
+            'target': 'rgw.foo',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'common_name': 'rgw.example.com',
+            'alt_names': ['rgw.example.com', 'rgw.internal'],
+            'ip_sans': ['10.0.0.10'],
+        }
+        values.update(kwargs)
+        return VaultCertificateMetadata(**values)
+
+    def test_vault_metadata_serializes_renewal_inputs(self):
+        metadata = self._metadata()
+
+        assert metadata.managed_by == TLSObjectManager.VAULT
+        assert metadata.store_target == 'rgw.foo'
+        assert metadata.to_json() == {
+            'cert_name': 'rgw_ssl_cert',
+            'key_name': 'rgw_ssl_key',
+            'ca_cert_name': 'rgw_ssl_ca_cert',
+            'managed_by': 'vault',
+            'scope': 'service',
+            'target': 'rgw.foo',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'common_name': 'rgw.example.com',
+            'alt_names': ['rgw.example.com', 'rgw.internal'],
+            'ip_sans': ['10.0.0.10'],
+        }
+
+        loaded = VaultCertificateMetadata.from_json(metadata.to_json())
+        assert loaded == metadata
+
+    def test_vault_metadata_supports_global_scope(self):
+        metadata = self._metadata(
+            cert_name='mgmt_gateway_ssl_cert',
+            key_name='mgmt_gateway_ssl_key',
+            ca_cert_name=None,
+            scope=TLSObjectScope.GLOBAL,
+            target=None,
+        )
+
+        assert metadata.store_target == ''
+        assert metadata.to_json()['target'] is None
+
+    def test_vault_metadata_validates_scope_and_owner(self):
+        with pytest.raises(TLSObjectException, match='requires target'):
+            self._metadata(target=None)
+
+        with pytest.raises(TLSObjectException, match='must not set target'):
+            self._metadata(scope=TLSObjectScope.GLOBAL, target='rgw.foo')
+
+        with pytest.raises(TLSObjectException, match='managed_by=vault'):
+            self._metadata(managed_by=TLSObjectManager.CEPHADM)
+
+        bad = self._metadata().to_json()
+        bad['unexpected'] = True
+        with pytest.raises(TLSObjectException, match='unknown field'):
+            VaultCertificateMetadata.from_json(bad)
+
+    def test_vault_metadata_store_save_load_get_remove(self):
+        mgr = MockCephadmOrchestrator()
+        store = VaultCertificateMetadataStore(mgr)
+        rgw_metadata = self._metadata()
+        global_metadata = self._metadata(
+            cert_name='mgmt_gateway_ssl_cert',
+            key_name='mgmt_gateway_ssl_key',
+            ca_cert_name=None,
+            scope=TLSObjectScope.GLOBAL,
+            target=None,
+            common_name='mgmt.example.com',
+            alt_names=['mgmt.example.com'],
+            ip_sans=[],
+        )
+
+        store.save(rgw_metadata)
+        store.save(global_metadata)
+
+        assert store.get('rgw_ssl_cert', 'rgw.foo') == rgw_metadata
+        assert store.get('mgmt_gateway_ssl_cert') == global_metadata
+        assert json.loads(mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert']) == {
+            'rgw.foo': rgw_metadata.to_json(),
+        }
+
+        reloaded = VaultCertificateMetadataStore(mgr)
+        reloaded.load()
+        assert reloaded.get('rgw_ssl_cert', 'rgw.foo') == rgw_metadata
+        assert reloaded.get('mgmt_gateway_ssl_cert') == global_metadata
+
+        assert reloaded.remove('rgw_ssl_cert', 'rgw.foo')
+        assert reloaded.get('rgw_ssl_cert', 'rgw.foo') is None
+        assert mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert'] is None
+        assert not reloaded.remove('rgw_ssl_cert', 'rgw.foo')
+
+    def test_vault_metadata_store_skips_bad_records(self):
+        mgr = MockCephadmOrchestrator()
+        good = self._metadata()
+        mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'rgw_ssl_cert'] = json.dumps({
+            'rgw.foo': good.to_json(),
+            'broken': {'cert_name': 'broken'},
+        })
+        mgr.store[VAULT_CERT_METADATA_STORE_PREFIX + 'bad-json'] = 'not-json'
+
+        store = VaultCertificateMetadataStore(mgr)
+        store.load()
+
+        assert store.get('rgw_ssl_cert', 'rgw.foo') == good
+        assert store.get('broken', 'broken') is None
+
+    def test_cert_mgr_vault_metadata_helpers_and_cert_removal(self):
+        mgr = MockCephadmOrchestrator()
+        cm = CertMgr(mgr)
+        cm.register_cert_key_pair(
+            'rgw',
+            'rgw_ssl_cert',
+            'rgw_ssl_key',
+            TLSObjectScope.SERVICE,
+            ca_cert_name='rgw_ssl_ca_cert',
+        )
+        cm.init_tlsobject_store = mock.Mock()
+        cm.cert_store = mock.Mock()
+        cm.cert_store.rm_tlsobject.return_value = True
+        cm.vault_cert_metadata_store = VaultCertificateMetadataStore(mgr)
+
+        metadata = self._metadata()
+        cm.save_vault_certificate_metadata(metadata)
+
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') == metadata
+        assert cm.rm_cert('rgw_ssl_cert', service_name='rgw.foo')
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
 
 
 class TestVaultIssuerConfig(unittest.TestCase):
