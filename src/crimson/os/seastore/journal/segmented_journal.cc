@@ -30,7 +30,8 @@ namespace crimson::os::seastore::journal {
 SegmentedJournal::SegmentedJournal(
   store_index_t store_index,
   SegmentProvider &segment_provider,
-  JournalTrimmer &trimmer)
+  JournalTrimmer &trimmer,
+  bool scan_alloc_on_startup)
   : store_index(store_index),
     segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
@@ -49,7 +50,8 @@ SegmentedJournal::SegmentedJournal(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
     sm_group(*segment_provider.get_segment_manager_group()),
-    trimmer{trimmer}
+    trimmer{trimmer},
+    scan_alloc_on_startup(scan_alloc_on_startup)
 {
 }
 
@@ -322,10 +324,19 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
   auto segment_headers = co_await sm_group.find_journal_segment_headers();
   INFO("got {} segments", segment_headers.size());
   co_await prep_replay_segments(std::move(segment_headers));
-  auto d_handler = [&handler, this](
+  alloc_map_t alloc_map;
+  if (scan_alloc_on_startup) {
+    alloc_map = co_await scan_alloc_map();
+  }
+  auto d_handler = [&handler, this, &alloc_map](
     const record_locator_t &locator,
     const delta_info_t &delta,
     sea_time_point modify_time) -> replay_ertr::future<bool> {
+    if (auto it = alloc_map.find(delta.paddr);
+        it != alloc_map.end() &&
+        it->second > locator.write_result.start_seq) {
+      co_return true;
+    }
     auto ret = co_await handler(
       locator,
       delta,

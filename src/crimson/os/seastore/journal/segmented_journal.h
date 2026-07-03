@@ -28,7 +28,8 @@ public:
   SegmentedJournal(
       store_index_t store_index,
       SegmentProvider &segment_provider,
-      JournalTrimmer &trimmer);
+      JournalTrimmer &trimmer,
+      bool scan_alloc_on_startup);
   ~SegmentedJournal() {}
 
   JournalTrimmer &get_trimmer() final {
@@ -99,6 +100,7 @@ private:
     std::size_t num_dirty_deltas = 0;
   } stats;
 
+  const bool scan_alloc_on_startup = false;
   using replay_segments_t = std::vector<
     std::pair<journal_seq_t, segment_header_t>>;
   replay_segments_t replay_segments;

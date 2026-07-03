@@ -38,9 +38,11 @@ namespace journal {
 JournalRef make_segmented(
   store_index_t store_index,
   SegmentProvider &provider,
-  JournalTrimmer &trimmer)
+  JournalTrimmer &trimmer,
+  bool scan_alloc_on_boot)
 {
-  return std::make_unique<SegmentedJournal>(store_index, provider, trimmer);
+  return std::make_unique<SegmentedJournal>(
+    store_index, provider, trimmer, scan_alloc_on_boot);
 }
 
 JournalRef make_circularbounded(

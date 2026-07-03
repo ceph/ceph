@@ -138,7 +138,7 @@ struct btree_test_base :
         segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
-      journal = journal::make_segmented(0, *this, *this);
+      journal = journal::make_segmented(0, *this, *this, false);
       rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
 	"seastore_hot_tier_generations");
       rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
