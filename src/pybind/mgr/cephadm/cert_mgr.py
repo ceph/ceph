@@ -766,9 +766,21 @@ class CertMgr:
             logger.info(f'Renewing cephadm-signed certificate for {cert_info.cert_name}')
             new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.mgr.certificate_duration_days)
             tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
-            self.cert_store.save_tlsobject(cert_info.cert_name, new_cert, service_name=tlsobj_target.service, host=tlsobj_target.host)
+            self.cert_store.save_tlsobject(
+                cert_info.cert_name,
+                new_cert,
+                service_name=tlsobj_target.service,
+                host=tlsobj_target.host,
+                managed_by=TLSObjectManager.CEPHADM,
+            )
             key_name = cert_info.cert_name.replace('_cert', '_key')
-            self.key_store.save_tlsobject(key_name, new_key, service_name=tlsobj_target.service, host=tlsobj_target.host)
+            self.key_store.save_tlsobject(
+                key_name,
+                new_key,
+                service_name=tlsobj_target.service,
+                host=tlsobj_target.host,
+                managed_by=TLSObjectManager.CEPHADM,
+            )
             return True
         except SSLConfigException as e:
             logger.error(f'Error while trying to renew cephadm-signed certificate for {cert_info.cert_name}: {e}')
@@ -784,18 +796,26 @@ class CertMgr:
             - List of certificates that require manual intervention.
         """
 
+        def supports_auto_fix(cert_obj: Cert) -> bool:
+            """Return whether certmgr currently knows how to fix this manager type."""
+            return cert_obj.managed_by == TLSObjectManager.CEPHADM
+
         def requires_user_intervention(cert_info: CertInfo, cert_obj: Cert) -> bool:
             """Determines if a certificate requires manual user intervention."""
-            close_to_expiry = (not cert_info.is_operationally_valid() and not self.mgr.certificate_automated_rotation_enabled)
-            user_made_and_invalid = cert_obj.user_made and not cert_info.is_operationally_valid()
-            return close_to_expiry or user_made_and_invalid
+            if cert_info.is_operationally_valid():
+                return False
+            if not self.mgr.certificate_automated_rotation_enabled:
+                return True
+            return not supports_auto_fix(cert_obj)
 
         def trigger_auto_fix(cert_info: CertInfo, cert_obj: Cert) -> bool:
             """Attempts to automatically fix certificate issues if possible."""
-            if not self.mgr.certificate_automated_rotation_enabled or cert_obj.user_made:
+            if not self.mgr.certificate_automated_rotation_enabled:
+                return False
+            if not supports_auto_fix(cert_obj):
                 return False
 
-            # This is a cephadm-signed certificate, let's try to fix it
+            # This is a cephadm-managed certificate, let's try to fix it
             if not cert_info.is_valid:
                 # Remove the invalid certificate to force regeneration
                 tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)

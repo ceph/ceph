@@ -1215,6 +1215,93 @@ class TestCertMgr(object):
             renew_mock.assert_called_once()
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_renews_only_cephadm_managed(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = True
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_self_signed_certificate', return_value=True) as renew_mock, \
+             mock.patch.object(cert_mgr, 'get_associated_service', return_value='rgw.foo'), \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_called_once_with(cert_info, cert_obj)
+        assert services_to_reconfig == ['rgw.foo']
+        assert certs_with_issues == []
+        notify_mock.assert_called_once_with([])
+
+    @pytest.mark.parametrize('managed_by', [
+        TLSObjectManager.USER,
+        TLSObjectManager.VAULT,
+        TLSObjectManager.ACME,
+    ])
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_does_not_cephadm_renew_non_cephadm_managed(
+        self, _set_store, cephadm_module: CephadmOrchestrator, managed_by: TLSObjectManager
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = True
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=managed_by,
+        )
+        cert_obj = Cert('external-cert', managed_by=managed_by)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_self_signed_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_not_called()
+        assert services_to_reconfig == []
+        assert certs_with_issues == [cert_info]
+        notify_mock.assert_called_once_with([cert_info])
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_check_services_certificates_rotation_disabled_requires_intervention(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cephadm_module.certificate_automated_rotation_enabled = False
+
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+
+        with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
+             mock.patch.object(cert_mgr, '_renew_self_signed_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
+            services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
+
+        renew_mock.assert_not_called()
+        assert services_to_reconfig == []
+        assert certs_with_issues == [cert_info]
+        notify_mock.assert_called_once_with([cert_info])
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_errors_appending(self, _set_store, cephadm_module: CephadmOrchestrator):
         """
         With split reporting:
