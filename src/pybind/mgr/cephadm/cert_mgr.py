@@ -44,6 +44,7 @@ class CertStatus(str, Enum):
 
 class CertInfo:
     """
+      - managed_by: owner of the certificate lifecycle.
       - is_valid: True if the certificate is valid.
       - is_close_to_expiration: True if the certificate is close to expiration.
       - days_to_expiration: Number of days until expiration.
@@ -51,12 +52,18 @@ class CertInfo:
     """
     def __init__(self, cert_name: str,
                  target: Optional[str],
-                 user_made: bool = False,
+                 user_made: Optional[bool] = None,
                  is_valid: bool = False,
                  is_close_to_expiration: bool = False,
                  days_to_expiration: int = 0,
-                 error_info: str = ''):
-        self.user_made = user_made
+                 error_info: str = '',
+                 managed_by: Optional[Union[TLSObjectManager, str]] = None):
+        if managed_by is not None:
+            self.managed_by = TLSObjectManager(managed_by)
+        elif user_made is not None:
+            self.managed_by = TLSObjectManager.USER if user_made else TLSObjectManager.CEPHADM
+        else:
+            self.managed_by = TLSObjectManager.CEPHADM
         self.cert_name = cert_name
         self.target = target or ''
         self.is_valid = is_valid
@@ -65,8 +72,12 @@ class CertInfo:
         self.error_info = error_info
 
     @property
+    def user_made(self) -> bool:
+        return self.managed_by == TLSObjectManager.USER
+
+    @property
     def signed_by(self) -> str:
-        return "user" if self.user_made else "cephadm"
+        return self.managed_by.value
 
     @property
     def status(self) -> CertStatus:
@@ -84,7 +95,12 @@ class CertInfo:
         return self.is_valid and not self.is_close_to_expiration
 
     def get_status_description(self) -> str:
-        cert_source = 'user-made' if self.user_made else 'cephadm-signed'
+        cert_source = {
+            TLSObjectManager.USER: 'user-made',
+            TLSObjectManager.CEPHADM: 'cephadm-signed',
+            TLSObjectManager.VAULT: 'vault-managed',
+            TLSObjectManager.ACME: 'acme-managed',
+        }[self.managed_by]
         cert_target = f' ({self.target})' if self.target else ''
         cert_details = f"'{self.cert_name}{cert_target}' ({cert_source})"
         if not self.is_valid:
@@ -694,9 +710,9 @@ class CertMgr:
         try:
             days_to_expiration = verify_tls(cert.cert, key.key) if key else certificate_days_to_expire(cert.cert)
             is_close_to_expiration = days_to_expiration < self.mgr.certificate_renewal_threshold_days
-            return CertInfo(cert_name, target, cert.user_made, True, is_close_to_expiration, days_to_expiration, "")
+            return CertInfo(cert_name, target, is_valid=True, is_close_to_expiration=is_close_to_expiration, days_to_expiration=days_to_expiration, error_info="", managed_by=cert.managed_by)
         except ServerConfigException as e:
-            return CertInfo(cert_name, target, cert.user_made, False, False, 0, str(e))
+            return CertInfo(cert_name, target, is_valid=False, is_close_to_expiration=False, days_to_expiration=0, error_info=str(e), managed_by=cert.managed_by)
 
     def get_problematic_certificates(self) -> List[Tuple[CertInfo, Cert]]:
 
@@ -732,7 +748,7 @@ class CertMgr:
             elif any(key_name in ks for ks in self.known_keys.values()) or self.is_cephadm_signed_object(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
-                cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
+                cert_info = CertInfo(cert_name, target, is_valid=False, is_close_to_expiration=False, days_to_expiration=0, error_info="missing key", managed_by=cert_obj.managed_by)
             else:
                 # certificate has no associated key
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj)

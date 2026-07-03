@@ -319,6 +319,54 @@ class TestCertMgr(object):
     def test_user_made_from_managed_by(self, managed_by, user_made):
         assert user_made_from_managed_by(managed_by) == user_made
 
+    def test_certinfo_legacy_user_made_sets_managed_by(self):
+        cert_info = CertInfo('rgw_ssl_cert', 'rgw.foo', user_made=True)
+
+        assert cert_info.managed_by == TLSObjectManager.USER
+        assert cert_info.user_made is True
+        assert cert_info.signed_by == 'user'
+
+    def test_certinfo_managed_by_takes_precedence_over_user_made(self):
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            user_made=True,
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        assert cert_info.managed_by == TLSObjectManager.VAULT
+        assert cert_info.user_made is False
+        assert cert_info.signed_by == 'vault'
+
+    @pytest.mark.parametrize('managed_by, description', [
+        (TLSObjectManager.USER, 'user-made'),
+        (TLSObjectManager.CEPHADM, 'cephadm-signed'),
+        (TLSObjectManager.VAULT, 'vault-managed'),
+        (TLSObjectManager.ACME, 'acme-managed'),
+    ])
+    def test_certinfo_status_description_uses_managed_by(self, managed_by, description):
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=False,
+            error_info='invalid format',
+            managed_by=managed_by,
+        )
+
+        assert f"({description})" in cert_info.get_status_description()
+
+    @mock.patch('cephadm.cert_mgr.certificate_days_to_expire')
+    def test_check_certificate_state_carries_managed_by(self, cert_days_mock, cephadm_module: CephadmOrchestrator):
+        cert_days_mock.return_value = 100
+        cert_info = cephadm_module.cert_mgr._check_certificate_state(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            Cert('cert-data', managed_by=TLSObjectManager.VAULT),
+        )
+
+        assert cert_info.managed_by == TLSObjectManager.VAULT
+        assert cert_info.signed_by == 'vault'
+
     @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
         (Cert, 'cert', 'fake-cert'),
         (PrivKey, 'key', 'fake-key'),
