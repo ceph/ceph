@@ -8,10 +8,10 @@
        [narrow]="true"
        [fullWidth]="true">
     <div cdsCol
-         [columnNumbers]="{sm: 4, md: 8}">
+         [columnNumbers]="{ sm: 4, md: 8 }">
       <div cdsRow
            class="form-heading form-item cds-mt-5">
-      <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+        <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
       <div cdsRow
            class="form-item">
@@ -32,8 +32,7 @@
               autofocus
               formControlName="groupName"
               cdRequiredField="Gateway group name"
-              [invalid]="groupName.isInvalid"
-            />
+              [invalid]="groupName.isInvalid" />
           </cds-text-label>
           <span
             class="invalid-feedback"
@@ -47,11 +46,8 @@
             class="invalid-feedback"
             *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
             i18n>Special characters are not allowed.</span>
-
         </div>
       </div>
-
-      <!-- CDS Checkbox -->
       <div cdsRow
            class="form-item">
         <div cdsCol>
@@ -62,7 +58,6 @@
         </div>
       </div>
 
-      <!-- Encryption Configuration (shown when checkbox is checked) -->
       @if (groupForm.controls.enableEncryption.value) {
       <div cdsRow
            class="form-item">
@@ -81,8 +76,7 @@
                       [invalid]="encryptionConfigRef.isInvalid"
                       formControlName="encryptionConfig"
                       cols="100"
-                      rows="4">
-            </textarea>
+                      rows="4"></textarea>
           </cds-textarea-label>
           <span
             class="invalid-feedback"
@@ -91,27 +85,22 @@
         </div>
       </div>
       }
-      <!-- Target Nodes Selection -->
-      <div
-        cdsRow
-        class="form-item"
-      >
-      <div cdsCol>
-        <h1 class="cds--type-heading-02">Select target nodes</h1>
-      <cd-help-text>
-        <span i18n>
-          Gateway nodes to run NVMe-oF target pods/services
-        </span>
-      </cd-help-text>
-      </div>
-      <div
-        cdsCol
-        class="cds-pt-3 cds-pb-3"
-      >
-        <cd-nvmeof-gateway-node
-          (hostsLoaded)="onHostsLoaded($event)"
-        ></cd-nvmeof-gateway-node>
-      </div>
+
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <h1 class="cds--type-heading-02">Select target nodes</h1>
+          <cd-help-text>
+            <span i18n>
+              Gateway nodes to run NVMe-oF target pods/services
+            </span>
+          </cd-help-text>
+        </div>
+        <div cdsCol
+             class="cds-pt-3 cds-pb-3">
+          <cd-nvmeof-gateway-node
+            (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
+        </div>
       </div>
       <div cdsRow class="form-item cds-mb-0">
         <div cdsCol>
@@ -120,13 +109,13 @@
             <div cdsRow class="form-item">
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal">
-                  <label class="cds--type-label-01" 
+                  <label class="cds--type-label-01"
                          i18n>Enable encryption</label>
                   <cds-tag type="green"
                            size="sm"
                            i18n>Recommended</cds-tag>
                 </div>
-                <cds-checkbox id="enableEncryption" 
+                <cds-checkbox id="enableEncryption"
                               formControlName="enableEncryption">
                   <span
                   class="cds--type-body-01"
@@ -136,13 +125,13 @@
             </div>
 
         @if (!groupForm.controls.enableEncryption.value) {
-        <div cdsRow 
+        <div cdsRow
              class="cds-mt-2">
           <div cdsCol>
             <cd-alert-panel type="warning"
                             spacingClass="mb-0"
                             i18n>
-             <span class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP or mTLS authentication.</span> 
+             <span class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP or mTLS authentication.</span>
             </cd-alert-panel>
           </div>
         </div>
@@ -205,7 +194,7 @@
             @if (groupForm.controls.enableMtls.value) {
             <div cdsRow class="form-item">
               <div cdsCol>
-                <label class="cds--label fw-bold" 
+                <label class="cds--label fw-bold"
                 i18n>Choose Certificate Authority</label>
                 <cds-radio-group
                   formControlName="certificateType"
@@ -491,8 +480,7 @@
           [form]="groupForm"
           [submitText]="(action | titlecase) + ' ' + (resource)"
           [disabled]="isCreateDisabled"
-          wrappingClass="text-right"
-        >
+          wrappingClass="text-right">
         </cd-form-button-panel>
       </div>
     </div>
