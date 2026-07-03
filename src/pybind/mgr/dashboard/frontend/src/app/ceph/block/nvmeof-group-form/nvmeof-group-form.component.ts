@@ -145,12 +145,12 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       this.groupForm.setErrors({ cdSubmitButton: true });
       return;
     }
-    let taskUrl = `service/${URLVerbs.CREATE}`;
-    const serviceName = `${formValues.groupName}`;
+    const taskUrl = `service/${URLVerbs.CREATE}`;
+    const serviceId = `${formValues.groupName}`;
 
     const serviceSpec: Record<string, any> = {
       service_type: 'nvmeof',
-      service_id: serviceName,
+      service_id: serviceId,
       group: formValues.groupName,
       placement: {
         hosts: selectedHostnames
@@ -173,7 +173,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
 
       if (formValues.pool) {
         serviceSpec['pool'] = formValues.pool;
-        serviceSpec['service_id'] = `${formValues.pool}.${serviceName}`;
+        serviceSpec['service_id'] = `${formValues.pool}.${formValues.groupName}`;
       }
 
       if (
@@ -195,7 +195,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
-          service_name: `nvmeof.${serviceName}`
+          service_name: `nvmeof.${serviceId}`
         }),
         call: this.cephServiceService.create(serviceSpec)
       })

@@ -90,6 +90,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(component.subsystem.namespace_count).toBe(3);
     expect(component.subsystem.max_namespaces).toBe(256);
     expect(component.subsystem.gw_group).toBe('gateway-prod');
+    expect(component.subsystem.subtype).toBe('NVMe');
   }));
 
   it('should not fetch when subsystemNQN is missing', fakeAsync(() => {
@@ -143,6 +144,10 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(labelTexts).toContain('Serial number');
     expect(labelTexts).toContain('Model Number');
     expect(labelTexts).toContain('Gateway group');
+    expect(labelTexts).toContain('Subsystem Type');
+    expect(labelTexts).toContain('Host access');
+    expect(labelTexts).toContain('Authentication');
+    expect(labelTexts).toContain('Listeners');
     expect(labelTexts).toContain('Maximum Controller Identifier');
     expect(labelTexts).toContain('Minimum Controller Identifier');
     expect(labelTexts).toContain('Namespaces');

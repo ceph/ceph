@@ -519,11 +519,14 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nvmeof',
-          service_id: 'default',
+          service_id: 'rbd.default',
           placement: {},
           unmanaged: false,
           group: 'default',
           enable_auth: true,
+          ssl: true,
+          pool: 'rbd',
+          certificate_source: 'inline',
           root_ca_cert: 'root_ca_cert',
           client_cert: 'client_cert',
           client_key: 'client_key',

@@ -184,6 +184,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   */
   @Input()
   customFilter: boolean | string = false;
+  get isCustomFilterString(): boolean {
+    return typeof this.customFilter === 'string';
+  }
 
   isCustomFilterLabel(): boolean {
     return typeof this.customFilter === 'string';

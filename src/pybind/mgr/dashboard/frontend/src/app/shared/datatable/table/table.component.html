@@ -123,7 +123,7 @@
           }}
           @if (customFilter) {
           @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
-            @if (isCustomFilterLabel()) {
+            @if (isCustomFilterString) {
               <div cdsRow
                    class="cds-mt-4 cds--type-body-02">
                 Filter {{ customFilter }}:
