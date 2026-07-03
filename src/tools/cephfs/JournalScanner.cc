@@ -40,17 +40,26 @@ int JournalScanner::scan(bool const full, EventCallback cb)
     return r;
   }
 
-  if (!is_mdlog || pointer_present) {
+  if (is_mdlog && !pointer_present) {
+    derr << "Aborting journal scan" << dendl;
+    return 0;
+  } else {
     r = scan_header();
     if (r < 0) {
       return r;
     }
   }
 
-  if (full && header_present) {
-    r = scan_events(cb);
-    if (r < 0) {
-      return r;
+  // NOTE:: ensure the caller checks for header validity before scanning events
+  if (full) {
+    if (!header_valid) {
+      derr << "Aborting journal scan" << dendl;
+      return 0;
+    } else {
+      r = scan_events(cb);
+      if (r < 0) {
+        return r;
+      }
     }
   }
 
