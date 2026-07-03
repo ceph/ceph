@@ -351,6 +351,37 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
   }
 
+  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
+    if (!selectedGroup) {
+      return [];
+    }
+
+    const runningGateways = selectedGroup.statusCount?.running ?? 0;
+    const errorGateways = selectedGroup.statusCount?.error ?? 0;
+    const totalGateways = runningGateways + errorGateways;
+
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: selectedGroup.name
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: totalGateways
+      },
+      {
+        label: $localize`Encryption`,
+        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      },
+      {
+        label: $localize`mTLS`,
+        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status'
+      }
+    ];
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
