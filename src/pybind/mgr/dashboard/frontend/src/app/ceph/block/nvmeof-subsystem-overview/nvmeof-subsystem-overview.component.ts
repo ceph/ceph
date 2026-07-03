@@ -31,6 +31,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   subsystemNQN: string;
   groupName: string;
   subsystem: NvmeofSubsystem;
+  details: SubsystemDetail[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -84,6 +85,12 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
         row: 1
       },
       {
+        label: $localize`Subsystem Type`,
+        value: this.subsystem.subtype,
+        type: 'text',
+        row: 2
+      },
+      {
         label: $localize`Host access`,
         value: this.subsystem.allow_any_host ?? false,
         type: 'host-access',
@@ -128,7 +135,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   }
 
   getRows(): number[] {
-    return [...new Set(this.details.map((d) => d.row))];
+    return [...new Set<number>(this.details.map((d) => d.row))];
   }
 
   getDetailsForRow(row: number): SubsystemDetail[] {
