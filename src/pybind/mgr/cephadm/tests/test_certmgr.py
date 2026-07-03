@@ -319,6 +319,89 @@ class TestCertMgr(object):
     def test_user_made_from_managed_by(self, managed_by, user_made):
         assert user_made_from_managed_by(managed_by) == user_made
 
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_legacy_user_made(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'user_made': True,
+            'editable': True,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.USER
+        assert tlsobject.user_made is True
+        assert tlsobject.editable is True
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_legacy_cephadm_managed(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'user_made': False,
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.CEPHADM
+        assert tlsobject.user_made is False
+        assert tlsobject.editable is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_managed_by_vault(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'managed_by': 'vault',
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.VAULT
+        assert tlsobject.user_made is False
+        assert tlsobject.editable is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_managed_by_precedence(self, tlsobject_cls, field_name, payload_value):
+        tlsobject = tlsobject_cls.from_json({
+            field_name: payload_value,
+            'managed_by': 'vault',
+            'user_made': True,
+            'editable': False,
+        })
+
+        assert tlsobject.managed_by == TLSObjectManager.VAULT
+        assert tlsobject.user_made is False
+
+    @pytest.mark.parametrize('tlsobject_cls, field_name, payload_value', [
+        (Cert, 'cert', 'fake-cert'),
+        (PrivKey, 'key', 'fake-key'),
+    ])
+    def test_tlsobject_from_json_invalid_managed_by(self, tlsobject_cls, field_name, payload_value):
+        with pytest.raises(TLSObjectException):
+            tlsobject_cls.from_json({
+                field_name: payload_value,
+                'managed_by': 'unknown-manager',
+            })
+
+    @pytest.mark.parametrize('tlsobject, payload_key, payload_value', [
+        (Cert('fake-cert', managed_by=TLSObjectManager.VAULT), 'cert', 'fake-cert'),
+        (PrivKey('fake-key', managed_by=TLSObjectManager.ACME), 'key', 'fake-key'),
+    ])
+    def test_tlsobject_to_json_includes_managed_by_and_legacy_user_made(self, tlsobject, payload_key, payload_value):
+        payload = tlsobject.to_json()
+
+        assert payload[payload_key] == payload_value
+        assert payload['managed_by'] == tlsobject.managed_by.value
+        assert payload['user_made'] == tlsobject.user_made
+        assert payload['editable'] is False
+
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
 
