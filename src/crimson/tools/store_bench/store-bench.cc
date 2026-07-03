@@ -24,6 +24,7 @@
    ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 --duration 10 --work-load-type pg_log --seastore_device_size 10G
  */
 
+#include <fstream>
 #include <random>
 #include <vector>
 #include <unordered_map>
@@ -72,6 +73,11 @@ struct results_t {
   std::vector<results_t> buckets_io_vector;
   //tracked metric name->value snapshots, one map per bucket index;
   std::vector<std::map<std::string, double>> tracked_metrics_buckets;
+  // single aggregate tracked-metric snapshot: populated instead of
+  // tracked_metrics_buckets when track-metrics is requested without
+  // --show-bucket-output/--csv-output, so a plain --track-metrics run gets
+  // one summary value per metric instead of a per-bucket breakdown.
+  std::map<std::string, double> tracked_metrics;
 
   results_t &operator += (const results_t &other_result) {
     ios_completed += other_result.ios_completed;
@@ -80,6 +86,10 @@ struct results_t {
       buckets_io_vector = other_result.buckets_io_vector;
     }
     else {
+      // bucket counts are always in lockstep here: every coroutine merged
+      // via this operator computed its bucket vector from the same
+      // common.bucket_size_time / common.get_duration(), so both sides are
+      // guaranteed the same size.
       for (size_t i = 0; i < buckets_io_vector.size(); ++i) {
         buckets_io_vector[i] += other_result.buckets_io_vector[i];
       }
@@ -100,11 +110,18 @@ struct results_t {
     return *this;
   }
 
-  void dump(ceph::Formatter *f) const {
+  void dump(ceph::Formatter *f,bool show_bucket_output) const {
     f->dump_int("ios_completed", ios_completed);
     f->dump_float("total_latency_s", total_latency.count());
     f->dump_float("total_duration_s", duration.count());
-    if (!buckets_io_vector.empty()) {
+    if (!tracked_metrics.empty()) {
+      f->open_object_section("track_metrics");
+      for (const auto &[name, val] : tracked_metrics) {
+        f->dump_float(name, val);
+      }
+      f->close_section();
+    }
+    if (!buckets_io_vector.empty() && show_bucket_output) {
       f->open_object_section("buckets");
       for (size_t i = 0; i < buckets_io_vector.size(); ++i) {
         const auto &b = buckets_io_vector[i];
@@ -133,8 +150,10 @@ private:
 public:
   unsigned num_concurrent_io = 16;
   bool dump_metrics = false;
+  bool show_bucket_output = false;
   std::string track_metrics="";
   unsigned bucket_size_time = 0;
+  std::string csv_output = "";
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -162,9 +181,15 @@ public:
       ("dump-metrics", po::bool_switch(&dump_metrics),
        "Dump JSON formatted metrics to stdout")
       ("track-metrics",po:: value<std::string>(&track_metrics),
-        "Metrics we wnat to include in result list,filtered from dump-metrics")
+        "Metrics we want to include in result list,filtered from dump-metrics")
+      ("show-bucket-output", po::bool_switch(&show_bucket_output),
+       "Show the per-bucket IO/latency (and tracked metrics) breakdown in "
+       "the results dump")
       ("bucket-size", po::value<unsigned>(&bucket_size_time),
        "collect metrics per bucket of this duration in seconds (0 = disabled)")
+      ("csv-output", po::value<std::string>(&csv_output),
+       "write per-bucket metrics to a CSV file at this path (requires "
+       "--bucket-size); one row per bucket, one column per shard per metric")
       ;
     return ret;
   }
@@ -358,6 +383,46 @@ std::map<std::string, double> snapshot_metric_values(
 }
 
 /**
+ * Writes the collected per-shard bucket results to a CSV file, one row per
+ * bucket. Each shard's buckets are written out in order (shard 0's buckets,
+ * then shard 1's, etc.), tagged with a shard column so rows stay
+ * identifiable once concatenated.
+ */
+void write_bucket_csv(
+  const std::string &path,
+  const std::vector<results_t> &per_shard_results,
+  const std::set<std::string> &requested_metrics) {
+  std::ofstream csv(path);
+
+  csv << "shard,bucket_index,ios_completed,avg_latency_s";
+  for (const auto &name : requested_metrics) {
+    csv << "," << name;
+  }
+  csv << "\n";
+
+  for (size_t s = 0; s < per_shard_results.size(); ++s) {
+    const auto &r = per_shard_results[s];
+    for (size_t b = 0; b < r.buckets_io_vector.size(); ++b) {
+      const auto &bucket = r.buckets_io_vector[b];
+      double avg_latency = bucket.ios_completed > 0
+        ? bucket.total_latency.count() / bucket.ios_completed
+        : 0.0;
+      csv << s << "," << b << "," << bucket.ios_completed << "," << avg_latency;
+      for (const auto &name : requested_metrics) {
+        csv << ",";
+        if (b < r.tracked_metrics_buckets.size()) {
+          auto it = r.tracked_metrics_buckets[b].find(name);
+          if (it != r.tracked_metrics_buckets[b].end()) {
+            csv << it->second;
+          }
+        }
+      }
+      csv << "\n";
+    }
+  }
+}
+
+/**
  * This function adds and removes log entries to a log object
  * It returns throughput(number of operations/nano sec)
  * Also returns average latency (time/operation)
@@ -422,31 +487,18 @@ seastar::future<results_t> PGLogWorkload::run(
         std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
 
-    std::vector<results_t> local_buckets;
-    uint64_t io_bucket = 0;
-    std::chrono::duration<double> latency_bucket =std::chrono::duration<double>(0.0);
-    unsigned curr_bucket = 0;
-    auto last_bucket_time = start;
-    std::set<std::string> requested_metrics = common.get_requested_metrics();
-    std::vector<std::map<std::string, double>> local_track_metrics_buckets;
-    // latency and io's bucketing
-    while (ceph::mono_clock::now() - start <= common.get_duration()) {
-      if (common.bucket_size_time > 0) {
-        auto elapsed_since_last = std::chrono::duration<double>(
-            ceph::mono_clock::now() - last_bucket_time);
-        if (elapsed_since_last >= std::chrono::seconds(common.bucket_size_time)&& std::chrono::duration<double>(ceph::mono_clock::now() - start)<= common.get_duration()) {
-          local_buckets.push_back(results_t{io_bucket, latency_bucket});
-          if (!common.track_metrics.empty()) {
-            local_track_metrics_buckets.push_back(
-              snapshot_metric_values(requested_metrics));
-          }
-          io_bucket = 0;
-          latency_bucket = std::chrono::duration<double>(0.0);
-          last_bucket_time = ceph::mono_clock::now();
-          curr_bucket++;
-         
-        }
+    unsigned num_buckets = 0;
+    if (common.bucket_size_time > 0) {
+      num_buckets = common.get_duration().count() / common.bucket_size_time;
+      if (num_buckets == 0) {
+        num_buckets = 1;
       }
+    }
+    std::vector<results_t> local_buckets(num_buckets);
+    std::set<std::string> requested_metrics = common.get_requested_metrics();
+    std::vector<std::map<std::string, double>> local_track_metrics_buckets(num_buckets);
+
+    while (ceph::mono_clock::now() - start <= common.get_duration()) {
       int obj_num = std::rand() % num_logs;
 
       auto object = create_hobj(obj_num);
@@ -478,24 +530,37 @@ seastar::future<results_t> PGLogWorkload::run(
           std::chrono::duration<double>(time_nanosec);
       tot_latency += time_sec;
       num_ops++;
-      io_bucket++;
-      latency_bucket += time_sec;
-    }
-    if (common.bucket_size_time > 0) {
-      // flush whatever accumulated in the still-open trailing window so the
-      // per-bucket totals always sum to num_ops/tot_latency above.
-      local_buckets.push_back(results_t{io_bucket, latency_bucket});
-      if (!common.track_metrics.empty()) {
-        local_track_metrics_buckets.push_back(
-          snapshot_metric_values(requested_metrics));
+
+      if (num_buckets > 0) {
+        std::chrono::duration<double> elapsed = latency_end - start;
+        unsigned bucket_index = elapsed.count() / common.bucket_size_time;
+        if (bucket_index >= num_buckets) {
+          bucket_index = num_buckets - 1;
+        }
+        local_buckets[bucket_index].ios_completed++;
+        local_buckets[bucket_index].total_latency += time_sec;
+        if (!common.track_metrics.empty() &&
+            local_track_metrics_buckets[bucket_index].empty()) {
+          local_track_metrics_buckets[bucket_index] =
+            snapshot_metric_values(requested_metrics);
+        }
       }
     }
     co_return results_t{num_ops, tot_latency, common.get_duration(),
       std::move(local_buckets), std::move(local_track_metrics_buckets)};
   };
   co_await pre_fill_logs();
-  co_return co_await run_concurrent_ios(
+  auto result = co_await run_concurrent_ios(
     common.get_duration(), common.num_concurrent_io, add_remove_entry);
+  // --track-metrics without --show-bucket-output means "one summary value
+  // per metric", not a per-bucket breakdown -- take a single snapshot here
+  // instead of using the (possibly-empty, if --bucket-size wasn't passed)
+  // per-bucket snapshots collected above.
+  if (!common.show_bucket_output && !common.track_metrics.empty()) {
+    result.tracked_metrics =
+      snapshot_metric_values(common.get_requested_metrics());
+  }
+  co_return result;
 }
 
 // rgw start
@@ -1081,17 +1146,20 @@ int main(int argc, char **argv) {
 
         JSONFormatter f(true /* pretty */);
         f.open_object_section("store-bench");
+        std::vector<results_t> per_shard_results;
+        auto requested_metrics = common_options.get_requested_metrics();
         {
           f.dump_float("duration_s", common_options.get_duration().count());
           f.open_array_section("results");
-          auto requested_metrics = common_options.get_requested_metrics();
           for (unsigned i = 0; i < per_shard_futures.size(); ++i) {
             auto results = co_await std::move(per_shard_futures[i]);
             f.open_object_section("result");
-            results.dump(&f);
+            // when writing buckets to CSV, keep the (potentially large)
+            // per-bucket breakdown out of the stdout JSON entirely.
+            results.dump(&f, common_options.show_bucket_output &&
+              common_options.csv_output.empty());
             f.dump_string("shard", std::to_string(i));
-            if (common_options.dump_metrics ||
-                !common_options.track_metrics.empty()) {
+            if (common_options.dump_metrics) {
               // scollectd::get_value_map() only sees the calling shard's
               // local metrics registry, so this has to run on shard i
               // itself rather than on the shard driving this loop.
@@ -1108,11 +1176,17 @@ int main(int argc, char **argv) {
               });
             }
             f.close_section();
+            per_shard_results.push_back(std::move(results));
           }
           f.close_section();
         }
         f.close_section();
         f.flush(std::cout);
+
+        if (!common_options.csv_output.empty()) {
+          write_bucket_csv(
+            common_options.csv_output, per_shard_results, requested_metrics);
+        }
 
         co_await store->umount();
         co_await store->stop();
