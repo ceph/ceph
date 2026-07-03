@@ -40,6 +40,17 @@ describe('NvmeofSetupCardsComponent', () => {
     expect(link).toBeTruthy();
   });
 
+  it('should not emit viewStatus from the disabled completion link', () => {
+    component.isAllConfigured = true;
+    fixture.detectChanges();
+
+    const emitSpy = jest.spyOn(component.viewStatus, 'emit');
+    const link = fixture.nativeElement.querySelector('.nvmeof-setup-cards__completion a');
+    link.click();
+
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
   describe('setup state', () => {
     const getStepCards = () =>
       fixture.debugElement.queryAll((el) => el.name === 'cd-setup-step-card');
@@ -79,7 +90,7 @@ describe('NvmeofSetupCardsComponent', () => {
     });
   });
 
-  it('should display "No gateway configured yet." on step 2 and 3 when hasGatewayGroups is false', () => {
+  it('should keep subsystem and namespace info messages when hasGatewayGroups is false', () => {
     component.hasGatewayGroups = false;
     component.hasSubsystems = false;
     component.hasNamespaces = false;
@@ -89,8 +100,8 @@ describe('NvmeofSetupCardsComponent', () => {
     const subsystemCard = cardElements[1].componentInstance;
     const namespaceCard = cardElements[2].componentInstance;
 
-    expect(subsystemCard.statusMessage).toBe('No gateway configured yet.');
-    expect(namespaceCard.statusMessage).toBe('No gateway configured yet.');
+    expect(subsystemCard.statusMessage).toBe('No subsystem configured for this cluster yet.');
+    expect(namespaceCard.statusMessage).toBe('No namespace allocated or mapped yet.');
   });
 
   it('should display original info messages when hasGatewayGroups is true', () => {
@@ -154,7 +165,11 @@ describe('NvmeofSetupCardsComponent', () => {
     expect(getCards()[0].componentInstance.statusMessage).toBe(
       'No gateway groups configured for this cluster yet.'
     );
-    expect(getCards()[1].componentInstance.statusMessage).toBe('No gateway configured yet.');
-    expect(getCards()[2].componentInstance.statusMessage).toBe('No gateway configured yet.');
+    expect(getCards()[1].componentInstance.statusMessage).toBe(
+      'No subsystem configured for this cluster yet.'
+    );
+    expect(getCards()[2].componentInstance.statusMessage).toBe(
+      'No namespace allocated or mapped yet.'
+    );
   });
 });
