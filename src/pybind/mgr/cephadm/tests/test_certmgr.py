@@ -1289,6 +1289,59 @@ class TestCertMgr(object):
             renew_mock.assert_called_once()
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_certificate_issuer_registry_marks_only_cephadm_auto_fixable(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+
+        assert cert_mgr._supports_auto_fix(Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM))
+        assert not cert_mgr._supports_auto_fix(Cert('user-cert', managed_by=TLSObjectManager.USER))
+        assert not cert_mgr._supports_auto_fix(Cert('vault-cert', managed_by=TLSObjectManager.VAULT))
+        assert not cert_mgr._supports_auto_fix(Cert('acme-cert', managed_by=TLSObjectManager.ACME))
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_renew_certificate_dispatches_to_registered_cephadm_issuer(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.CEPHADM,
+        )
+        cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
+        issuer = cert_mgr.certificate_issuers[TLSObjectManager.CEPHADM]
+
+        with mock.patch.object(issuer, 'renew', return_value=True) as renew_mock:
+            assert cert_mgr._renew_certificate(cert_info, cert_obj)
+
+        renew_mock.assert_called_once_with(cert_mgr, cert_info, cert_obj)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_renew_certificate_returns_false_for_unsupported_issuer(
+        self, _set_store, cephadm_module: CephadmOrchestrator
+    ):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_info = CertInfo(
+            'rgw_ssl_cert',
+            'rgw.foo',
+            is_valid=True,
+            is_close_to_expiration=True,
+            days_to_expiration=5,
+            managed_by=TLSObjectManager.VAULT,
+        )
+        cert_obj = Cert('vault-cert', managed_by=TLSObjectManager.VAULT)
+        issuer = cert_mgr.certificate_issuers[TLSObjectManager.VAULT]
+
+        with mock.patch.object(issuer, 'renew', wraps=issuer.renew) as renew_mock:
+            assert not cert_mgr._renew_certificate(cert_info, cert_obj)
+
+        renew_mock.assert_not_called()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_check_services_certificates_renews_only_cephadm_managed(
         self, _set_store, cephadm_module: CephadmOrchestrator
     ):
@@ -1306,7 +1359,7 @@ class TestCertMgr(object):
         cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
 
         with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
-             mock.patch.object(cert_mgr, '_renew_self_signed_certificate', return_value=True) as renew_mock, \
+             mock.patch.object(cert_mgr, '_renew_certificate', return_value=True) as renew_mock, \
              mock.patch.object(cert_mgr, 'get_associated_service', return_value='rgw.foo'), \
              mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
             services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
@@ -1339,7 +1392,7 @@ class TestCertMgr(object):
         cert_obj = Cert('external-cert', managed_by=managed_by)
 
         with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
-             mock.patch.object(cert_mgr, '_renew_self_signed_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_renew_certificate') as renew_mock, \
              mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
             services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
 
@@ -1366,7 +1419,7 @@ class TestCertMgr(object):
         cert_obj = Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM)
 
         with mock.patch.object(cert_mgr, 'get_problematic_certificates', return_value=[(cert_info, cert_obj)]), \
-             mock.patch.object(cert_mgr, '_renew_self_signed_certificate') as renew_mock, \
+             mock.patch.object(cert_mgr, '_renew_certificate') as renew_mock, \
              mock.patch.object(cert_mgr, '_notify_certificates_health_status') as notify_mock:
             services_to_reconfig, certs_with_issues = cert_mgr.check_services_certificates(fix_issues=True)
 
