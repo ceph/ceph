@@ -306,7 +306,7 @@ class CephFSMountBase(object):
             # Setup the NAT
             gw = self._default_gateway()
 
-            self.run_shell_payload(f"""
+            self.run_shell_payload(rf"""
                 set -e
 
                 if command -v iptables >/dev/null 2>&1 && sudo iptables -t nat -A POSTROUTING -s {self.ceph_brx_net} -o {gw} -j MASQUERADE 2>/dev/null; then
