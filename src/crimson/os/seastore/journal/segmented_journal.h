@@ -110,6 +110,20 @@ private:
     delta_handler_t &delta_handler,  ///< [in] processes deltas in order
     replay_stats_t &stats            ///< [out] replay stats
   );
+
+  journal_seq_t get_dirty_tail() const final {
+    return trimmer.get_dirty_tail();
+  }
+
+  journal_seq_t get_alloc_tail() const final {
+    return trimmer.get_alloc_tail();
+  }
+
+  replay_ret scan_valid_record_delta(
+    scan_delta_handler_t &&delta_handler,
+    journal_seq_t tail) final {
+    return replay_ertr::now();
+  }
 };
 
 }
