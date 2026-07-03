@@ -1079,6 +1079,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     this.getDefaultPlacementCount(selectedServiceType);
 
+    if (selectedServiceType === 'nvmeof' && this.rbdPools?.length > 0) {
+      this.serviceForm.get('pool').setValue(this.rbdPools[0].pool_name);
+    }
+
     if (selectedServiceType === 'rgw') {
       this.setRgwFields();
     }
