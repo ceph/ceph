@@ -176,6 +176,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(labelTexts).toContain('Model Number');
     expect(labelTexts).toContain('Gateway group');
     expect(labelTexts).toContain('Subsystem Type');
+    expect(labelTexts).toContain('Host access');
     expect(labelTexts).toContain('Authentication');
     expect(labelTexts).toContain('Maximum Controller Identifier');
     expect(labelTexts).toContain('Minimum Controller Identifier');
