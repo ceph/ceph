@@ -25,6 +25,7 @@ class CertFilterOption(str, Enum):
     NAME = 'name'
     STATUS = 'status'
     SIGNED_BY = 'signed-by'
+    MANAGED_BY = 'managed-by'
     SCOPE = 'scope'
     SERVICE = 'service'
 
@@ -508,22 +509,17 @@ class CertMgr:
                 include_details: bool = False,
                 include_cephadm_signed: bool = False) -> Dict:
         """
-        signed-by filtering behavior in `cert_ls`:
+        lifecycle-owner filtering behavior in `cert_ls`:
 
         Defaults:
-        - If `include_cephadm_signed` is False and no explicit `signed-by=` is provided,
-          we auto-filter to show only user-made certs (and always include the root CA).
-        - If the caller explicitly filters by `signed-by=...`, that explicit filter wins.
+        - If `include_cephadm_signed` is False and no explicit `signed-by=` or
+          `managed-by=` selector is provided, we auto-filter to show only
+          user-made certs (and always include the root CA).
+        - If the caller explicitly filters by `signed-by=...` or
+          `managed-by=...`, that explicit filter wins.
 
-        Behavior matrix:
-          +------------------------+-----------------------------+----------------------------------------------+
-          | include_cephadm_signed | 'signed-by=' in filter_by?  | Effective behavior on signed-by               |
-          +------------------------+-----------------------------+----------------------------------------------+
-          | False                  | No                          | Auto-filter: signed-by=user  + root CA        |
-          | False                  | Yes                         | Use user's explicit selector                  |
-          | True                   | No                          | No auto filter (include user + cephadm)       |
-          | True                   | Yes                         | Use user's explicit selector                  |
-          +------------------------+-----------------------------+----------------------------------------------+
+        `signed-by` is kept as a compatibility alias for the lifecycle owner;
+        new callers should prefer `managed-by`.
         """
 
         def _lhs(expr: str) -> str:
@@ -536,6 +532,7 @@ class CertMgr:
                 CertFilterOption.NAME: cert_info.cert_name,
                 CertFilterOption.STATUS: cert_info.status,
                 CertFilterOption.SIGNED_BY: cert_info.signed_by,
+                CertFilterOption.MANAGED_BY: cert_info.managed_by.value,
                 CertFilterOption.SCOPE: scope,
                 CertFilterOption.SERVICE: svc,
             }
@@ -553,7 +550,12 @@ class CertMgr:
             if key in (CertFilterOption.NAME, CertFilterOption.SERVICE):
                 return lambda cert_ctx: fnmatch(cert_ctx.get(key, ''), value)
 
-            if key in (CertFilterOption.SCOPE, CertFilterOption.STATUS, CertFilterOption.SIGNED_BY):
+            if key in (
+                CertFilterOption.SCOPE,
+                CertFilterOption.STATUS,
+                CertFilterOption.SIGNED_BY,
+                CertFilterOption.MANAGED_BY,
+            ):
                 return lambda cert_ctx: cert_ctx.get(key) == value
 
             # Default: unknown field selector -> nop filter (don't exclude)
@@ -564,12 +566,16 @@ class CertMgr:
             cert_filters = [_field_filter(expr) for expr in filter_exprs]
             # By default: filter out cephadm-signed certs unless explicitly included
             # with the exception of the cephadm root CA cert (CEPHADM_ROOT_CA_CERT) as
-            # technically the user may be interested in adding it to his CA trust chain
-            explicit_signed_by = any(_lhs(e) == str(CertFilterOption.SIGNED_BY) for e in filter_exprs)
-            if not include_cephadm_signed and not explicit_signed_by:
+            # technically the user may be interested in adding it to his CA trust chain.
+            # An explicit signed-by= or managed-by= selector disables this auto-filter.
+            explicit_manager_filter = any(
+                _lhs(e) in (str(CertFilterOption.SIGNED_BY), str(CertFilterOption.MANAGED_BY))
+                for e in filter_exprs
+            )
+            if not include_cephadm_signed and not explicit_manager_filter:
                 cert_filters.append(
                     lambda cert_ctx:
-                    cert_ctx.get(CertFilterOption.SIGNED_BY) == 'user'
+                    cert_ctx.get(CertFilterOption.MANAGED_BY) == TLSObjectManager.USER.value
                     or cert_ctx[CertFilterOption.NAME] == self.CEPHADM_ROOT_CA_CERT
                 )
             return cert_filters

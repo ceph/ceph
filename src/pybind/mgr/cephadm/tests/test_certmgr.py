@@ -355,6 +355,72 @@ class TestCertMgr(object):
 
         assert f"({description})" in cert_info.get_status_description()
 
+    def _new_cert_mgr_for_filter_tests(self):
+        cm = CertMgr(mock.Mock())
+        cm.cert_store = mock.Mock()
+        cm.key_store = mock.Mock()
+        cm.known_certs[TLSObjectScope.SERVICE].extend(['rgw_ssl_cert', 'vault_ssl_cert'])
+        return cm
+
+    def _set_filter_test_certs(self, cm):
+        cm.cert_store.list_tlsobjects.return_value = [
+            ('rgw_ssl_cert', Cert('user-cert', managed_by=TLSObjectManager.USER), 'rgw.foo'),
+            ('cephadm-signed_grafana_cert', Cert('cephadm-cert', managed_by=TLSObjectManager.CEPHADM), 'node1'),
+            ('vault_ssl_cert', Cert('vault-cert', managed_by=TLSObjectManager.VAULT), 'rgw.foo'),
+        ]
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_managed_by_filter_selects_manager(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='managed-by=vault')
+
+        assert set(ls.keys()) == {'vault_ssl_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_signed_by_filter_remains_compat_alias(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='signed-by=vault')
+
+        assert set(ls.keys()) == {'vault_ssl_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_explicit_managed_by_overrides_default_cephadm_filter(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(filter_by='managed-by=cephadm', include_cephadm_signed=False)
+
+        assert set(ls.keys()) == {'cephadm-signed_grafana_cert'}
+
+    @mock.patch('cephadm.cert_mgr.get_certificate_info', return_value={})
+    def test_cert_ls_default_still_shows_only_user_managed_and_root_ca(self, _get_cert_info):
+        cm = self._new_cert_mgr_for_filter_tests()
+        self._set_filter_test_certs(cm)
+
+        def check_state(cert_name, target, cert_obj, key_obj=None):
+            return CertInfo(cert_name, target, is_valid=True, managed_by=cert_obj.managed_by)
+
+        with mock.patch.object(cm, '_check_certificate_state', side_effect=check_state):
+            ls = cm.cert_ls(include_cephadm_signed=False)
+
+        assert set(ls.keys()) == {'rgw_ssl_cert'}
+
     @mock.patch('cephadm.cert_mgr.certificate_days_to_expire')
     def test_check_certificate_state_carries_managed_by(self, cert_days_mock, cephadm_module: CephadmOrchestrator):
         cert_days_mock.return_value = 100
