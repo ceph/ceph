@@ -85,6 +85,12 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
         row: 1
       },
       {
+        label: $localize`Subsystem Type`,
+        value: this.subsystem.subtype,
+        type: 'text',
+        row: 2
+      },
+      {
         label: $localize`Host access`,
         value: this.subsystem.allow_any_host ?? false,
         type: 'host-access',

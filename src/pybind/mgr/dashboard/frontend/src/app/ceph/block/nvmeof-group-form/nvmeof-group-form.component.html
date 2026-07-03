@@ -52,7 +52,7 @@
            class="form-item">
         <div cdsCol>
           <cds-checkbox id="enableCds"
-                        formControlName="enableEncryption"
+                        formControlName="enable_auth"
                         i18n>Enable encryption
           </cds-checkbox>
         </div>
@@ -74,13 +74,13 @@
                       cdValidate
                       #encryptionConfigRef="cdValidate"
                       [invalid]="encryptionConfigRef.isInvalid"
-                      formControlName="encryptionConfig"
+                      formControlName="encryptionKey"
                       cols="100"
                       rows="4"></textarea>
           </cds-textarea-label>
           <span
             class="invalid-feedback"
-            *ngIf="groupForm.showError('encryptionConfig', formDir, 'required')"
+            *ngIf="groupForm.showError('encryptionKey', formDir, 'required')"
             i18n>This field is required.</span>
         </div>
       </div>
