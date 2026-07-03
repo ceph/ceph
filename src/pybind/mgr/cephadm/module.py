@@ -501,6 +501,42 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             max=90
         ),
         Option(
+            'certmgr_vault_addr',
+            type='str',
+            default=None,
+            desc='Vault server address used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_pki_mount',
+            type='str',
+            default=None,
+            desc='Vault PKI secrets engine mount used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_role',
+            type='str',
+            default=None,
+            desc='Default Vault PKI role used by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_ttl',
+            type='str',
+            default=None,
+            desc='Default Vault certificate TTL requested by certmgr for Vault-managed certificates.',
+        ),
+        Option(
+            'certmgr_vault_cacert',
+            type='str',
+            default=None,
+            desc='CA certificate path or PEM used to verify the Vault server TLS certificate.',
+        ),
+        Option(
+            'certmgr_vault_verify_tls',
+            type='bool',
+            default=True,
+            desc='Whether certmgr should verify the Vault server TLS certificate.',
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -669,6 +705,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.certmgr_vault_addr: Optional[str] = None
+            self.certmgr_vault_pki_mount: Optional[str] = None
+            self.certmgr_vault_role: Optional[str] = None
+            self.certmgr_vault_ttl: Optional[str] = None
+            self.certmgr_vault_cacert: Optional[str] = None
+            self.certmgr_vault_verify_tls = True
             self.cephadm_binary_logging_level = 'debug'
 
         self.notify(NotifyType.mon_map, None)

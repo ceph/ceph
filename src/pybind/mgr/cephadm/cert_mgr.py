@@ -14,6 +14,7 @@ from cephadm.tlsobject_types import (Cert,
                                      TLSCredentials,
                                      TLSObjectManager)
 from cephadm.tlsobject_store import TLSObjectStore
+from cephadm.vault import VaultIssuerConfig
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -185,6 +186,7 @@ class CertMgr:
 
     CEPHADM_CERT_ERROR = 'CEPHADM_CERT_ERROR'
     CEPHADM_CERT_WARNING = 'CEPHADM_CERT_WARNING'
+    VAULT_TOKEN_STORE_KEY = 'certmgr/vault/token'
 
     CEPHADM_SIGNED = 'cephadm-signed'
     LABEL_SEPARATOR = "__lbl__"
@@ -269,6 +271,19 @@ class CertMgr:
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
+
+    def get_vault_issuer_config(self) -> VaultIssuerConfig:
+        return VaultIssuerConfig.from_mgr(self.mgr)
+
+    def get_vault_token(self) -> Optional[str]:
+        token = self.mgr.get_store(self.VAULT_TOKEN_STORE_KEY)
+        return token.strip() if token else None
+
+    def set_vault_token(self, token: Optional[str]) -> None:
+        self.mgr.set_store(self.VAULT_TOKEN_STORE_KEY, token.strip() if token else None)
+
+    def rm_vault_token(self) -> None:
+        self.set_vault_token(None)
 
     def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """

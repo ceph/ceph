@@ -18,6 +18,7 @@ from cephadm.tlsobject_types import (
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
+from cephadm.vault import VaultIssuerConfig
 
 EXPIRED_CERT = """
 -----BEGIN CERTIFICATE-----
@@ -2255,8 +2256,93 @@ class MockCephadmOrchestrator:
     def set_store(self, key, value):
         self.store[key] = value
 
+    def get_store(self, key):
+        return self.store.get(key)
+
     def get_store_prefix(self, prefix):
         return {k: v for k, v in self.store.items() if k.startswith(prefix)}
+
+
+class TestVaultIssuerConfig(unittest.TestCase):
+
+    class MockMgr:
+        certmgr_vault_addr = 'https://vault.example.com:8200'
+        certmgr_vault_pki_mount = 'pki'
+        certmgr_vault_role = 'ceph-rgw'
+        certmgr_vault_ttl = '720h'
+        certmgr_vault_cacert = '/etc/ceph/vault-ca.pem'
+        certmgr_vault_verify_tls = True
+
+    def test_from_mgr_loads_global_vault_config(self):
+        config = VaultIssuerConfig.from_mgr(self.MockMgr())
+
+        assert config.addr == 'https://vault.example.com:8200'
+        assert config.pki_mount == 'pki'
+        assert config.role == 'ceph-rgw'
+        assert config.ttl == '720h'
+        assert config.ca_cert == '/etc/ceph/vault-ca.pem'
+        assert config.verify_tls is True
+        assert config.is_configured()
+        assert config.missing_required_fields() == []
+
+    def test_from_mgr_normalizes_empty_strings(self):
+        class EmptyMgr:
+            certmgr_vault_addr = '  '
+            certmgr_vault_pki_mount = ''
+            certmgr_vault_role = None
+            certmgr_vault_verify_tls = False
+
+        config = VaultIssuerConfig.from_mgr(EmptyMgr())
+
+        assert config.addr is None
+        assert config.pki_mount is None
+        assert config.role is None
+        assert config.verify_tls is False
+        assert not config.is_configured()
+        assert config.missing_required_fields() == ['addr', 'pki_mount', 'role']
+
+    def test_to_json(self):
+        config = VaultIssuerConfig(
+            addr='https://vault.example.com:8200',
+            pki_mount='pki',
+            role='ceph-rgw',
+            ttl='720h',
+            ca_cert='vault-ca',
+            verify_tls=False,
+        )
+
+        assert config.to_json() == {
+            'addr': 'https://vault.example.com:8200',
+            'pki_mount': 'pki',
+            'role': 'ceph-rgw',
+            'ttl': '720h',
+            'ca_cert': 'vault-ca',
+            'verify_tls': False,
+        }
+
+    def test_cert_mgr_vault_config_and_token_helpers(self):
+        mgr = MockCephadmOrchestrator()
+        mgr.certmgr_vault_addr = 'https://vault.example.com:8200'
+        mgr.certmgr_vault_pki_mount = 'pki'
+        mgr.certmgr_vault_role = 'ceph-rgw'
+        mgr.certmgr_vault_ttl = '720h'
+        mgr.certmgr_vault_cacert = None
+        mgr.certmgr_vault_verify_tls = True
+        cm = CertMgr(mgr)
+
+        config = cm.get_vault_issuer_config()
+        assert config.is_configured()
+        assert config.addr == 'https://vault.example.com:8200'
+        assert config.pki_mount == 'pki'
+        assert config.role == 'ceph-rgw'
+
+        assert cm.get_vault_token() is None
+        cm.set_vault_token('  s.vault-token  ')
+        assert mgr.store[CertMgr.VAULT_TOKEN_STORE_KEY] == 's.vault-token'
+        assert cm.get_vault_token() == 's.vault-token'
+        cm.rm_vault_token()
+        assert mgr.store[CertMgr.VAULT_TOKEN_STORE_KEY] is None
+        assert cm.get_vault_token() is None
 
 
 class TestTLSObjectStore(unittest.TestCase):
