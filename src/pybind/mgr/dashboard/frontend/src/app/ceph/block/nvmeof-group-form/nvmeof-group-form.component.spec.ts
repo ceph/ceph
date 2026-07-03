@@ -43,7 +43,9 @@ describe('NvmeofGroupFormComponent', () => {
         SelectModule
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
+    })
+      .overrideTemplate(NvmeofGroupFormComponent, '')
+      .compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGroupFormComponent);
     component = fixture.componentInstance;
@@ -159,7 +161,7 @@ describe('NvmeofGroupFormComponent', () => {
 
       component.groupForm.get('groupName').setValue('encrypted-group');
       component.groupForm.get('enableEncryption').setValue(true);
-      component.groupForm.get('encryptionConfig').setValue('encryption-key-123');
+      component.groupForm.get('encryptionKey').setValue('encryption-key-123');
       component.onSubmit();
 
       expect(cephServiceService.create).toHaveBeenCalledWith(
