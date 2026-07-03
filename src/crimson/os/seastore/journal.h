@@ -132,7 +132,8 @@ namespace journal {
 JournalRef make_segmented(
   store_index_t store_index,
   SegmentProvider &provider,
-  JournalTrimmer &trimmer);
+  JournalTrimmer &trimmer,
+  bool scan_alloc_on_boot);
 
 JournalRef make_circularbounded(
   store_index_t store_index,

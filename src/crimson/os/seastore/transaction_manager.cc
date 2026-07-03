@@ -1826,6 +1826,7 @@ TransactionManagerRef make_transaction_manager(
   JournalRef journal;
 
   AsyncCleanerRef cold_cleaner = nullptr;
+  bool scan_alloc_on_boot = false;
 
   if (cold_sms) {
     assert(!cold_rbs);
@@ -1846,6 +1847,7 @@ TransactionManagerRef make_transaction_manager(
     }
     cold_cleaner = std::move(segment_cleaner);
   } else if (cold_rbs) {
+    scan_alloc_on_boot = true;
     cold_cleaner = RBMCleaner::create(
       store_index,
       std::move(cold_rbs),
@@ -1873,7 +1875,8 @@ TransactionManagerRef make_transaction_manager(
     journal = journal::make_segmented(
       store_index,
       *segment_cleaner,
-      *journal_trimmer);
+      *journal_trimmer,
+      scan_alloc_on_boot);
   } else {
     cleaner = RBMCleaner::create(
       store_index,
