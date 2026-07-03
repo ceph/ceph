@@ -497,15 +497,20 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   } else if (command == "recover_dentries") {
     std::set<inodeno_t> consumed_inos;
     
-    // decode the journal first to check if the header is valid
+    // decode the journal first to check if the journal pointer and header are valid
     r = js.scan(false);
     if (r < 0) {
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
     }
-    if (!js.header_present || !js.header_valid) {
-      derr << "Journal header is not present or is damaged, cannot recover dentries" << dendl;
-      return -EIO;
+    if (!js.pointer_present) {
+      derr << "Cannot recover dentries: journal pointer is missing" << dendl;
+      return 0;
+    }
+    // if header_valid is false, header_present is also false
+    if (!js.header_valid) {
+      derr << "Cannot recover dentries: journal header is missing or invalid" << dendl;
+      return 0;
     }
 
     auto flush_events = [&]() {
