@@ -1,4 +1,4 @@
-import { Component, Input, TemplateRef } from '@angular/core';
+import { Component, EventEmitter, Input, Output, TemplateRef } from '@angular/core';
 
 type DetailValue = any;
 type DetailTemplateContext = { $implicit: DetailValue; detail: DetailItem };
@@ -26,7 +26,23 @@ export class DetailsCardComponent {
   details?: DetailItem[] = [];
 
   @Input()
+  showEditButton = false;
+
+  @Input()
+  editButtonLabel = $localize`Edit`;
+
+  @Input()
+  editButtonDisabled = false;
+
+  @Input()
   columns = 4;
+
+  @Output()
+  editClicked = new EventEmitter<void>();
+
+  onEditClick(): void {
+    this.editClicked.emit();
+  }
 
   getVisibleDetails(): DetailItem[] {
     return (this.details || []).filter((detail) => !detail.hidden);

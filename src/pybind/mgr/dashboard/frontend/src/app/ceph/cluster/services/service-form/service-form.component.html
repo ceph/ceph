@@ -201,8 +201,7 @@
                     [invalid]="serviceForm.controls.realm_name.invalid && serviceForm.controls.realm_name.dirty"
                     [invalidText]="authModeError"
                     helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
-                    i18n-helperText
-                    [disabled]="realmList.length === 0  || editing ? true : false">
+                    i18n-helperText>
           @if (realmList.length === 0) {
           <option i18n
                   selected>-- No realm available --
@@ -225,8 +224,7 @@
       <div class="form-item">
         <cds-select id="zonegroup_name"
                     formControlName="zonegroup_name"
-                    label="Zonegroup"
-                    [disabled]="zonegroupList.length === 0  || editing ? true : null">
+                    label="Zonegroup">
           @for (zonegroup of zonegroupList; track zonegroup) {
           <option [value]="zonegroup.name">
             {{ zonegroup.name }}
@@ -238,8 +236,7 @@
       <div class="form-item">
         <cds-select id="zone_name"
                     formControlName="zone_name"
-                    label="Zone"
-                    [disabled]="zoneList.length === 0  || editing ? true : null">
+                    label="Zone">
           @for (zone of zoneList; track zone) {
           <option [value]="zone.name">
             {{ zone.name }}
@@ -1153,112 +1150,8 @@
       }
 
       <!-- Certificate Management UI -->
-      @if (serviceForm.controls.ssl.value && ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway', 'nvmeof', 'nfs'].includes(serviceForm.controls.service_type.value)) {
-      <div>
-        <!-- Current Certificate Section - Only shown in Edit mode when certificate exists -->
-        @if (editing && currentCertificate?.has_certificate) {
-        <div class="form-item">
-          <label class="cds--label fw-bold"
-                 i18n>Current Certificate</label>
-          <div class="row">
-            <div class="col-6">
-              <label class="cds--label"
-                     i18n>Certificate</label>
-              <div>{{ currentCertificate.cert_name }}</div>
-            </div>
-            <div class="col-6">
-              <label class="cds--label"
-                     i18n>Valid Until</label>
-              <div>{{ currentCertificate.expiry_date | cdDate }} • {{ currentCertificate.days_to_expiration }} <span i18n>days left</span></div>
-            </div>
-          </div>
-          <div class="row mt-3">
-            <div class="col-6">
-              <label class="cds--label"
-                     i18n>Status</label>
-              <div class="align-items-center">
-                <cd-icon [type]="statusIconMap[currentCertificate.status] || statusIconMap['default']"></cd-icon>
-                @switch (currentCertificate.status) {
-                  @case ('valid') { <span i18n>Valid</span> }
-                  @case ('expiring') { <span i18n>Expiring soon</span> }
-                  @case ('expired') { <span i18n>Expired</span> }
-                  @case ('not_configured') { <span i18n>Not configured</span> }
-                  @case ('invalid') { <span i18n>Invalid</span> }
-                  @default { {{ currentCertificate.status }} }
-                }
-              </div>
-            </div>
-            <div class="col-6">
-              <label class="cds--label"
-                     i18n>Issuer</label>
-              <div>
-                @if (currentCertificate.signed_by === 'cephadm') {
-                <span i18n>Internal (Cephadm CA)</span>
-                } @else {
-                {{ currentCertificate.issuer || 'External' }}
-                }
-              </div>
-            </div>
-          </div>
-        </div>
-        }
-
-        <!-- Certificate Authority Selection -->
-        <div class="form-item">
-          <label class="cds--label fw-bold"
-                 i18n>Choose Certificate Authority</label>
-          <cds-radio-group formControlName="certificateType"
-                           orientation="horizontal"
-                           helperText="Select how certificates will be signed for this service. Choose internal to use the cluster’s CA, or external to upload certificates signed by your organization.">
-            <cds-radio [value]="CertificateType.internal"
-                       (change)="onCertificateTypeChange(CertificateType.internal)"
-                       i18n>
-              Internal
-            </cds-radio>
-            <cds-radio [value]="CertificateType.external"
-                       (change)="onCertificateTypeChange(CertificateType.external)"
-                       i18n>
-              External
-            </cds-radio>
-          </cds-radio-group>
-        </div>
-
-        @if (showCertSourceChangeWarning) {
-          <cd-alert-panel type="warning"
-                          spacingClass="mb-3"
-                          i18n>
-            Changing the certificate source will redeploy the service daemons to apply the new certificate configuration.
-          </cd-alert-panel>
-        }
-
-        @if (serviceForm.controls.certificateType.value === CertificateType.internal) {
-        <cd-alert-panel type="info"
-                        spacingClass="mb-3"
-                        i18n>
-          Certificate will be generated automatically by Cephadm CA for internal certificate type.
-        </cd-alert-panel>
-        <div class="form-item">
-          <cd-text-label-list formControlName="custom_sans"
-                              label="Custom SAN Entries"
-                              i18n-label
-                              helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
-                              i18n-helperText>
-          </cd-text-label-list>
-        </div>
-        @if (serviceForm.controls.service_type.value === 'rgw'
-             && serviceForm.controls.virtual_host_enabled.value) {
-        <div class="form-item">
-          <cds-checkbox i18n-label
-                        formControlName="wildcard_enabled">
-            Include wildcard certificate for bucket subdomains
-            <cd-help-text i18n>
-              Add wildcard certificates (*.domain) to allow SSL for all bucket subdomains. Required for virtual-host style with SSL.
-            </cd-help-text>
-          </cds-checkbox>
-        </div>
-        }
-        }
-      </div>
+      @if (serviceForm.controls.ssl.value && ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway', 'nfs'].includes(serviceForm.controls.service_type.value)) {
+      <ng-container *ngTemplateOutlet="certificateAuthorityManagement"></ng-container>
       }
 
       <!-- ssl_cert - Only show when SSL is enabled AND certificate type is external -->
@@ -1361,8 +1254,7 @@
           <input cdsPassword
                  type="password"
                  id="grafana_admin_password"
-                 formControlName="grafana_admin_password"
-                 [disabled]="editing ? true:null" />
+                 formControlName="grafana_admin_password" />
         </cds-password-label>
         <cd-copy-2-clipboard-button source="grafana_admin_password"
                                     class="mt-4">
@@ -1396,6 +1288,9 @@
         </fieldset>
       </div>
       @if (serviceForm.controls.enable_mtls.value) {
+      <ng-container *ngTemplateOutlet="certificateAuthorityManagement"></ng-container>
+
+      @if (serviceForm.controls.certificateType.value === CertificateType.external) {
       <!-- root_ca_cert -->
       <div class="form-item">
         <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'root_ca_cert', title: 'Root CA Certificate Input', helperText: 'Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly.', invalidTemplate: invalidRootCaCertError, isRequired: true }"></ng-container>
@@ -1452,6 +1347,7 @@
       </div>
       }
       }
+      }
     </form>
   </section>
   <cd-form-button-panel (submitActionEvent)="onSubmit()"
@@ -1465,6 +1361,115 @@
     Default cipher list used: <a href="https://ssl-config.mozilla.org/#server=nginx"
                                  target="_blank">https://ssl-config.mozilla.org/#server=nginx</a>
   </span>
+</ng-template>
+
+<ng-template #certificateAuthorityManagement>
+  <div [formGroup]="serviceForm">
+  <!-- Current Certificate Section - Only shown in Edit mode when certificate exists -->
+  @if (editing && currentCertificate?.has_certificate) {
+  <div class="form-item">
+    <label class="cds--label cds--type-heading-compact-01"
+           i18n>Current Certificate</label>
+    <div class="row">
+      <div class="col-6">
+        <label class="cds--label"
+               i18n>Certificate</label>
+        <div>{{ currentCertificate.cert_name }}</div>
+      </div>
+      <div class="col-6">
+        <label class="cds--label"
+               i18n>Valid Until</label>
+        <div>{{ currentCertificate.expiry_date | cdDate }} • {{ currentCertificate.days_to_expiration }} <span i18n>days left</span></div>
+      </div>
+    </div>
+    <div class="row mt-3">
+      <div class="col-6">
+        <label class="cds--label"
+               i18n>Status</label>
+        <div class="align-items-center">
+          <cd-icon [type]="statusIconMap[currentCertificate.status] || statusIconMap['default']"></cd-icon>
+          @switch (currentCertificate.status) {
+            @case ('valid') { <span i18n>Valid</span> }
+            @case ('expiring') { <span i18n>Expiring soon</span> }
+            @case ('expired') { <span i18n>Expired</span> }
+            @case ('not_configured') { <span i18n>Not configured</span> }
+            @case ('invalid') { <span i18n>Invalid</span> }
+            @default { {{ currentCertificate.status }} }
+          }
+        </div>
+      </div>
+      <div class="col-6">
+        <label class="cds--label"
+               i18n>Issuer</label>
+        <div>
+          @if (currentCertificate.signed_by === 'cephadm') {
+          <span i18n>Internal (Cephadm CA)</span>
+          } @else {
+          {{ currentCertificate.issuer || 'External' }}
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  }
+
+  <!-- Certificate Authority Selection -->
+  <div class="form-item">
+    <label class="cds--label cds--type-heading-compact-01"
+           i18n>Choose Certificate Authority</label>
+    <cds-radio-group formControlName="certificateType"
+                     orientation="horizontal"
+                     helperText="Select how certificates will be signed for this service. Choose internal to use the cluster’s CA, or external to upload certificates signed by your organization."
+                     i18n-helperText>
+      <cds-radio [value]="CertificateType.internal"
+                 (change)="onCertificateTypeChange(CertificateType.internal)"
+                 i18n>
+        Internal
+      </cds-radio>
+      <cds-radio [value]="CertificateType.external"
+                 (change)="onCertificateTypeChange(CertificateType.external)"
+                 i18n>
+        External
+      </cds-radio>
+    </cds-radio-group>
+  </div>
+
+  @if (showCertSourceChangeWarning) {
+    <cd-alert-panel type="warning"
+                    spacingClass="mb-3"
+                    i18n>
+      Changing the certificate source will redeploy the service daemons to apply the new certificate configuration.
+    </cd-alert-panel>
+  }
+
+  @if (serviceForm.controls.certificateType.value === CertificateType.internal) {
+  <cd-alert-panel type="info"
+                  spacingClass="mb-3"
+                  i18n>
+    Certificate will be generated automatically by Cephadm CA for internal certificate type.
+  </cd-alert-panel>
+  <div class="form-item">
+    <cd-text-label-list formControlName="custom_sans"
+                        label="Custom SAN Entries"
+                        i18n-label
+                        helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
+                        i18n-helperText>
+    </cd-text-label-list>
+  </div>
+  @if (serviceForm.controls.service_type.value === 'rgw'
+       && serviceForm.controls.virtual_host_enabled.value) {
+  <div class="form-item">
+    <cds-checkbox i18n-label
+                  formControlName="wildcard_enabled">
+      Include wildcard certificate for bucket subdomains
+      <cd-help-text i18n>
+        Add wildcard certificates (*.domain) to allow SSL for all bucket subdomains. Required for virtual-host style with SSL.
+      </cd-help-text>
+    </cds-checkbox>
+  </div>
+  }
+  }
+  </div>
 </ng-template>
 
 <ng-template #fileUploaderTextarea

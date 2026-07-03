@@ -45,6 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -137,7 +138,6 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
 import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
-import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
