@@ -4161,6 +4161,69 @@ Then run the following:
         )
         return f'Key for {key_name} set correctly'
 
+
+    @handle_orch_error
+    def cert_store_vault_issue(
+        self,
+        consumer: str,
+        common_name: str,
+        cert_name: str = "",
+        service_name: str = "",
+        hostname: str = "",
+        ca_cert_name: str = "",
+        alt_names: Optional[List[str]] = None,
+        ip_sans: Optional[List[str]] = None,
+        pki_mount: Optional[str] = None,
+        role: Optional[str] = None,
+        ttl: Optional[str] = None,
+    ) -> str:
+        """Issue a Vault-managed certificate/key pair into the certmgr store."""
+        if consumer not in self.cert_mgr.list_consumers():
+            raise OrchestratorError(
+                f"Invalid service: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid bindings."
+            )
+
+        if not cert_name:
+            cert_names = self.cert_mgr.list_consumer_known_certificates(consumer)
+            if len(cert_names) == 1:
+                cert_name = cert_names[0]
+            elif len(cert_names) > 1:
+                raise OrchestratorError(
+                    f"Service '{consumer}' has many certificates, please use the --cert-name argument "
+                    f"to specify which one from the list: {cert_names}"
+                )
+            else:
+                raise OrchestratorError(f"Service '{consumer}' has no registered certificate bindings")
+
+        scope_errors = {
+            TLSObjectScope.HOST: "Certificate is bound to a host. Please specify the host using --hostname.",
+            TLSObjectScope.SERVICE: "Certificate is bound to a service. Please specify the service using --service-name.",
+            TLSObjectScope.UNKNOWN: f"Unknown certificate '{cert_name}'. Use 'ceph orch certmgr cert ls' to list supported certificates.",
+        }
+        scope = self.cert_mgr.get_cert_scope(cert_name)
+        if (scope == TLSObjectScope.HOST and not hostname) or (scope == TLSObjectScope.SERVICE and not service_name):
+            raise OrchestratorError(scope_errors[scope])
+        if scope == TLSObjectScope.UNKNOWN:
+            raise OrchestratorError(scope_errors[scope])
+
+        key_name = cert_name.replace('_cert', '_key')
+        self.cert_mgr.issue_vault_certificate(
+            cert_name=cert_name,
+            key_name=key_name,
+            common_name=common_name,
+            service_name=service_name or None,
+            host=hostname or None,
+            ca_cert_name=ca_cert_name or None,
+            alt_names=alt_names or [],
+            ip_sans=ip_sans or [],
+            pki_mount=pki_mount,
+            role=role,
+            ttl=ttl,
+        )
+        target = service_name or hostname
+        target_info = f" for {target}" if target else ""
+        return f"Vault-managed certificate/key pair for {cert_name}{target_info} issued correctly"
+
     @handle_orch_error
     def cert_store_rm_cert(
         self,

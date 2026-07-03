@@ -14,7 +14,7 @@ from cephadm.tlsobject_types import (Cert,
                                      TLSCredentials,
                                      TLSObjectManager)
 from cephadm.tlsobject_store import TLSObjectStore
-from cephadm.vault import VaultIssuerConfig
+from cephadm.vault import VaultIssuerConfig, VaultPKIClient
 from cephadm.cert_metadata import VaultCertificateMetadata, VaultCertificateMetadataStore
 from cephadm.cert_issuer import CertificateIssuer, build_certificate_issuers
 
@@ -312,6 +312,140 @@ class CertMgr:
                                       host: Optional[str] = None) -> bool:
         target = self._vault_metadata_target(cert_name, service_name, host)
         return self.vault_cert_metadata_store.remove(cert_name, target)
+
+
+    def _ensure_vault_issue_target(self, cert_name: str, key_name: str,
+                                   service_name: Optional[str] = None,
+                                   host: Optional[str] = None) -> Tuple[TLSObjectScope, Optional[str]]:
+        cert_scope = self.get_cert_scope(cert_name)
+        key_scope = self.get_key_scope(key_name)
+        if cert_scope == TLSObjectScope.UNKNOWN:
+            raise TLSObjectException(f"Unknown certificate '{cert_name}'. Cannot issue it from Vault.")
+        if key_scope == TLSObjectScope.UNKNOWN:
+            raise TLSObjectException(f"Unknown key '{key_name}'. Cannot issue certificate '{cert_name}' from Vault.")
+        if cert_scope != key_scope:
+            raise TLSObjectException(
+                f"Certificate '{cert_name}' and key '{key_name}' must have the same scope to be issued from Vault. "
+                f"Got cert scope '{cert_scope.value}' and key scope '{key_scope.value}'."
+            )
+        if cert_scope == TLSObjectScope.SERVICE:
+            if not service_name:
+                raise TLSObjectException(f"Vault-managed certificate '{cert_name}' is service-scoped. Please specify service_name.")
+            return cert_scope, service_name
+        if cert_scope == TLSObjectScope.HOST:
+            if not host:
+                raise TLSObjectException(f"Vault-managed certificate '{cert_name}' is host-scoped. Please specify host.")
+            return cert_scope, host
+        return cert_scope, None
+
+    def _ensure_vault_ca_scope(self, ca_cert_name: Optional[str], scope: TLSObjectScope) -> None:
+        if not ca_cert_name:
+            return
+        ca_scope = self.get_cert_scope(ca_cert_name)
+        if ca_scope == TLSObjectScope.UNKNOWN:
+            raise TLSObjectException(f"Unknown CA certificate '{ca_cert_name}'. Cannot save Vault issuing CA.")
+        if ca_scope != scope:
+            raise TLSObjectException(
+                f"CA certificate '{ca_cert_name}' must have the same scope as the Vault-managed certificate. "
+                f"Got CA scope '{ca_scope.value}' and certificate scope '{scope.value}'."
+            )
+
+    def _ensure_vault_overwrite_allowed(self, cert_name: str, key_name: str,
+                                        service_name: Optional[str] = None,
+                                        host: Optional[str] = None,
+                                        ca_cert_name: Optional[str] = None) -> None:
+        objects = [
+            ('certificate', cert_name, self.cert_store.get_tlsobject_if_exists(cert_name, service_name, host)),
+            ('key', key_name, self.key_store.get_tlsobject_if_exists(key_name, service_name, host)),
+        ]
+        if ca_cert_name:
+            objects.append(
+                ('CA certificate', ca_cert_name, self.cert_store.get_tlsobject_if_exists(ca_cert_name, service_name, host))
+            )
+        for obj_type, obj_name, obj in objects:
+            if not obj:
+                continue
+            if not getattr(obj, 'editable', True) and getattr(obj, 'managed_by', TLSObjectManager.CEPHADM) != TLSObjectManager.VAULT:
+                raise TLSObjectException(
+                    f"Cannot overwrite non-editable {obj_type} '{obj_name}' with Vault-managed material."
+                )
+
+    def issue_vault_certificate(self,
+                                cert_name: str,
+                                key_name: str,
+                                common_name: str,
+                                service_name: Optional[str] = None,
+                                host: Optional[str] = None,
+                                ca_cert_name: Optional[str] = None,
+                                alt_names: Optional[List[str]] = None,
+                                ip_sans: Optional[List[str]] = None,
+                                pki_mount: Optional[str] = None,
+                                role: Optional[str] = None,
+                                ttl: Optional[str] = None) -> TLSCredentials:
+        """Issue a certificate from Vault PKI and store it in certmgr.
+
+        This is the manual Vault enrollment path. It intentionally stores the
+        resulting cert/key as non-editable and managed_by=vault so existing
+        services can consume the material through certificate_source=reference.
+        Renewal is not enabled here; later commits use the persisted metadata.
+        """
+        scope, target = self._ensure_vault_issue_target(cert_name, key_name, service_name, host)
+        self._ensure_vault_ca_scope(ca_cert_name, scope)
+        self._ensure_vault_overwrite_allowed(cert_name, key_name, service_name, host, ca_cert_name)
+
+        config = self.get_vault_issuer_config()
+        client = VaultPKIClient(config, self.get_vault_token())
+        creds = client.issue_certificate(
+            common_name=common_name,
+            alt_names=alt_names or [],
+            ip_sans=ip_sans or [],
+            ttl=ttl,
+            mount=pki_mount,
+            role=role,
+        )
+
+        self.save_cert(
+            cert_name,
+            creds.cert,
+            service_name=service_name,
+            host=host,
+            managed_by=TLSObjectManager.VAULT,
+            editable=False,
+        )
+        self.save_key(
+            key_name,
+            creds.key,
+            service_name=service_name,
+            host=host,
+            managed_by=TLSObjectManager.VAULT,
+            editable=False,
+        )
+        if ca_cert_name and creds.ca_cert:
+            self.save_cert(
+                ca_cert_name,
+                creds.ca_cert,
+                service_name=service_name,
+                host=host,
+                managed_by=TLSObjectManager.VAULT,
+                editable=False,
+            )
+
+        resolved_config = self.get_vault_issuer_config()
+        metadata = VaultCertificateMetadata(
+            cert_name=cert_name,
+            key_name=key_name,
+            ca_cert_name=ca_cert_name if creds.ca_cert else None,
+            scope=scope,
+            target=target,
+            pki_mount=pki_mount or resolved_config.pki_mount,
+            role=role or resolved_config.role,
+            ttl=ttl or resolved_config.ttl,
+            common_name=common_name,
+            alt_names=alt_names or [],
+            ip_sans=ip_sans or [],
+        )
+        self.save_vault_certificate_metadata(metadata)
+        return creds
 
     def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """

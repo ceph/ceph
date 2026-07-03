@@ -2462,6 +2462,173 @@ class TestVaultCertificateMetadata(unittest.TestCase):
         assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
 
 
+
+class TestVaultManualIssue(unittest.TestCase):
+
+    def _cert_mgr(self) -> CertMgr:
+        mgr = MockCephadmOrchestrator()
+        mgr.certmgr_vault_addr = 'https://vault.example.com:8200'
+        mgr.certmgr_vault_pki_mount = 'pki'
+        mgr.certmgr_vault_role = 'ceph-rgw'
+        mgr.certmgr_vault_ttl = '720h'
+        mgr.certmgr_vault_cacert = None
+        mgr.certmgr_vault_verify_tls = True
+        cm = CertMgr(mgr)
+        cm.register_cert_key_pair(
+            'rgw',
+            'rgw_ssl_cert',
+            'rgw_ssl_key',
+            TLSObjectScope.SERVICE,
+            ca_cert_name='rgw_ssl_ca_cert',
+        )
+        cm.cert_store = TLSObjectStore(mgr, Cert, cm.known_certs, cm.is_cephadm_signed_object)
+        cm.key_store = TLSObjectStore(mgr, PrivKey, cm.known_keys, cm.is_cephadm_signed_object)
+        cm.vault_cert_metadata_store = VaultCertificateMetadataStore(mgr)
+        cm.set_vault_token('s.vault-token')
+        return cm
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_stores_cert_key_ca_and_metadata(self, m_client_cls):
+        cm = self._cert_mgr()
+        m_client = m_client_cls.return_value
+        m_client.issue_certificate.return_value = TLSCredentials(
+            cert='---VAULT CERT---',
+            key='---VAULT KEY---',
+            ca_cert='---VAULT CA---',
+        )
+
+        creds = cm.issue_vault_certificate(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            service_name='rgw.foo',
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+            pki_mount='pki-int',
+            role='ceph-rgw-int',
+            ttl='24h',
+        )
+
+        assert creds.cert == '---VAULT CERT---'
+        m_client_cls.assert_called_once_with(cm.get_vault_issuer_config(), 's.vault-token')
+        m_client.issue_certificate.assert_called_once_with(
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+            ttl='24h',
+            mount='pki-int',
+            role='ceph-rgw-int',
+        )
+
+        cert_obj = cm.cert_store.get_tlsobject('rgw_ssl_cert', service_name='rgw.foo')
+        key_obj = cm.key_store.get_tlsobject('rgw_ssl_key', service_name='rgw.foo')
+        ca_obj = cm.cert_store.get_tlsobject('rgw_ssl_ca_cert', service_name='rgw.foo')
+        assert cert_obj.cert == '---VAULT CERT---'
+        assert key_obj.key == '---VAULT KEY---'
+        assert ca_obj.cert == '---VAULT CA---'
+        assert cert_obj.managed_by == TLSObjectManager.VAULT
+        assert key_obj.managed_by == TLSObjectManager.VAULT
+        assert ca_obj.managed_by == TLSObjectManager.VAULT
+        assert cert_obj.editable is False
+        assert key_obj.editable is False
+        assert ca_obj.editable is False
+
+        metadata = cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo')
+        assert metadata == VaultCertificateMetadata(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            scope=TLSObjectScope.SERVICE,
+            target='rgw.foo',
+            pki_mount='pki-int',
+            role='ceph-rgw-int',
+            ttl='24h',
+            common_name='rgw.example.com',
+            alt_names=['rgw.example.com', 'rgw.internal'],
+            ip_sans=['10.0.0.10'],
+        )
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_uses_global_config_defaults_in_metadata(self, m_client_cls):
+        cm = self._cert_mgr()
+        m_client_cls.return_value.issue_certificate.return_value = TLSCredentials(
+            cert='---VAULT CERT---',
+            key='---VAULT KEY---',
+            ca_cert='',
+        )
+
+        cm.issue_vault_certificate(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            service_name='rgw.foo',
+            common_name='rgw.example.com',
+        )
+
+        metadata = cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo')
+        assert metadata.pki_mount == 'pki'
+        assert metadata.role == 'ceph-rgw'
+        assert metadata.ttl == '720h'
+        assert metadata.ca_cert_name is None
+
+    def test_issue_vault_certificate_validates_scope_and_registered_names(self):
+        cm = self._cert_mgr()
+
+        with pytest.raises(TLSObjectException, match='service-scoped'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                common_name='rgw.example.com',
+            )
+
+        with pytest.raises(TLSObjectException, match='Unknown certificate'):
+            cm.issue_vault_certificate(
+                cert_name='unknown_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+        with pytest.raises(TLSObjectException, match='Unknown key'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='unknown_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+    @mock.patch('cephadm.cert_mgr.VaultPKIClient')
+    def test_issue_vault_certificate_failure_preserves_existing_material(self, m_client_cls):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'old-cert', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=True)
+        cm.save_key('rgw_ssl_key', 'old-key', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=True)
+        m_client_cls.return_value.issue_certificate.side_effect = VaultClientError('Vault unavailable')
+
+        with pytest.raises(VaultClientError, match='Vault unavailable'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+        assert cm.get_cert('rgw_ssl_cert', service_name='rgw.foo') == 'old-cert'
+        assert cm.get_key('rgw_ssl_key', service_name='rgw.foo') == 'old-key'
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
+
+    def test_issue_vault_certificate_rejects_non_editable_non_vault_overwrite(self):
+        cm = self._cert_mgr()
+        cm.save_cert('rgw_ssl_cert', 'inline-cert', service_name='rgw.foo', managed_by=TLSObjectManager.USER, editable=False)
+
+        with pytest.raises(TLSObjectException, match='Cannot overwrite non-editable certificate'):
+            cm.issue_vault_certificate(
+                cert_name='rgw_ssl_cert',
+                key_name='rgw_ssl_key',
+                service_name='rgw.foo',
+                common_name='rgw.example.com',
+            )
+
+
 class TestVaultIssuerConfig(unittest.TestCase):
 
     class MockMgr:
