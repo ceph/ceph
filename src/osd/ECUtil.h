@@ -25,6 +25,7 @@
 #include "include/encoding.h"
 #include "common/interval_map.h"
 #include "common/mini_flat_map.h"
+#include "os/Transaction.h"
 
 #include "osd_types.h"
 
@@ -1152,5 +1153,28 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
+
+/**
+ * Compute the on-disk file size of a shard object after applying the ops in
+ * a single shard's ObjectStore::Transaction.
+ *
+ * @param txn        The shard transaction to parse (taken by value; consumed).
+ * @param target     The ghobject_t whose size changes should be tracked.
+ *                   Only OP_WRITE, OP_ZERO and OP_TRUNCATE on this exact
+ *                   object affect the returned size; all other objects (e.g.
+ *                   rollback-stash gen-objects) are ignored.
+ * @param orig_size  Starting shard file size, used when the transaction
+ *                   contains no size-altering ops for @p target.
+ * @return           Resulting shard file size after replaying the transaction.
+ *
+ * Rules applied per op on @p target:
+ *   OP_WRITE / OP_ZERO  — extend if (off + len) > current size
+ *   OP_TRUNCATE         — set size to op->off  (grows or shrinks)
+ */
+uint64_t compute_shard_size_from_transaction(
+  ceph::os::Transaction txn,
+  const ghobject_t &target,
+  uint64_t orig_size);
+
 }
 

@@ -1146,6 +1146,7 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
         &m->t);
     }
   }
+
   m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
   m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
 }
