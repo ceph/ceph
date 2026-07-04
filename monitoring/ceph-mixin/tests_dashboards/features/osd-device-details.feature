@@ -1,5 +1,8 @@
 Feature: OSD device details
 
+  Background:
+    Given the dashboard is `osd-device-details`
+
 Scenario: "Test Physical Device Latency for $osd - Reads"
   Given the following series:
     | metrics | values |
