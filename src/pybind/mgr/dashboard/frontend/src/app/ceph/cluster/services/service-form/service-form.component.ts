@@ -1198,6 +1198,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     this.getDefaultPlacementCount(selectedServiceType);
 
+    if (selectedServiceType === 'nvmeof' && this.rbdPools?.length > 0) {
+      this.serviceForm.get('pool').setValue(this.rbdPools[0].pool_name);
+    }
+
     if (selectedServiceType === 'rgw') {
       this.setRgwFields();
     }
@@ -1374,13 +1378,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['ssl'] = true;
           serviceSpec['certificate_source'] =
             values['certificateType'] === CertificateType.internal ? 'cephadm-signed' : 'inline';
-          if (
-            values['certificateType'] === CertificateType.internal &&
-            values['custom_sans']?.length > 0
-          ) {
-            serviceSpec['custom_sans'] = values['custom_sans'];
+          if (values['certificateType'] === CertificateType.internal) {
+            if (values['custom_sans']?.length > 0) {
+              serviceSpec['custom_sans'] = values['custom_sans'];
+            }
           }
           if (values['certificateType'] === CertificateType.external) {
+            serviceSpec['pool'] = values['pool'];
+            serviceSpec['service_id'] = `${values['pool']}.${values['group']}`;
             serviceSpec['root_ca_cert'] = values['root_ca_cert'];
             serviceSpec['client_cert'] = values['client_cert'];
             serviceSpec['client_key'] = values['client_key'];
