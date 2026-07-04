@@ -106,11 +106,19 @@ OSD::OSD(int id, uint32_t nonce,
     mgrc{new crimson::mgr::Client{
       *public_msgr,
       *this,
+      // one lambda to perf-query them all
       [this](const ConfigPayload &config_payload) {
 	return set_perf_queries(config_payload);
       },
+      // one lambda to help _send_report() report them all
       [this] {
 	return get_perf_reports();
+      },
+      // one lambda to log-warn if pg stats report is stuck
+      [this](uint32_t skips) {
+	clog->warn() << fmt::format(
+	  "pg stats report stuck for ~{}s, store may be overloaded",
+	  skips * 5);
       }
     }},
     store{store},
