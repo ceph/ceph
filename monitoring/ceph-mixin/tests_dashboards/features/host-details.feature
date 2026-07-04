@@ -1,5 +1,8 @@
 Feature: Host Details Dashboard
 
+  Background:
+    Given the dashboard is `host-details`
+
 Scenario: "Test OSD"
   Given the following series:
     | metrics | values |
