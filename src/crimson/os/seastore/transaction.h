@@ -431,15 +431,18 @@ public:
       auto &mextent = *i;
       write_set.erase(mextent);
       extent_len_t off = 0;
-      if (new_paddr.is_absolute_segmented()) {
-        assert(mextent.get_paddr().as_seg_paddr().get_segment_id()
-          == old_paddr.as_seg_paddr().get_segment_id());
+      if (old_paddr.is_absolute_segmented()) {
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_id() ==
+          old_paddr.as_seg_paddr().get_segment_id());
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_off() >=
+          old_paddr.as_seg_paddr().get_segment_off());
         assert(mextent.get_paddr().as_seg_paddr().get_segment_off()
-          >= old_paddr.as_seg_paddr().get_segment_off());
-        off = mextent.get_paddr().as_seg_paddr().get_segment_off()
-          - old_paddr.as_seg_paddr().get_segment_off();
+                + mextent.get_length() <=
+          old_paddr.as_seg_paddr().get_segment_off() + len);
+        off = mextent.get_paddr().as_seg_paddr().get_segment_off() -
+          old_paddr.as_seg_paddr().get_segment_off();
       } else {
-        assert(new_paddr.is_absolute_random_block());
+        assert(mextent.get_paddr().is_absolute_random_block());
         off = mextent.get_paddr().as_blk_paddr().get_device_off() -
           old_paddr.as_blk_paddr().get_device_off();
       }
