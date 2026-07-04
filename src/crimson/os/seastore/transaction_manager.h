@@ -1521,8 +1521,19 @@ private:
     assert(cursor.get_pos() != BTREENODE_POS_NULL);
     ceph_assert(t.get_trans_id() == cursor.ctx.trans.get_trans_id());
     auto p = cursor.parent->cast<LBALeafNode>();
-    return p->template get_child<LogicalChildNode>(
+    auto v = p->template get_child<LogicalChildNode>(
       t, cursor.ctx.cache, cursor.get_pos(), cursor.key);
+    if (v.has_child()) {
+      return v.get_child_fut_as<LogicalChildNode>(
+      ).si_then([&t](auto lext) {
+        if (auto shadow = lext->get_shadow();\
+            shadow && shadow->is_stable()) {
+          std::ignore = t.maybe_add_to_read_set(shadow);
+        }
+        return lext;
+      });
+    }
+    return v;
   }
 
   base_iertr::future<LogicalChildNodeRef> read_cursor_by_type(
