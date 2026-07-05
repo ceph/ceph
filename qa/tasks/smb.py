@@ -554,6 +554,7 @@ def workunit(ctx, config):
     _ssh_keys_config = config.get('ssh_keys', {})
     _config['enable_ssh_keys'] = _ssh_keys_config not in (False, None)
     _config['testdir'] = misc.get_testdir(ctx)
+    _config['params'] = config.get('params')  # freeform test parameters
     log.info('Passing workunit config: %r', _config)
     with contextlib.ExitStack() as estack:
         if _config['enable_ssh_keys']:
@@ -596,6 +597,8 @@ def write_metadata_file(ctx, config, *, roles=None):
         ]
     if config.get('testdir'):
         obj['testdir'] = config['testdir']
+    if config.get('params'):
+        obj['params'] = config['params']
     data = json.dumps(obj)
     log.debug('smb metadata: %r', obj)
 
