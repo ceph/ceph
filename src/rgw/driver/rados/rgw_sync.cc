@@ -1360,6 +1360,17 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        if (section == "bucket.instance" &&
+            cct->_conf->rgw_inject_delay_sec > 0 &&
+            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                "delay_meta_sync_bucket_instance_store") {
+          yield {
+            utime_t dur;
+            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket.instance metadata store"));
+            wait(dur);
+          }
+        }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
