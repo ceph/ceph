@@ -273,7 +273,7 @@ BuildRequires:  libatomic
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:	gperftools-devel >= 2.7.90
+BuildRequires:	pkgconfig(libtcmalloc) >= 2.7.90
 %endif
 %if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
@@ -309,7 +309,7 @@ BuildRequires:  procps
 BuildRequires:	python3
 BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools
-BuildRequires:	python3-Cython
+BuildRequires:	python3dist(cython)
 BuildRequires:	python3-pip
 BuildRequires:	python3-wheel
 BuildRequires:	pkgconfig(snappy)
@@ -351,6 +351,7 @@ BuildRequires:	python3dist(natsort)
 %endif
 BuildRequires:	pkgconfig(thrift) >= 0.13.0
 BuildRequires:  pkgconfig(re2)
+BuildRequires:	pkgconfig(numa)
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
@@ -422,7 +423,6 @@ Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:  libatomic
 BuildRequires:  ninja-build
-BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  CUnit-devel
 BuildRequires:	python3-devel
@@ -472,9 +472,6 @@ BuildRequires:  openEuler-rpm-config
 # pkgconfig(cryptopp)), while el10 and SUSE's cryptopp/libcryptopp-devel
 # provide pkgconfig(libcryptopp); accept either.
 BuildRequires:  (pkgconfig(libcryptopp) or pkgconfig(cryptopp))
-%if 0%{?suse_version}
-BuildRequires:  libnuma-devel
-%endif
 %endif
 %if 0%{?rhel}
 BuildRequires: python-rpm-macros
