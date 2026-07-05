@@ -29,7 +29,7 @@ namespace rgw { namespace sal {
 class POSIXDriver;
 class POSIXBucket;
 class POSIXObject;
-
+using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
 
 /* integration w/bucket listing cache */
@@ -110,6 +110,7 @@ protected:
 public:
   static constexpr uint32_t FLAG_NONE =      0x0;
   static constexpr uint32_t FLAG_CURRENT =   0x2;
+  static constexpr uint32_t FLAG_DELETE_MARKER =   0x4;
 
   FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
   FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
@@ -135,7 +136,7 @@ public:
   virtual int open(const DoutPrefixProvider *dpp) = 0;
   virtual int close() = 0;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) = 0;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) = 0;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs);
@@ -166,7 +167,7 @@ public:
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
@@ -198,7 +199,7 @@ public:
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   template <typename F>
     int for_each(const DoutPrefixProvider* dpp, const F& func);
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, std::string dst_name);
@@ -275,7 +276,7 @@ public:
   virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
   virtual std::unique_ptr<FSEnt> clone_base() override {
@@ -331,11 +332,12 @@ public:
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
-  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual std::string get_cur_version() override;
   std::string get_new_instance();
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
+  int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
   virtual std::unique_ptr<FSEnt> clone_base() override {
@@ -998,6 +1000,7 @@ private:
   RGWAccessControlPolicy acls;
   std::unique_ptr<FSEnt> ent;
   std::map<std::string, int64_t> parts;
+  DeleteResult del_result;
 
 public:
   struct POSIXReadOp : ReadOp {
@@ -1149,6 +1152,7 @@ public:
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(ObjectType type);
   bool versioned() { return bucket->versioned(); }
+  DeleteResult get_result() {return del_result;}
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
