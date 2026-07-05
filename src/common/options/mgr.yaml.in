@@ -56,12 +56,28 @@ options:
   long_desc: When mgr_stats_period_autotune is enabled, the Manager will increase
     the stats reporting period if the incoming message queue exceeds this threshold.
     Higher values make the system less sensitive to temporary queue spikes but may
-    allow longer periods of Manager overload.
+    allow longer periods of Manager overload. Should be well below the smallest
+    of mgr_mon_messages, mgr_mds_messages, and mgr_osd_messages so the autotune
+    fires before any per-connection throttle saturates.
   default: 100
   services:
   - mgr
   see_also:
   - mgr_stats_period
+- name: mgr_dispatch_throttle_bytes
+  type: size
+  level: advanced
+  desc: Limit total size of messages waiting in the mgr dispatch queue
+  long_desc: Sets the maximum total bytes of messages queued in the mgr dispatch
+    throttle. Overrides ms_dispatch_throttle_bytes for the mgr process. Should be
+    set to at least the sum of all per-type byte throttles (mgr_osd_bytes +
+    mgr_mds_bytes + mgr_client_bytes) to avoid the dispatch queue becoming a
+    bottleneck before per-connection throttles engage.
+  default: 1_G
+  services:
+  - mgr
+  see_also:
+  - ms_dispatch_throttle_bytes
 - name: mgr_client_bytes
   type: size
   level: dev
