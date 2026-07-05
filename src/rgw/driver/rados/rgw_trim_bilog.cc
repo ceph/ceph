@@ -458,7 +458,6 @@ class RGWReadRemoteStatusShardsCR : public RGWCoroutine {
   rgw::sal::RadosStore* const store;
   CephContext *cct;
   RGWHTTPManager *http;
-  const RGWBucketInfo* bucket_info;
   std::string bucket_instance;
   const rgw_zone_id zid;
   const std::string& zone_id;
@@ -469,13 +468,12 @@ public:
 				    rgw::sal::RadosStore* const store,
             CephContext *cct,
             RGWHTTPManager *http,
-            const RGWBucketInfo* bucket_info,
 				    std::string bucket_instance,
             const rgw_zone_id zid,
             const std::string& zone_id,
             StatusShards *p)
     : RGWCoroutine(cct), dpp(dpp), store(store),
-      cct(cct), http(http), bucket_info(bucket_info), bucket_instance(bucket_instance),
+      cct(cct), http(http), bucket_instance(bucket_instance),
       zid(zid), zone_id(zone_id), p(p) {}
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -857,7 +855,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       auto p = peer_status.begin();
       for (auto& zid : zids) {
-        spawn(new RGWReadRemoteStatusShardsCR(dpp, store, cct, http, pbucket_info, bucket_instance, zid, zone_id, &*p), false);
+        spawn(new RGWReadRemoteStatusShardsCR(dpp, store, cct, http, bucket_instance, zid, zone_id, &*p), false);
         ++p;
       }
     }
