@@ -201,7 +201,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.goToListView();
+          this.goToListView();;
         },
         error: () => {
           this.groupForm.setErrors({ cdSubmitButton: true });
