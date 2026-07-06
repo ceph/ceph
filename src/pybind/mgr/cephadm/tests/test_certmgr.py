@@ -18,8 +18,10 @@ from cephadm.tlsobject_types import (
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
-from cephadm.vault import VaultClientError, VaultIssuerConfig, VaultPKIClient
-from cephadm.services.cephadmservice import CephadmService, CERTIFICATE_SOURCE_VAULT
+from cephadm.vault import VaultAuthError, VaultClientError, VaultIssuerConfig, VaultPKIClient
+from ceph.deployment.service_spec import CertificateSource
+from cephadm.services.cephadmservice import CephadmService
+from orchestrator import OrchestratorError
 from cephadm.cert_metadata import (
     VAULT_CERT_METADATA_STORE_PREFIX,
     VaultCertificateMetadata,
@@ -312,6 +314,11 @@ TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
 
 class TestCertificateSourceVaultServiceSupport:
 
+    class VaultTestService(CephadmService):
+        @property
+        def TYPE(self) -> str:
+            return 'rgw'
+
     def _service(self):
         mgr = mock.MagicMock()
         mgr.inventory.get_addr.return_value = '10.0.0.10'
@@ -319,12 +326,12 @@ class TestCertificateSourceVaultServiceSupport:
         mgr.cert_mgr = mock.MagicMock()
         mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = None
         mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = None
-        return CephadmService(mgr)
+        return self.VaultTestService(mgr)
 
     def _spec(self):
         spec = mock.MagicMock()
         spec.service_name.return_value = 'rgw.foo'
-        spec.certificate_source = CERTIFICATE_SOURCE_VAULT
+        spec.certificate_source = CertificateSource.VAULT.value
         spec.custom_sans = ['rgw.alt.example.com']
         return spec
 
@@ -359,7 +366,7 @@ class TestCertificateSourceVaultServiceSupport:
             ca_cert_name='rgw_ssl_ca_cert',
             service_name='rgw.foo',
             host='host1',
-            common_name='rgw.alt.example.com',
+            common_name='rgw.example.com',
             alt_names=['rgw.alt.example.com', 'rgw.example.com'],
             ip_sans=['10.0.0.10'],
         )
@@ -1067,6 +1074,8 @@ class TestCertMgr(object):
                     )
                     for key_name, (target, key_value, scope) in chain(keys.items(), unknown_keys.items())
                 }
+            elif key == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
             else:
                 raise Exception(f'Unexpected key access in store: {key}')
 
@@ -1153,6 +1162,9 @@ class TestCertMgr(object):
                     "-----BEGIN PRIVATE KEY-----\nSNIP\n-----END PRIVATE KEY-----"  # raw PEM
                 )
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -1271,6 +1283,9 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_KEY_PREFIX}totally_unknown_key_global': _dump_key(None, 'ignored-key-3', TLSObjectScope.GLOBAL),
                 }
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -2633,6 +2648,11 @@ class TestVaultCertificateMetadata(unittest.TestCase):
         assert cm.rm_cert('rgw_ssl_cert', service_name='rgw.foo')
         assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
 
+        cm.save_vault_certificate_metadata(metadata)
+        cm.key_store = mock.Mock()
+        cm.key_store.rm_tlsobject.return_value = True
+        assert cm.rm_key('rgw_ssl_key', service_name='rgw.foo')
+        assert cm.get_vault_certificate_metadata('rgw_ssl_cert', service_name='rgw.foo') is None
 
 
 class TestVaultManualIssue(unittest.TestCase):
@@ -3124,6 +3144,23 @@ class TestVaultPKIClient(unittest.TestCase):
             client.issue_certificate(common_name='rgw.example.com')
 
     @mock.patch('cephadm.vault.urlopen')
+    def test_issue_certificate_reports_vault_auth_errors(self, m_urlopen):
+        from io import BytesIO
+        from urllib.error import HTTPError
+
+        m_urlopen.side_effect = HTTPError(
+            'https://vault.example.com:8200/v1/pki/issue/ceph-rgw',
+            403,
+            'Forbidden',
+            {},
+            BytesIO(json.dumps({'errors': ['permission denied']}).encode('utf-8')),
+        )
+        client = VaultPKIClient(self._config(), 's.expired-token')
+
+        with pytest.raises(VaultAuthError, match='token may be invalid or expired'):
+            client.issue_certificate(common_name='rgw.example.com')
+
+    @mock.patch('cephadm.vault.urlopen')
     def test_issue_certificate_reports_invalid_json(self, m_urlopen):
         class InvalidJsonResponse:
             def __enter__(self):
@@ -3140,6 +3177,32 @@ class TestVaultPKIClient(unittest.TestCase):
 
         with pytest.raises(VaultClientError, match='invalid JSON'):
             client.issue_certificate(common_name='rgw.example.com')
+
+
+class TestVaultCertSourceValidation:
+
+    def _vault_spec(self):
+        spec = mock.MagicMock()
+        spec.service_name.return_value = 'rgw.foo'
+        spec.service_type = 'rgw'
+        spec.certificate_source = CertificateSource.VAULT.value
+        spec.is_using_certificates_source.return_value = False
+        return spec
+
+    def test_check_cert_source_rejects_vault_when_config_incomplete(self, cephadm_module):
+        spec = self._vault_spec()
+
+        with pytest.raises(OrchestratorError, match='Vault issuer config is incomplete'):
+            cephadm_module._check_cert_source(spec)
+
+    def test_check_cert_source_rejects_vault_when_token_missing(self, cephadm_module):
+        spec = self._vault_spec()
+        cephadm_module.certmgr_vault_addr = 'https://vault.example.com:8200'
+        cephadm_module.certmgr_vault_pki_mount = 'pki'
+        cephadm_module.certmgr_vault_role = 'ceph-rgw'
+
+        with pytest.raises(OrchestratorError, match='no Vault token is configured'):
+            cephadm_module._check_cert_source(spec)
 
 
 class TestTLSObjectStore(unittest.TestCase):
