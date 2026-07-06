@@ -6,8 +6,8 @@ import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
 import { of } from 'rxjs';
 import {
-  RepeaFrequencyPlural,
-  RepeaFrequencySingular,
+  RepeatFrequencyPlural,
+  RepeatFrequencySingular,
   RepeatFrequency
 } from '../enum/repeat-frequency.enum';
 import { RetentionFrequencyCopy } from '../enum/retention-frequency.enum';
@@ -161,12 +161,13 @@ export class CephfsSnapshotScheduleService {
   }
 
   parseScheduleCopy(schedule: string): string {
-    const scheduleArr = schedule.split('');
-    const interval = Number(scheduleArr.filter((x) => !isNaN(Number(x))).join(''));
-    const frequencyUnit = scheduleArr[scheduleArr.length - 1];
-    const frequency =
-      interval > 1 ? RepeaFrequencyPlural[frequencyUnit] : RepeaFrequencySingular[frequencyUnit];
-    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${frequency}`;
+    const match = schedule.match(/^(\d+)([a-zA-Z])$/);
+    if (!match) return schedule;
+    const interval = Number(match[1]);
+    const unit = match[2];
+    const label =
+      interval > 1 ? RepeatFrequencyPlural[unit] : RepeatFrequencySingular[unit];
+    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${label}`;
   }
 
   parseRetentionCopy(retention: string | Record<string, number>): string[] {

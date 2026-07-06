@@ -221,7 +221,9 @@ export class CephfsSnapshotscheduleFormComponent
     this.action = this.actionLabels.EDIT;
     this.snapScheduleService.getSnapshotSchedule(this.path, this.fsName, false).subscribe({
       next: (response: SnapshotSchedule[]) => {
-        const schedule = response.find((x) => x.path === this.path);
+        const schedule = response.find(
+          (x) => x.path === this.path && x.schedule === this.schedule
+        ) || response.find((x) => x.path === this.path);
         const offset = moment().utcOffset();
         const startDate = moment
           .parseZone(schedule.start)

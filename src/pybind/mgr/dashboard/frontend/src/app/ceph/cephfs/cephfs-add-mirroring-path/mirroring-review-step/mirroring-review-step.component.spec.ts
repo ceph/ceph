@@ -23,12 +23,10 @@ describe('MirroringReviewStepComponent', () => {
   });
 
   it('should initialise with default values', () => {
-    expect(component.destinationCluster).toBe('—');
-    expect(component.destinationFilesystem).toBe('—');
+    expect(component.fsName).toBe('—');
     expect(component.totalPaths).toBe(0);
     expect(component.snapshotInterval).toBe('—');
     expect(component.retention).toBe('—');
-    expect(component.existingScheduleCount).toBe(0);
   });
 
   it('should have an empty formGroup', () => {
@@ -36,20 +34,41 @@ describe('MirroringReviewStepComponent', () => {
     expect(Object.keys(component.formGroup.controls)).toHaveLength(0);
   });
 
-  it('should accept input values', () => {
-    component.destinationCluster = 'remote-cluster';
-    component.destinationFilesystem = 'remote-fs';
-    component.totalPaths = 3;
-    component.snapshotInterval = 'Every 2 hours';
-    component.retention = '7 daily';
-    component.existingScheduleCount = 5;
-    fixture.detectChanges();
+  it('should compute totalPaths from pathsStep', () => {
+    component.pathsStep = { getSubmitPaths: () => ({ toAdd: ['/a', '/b'], alreadyMirrored: [] }) } as any;
+    expect(component.totalPaths).toBe(2);
+  });
 
-    expect(component.destinationCluster).toBe('remote-cluster');
-    expect(component.destinationFilesystem).toBe('remote-fs');
-    expect(component.totalPaths).toBe(3);
-    expect(component.snapshotInterval).toBe('Every 2 hours');
-    expect(component.retention).toBe('7 daily');
-    expect(component.existingScheduleCount).toBe(5);
+  it('should compute snapshotInterval from scheduleStep', () => {
+    component.scheduleStep = {
+      snapScheduleForm: {
+        get: (key: string) => {
+          if (key === 'repeatInterval') return { value: 2 };
+          if (key === 'repeatFrequency') return { value: 'h' };
+          return { value: null };
+        }
+      }
+    } as any;
+    expect(component.snapshotInterval).toBe('2 hours');
+  });
+
+  it('should compute retention from scheduleStep', () => {
+    component.scheduleStep = {
+      snapScheduleForm: {
+        get: () => ({ value: null })
+      },
+      retentionPolicies: {
+        controls: [
+          {
+            get: (key: string) => {
+              if (key === 'retentionInterval') return { value: 7 };
+              if (key === 'retentionFrequency') return { value: 'd' };
+              return { value: null };
+            }
+          }
+        ]
+      }
+    } as any;
+    expect(component.retention).toBe('7 Daily');
   });
 });

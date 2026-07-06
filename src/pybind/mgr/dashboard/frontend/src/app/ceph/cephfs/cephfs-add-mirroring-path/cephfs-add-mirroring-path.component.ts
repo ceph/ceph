@@ -9,6 +9,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -47,6 +48,13 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     { label: $localize`Review`, invalid: false }
   ];
   isSubmitLoading = false;
+  existingSchedules: { id: string; path: string; existingSchedule: string; filesReplicating: string }[] = [];
+  scheduleConflictAction: 'keep' | 'replace' | 'individual' = 'keep';
+  existingScheduleColumns: CdTableColumn[] = [
+    { prop: 'path', name: $localize`Path`, flexGrow: 3 },
+    { prop: 'existingSchedule', name: $localize`Existing schedule`, flexGrow: 2 },
+    { prop: 'filesReplicating', name: $localize`Files replicating`, flexGrow: 2 }
+  ];
 
   get schedulePath(): string {
     return this.pathsStep?.getSubmitPaths()?.toAdd?.[0] ?? '';
@@ -60,6 +68,56 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     } catch {
       this.fsName = fsName;
     }
+  }
+
+  onStepChanged(event: { current: number }): void {
+    if (event.current === 1) {
+      this.loadExistingSchedules();
+    }
+  }
+
+  private loadExistingSchedules(): void {
+    const { toAdd } = this.pathsStep?.getSubmitPaths() ?? { toAdd: [] };
+    if (!toAdd.length) {
+      this.existingSchedules = [];
+      return;
+    }
+
+    from(toAdd)
+      .pipe(
+        concatMap((selectedPath) =>
+          this.snapshotScheduleService.getSnapshotSchedule(selectedPath, this.fsName, true).pipe(
+            map((schedules) => {
+              const unique = new Map<string, any>();
+              schedules.forEach((s) => {
+                const key = `${s.path}@${s.schedule}`;
+                if (!unique.has(key)) {
+                  unique.set(key, s);
+                }
+              });
+              return Array.from(unique.values()).map((s) => ({
+                id: `${selectedPath}@${s.schedule}`,
+                path: selectedPath,
+                existingSchedule: this.formatSchedule(s.schedule),
+                filesReplicating: s.created_count != null ? `${s.created_count} files` : '—'
+              }));
+            }),
+            catchError(() => of([]))
+          )
+        ),
+        toArray(),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((results) => {
+        this.existingSchedules = results.flat();
+      });
+  }
+
+  private formatSchedule(schedule: string): string {
+    if (!schedule) {
+      return '—';
+    }
+    return this.snapshotScheduleService.parseScheduleCopy(schedule);
   }
 
   onSubmit(): void {
@@ -110,9 +168,9 @@ export class CephfsAddMirroringPathComponent implements OnInit {
                     error?.message ||
                     $localize`Failed to add mirroring path '${path}'`;
                   if (MirroringPathUtils.isAlreadyTrackedMirrorError(detail)) {
+                    error?.preventDefault?.();
                     pathsStep.addTrackedPath(path);
-                    skippedByServer.push(path);
-                    return of(null);
+                    return of(path);
                   }
                   failed.push({ path, detail });
                   return of(null);
@@ -122,7 +180,11 @@ export class CephfsAddMirroringPathComponent implements OnInit {
             toArray(),
             switchMap((results) => {
               const succeeded = results.filter((path): path is string => !!path);
-              return this.createSnapshotSchedules(succeeded).pipe(
+              let schedulePaths = [...succeeded];
+              if (this.scheduleConflictAction === 'keep') {
+                schedulePaths = [...new Set([...schedulePaths, ...alreadyMirrored])];
+              }
+              return this.createSnapshotSchedules(schedulePaths).pipe(
                 map(() => ({ failed, alreadyMirrored, skippedByServer, succeeded }))
               );
             }),
@@ -159,6 +221,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
                 error?.error?.detail ||
                 error?.message ||
                 $localize`Failed to create snapshot schedule for '${path}'`;
+              if (this.isScheduleExistsError(detail)) {
+                error?.preventDefault?.();
+                return of(undefined);
+              }
               this.notificationService.show(
                 NotificationType.error,
                 $localize`Failed to create snapshot schedule`,
@@ -171,6 +237,10 @@ export class CephfsAddMirroringPathComponent implements OnInit {
       toArray(),
       map(() => undefined)
     );
+  }
+
+  private isScheduleExistsError(message: string): boolean {
+    return /EEXIST|existing schedule/i.test(message ?? '');
   }
 
   onCancel(): void {

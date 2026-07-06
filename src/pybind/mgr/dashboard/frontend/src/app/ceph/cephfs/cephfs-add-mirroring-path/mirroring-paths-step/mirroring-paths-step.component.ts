@@ -49,9 +49,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     if (!control.invalid || !(control.touched || control.dirty)) {
       return '';
     }
-    if (control.hasError('alreadyMirrored')) {
-      return $localize`Selected path(s) are already mirrored. Select a path that is not already mirrored.`;
-    }
     return $localize`Select at least one path to continue.`;
   }
 
@@ -115,6 +112,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       }
       if (MirroringPathUtils.isPathTracked(path, this.trackedPaths)) {
         alreadyMirrored.push(path);
+        toAdd.push(path);
       } else if (this.isPathSelectable(path, pathIndex)) {
         toAdd.push(path);
       }
@@ -230,7 +228,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
   private isPathSelectable(path: string, pathIndex: number): boolean {
     const normalized = MirroringPathUtils.normalizePath(path);
-    if (!normalized || MirroringPathUtils.isPathTracked(normalized, this.trackedPaths)) {
+    if (!normalized) {
       return false;
     }
 
@@ -244,14 +242,12 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
   }
 
   private syncFormValue(): void {
-    const { toAdd, alreadyMirrored } = this.getSubmitPaths();
+    const { toAdd } = this.getSubmitPaths();
     const control = this.pathsControl;
     control.setValue(toAdd, { emitEvent: false });
 
     if (toAdd.length) {
       control.setErrors(null);
-    } else if (alreadyMirrored.length) {
-      control.setErrors({ alreadyMirrored: true });
     } else {
       control.setErrors({ required: true });
     }
