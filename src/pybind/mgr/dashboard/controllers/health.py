@@ -395,7 +395,8 @@ class Health(BaseController):
                 'quorum': data.get('quorum', {})
             }
 
-        if self._has_permissions(Permission.READ, Scope.OSD):
+        if (self._has_permissions(Permission.READ, Scope.OSD)
+                or self._has_permissions(Permission.READ, Scope.POOL)):
             summary['osdmap'] = {
                 'in': data.get('osdmap', {}).get('num_in_osds'),
                 'up': data.get('osdmap', {}).get('num_up_osds'),
