@@ -465,6 +465,7 @@ class RadosUser : public StoreUser {
   public:
     RadosUser(RadosStore *_st, const rgw_user& _u) : StoreUser(_u), store(_st) { }
     RadosUser(RadosStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
+    RadosUser(RadosStore *_st, std::shared_ptr<const RGWUserInfo> _i) : StoreUser(std::move(_i)), store(_st) { }
     RadosUser(RadosStore *_st) : store(_st) { }
     RadosUser(RadosUser& _o) = default;
 

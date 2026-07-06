@@ -2382,7 +2382,8 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 
 int POSIXUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+  const std::string& id = this->get_id().id;
+  return driver->get_user_db()->get_user(dpp, std::string("user_id"), id, this->get_info_mut(), &(this->get_attrs()),
         &(this->get_version_tracker()));
 }
 
@@ -2399,7 +2400,8 @@ int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int POSIXUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+  const std::string& id = this->get_id().id;
+  return driver->get_user_db()->get_user(dpp, std::string("user_id"), id, this->get_info_mut(), &(this->get_attrs()),
            &(this->get_version_tracker()));
 }
 

@@ -4800,16 +4800,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   }
 
   if (override_owner) {
-    RGWUserInfo owner_info;
-    if (ctl.user->get_info_by_uid(rctx.dpp, *override_owner, &owner_info, rctx.y) < 0) {
+    std::shared_ptr<const RGWUserInfo> owner_info;
+    if (ctl.user->get_info_by_uid(rctx.dpp, *override_owner, owner_info, rctx.y) < 0) {
       ldpp_dout(rctx.dpp, 10) << "owner info does not exist" << dendl;
       return -EINVAL;
     }
 
     owner.id = *override_owner;
-    owner.display_name = owner_info.display_name;
+    owner.display_name = owner_info->display_name;
 
-    policy.create_default(owner_info.user_id, owner_info.display_name);
+    policy.create_default(owner_info->user_id, owner_info->display_name);
 
     bufferlist bl;
     policy.encode(bl);

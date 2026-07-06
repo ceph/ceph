@@ -563,7 +563,7 @@ static int build_token(const string& swift_user,
 
 }
 
-static int encode_token(CephContext *cct, string& swift_user, string& key,
+static int encode_token(CephContext *cct, const string& swift_user, const string& key,
 			bufferlist& bl)
 {
   const auto nonce = ceph::util::generate_random_number<uint64_t>();
@@ -711,8 +711,8 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
   string user_str;
   std::unique_ptr<rgw::sal::User> user;
   bufferlist bl;
-  RGWAccessKey *swift_key;
-  map<string, RGWAccessKey>::iterator siter;
+  const RGWAccessKey *swift_key;
+  map<string, RGWAccessKey>::const_iterator siter;
 
   string swift_url = g_conf()->rgw_swift_url;
   string swift_prefix = g_conf()->rgw_swift_url_prefix;

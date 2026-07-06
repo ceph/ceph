@@ -2596,7 +2596,7 @@ public:
   RGWGetObjLayout() {
   }
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(const RGWUserCaps& caps) {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
   int verify_permission(optional_yield) override {

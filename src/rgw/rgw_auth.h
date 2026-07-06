@@ -730,7 +730,7 @@ class LocalApplier : public IdentityApplier {
   using aclspec_t = rgw::auth::Identity::aclspec_t;
 
 protected:
-  const RGWUserInfo user_info;
+  const std::shared_ptr<const RGWUserInfo> user_info;
   mutable std::unique_ptr<rgw::sal::User> user;
   const std::optional<RGWAccountInfo> account;
   const std::vector<IAM::Policy> policies;
@@ -761,7 +761,7 @@ public:
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     if (this->perm_mask == RGW_PERM_INVALID) {
-      return get_perm_mask(subuser, user_info);
+      return get_perm_mask(subuser, *user_info);
     } else {
       return this->perm_mask;
     }
@@ -769,24 +769,24 @@ public:
   void to_str(std::ostream& out) const override;
   auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override; /* out */
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
-  uint32_t get_identity_type() const override { return user_info.type; }
+  uint32_t get_identity_type() const override { return user_info->type; }
 
   std::optional<rgw::ARN> get_caller_identity() const override {
-    bool has_account_id = !user_info.account_id.empty();
-    std::string acct = has_account_id ? user_info.account_id : user_info.user_id.tenant;
-    if(user_info.type == TYPE_ROOT) {
+    bool has_account_id = !user_info->account_id.empty();
+    std::string acct = has_account_id ? user_info->account_id : user_info->user_id.tenant;
+    if(user_info->type == TYPE_ROOT) {
       return rgw::ARN("", "root", acct, true);
     }
 
-    std::string username = has_account_id ? user_info.display_name : user_info.user_id.id;
-    std::string path = user_info.path.empty() ? "/" : user_info.path;
+    std::string username = has_account_id ? user_info->display_name : user_info->user_id.id;
+    std::string path = user_info->path.empty() ? "/" : user_info->path;
     return rgw::ARN(string_cat_reserve(path, username), "user", acct, true);
   }
 
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
   const std::string& get_tenant() const override {
-    return user_info.user_id.tenant;
+    return user_info->user_id.tenant;
   }
   const std::optional<RGWAccountInfo>& get_account() const override {
     return account;

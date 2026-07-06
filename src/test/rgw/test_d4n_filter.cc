@@ -152,7 +152,7 @@ class D4NFilterFixture: public ::testing::Test {
       rgw_user u("test_tenant", "test_user", "ns");
 
       testUser = driver->get_user(u);
-      testUser->get_info().user_id = u;
+      testUser->get_info_mut().user_id = u;
 
       ASSERT_EQ(testUser->store_user(env->dpp, optional_yield{yield}, false), 0);
     }

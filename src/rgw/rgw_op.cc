@@ -5670,7 +5670,7 @@ void RGWPutMetadataAccount::execute(optional_yield y)
   }
 
   RGWUserInfo old_info = s->user->get_info();
-  RGWUserInfo& info = s->user->get_info();
+  RGWUserInfo& info = s->user->get_info_mut();
 
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {

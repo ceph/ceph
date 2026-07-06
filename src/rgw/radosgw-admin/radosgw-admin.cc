@@ -1794,7 +1794,7 @@ int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
 int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                           bool have_max_size, bool have_max_objects)
 {
-  RGWUserInfo& user_info = op_state.get_user_info();
+  RGWUserInfo& user_info = op_state.get_user_info_mut();
 
   set_quota_info(user_info.quota.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
@@ -1812,7 +1812,7 @@ int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
 int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                    bool have_max_size, bool have_max_objects)
 {
-  RGWUserInfo& user_info = op_state.get_user_info();
+  RGWUserInfo& user_info = op_state.get_user_info_mut();
 
   set_quota_info(user_info.quota.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
@@ -11867,7 +11867,7 @@ next:
       return -ret;
     }
     
-    RGWUserInfo& user_info = user_op.get_user_info();
+    RGWUserInfo& user_info = user_op.get_user_info_mut();
     user_info.mfa_ids.insert(totp_serial);
     user_op.set_mfa_ids(user_info.mfa_ids);
     string err;
@@ -11904,7 +11904,7 @@ next:
       return -ret;
     }
 
-    RGWUserInfo& user_info = user_op.get_user_info();
+    RGWUserInfo& user_info = user_op.get_user_info_mut();
     user_info.mfa_ids.erase(totp_serial);
     user_op.set_mfa_ids(user_info.mfa_ids);
     string err;

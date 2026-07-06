@@ -255,7 +255,7 @@ void RGWUserAdminOpState::set_user_id(const rgw_user& id)
   if (id.empty())
     return;
 
-  user->get_info().user_id = id;
+  user->get_info_mut().user_id = id;
 }
 
 void RGWUserAdminOpState::set_subuser(std::string& _subuser)
@@ -268,9 +268,9 @@ void RGWUserAdminOpState::set_subuser(std::string& _subuser)
     rgw_user tmp_id;
     tmp_id.from_str(_subuser.substr(0, pos));
     if (tmp_id.tenant.empty()) {
-      user->get_info().user_id.id = tmp_id.id;
+      user->get_info_mut().user_id.id = tmp_id.id;
     } else {
-      user->get_info().user_id = tmp_id;
+      user->get_info_mut().user_id = tmp_id;
     }
     subuser = _subuser.substr(pos+1);
   } else {
@@ -280,9 +280,9 @@ void RGWUserAdminOpState::set_subuser(std::string& _subuser)
   subuser_specified = true;
 }
 
-void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
+void RGWUserAdminOpState::set_user_info(const RGWUserInfo& user_info)
 {
-  user->get_info() = user_info;
+  user->get_info_mut() = user_info;
 }
 
 void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
@@ -304,29 +304,34 @@ const rgw_user& RGWUserAdminOpState::get_user_id()
   return user->get_id();
 }
 
-RGWUserInfo& RGWUserAdminOpState::get_user_info()
+const RGWUserInfo& RGWUserAdminOpState::get_user_info() const
 {
   return user->get_info();
 }
 
+RGWUserInfo& RGWUserAdminOpState::get_user_info_mut()
+{
+  return user->get_info_mut();
+}
+
 map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_swift_keys()
 {
-  return &user->get_info().swift_keys;
+  return &user->get_info_mut().swift_keys;
 }
 
 map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_access_keys()
 {
-  return &user->get_info().access_keys;
+  return &user->get_info_mut().access_keys;
 }
 
 map<std::string, RGWSubUser>* RGWUserAdminOpState::get_subusers()
 {
-  return &user->get_info().subusers;
+  return &user->get_info_mut().subusers;
 }
 
 RGWUserCaps *RGWUserAdminOpState::get_caps_obj()
 {
-  return &user->get_info().caps;
+  return &user->get_info_mut().caps;
 }
 
 std::string RGWUserAdminOpState::build_default_swift_kid()
@@ -1590,7 +1595,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
-  RGWUserInfo& user_info = op_state.get_user_info();
+  RGWUserInfo& user_info = op_state.get_user_info_mut();
   user_info.user_id = new_user->get_id();
   op_state.objv = user->get_version_tracker();
   op_state.set_user_version_tracker(user->get_version_tracker());
@@ -2881,12 +2886,11 @@ public:
   }
 };
 
-int RGWUserCtl::get_info_by_uid(const DoutPrefixProvider *dpp, 
+int RGWUserCtl::get_info_by_uid(const DoutPrefixProvider *dpp,
                                 const rgw_user& uid,
-                                RGWUserInfo *info,
+                                std::shared_ptr<const RGWUserInfo>& info,
                                 optional_yield y,
                                 const GetParams& params)
-
 {
   return svc.user->get_user_info_by_uid(uid,
                                         info,
@@ -2897,9 +2901,9 @@ int RGWUserCtl::get_info_by_uid(const DoutPrefixProvider *dpp,
                                         dpp);
 }
 
-int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp, 
+int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp,
                                   const string& email,
-                                  RGWUserInfo *info,
+                                  std::shared_ptr<const RGWUserInfo>& info,
                                   optional_yield y,
                                   const GetParams& params)
 {
@@ -2914,7 +2918,7 @@ int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp,
 
 int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp, 
                                   const string& swift_name,
-                                  RGWUserInfo *info,
+                                  std::shared_ptr<const RGWUserInfo>& info,
                                   optional_yield y,
                                   const GetParams& params)
 {
@@ -2929,7 +2933,7 @@ int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp,
 
 int RGWUserCtl::get_info_by_access_key(const DoutPrefixProvider *dpp, 
                                        const string& access_key,
-                                       RGWUserInfo *info,
+                                       std::shared_ptr<const RGWUserInfo>& info,
                                        optional_yield y,
                                        const GetParams& params)
 {
@@ -2948,9 +2952,9 @@ int RGWUserCtl::get_attrs_by_uid(const DoutPrefixProvider *dpp,
                                  optional_yield y,
                                  RGWObjVersionTracker *objv_tracker)
 {
-  RGWUserInfo user_info;
+  std::shared_ptr<const RGWUserInfo> user_info;
 
-  return get_info_by_uid(dpp, user_id, &user_info, y, RGWUserCtl::GetParams()
+  return get_info_by_uid(dpp, user_id, user_info, y, RGWUserCtl::GetParams()
                          .set_attrs(pattrs)
                          .set_objv_tracker(objv_tracker));
 }
