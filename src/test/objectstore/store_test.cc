@@ -495,6 +495,22 @@ public:
   }
 };
 
+class StoreTestReformatting : public StoreTestFixture,
+                              public ::testing::WithParamInterface<const char*> {
+public:
+  StoreTestReformatting()
+    : StoreTestFixture("bluestore")
+  {
+  }
+  void SetUp() override {
+    //do nothing
+  }
+protected:
+  void DeferredSetup() {
+    StoreTestFixture::SetUp();
+  }
+};
+
 struct MatrixArg
 {
   std::string param;
@@ -13021,9 +13037,7 @@ TEST_P(StoreTestSpecificAUSize, OverwriteDeferredV2Test) {
   doOverwriteDeferredTest(store.get(), true);
 }
 
-TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
-  if (string(GetParam()) != "bluestore")
-    return;
+TEST_P(StoreTestReformatting, BasicTest) {
 
   // enforce 'ssd' settings to avoid deferred writes
   // which result in cached data blocks and hence
@@ -13033,9 +13047,9 @@ TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
   // space fragmentation as new allocations tend to occupy new extents
   // in this mode.
   SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
   g_conf().apply_changes(nullptr);
-
-  StartDeferred(0x1000);
+  DeferredSetup();
 
   int r;
   coll_t cid;
@@ -13286,9 +13300,7 @@ TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
-  if (string(GetParam()) != "bluestore")
-    return;
+TEST_P(StoreTestReformatting, CompressedTest) {
 
   // enforce 'ssd' settings to avoid deferred writes
   // which result in cached data blocks and hence
@@ -13298,20 +13310,19 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
   // space fragmentation as new allocations tend to occupy new extents
   // in this mode.
   SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
+  // disable write v2 recompression
+  SetVal(g_conf(), "bluestore_recompression_min_gain", "1000");
   g_conf().apply_changes(nullptr);
-
-  StartDeferred(0x1000);
+  DeferredSetup();
 
   int r;
   coll_t cid;
 
   SetVal(g_conf(), "bluestore_compression_algorithm", "lz4");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
-//  SetVal(g_conf(), "bluestore_write_v2", "false");
-//  SetVal(g_conf(), "bluefs_wal_envelope_mode", "false");
 
   g_ceph_context->_conf.apply_changes(nullptr);
-
   ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   ghobject_t objw(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
   auto ch = store->create_new_collection(cid);
@@ -13337,8 +13348,6 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
     ch.reset();
     int r = store->umount();
     ASSERT_EQ(0, r);
-    //r = store->fsck(true);
-    //ASSERT_EQ(0, r);
     r = store->mount();
     ASSERT_EQ(0, r);
     ch = store->open_collection(cid);
@@ -13346,13 +13355,22 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
   };
   bufferlist bl;
   bufferlist expected_bl;
-  uint64_t len = 512 * 1024 - 10;
+  uint64_t len1 = 508 * 1024;
+  uint64_t len2 = 4096 - 10; // make an independent "small" write
+                             // to simulate v1 writing scheme where
+			     // tail gets independent uncompressed blob.
+  uint64_t len = len1 + len2;
   size_t len4K = 4096;
-  bl.append(std::string(len, 'a'));
+  bl.append(std::string(len1, 'a'));
+  bl.append(std::string(len2, 'A'));
   {
     C_SaferCond c;
     ObjectStore::Transaction t;
-    t.write(cid, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    bufferlist bl0;
+    bl0.substr_of(bl, 0, len1);
+    t.write(cid, obj, 0, len1, bl0, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    bl0.substr_of(bl, len1, len2);
+    t.write(cid, obj, len1, len2, bl0, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     t.register_on_complete(&c);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -13604,9 +13622,7 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
-  if (string(GetParam()) != "bluestore")
-    return;
+TEST_P(StoreTestReformatting, LazyCompressionTest) {
 
   // enforce 'ssd' settings to avoid deferred writes
   // which result in cached data blocks and hence
@@ -13616,10 +13632,10 @@ TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
   // space fragmentation as new allocations tend to occupy new extents
   // in this mode.
   SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  SetVal(g_conf(), "bluestore_write_v2", GetParam());
 
   g_conf().apply_changes(nullptr);
-
-  StartDeferred(0x1000);
+  DeferredSetup();
 
   int r;
   coll_t cid;
@@ -13843,6 +13859,16 @@ TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
     ASSERT_EQ(r, 0);
   }
 }
+// Vary write_v2 mode
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  StoreTestReformatting,
+  ::testing::Values(
+    "false",
+    "true"
+  ));
+
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
