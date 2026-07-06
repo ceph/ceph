@@ -319,10 +319,10 @@ PGRecovery::recover_missing(
     } else {
       return recovering.wait_track_blocking(
 	trigger,
-	with_throttle
+	(with_throttle
 	  ? recover_object_with_throttle(soid, need)
 	  : recover_object(soid, need)
-	.handle_exception_interruptible(
+	).handle_exception_interruptible(
 	  [=, this, soid = std::move(soid)] (auto e) {
 	  on_failed_recover({ pg->get_pg_whoami() }, soid, need);
 	  return seastar::make_ready_future<>();
