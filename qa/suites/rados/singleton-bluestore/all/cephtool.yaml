@@ -3,6 +3,7 @@ roles:
   - mon.b
   - mon.c
   - mgr.x
+  - mds.a
   - osd.0
   - osd.1
   - osd.2
