@@ -24,7 +24,7 @@
       ></a
     >
   </ng-container>
-  @if (canViewSilences) {
+  @if (prometheusPermissions.read) {
     <ng-container ngbNavItem>
       <a
         class="nav-link"

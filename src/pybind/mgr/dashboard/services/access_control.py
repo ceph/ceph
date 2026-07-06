@@ -218,7 +218,8 @@ ADMIN_ROLE = Role(
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role(
     'read-only',
-    'allows read permission for all security scope except user, dashboard settings and config-opt', {
+    'allows read permission for all security scope except user, '
+    'dashboard settings and config-opt', {
         scope_name: [_P.READ] for scope_name in Scope.all_scopes()
         if scope_name not in (Scope.USER, Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
     })
@@ -231,6 +232,7 @@ BLOCK_MGR_ROLE = Role(
         Scope.POOL: [_P.READ],
         Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.HOSTS: [_P.READ],
         Scope.GRAFANA: [_P.READ],
         Scope.NVME_OF: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.PROMETHEUS: [_P.READ]
@@ -293,6 +295,7 @@ SMB_MGR_ROLE = Role(
     'smb-manager', 'allows full permissions for the smb scope', {
         Scope.SMB: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.HOSTS: [_P.READ],
+        Scope.POOL: [_P.READ],
         Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],

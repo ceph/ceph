@@ -156,7 +156,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(role['name'], 'read-only')
         self.assertEqual(
             role['description'],
-            'allows read permission for all security scope except user, dashboard settings and config-opt'
+            'allows read permission for all security scope except user, '
+            'dashboard settings and config-opt'
         )
 
     def test_cluster_manager_role_has_pool_read(self):
@@ -165,6 +166,18 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_smb_manager_role_has_hosts_read(self):
         role = self.exec_cmd('ac-role-show', rolename='smb-manager')
+        self.assertEqual(role['scopes_permissions'][Scope.HOSTS], [Permission.READ])
+
+    def test_smb_manager_role_has_pool_read(self):
+        role = self.exec_cmd('ac-role-show', rolename='smb-manager')
+        self.assertEqual(role['scopes_permissions'][Scope.POOL], [Permission.READ])
+
+    def test_block_manager_role_has_pool_read(self):
+        role = self.exec_cmd('ac-role-show', rolename='block-manager')
+        self.assertEqual(role['scopes_permissions'][Scope.POOL], [Permission.READ])
+
+    def test_block_manager_role_has_hosts_read(self):
+        role = self.exec_cmd('ac-role-show', rolename='block-manager')
         self.assertEqual(role['scopes_permissions'][Scope.HOSTS], [Permission.READ])
 
     def test_delete_system_role(self):
