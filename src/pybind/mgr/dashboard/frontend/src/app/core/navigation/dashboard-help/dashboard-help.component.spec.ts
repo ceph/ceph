@@ -33,6 +33,16 @@ describe('DashboardHelpComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should show report issue when config-opt is readable', () => {
+    const options = fixture.debugElement.queryAll(By.css('cds-overflow-menu-option'));
+    // About + Report an issue (Documentation and API are plain <li> links)
+    expect(options.length).toBe(2);
+    expect(options.map((o) => o.nativeElement.textContent.trim())).toEqual([
+      'About',
+      'Report an issue...'
+    ]);
+  });
+
   it('should hide report issue when config-opt is not readable', () => {
     permissions.configOpt = new Permission([]);
     (TestBed.inject(AuthStorageService).getPermissions as jasmine.Spy).and.returnValue(permissions);
@@ -42,6 +52,8 @@ describe('DashboardHelpComponent', () => {
     fixture.detectChanges();
 
     const options = fixture.debugElement.queryAll(By.css('cds-overflow-menu-option'));
-    expect(options.length).toBe(3);
+    // Only About remains; Documentation and API are plain <li> links
+    expect(options.length).toBe(1);
+    expect(options[0].nativeElement.textContent.trim()).toBe('About');
   });
 });
