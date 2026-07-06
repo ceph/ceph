@@ -29,6 +29,7 @@ overrides:
       - POOL_FULL
       - pool full
       - pool\(s\) full
+      - telemetry module includes new collections
 tasks:
 - install:
     branch: tentacle
