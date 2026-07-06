@@ -272,7 +272,7 @@ user's secret key is not divulged before it expires.
 
 CephX also supports rotating a credential's secret key to address leaks
 or scope changes when desired. It is expected to be routine in future
-Ceph installations (2025+) that the service daemon keys (e.g. ``mgr.x``)
+Ceph installations (2026+) that the service daemon keys (e.g. ``mgr.x``)
 might be rotated whenever the daemon is relocated or even restarted.
 The same can be done for any entity type, including clients. Finally, this 
 mechanism can be used to effect key type upgrades as necessary when ciphers
