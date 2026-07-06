@@ -4513,6 +4513,7 @@ int main(int argc, const char **argv)
       auto* bucket_logging_flush = bucket_logging->add_subcommand("flush", "flush pending log records object of source bucket to the log bucket");
       auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
       auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
+      bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
       auto* bucket_set_min_shards = bucket_cmd->add_subcommand("set-min-shards", "set the minimum number of shards that dynamic resharding will consider for a bucket");
       auto* bucket_object       = bucket_cmd->add_subcommand("object", "bucket object commands");
@@ -4534,7 +4535,6 @@ int main(int argc, const char **argv)
       auto* bucket_rados      = bucket_cmd->add_subcommand("rados", "bucket rados commands");
       auto* bucket_rados_list = bucket_rados->add_subcommand("list", "list rados objects backing bucket's objects");
       bucket_rados->require_subcommand(show_cli11_help ? 0 : 1);
-      bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -13688,10 +13688,6 @@ next:
   }
 #endif
 
-  if (cli11_action) {
-    return cli11_action();
-  }
-
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
@@ -13876,6 +13872,10 @@ next:
 
     optional_global_cors->dump(formatter.get());
     formatter->flush(cout);
+  }
+
+  if (cli11_action) {
+    return cli11_action();
   }
   return 0;
 }
