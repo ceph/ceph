@@ -253,6 +253,7 @@ CLUSTER_MGR_ROLE = Role(
     and config-opt scopes""", {
         Scope.HOSTS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.OSD: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.POOL: [_P.READ],
         Scope.MONITOR: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
