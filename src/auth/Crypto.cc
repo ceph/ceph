@@ -563,13 +563,30 @@ public:
   CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, const std::vector<uint32_t>& usages, string& error) override;
 };
 
+struct EVPCipherDeleter {
+  void operator()(EVP_CIPHER* ptr) const noexcept {
+    if (ptr) {
+      EVP_CIPHER_free(ptr);
+    }
+  }
+};
+
+struct EVPCipherCtxDeleter {
+  void operator()(EVP_CIPHER_CTX* ptr) const noexcept {
+    if (ptr) {
+      EVP_CIPHER_CTX_free(ptr);
+    }
+  }
+};
+
+
 static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
 static constexpr const std::size_t AES256KRB5_BLOCK_LEN{16};
 static constexpr const std::size_t AES256KRB5_HASH_LEN{24};
 static constexpr const std::size_t SHA384_LEN{48};
 
 class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
-  EVP_CIPHER *cipher{nullptr};
+  std::unique_ptr<EVP_CIPHER, EVPCipherDeleter> cipher;
 
   struct usage_keys {
     ceph::bufferlist ki;
@@ -730,7 +747,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     OSSL_PARAM params[2] = { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
       OSSL_PARAM_construct_end()};
 
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    std::unique_ptr<EVP_CIPHER_CTX, EVPCipherCtxDeleter> ctx{EVP_CIPHER_CTX_new()};
     if (!ctx) {
       ldout(cct, 20) << "EVP_CIPHER_CTX_new() returned null" << dendl;
       return -EIO;
@@ -742,7 +759,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
       return -EIO;
     }
 
-    if (!EVP_EncryptInit_ex2(ctx, cipher, uk->ke_raw, iv, params)) {
+    if (!EVP_EncryptInit_ex2(ctx.get(), cipher.get(), uk->ke_raw, iv, params)) {
       ldout(cct, 20) << "EVP_EncryptInit() failed" << dendl;
       return -EIO;
     }
@@ -750,21 +767,19 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     int encrypted_len = 0;
     int len;
 
-    auto ret = EVP_EncryptUpdate(ctx, ciphertext + encrypted_len, &len, (const unsigned char *)plaintext.c_str(), plaintext.length());
+    auto ret = EVP_EncryptUpdate(ctx.get(), ciphertext + encrypted_len, &len, (const unsigned char *)plaintext.c_str(), plaintext.length());
     if (ret != 1) {
       ldout(cct, 20) << "EVP_EncryptUpdate(len=" << plaintext.length() << ") returned " << ret << dendl;
       return -EIO;
     }
     encrypted_len += len;
 
-    ret = EVP_EncryptFinal_ex(ctx, ciphertext + encrypted_len, &len);
+    ret = EVP_EncryptFinal_ex(ctx.get(), ciphertext + encrypted_len, &len);
     if (ret != 1) {
       ldout(cct, 20) << "EVP_EncryptFinal_ex() returned " << ret << dendl;
       return -EIO;
     }
     encrypted_len += len;
-
-    EVP_CIPHER_CTX_free(ctx);
 
     return encrypted_len;
   }
@@ -780,12 +795,12 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     OSSL_PARAM params[2] = { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
       OSSL_PARAM_construct_end()};
 
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    std::unique_ptr<EVP_CIPHER_CTX, EVPCipherCtxDeleter> ctx{EVP_CIPHER_CTX_new()};
     if (!ctx) {
       return -EIO;
     }
 
-    if (!EVP_DecryptInit_ex2(ctx, cipher, key, iv, params)) {
+    if (!EVP_DecryptInit_ex2(ctx.get(), cipher.get(), key, iv, params)) {
       return -EIO;
     }
 
@@ -799,18 +814,16 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
       const char *p;
       int chunk_len = iter.get_ptr_and_advance(max, &p);
 
-      if (EVP_DecryptUpdate(ctx, dest + plaintext_len, &len, (const unsigned char *)p, chunk_len) != 1) {
+      if (EVP_DecryptUpdate(ctx.get(), dest + plaintext_len, &len, (const unsigned char *)p, chunk_len) != 1) {
         return -EIO;
       }
       plaintext_len += len;
     }
 
-    if (EVP_DecryptFinal_ex(ctx, dest + plaintext_len, &len) != 1) {
+    if (EVP_DecryptFinal_ex(ctx.get(), dest + plaintext_len, &len) != 1) {
       return -EIO;
     }
     plaintext_len += len;
-
-    EVP_CIPHER_CTX_free(ctx);
 
     return 0;
   }
@@ -824,7 +837,11 @@ public:
   using CryptoKeyHandler::encrypt;
 
   int init(const ceph::bufferptr& s, const std::vector<uint32_t>& usages, ostringstream& err) {
-    cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
+    cipher.reset(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL));
+    if (!cipher) {
+      err << "Failed to fetch OpenSSL cipher AES-256-CBC-CTS";
+      return -EINVAL;
+    }
     secret = s;
     if (usages.size() > 0) {
       default_usage = usages[0];
