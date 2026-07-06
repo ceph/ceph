@@ -156,7 +156,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(role['name'], 'read-only')
         self.assertEqual(
             role['description'],
-            'allows read permission for all security scope except dashboard settings and config-opt'
+            'allows read permission for all security scope except user, dashboard settings and config-opt'
         )
 
     def test_delete_system_role(self):
