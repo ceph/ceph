@@ -356,13 +356,13 @@ int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
 int MotrUser::load_user(const DoutPrefixProvider *dpp,
                         optional_yield y)
 {
-  ldpp_dout(dpp, 20) << "load user: user id =   " << info.user_id.to_str() << dendl;
-  return load_user_from_idx(dpp, store, info, &attrs, &objv_tracker);
+  ldpp_dout(dpp, 20) << "load user: user id =   " << get_info().user_id.to_str() << dendl;
+  return load_user_from_idx(dpp, store, get_info_mut(), &attrs, &objv_tracker);
 }
 
 int MotrUser::create_user_info_idx()
 {
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
+  string user_info_iname = "motr.rgw.user.info." + get_info().user_id.to_str();
   return store->create_motr_idx_by_name(user_info_iname);
 }
 
@@ -382,6 +382,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   RGWUserInfo orig_info;
   RGWObjVersionTracker objv_tr = {};
   obj_version& obj_ver = objv_tr.read_version;
+  const RGWUserInfo& info = get_info();
 
   ldpp_dout(dpp, 20) << "Store_user(): User = " << info.user_id.id << dendl;
   orig_info.user_id = info.user_id;
@@ -484,6 +485,7 @@ int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   // Delete email for user - TODO
   bufferlist bl;
   int rc;
+  const RGWUserInfo& info = get_info();
   // Remove the user info from cache.
   store->get_user_cache()->remove(dpp, info.user_id.id);
 

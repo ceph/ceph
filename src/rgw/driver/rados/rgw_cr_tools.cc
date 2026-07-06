@@ -94,7 +94,12 @@ int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
 template<>
 int RGWGetUserInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  return store->ctl()->user->get_info_by_uid(dpp, params.user, result.get(), null_yield);
+  std::shared_ptr<const RGWUserInfo> info;
+  int r = store->ctl()->user->get_info_by_uid(dpp, params.user, info, null_yield);
+  if (r >= 0) {
+    *result.get() = *info;
+  }
+  return r;
 }
 
 template<>
