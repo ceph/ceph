@@ -111,31 +111,23 @@ public:
                       const std::string& object_name,
                       optional_yield y) override;
 
-    int scan_objects(const DoutPrefixProvider* dpp,
-                     const std::string& bucket_id,
-                     uint64_t start_pos,
-                     const std::string& pattern,
-                     uint64_t count,
-                     std::vector<std::string>& objects,
-                     std::optional<CacheObject>& params,
-                     uint64_t& next_pos,
-                     optional_yield y) override;
-
-    int get_range(const DoutPrefixProvider* dpp,
-                  const std::string& bucket_id,
-                  const std::string& start,
-                  const std::string& stop,
-                  uint64_t offset,
-                  uint64_t count,
-                  std::vector<std::string>& objects,
-                  std::optional<CacheObject>& params,
-                  optional_yield y) override;
+    int list_objects(const DoutPrefixProvider* dpp,
+                    const std::string& bucket_id,
+                    const std::string& start_token,
+                    const std::string& prefix,
+                    const std::string& marker,
+                    uint64_t count,
+                    bool marker_inclusive,
+                    std::vector<CacheObject>& objs_info,
+                    std::string& continuation_token,
+                    optional_yield y);
 
 private:
     int fdb_add(const DoutPrefixProvider* dpp,
                 const std::string& bucket_id,
                 double score,
                 const std::string& member,
+                std::optional<CacheObject> params,
                 optional_yield y);
 
     int fdb_rem(const DoutPrefixProvider* dpp,
@@ -146,20 +138,24 @@ private:
     int fdb_range(const DoutPrefixProvider* dpp,
                   const std::string& bucket_id,
                   const std::string& start,
-                  const std::string& stop,
-                  uint64_t offset,
                   uint64_t count,
-                  std::vector<std::string>& members,
+                  std::vector<CacheObject>& objs_info,
+                  std::string& continuation_token,
+                  bool start_inclusive,
                   optional_yield y);
 
     int fdb_scan(const DoutPrefixProvider* dpp,
-                 const std::string& bucket_id,
-                 uint64_t cursor,
-                 const std::string& pattern,
-                 uint64_t count,
-                 std::vector<std::string>& members,
-                 uint64_t next_cursor,
-                 optional_yield y);
+                const std::string& bucket_id,
+                const std::string& start_token,
+                const std::string& prefix,
+                uint64_t count,
+                bool marker_inclusive, 
+                std::vector<CacheObject>& objs_info,
+                std::string& continuation_token,
+                optional_yield y);
+
+    std::string build_object_index(const std::string& bucket_id,const std::string& obj_name);
+    std::string get_object_subspace(const std::string& bucket_id);
 };
 
 class FDBObjectDirectory : public FDBDirectory, public ObjectDirectory {
@@ -194,30 +190,25 @@ public:
     int remove_version_by_creation_time(const DoutPrefixProvider* dpp,
                                         const std::string& bucket_id,
                                         const std::string& obj_name,
-                                        const double& creation_time,
+                                        ceph::real_time creation_time,
                                         optional_yield y) override;
 
     int list_versions(const DoutPrefixProvider* dpp,
                       const std::string& bucket_id,
                       const std::string& obj_name,
-                      const std::string& start,
-                      const std::string& stop,
-                      std::vector<CacheObjectVersion>& versions,
-                      optional_yield y) override;
-
-    int get_version_index(const DoutPrefixProvider* dpp,
-                          const std::string& bucket_id,
-                          const std::string& obj_name,
-                          const std::string& version,
-                          std::string& index,
-                          optional_yield y) override;
+                      const std::string& marker_version,
+                      uint64_t count,
+                      std::vector<CacheObjectVersion>& obj_versions,
+                      std::string& continuation_token,
+                      optional_yield y);
 
 private:
     int fdb_add(const DoutPrefixProvider* dpp,
                 const std::string& bucket_id,
                 const std::string& obj_name,
-                double score,
+                int64_t score,
                 const std::string& member,
+                std::optional<CacheObjectVersion> params,
                 optional_yield y);
 
     int fdb_range(const DoutPrefixProvider* dpp,
@@ -229,12 +220,13 @@ private:
                   optional_yield y);
 
     int fdb_revrange(const DoutPrefixProvider* dpp,
-                     const std::string& bucket_id,
-                     const std::string& obj_name,
-                     const std::string& start,
-                     const std::string& stop,
-                     std::vector<std::string>& members,
-                     optional_yield y);
+                    const std::string& bucket_id,
+                    const std::string& obj_name,
+                    const std::string& marker_version,
+                    uint64_t count,
+                    std::vector<CacheObjectVersion>& obj_versions,
+                    std::string& continuation_token,
+                    optional_yield y);
 
     int fdb_rem(const DoutPrefixProvider* dpp,
                 const std::string& bucket_id,
@@ -245,8 +237,8 @@ private:
     int fdb_remrangebyscore(const DoutPrefixProvider* dpp,
                             const std::string& bucket_id,
                             const std::string& obj_name,
-                            double min,
-                            double max,
+                            int64_t min,
+                            int64_t max,
                             optional_yield y);
 
     int fdb_rank(const DoutPrefixProvider* dpp,
@@ -255,6 +247,22 @@ private:
                  const std::string& member,
                  std::string& index,
                  optional_yield y);
+
+    std::string get_versions_subspace(const DoutPrefixProvider* dpp,
+                                        const std::string& bucket_id,
+                                        const std::string& obj_name);
+    std::string get_score_subspace(const DoutPrefixProvider* dpp,
+                                        const std::string& bucket_id,
+                                        const std::string& obj_name);
+    std::string build_versions_index(const DoutPrefixProvider* dpp,
+                                        const std::string& bucket_id,
+                                        const std::string& obj_name,
+                                        const std::string& score,
+                                        const std::string& version);
+    std::string build_version_score_index(const DoutPrefixProvider* dpp,
+                                                const std::string& bucket_id,
+                                                const std::string& obj_name,
+                                                const std::string& version);
 };
 
 class FDBBlockDirectory : public FDBDirectory, public BlockDirectory {

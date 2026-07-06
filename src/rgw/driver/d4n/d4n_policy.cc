@@ -154,9 +154,10 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
         size = std::stoull(i->second.to_str());
         ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): size: " << size << dendl;
       }
-      double creationTime = 0;
+      ceph::real_time creationTime;
       if (auto i = attrs.find(RGW_CACHE_ATTR_MTIME); i != attrs.end()) {
-        creationTime = std::stod(i->second.to_str());
+        auto ns = std::stoll(i->second.to_str());
+        creationTime = ceph::real_time(std::chrono::nanoseconds(ns));
         ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): creationTime: " << creationTime << dendl;
       }
       rgw_user user;
@@ -729,7 +730,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
 }
 
 LFUDAPolicy::LFUDAObjEntry* LFUDAPolicy::create_obj_entry(const DoutPrefixProvider* dpp, const std::string& dirty_obj_key, const std::string& version,
-                                              bool deleteMarker, uint64_t size, double creationTime,
+                                              bool deleteMarker, uint64_t size, ceph::real_time creationTime,
                                               const rgw_user& user, const std::string& etag,
                                               const std::string& bucket_name, const std::string& bucket_id,
                                               const rgw_obj_key& obj_key, State state)
@@ -749,7 +750,7 @@ LFUDAPolicy::LFUDAObjEntry* LFUDAPolicy::create_obj_entry(const DoutPrefixProvid
   return e;
 }
 
-void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   State state{State::INIT};
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Before acquiring lock, adding entry: " << key << dendl;
@@ -904,7 +905,7 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
       auto v_it = per_obj_versions.find(e->obj_key.name);
       if (v_it != per_obj_versions.end()) {
         v_it->second.erase(e->creationTime);
-        e->creationTime += (interval / 2);
+        e->creationTime += std::chrono::seconds(interval / 2);
         v_it->second[e->creationTime] = e;
       }
       ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << e->creationTime << dendl;
@@ -1049,8 +1050,8 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     op_ret = filter->process({}, ofs);
 
     const req_context rctx{dpp, y, nullptr};
-    ceph::real_time mtime = ceph::real_clock::from_time_t(e->creationTime);
-    op_ret = processor->complete(lst, e->etag, &mtime, ceph::real_clock::from_time_t(e->creationTime), obj_attrs,
+    ceph::real_time mtime = e->creationTime;
+    op_ret = processor->complete(lst, e->etag, &mtime, e->creationTime, obj_attrs,
           std::nullopt, ceph::real_time(), nullptr, nullptr,
           nullptr, nullptr, nullptr,
           rctx, rgw::sal::FLAG_LOG_OP);
@@ -1262,14 +1263,16 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->user=" << (*e)->user << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->obj_key=" << (*e)->obj_key << dendl;
 
-    int diff = std::difftime(time(NULL), (*e)->creationTime);
+    int diff = std::chrono::duration_cast<std::chrono::seconds>(
+        ceph::real_clock::now() - (*e)->creationTime).count();
     bool entry_expired = (diff >= interval);
     if (!entry_expired && !above_watermark) {
       ldpp_dout(dpp, 10) << __LINE__ << " " << __func__
                          << "(): entry not expired and below watermark, waiting on=" << (*e)->key << dendl;
       l.unlock();
       while (!quit && !above_watermark) {
-        diff = (int)std::difftime(time(NULL), (*e)->creationTime);
+        diff = std::chrono::duration_cast<std::chrono::seconds>(
+            ceph::real_clock::now() - (*e)->creationTime).count();
         if (diff >= interval) break;     // entry expired while we slept
 
         boost::system::error_code ec;
@@ -1453,7 +1456,7 @@ void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, ui
   entries_map.emplace(key, e);
 }
 
-void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);

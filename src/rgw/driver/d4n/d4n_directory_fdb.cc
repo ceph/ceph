@@ -6,19 +6,15 @@
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
 #include "d4n_directory_fdb.h"
-#include <iomanip>
-#include <sstream>
 
 namespace rgw::d4n {
 
 using std::map;
 using std::string;
 
-static std::string encode_score(double score)
+static std::string encode_score(int64_t score)
 {
-  std::ostringstream ss;
-  ss << std::setw(20) << std::setfill('0') << std::fixed << std::setprecision(6) << score;
-  return ss.str();
+  return fmt::format("{:019d}", score);
 }
 
 int FDBDirectory::get_kv(const DoutPrefixProvider* dpp, optional_yield y,
@@ -131,7 +127,7 @@ int FDBBucketDirectory::del(const DoutPrefixProvider* dpp, const std::string& bu
 
 int FDBBucketDirectory::add_object(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& object_name, std::optional<CacheObject> params, optional_yield y, Pipeline* pipeline)
 {
-  return fdb_add(dpp, bucket_id, 0, object_name, y);
+  return fdb_add(dpp, bucket_id, 0, object_name, std::move(params), y);
 }
 
 int FDBBucketDirectory::remove_object(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& object_name, optional_yield y)
@@ -139,24 +135,55 @@ int FDBBucketDirectory::remove_object(const DoutPrefixProvider* dpp, const std::
   return fdb_rem(dpp, bucket_id, object_name, y);
 }
 
-int FDBBucketDirectory::scan_objects(const DoutPrefixProvider* dpp, const std::string& bucket_id, uint64_t start_pos, const std::string& pattern, uint64_t count, std::vector<std::string>& objects, std::optional<CacheObject>& params, uint64_t& next_pos, optional_yield y)
+int FDBBucketDirectory::list_objects(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, optional_yield y)
 {
-  return fdb_scan(dpp, bucket_id, start_pos, pattern, count, objects, next_pos, y);
+  //TODO - check if the two paths can be combined into one
+  if (!prefix.empty()) {
+    // SCAN_OBJECTS path (with prefix)
+    auto ret = fdb_scan(dpp, bucket_id, marker, prefix, count, marker_inclusive, objs_info, continuation_token, y);
+    if (ret < 0 ) {
+      ldpp_dout(dpp, 0) << "FDBBucketDirectory::" << __func__ << " fdb_scan: " << ret << dendl;
+      return ret;
+    }
+  } else {
+    // GET_RANGE path (no prefix)
+    auto ret = fdb_range(dpp, bucket_id, marker, count, objs_info, continuation_token, marker_inclusive, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "FDBBucketDirectory::" << __func__ << " fdb_range failed: " << ret << dendl;
+      return ret;
+    }
+  }
+  return 0;
 }
 
-int FDBBucketDirectory::get_range(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& objects, std::optional<CacheObject>& params, optional_yield y)
+//Key form is <bucket-id>/objects/<object-name>
+std::string FDBBucketDirectory::get_object_subspace(const std::string& bucket_id)
 {
-  return fdb_range(dpp, bucket_id, start, stop, offset, count, objects, y);
+  return url_encode(bucket_id, true) + "/objects/";
+}
+std::string FDBBucketDirectory::build_object_index(const std::string& bucket_id, const std::string& obj_name)
+{
+  return get_object_subspace(bucket_id) + obj_name;
 }
 
 int FDBBucketDirectory::fdb_add(const DoutPrefixProvider* dpp,
                                 const std::string& bucket_id,
-                                double /* score */,
+                                double score,
                                 const std::string& member,
+                                std::optional<CacheObject> params,
                                 optional_yield y)
 {
   try {
-    lfdb::set(FDBconn, bucket_id + "/" + member, "");
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " :member " << member << dendl;
+    std::string member_key = build_object_index(bucket_id, member);
+
+    if (params) {
+      lfdb::set(FDBconn, member_key, *params);
+    } else {
+      lfdb::set(FDBconn, member_key, "1");
+    }
+
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " :member_key " << member_key << dendl;
 
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
@@ -175,7 +202,8 @@ int FDBBucketDirectory::fdb_rem(const DoutPrefixProvider* dpp,
                                 optional_yield y)
 {
   try {
-    lfdb::erase(FDBconn, bucket_id + "/" + member);
+    std::string member_key = build_object_index(bucket_id, member);
+    lfdb::erase(FDBconn, member_key);
 
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
@@ -188,38 +216,38 @@ int FDBBucketDirectory::fdb_rem(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-
-
 int FDBBucketDirectory::fdb_range(const DoutPrefixProvider* dpp,
                               const std::string& bucket_id,
                               const std::string& start,
-                              const std::string& stop,
-                              uint64_t offset,
                               uint64_t count,
-                              std::vector<std::string>& members,
+                              std::vector<CacheObject>& objs_info,
+                              std::string& continuation_token,
+                              bool start_inclusive,
                               optional_yield y)
 {
+  continuation_token.clear();
   try {
-    std::string begin_key = bucket_id + "/";
-    if (!start.empty()) {
-      begin_key += start;
-    }
+    std::string base = get_object_subspace(bucket_id);
 
-    std::string end_key = bucket_id + "/";
-    if (!stop.empty()) {
-      end_key += stop + "\xff";
+    std::string begin_key;
+    if (start.empty()) {
+      begin_key = base;
+    } else if (start_inclusive) {
+      begin_key = base + start; // include this key
     } else {
-      end_key += "\xff";
+      begin_key = base + start + std::string(1, '\x00'); // exclusive resume
+    }
+    std::string end_key = base + "\xff";
+
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " begin_key: " << begin_key << dendl;
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " end_key: " << end_key << dendl;
+
+    std::vector<std::pair<std::string, CacheObject>> kvs;
+    for (auto&& block : lfdb::block_generator<CacheObject>(FDBconn, lfdb::select { begin_key, end_key })) {
+      kvs.insert(kvs.end(), std::begin(block), std::end(block));
     }
 
-    std::vector<std::pair<std::string, std::string>> kvs;
-
-    bool ok = lfdb::get(
-        FDBconn,
-        lfdb::select{begin_key, end_key},
-        std::back_inserter(kvs));
-
-    if (!ok || kvs.empty()) {
+    if (kvs.empty()) {
       ldpp_dout(dpp, 10)
           << "FDBBucketDirectory::" << __func__
           << "() Empty response"
@@ -227,16 +255,26 @@ int FDBBucketDirectory::fdb_range(const DoutPrefixProvider* dpp,
       return -ENOENT;
     }
 
-    uint64_t begin = std::min(offset, (uint64_t)kvs.size());
-    uint64_t end = count
-                       ? std::min(begin + count, (uint64_t)kvs.size())
-                       : kvs.size();
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " kvs.size(): " << kvs.size() << dendl;
+    uint64_t i = 0;
+    for (const auto& [key, value] : kvs) {
+      // key layout: "<bucket_id>/objects/<member>"
+      // member itself may contain '/', so we can't use rfind("/") here.
+      std::string member = key.substr(base.size());
+      objs_info.push_back(value);
+      objs_info.back().objName = member;
 
-    const size_t prefix_len = bucket_id.size() + 1;
-
-    for (uint64_t i = begin; i < end; ++i) {
-      members.emplace_back(kvs[i].first.substr(prefix_len));
+      if (count && objs_info.size() == count) {
+        // More results exist only if there's at least one more
+        // key left in what we fetched.
+        if (i + 1 < kvs.size()) {
+          continuation_token = member;
+        }
+        break;
+      }
+      ++i;
     }
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << " continuation_token: " << continuation_token << dendl;
 
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
@@ -251,49 +289,71 @@ int FDBBucketDirectory::fdb_range(const DoutPrefixProvider* dpp,
 
 int FDBBucketDirectory::fdb_scan(const DoutPrefixProvider* dpp,
                              const std::string& bucket_id,
-                             uint64_t cursor,
-                             const std::string& pattern,
+                             const std::string& start_token,
+                             const std::string& prefix,
                              uint64_t count,
-                             std::vector<std::string>& members,
-                             uint64_t next_cursor,
+                             bool marker_inclusive, 
+                             std::vector<CacheObject>& objs_info,
+                             std::string& continuation_token,
                              optional_yield y)
 {
+  continuation_token.clear();
   try {
-    std::string begin_key = bucket_id + "/";
-    std::string end_key = bucket_id + "/\xff";
+    std::string base = get_object_subspace(bucket_id);
 
-    std::vector<std::pair<std::string, std::string>> kvs;
+    std::string prefix_lo = base + prefix;
+    std::string prefix_hi = base + prefix + "\xff";
 
-    bool ok = lfdb::get(
-        FDBconn,
-        lfdb::select{begin_key, end_key},
-        std::back_inserter(kvs));
+    // start_token may come from an S3-level marker the caller chose
+    // freely -- it is NOT guaranteed to fall within [prefix_lo, prefix_hi).
+    // Clamp it into that range rather than trusting it blindly.
+    std::string candidate_begin;
+    if (start_token.empty()) {
+      candidate_begin = prefix_lo;
+    } else {
+      if (marker_inclusive) {
+        candidate_begin = base + start_token;
+      } else {
+        candidate_begin = base + start_token + std::string(1, '\x00');
+      }
+    }
 
-    if (!ok || kvs.empty()) {
-      next_cursor = 0;
+    std::string range_begin = std::max(candidate_begin, prefix_lo);
+    std::string range_end   = prefix_hi;
+    if (range_begin >= range_end) {
+      // The marker is already past the end of this prefix's range --
+      // nothing to return.
+      return -ENOENT;
+    }
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << "() range_begin: " << range_begin << dendl;
+    ldpp_dout(dpp, 20) << "FDBBucketDirectory::" << __func__ << "() range_end: " << range_end << dendl;
+
+    std::vector<std::pair<std::string, CacheObject>> kvs;
+    for (auto&& block : lfdb::block_generator<CacheObject>(FDBconn, lfdb::select { range_begin, range_end })) {
+      kvs.insert(kvs.end(), std::begin(block), std::end(block));
+    }
+    if (kvs.empty()) {
       return -ENOENT;
     }
 
-    uint64_t start = std::min(cursor, (uint64_t)kvs.size());
-    uint64_t end = count
-                       ? std::min(start + count, (uint64_t)kvs.size())
-                       : kvs.size();
+    uint64_t i = 0;
+    for (const auto& [key, value] : kvs) {
+      // key layout: "<bucket_id>/objects/<member>"
+      // member itself may contain '/', so we can't use rfind("/") here.
+      std::string member = key.substr(base.size());
+      objs_info.push_back(value);
+      objs_info.back().objName = member;
 
-    next_cursor = (end >= kvs.size()) ? 0 : end;
-
-    const size_t prefix_len = bucket_id.size() + 1;
-
-    for (uint64_t i = start; i < end; ++i) {
-      std::string member = kvs[i].first.substr(prefix_len);
-
-      if (!pattern.empty() &&
-          member.find(pattern) == std::string::npos) {
-        continue;
+      if (count && objs_info.size() == count) {
+        // More results exist only if there's at least one more
+        // key left in what we fetched.
+        if (i + 1 < kvs.size()) {
+          continuation_token = member;
+        }
+        break;
       }
-
-      members.emplace_back(std::move(member));
+      ++i;
     }
-
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
         << "FDBBucketDirectory::" << __func__
@@ -305,6 +365,45 @@ int FDBBucketDirectory::fdb_scan(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/*
+  Key formats:
+  <bucket-id>#<object-name>/versions/<score>/<version> --> stores versions in order
+  <bucket-id>#<object-name>/score/<version> --> for reverse lookup of a version key using its score
+*/
+std::string FDBObjectDirectory::get_versions_subspace(const DoutPrefixProvider* dpp,
+                                                      const std::string& bucket_id,
+                                                      const std::string& obj_name)
+{
+  std::string index = build_index(bucket_id, obj_name);
+  ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " :index " << index << dendl;
+  return index + "/versions/";
+}
+
+std::string FDBObjectDirectory::get_score_subspace(const DoutPrefixProvider* dpp,
+                                                    const std::string& bucket_id,
+                                                    const std::string& obj_name)
+{
+  std::string index = build_index(bucket_id, obj_name);
+  ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " :index " << index << dendl;
+  return index + "/score/";
+}
+
+std::string FDBObjectDirectory::build_versions_index(const DoutPrefixProvider* dpp,
+                                                    const std::string& bucket_id,
+                                                    const std::string& obj_name,
+                                                    const std::string& score,
+                                                    const std::string& version)
+{
+  return get_versions_subspace(dpp, bucket_id, obj_name) + score + "/" + version;
+}
+
+std::string FDBObjectDirectory::build_version_score_index(const DoutPrefixProvider* dpp,
+                                                          const std::string& bucket_id,
+                                                          const std::string& obj_name,
+                                                          const std::string& version)
+{
+  return get_score_subspace(dpp, bucket_id, obj_name) + version;
+}
 
 int FDBObjectDirectory::exist_key(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, optional_yield y) 
 {
@@ -322,17 +421,36 @@ int FDBObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, opt
 int FDBObjectDirectory::fdb_add(const DoutPrefixProvider* dpp,
                                 const std::string& bucket_id,
                                 const std::string& obj_name,
-                                double score,
+                                int64_t score,
                                 const std::string& version,
+                                std::optional<CacheObjectVersion> params,
                                 optional_yield y)
 {
   try {
-    std::string index = build_index(bucket_id, obj_name);
+    return lfdb::make_transactor(FDBconn)([&](auto& tr) {
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " :bucket_id " << bucket_id << dendl;
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " :obj_name " << obj_name << dendl;
 
-    lfdb::set(FDBconn,
-              index + "/" + std::to_string(score) + "/" + version,
-              "");
+      std::string encoded_score = encode_score(score);
+      std::string score_key = build_version_score_index(dpp, bucket_id, obj_name, version);
 
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " score_key " << score_key << dendl;
+      std::string existing;
+      if (lfdb::get(tr, score_key, existing)){
+        std::string existing_versions_key = build_versions_index(dpp, bucket_id, obj_name, existing, version);
+        lfdb::erase(tr, existing_versions_key);
+      }
+
+      std::string versions_key = build_versions_index(dpp, bucket_id, obj_name, encoded_score, version);
+      if (params) {
+        lfdb::set(tr, versions_key, *params);
+      } else {
+        lfdb::set(tr, versions_key, "1");
+      }
+      lfdb::set(tr, score_key, encoded_score);
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " versions_key: " << versions_key << dendl;
+      return 0;
+    });
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
       << "FDBObjectDirectory::" << __func__
@@ -353,13 +471,12 @@ int FDBObjectDirectory::fdb_range(const DoutPrefixProvider* dpp,
                                   optional_yield y)
 {
   try {
-    std::string prefix = build_index(bucket_id, obj_name) + "/";
-
+    std::string versions_subspace = get_versions_subspace(dpp, bucket_id, obj_name);
     std::vector<std::pair<std::string, std::string>> kvs;
 
     bool ok = lfdb::get(
         FDBconn,
-        lfdb::select{prefix, prefix + "\xff"},
+        lfdb::select{versions_subspace, versions_subspace + "\xff"},
         std::back_inserter(kvs));
 
     if (!ok || kvs.empty()) {
@@ -371,7 +488,7 @@ int FDBObjectDirectory::fdb_range(const DoutPrefixProvider* dpp,
     for (int i = start; i < end; ++i) {
       const std::string& key = kvs[i].first;
 
-      auto pos = key.find('/', prefix.size());
+      auto pos = key.find('/', versions_subspace.size());
 
       if (pos != std::string::npos) {
         members.push_back(key.substr(pos + 1));
@@ -390,37 +507,80 @@ int FDBObjectDirectory::fdb_range(const DoutPrefixProvider* dpp,
 }
 
 int FDBObjectDirectory::fdb_revrange(const DoutPrefixProvider* dpp,
-                                     const std::string& bucket_id,
-                                     const std::string& obj_name,
-                                     const std::string& start,
-                                     const std::string& stop,
-                                     std::vector<std::string>& members,
-                                     optional_yield y)
+                                    const std::string& bucket_id,
+                                    const std::string& obj_name,
+                                    const std::string& marker_version,
+                                    uint64_t count,
+                                    std::vector<CacheObjectVersion>& obj_versions,
+                                    std::string& continuation_token,
+                                    optional_yield y)
 {
+  continuation_token.clear();
   try {
-    std::string prefix = build_index(bucket_id, obj_name) + "/";
+    std::string versions_subspace = get_versions_subspace(dpp, bucket_id, obj_name);
+    std::string range_begin = versions_subspace;
+    std::string range_end = versions_subspace + "\xff";  // default: everything, if no marker
 
-    std::vector<std::pair<std::string, std::string>> kvs;
+    if (!marker_version.empty()) {
+      // Point lookup: resolve the marker's own encoded_score via the
+      // reverse index (index + "/score/" + marker -> encoded_score),
+      // rather than scanning to find it.
+      std::string marker_score;
+      std::string member_key = build_version_score_index(dpp, bucket_id, obj_name, marker_version);
+      bool found = lfdb::get(FDBconn, member_key, marker_score);
+      if (!found) {
+          ldpp_dout(dpp, 10) << "FDBObjectDirectory::" << __func__
+                              << "() marker version not found: " << marker_version << dendl;
+          return -ENOENT;
+      }
 
-    bool ok = lfdb::get(
-        FDBconn,
-        lfdb::select{prefix + start, prefix + stop + "\xff"},
-        std::back_inserter(kvs));
-
-    if (!ok || kvs.empty()) {
+      // Bound strictly before the marker's own key (score + "/" + version),
+      // so the marker itself is excluded and only genuinely older
+      // versions (lower scores) are returned.
+      range_end = build_versions_index(dpp, bucket_id, obj_name, marker_score, marker_version);
+    }
+    ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "() range_begin: " << range_begin << dendl;
+    ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "() range_end: " << range_end << dendl;
+    auto reverse_range = lfdb::select { range_begin, range_end };
+    reverse_range.options.reverse_order = true;
+    std::vector<std::pair<std::string, CacheObjectVersion>> kvs;
+    for (auto&& block : lfdb::block_generator<CacheObjectVersion>(FDBconn, reverse_range)) {
+      kvs.insert(kvs.end(), std::begin(block), std::end(block));
+    }
+    if (kvs.empty()) {
       return -ENOENT;
     }
+    ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "count: " << count << dendl;
 
-    std::reverse(kvs.begin(), kvs.end());
-
-    for (const auto& kv : kvs) {
-      auto pos = kv.first.find('/', prefix.size());
-
-      if (pos != std::string::npos) {
-        members.push_back(kv.first.substr(pos + 1));
+    uint64_t i = 0;
+    for (const auto& [key, value] : kvs) {
+      //const std::string& key = kvs[i].first;
+      // key layout: versions_subspace + encoded_score + "/" + member.
+      // member may itself contain '/', so don't use rfind("/") -- instead
+      // skip forward past the fixed versions_subspace prefix, then past the score segment
+      // (delimited by the first '/' after the prefix), and take everything
+      // that remains as the member.
+      size_t score_start = versions_subspace.size();
+      size_t score_end = key.find('/', score_start);
+      if (score_end == std::string::npos) {
+        ldpp_dout(dpp, 0) << "FDBObjectDirectory::" << __func__
+                          << "() malformed key (no member segment): " << key << dendl;
+        continue;
       }
+      obj_versions.push_back(value);
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "() obj_versions: " << obj_versions[i].version << dendl;
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "() obj_versions: " << obj_versions[i].user_id << dendl;
+      ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << "() obj_versions: " << obj_versions[i].display_name << dendl;
+      if (count && obj_versions.size() == count) {
+        // More results exist only if there's at least one more
+        // key left in what we fetched.
+        if (i + 1 < kvs.size()) {
+          continuation_token = key.substr(score_end + 1);
+        }
+        break;
+      }
+      ++i;
     }
-
   } catch (const lfdb::libfdb_exception& e) {
     ldpp_dout(dpp, 0)
       << "FDBObjectDirectory::" << __func__
@@ -438,65 +598,64 @@ int FDBObjectDirectory::fdb_rem(const DoutPrefixProvider* dpp,
                                 const std::string& obj_name,
                                 const std::string& version,
                                 optional_yield y)
-try
 {
-  return lfdb::make_transactor(FDBconn)([&](auto& tr) {
+  try
+  {
+    return lfdb::make_transactor(FDBconn)([&](auto& tr) {
 
-    const auto prefix = build_index(bucket_id, obj_name) + "/";
+    std::string score_key = build_version_score_index(dpp, bucket_id, obj_name, version);
+    std::string existing_score;
+    bool found = lfdb::get(tr, score_key, existing_score);
 
-    for (const auto& kv : lfdb::pair_generator(tr, lfdb::select { prefix })) {
-      const auto& key = kv.first;
-      const auto pos = key.find('/', prefix.size());
+      if (!found) {
+        return -ENOENT;
+      }
 
-      if (pos == key.npos || key.substr(pos + 1) != version)
-        continue;
-
-      lfdb::erase(tr, key);
-
+      std::string version_key = build_versions_index(dpp, bucket_id, obj_name, existing_score, version);
+      lfdb::erase(tr, version_key);
+      lfdb::erase(tr, score_key);
       return 0;
+    });
+
+  } catch (const  lfdb::libfdb_exception& e) {
+      ldpp_dout(dpp, 0)
+        << "FDBObjectDirectory::" << __func__
+        << "() ERROR: " << e.what()
+        << dendl;
+      return -EINVAL;
     }
-
-    return -ENOENT;
-  });
-
-} catch (const  lfdb::libfdb_exception& e) {
-    ldpp_dout(dpp, 0)
-      << "FDBObjectDirectory::" << __func__
-      << "() ERROR: " << e.what()
-      << dendl;
-
-  return -EINVAL;
+    return 0;
 }
 
 
 int FDBObjectDirectory::fdb_remrangebyscore(const DoutPrefixProvider* dpp,
                                             const std::string& bucket_id,
                                             const std::string& obj_name,
-                                            double min,
-                                            double max,
+                                            int64_t min,
+                                            int64_t max,
                                             optional_yield y)
 try
 {
   return lfdb::make_transactor(FDBconn)([&](auto& tr) {
 
-    const auto prefix = build_index(bucket_id, obj_name) + "/";
+    std::string versions_subspace = get_versions_subspace(dpp, bucket_id, obj_name);
 
     const std::string min_s = encode_score(min);
     const std::string max_s = encode_score(max);
 
     bool removed = false;
 
-    for (const auto& kv : lfdb::pair_generator(tr, lfdb::select { prefix })) {
+    for (const auto& kv : lfdb::pair_generator(tr, lfdb::select { versions_subspace })) {
 
       const auto& key = kv.first;
 
-      const auto pos = key.find('/', prefix.size());
+      const auto pos = key.find('/', versions_subspace.size());
 
       if (pos == std::string::npos)
         continue;
 
       const std::string score =
-          key.substr(prefix.size(), pos - prefix.size());
+          key.substr(versions_subspace.size(), pos - versions_subspace.size());
 
       if (score >= min_s && score <= max_s) {
         lfdb::erase(tr, key);
@@ -525,20 +684,21 @@ int FDBObjectDirectory::fdb_rank(const DoutPrefixProvider* dpp,
                                  optional_yield y)
 {
   try {
-    std::string prefix = build_index(bucket_id, obj_name) + "/";
+
+    std::string versions_subspace = get_versions_subspace(dpp, bucket_id, obj_name);
 
     std::vector<std::pair<std::string, std::string>> kvs;
 
     bool ok = lfdb::get(
         FDBconn,
-        lfdb::select{prefix, prefix + "\xff"},
+        lfdb::select{versions_subspace, versions_subspace + "\xff"},
         std::back_inserter(kvs));
 
     if (!ok)
       return -ENOENT;
 
     for (size_t i = 0; i < kvs.size(); ++i) {
-      auto pos = kvs[i].first.find('/', prefix.size());
+      auto pos = kvs[i].first.find('/', versions_subspace.size());
 
       if (pos != std::string::npos &&
           kvs[i].first.substr(pos + 1) == member) {
@@ -556,13 +716,15 @@ int FDBObjectDirectory::fdb_rank(const DoutPrefixProvider* dpp,
       << dendl;
     return -EINVAL;
   }
+  return 0;
 }
 
 int FDBObjectDirectory::add_version(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const std::string& version, ceph::real_time& creation_time, std::optional<CacheObjectVersion> params, optional_yield y, Pipeline* pipeline)
 {
-  auto score = ceph::real_clock::to_double(creation_time);
+  auto score = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      creation_time.time_since_epoch()).count();
   ldpp_dout(dpp, 10) << "FDBObjectDirectory::" << __func__ << "(): Score of object name: "<< obj_name << " version: " << version << " is: "  << score << dendl;
-  return fdb_add(dpp, bucket_id, obj_name, score, version, y);
+  return fdb_add(dpp, bucket_id, obj_name, score, version, params, y);
 }
 
 int FDBObjectDirectory::remove_version(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const std::string& version, optional_yield y)
@@ -570,31 +732,24 @@ int FDBObjectDirectory::remove_version(const DoutPrefixProvider* dpp, const std:
   return fdb_rem(dpp, bucket_id, obj_name, version, y);
 }
 
-int FDBObjectDirectory::remove_version_by_creation_time(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const double& creation_time,optional_yield y)
+int FDBObjectDirectory::remove_version_by_creation_time(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, ceph::real_time creation_time, optional_yield y)
 {
-  return fdb_remrangebyscore(dpp, bucket_id, obj_name, creation_time, creation_time, y);;
+  auto score = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      creation_time.time_since_epoch()).count();
+  return fdb_remrangebyscore(dpp, bucket_id, obj_name, score, score, y);
 }
 
-int FDBObjectDirectory::list_versions(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const std::string& start, const std::string& stop, std::vector<CacheObjectVersion>& obj_versions, optional_yield y)
+int FDBObjectDirectory::list_versions(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const std::string& marker_version, uint64_t count, std::vector<CacheObjectVersion>& obj_versions, std::string& continuation_token, optional_yield y)
 {
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " obj_name: " << obj_name << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " marker_version: " << marker_version << dendl;
   std::vector<std::string> members;
-  auto ret = fdb_revrange(dpp, bucket_id, obj_name, start, stop, members, y);
-  obj_versions.reserve(members.size());
-  for (const auto& version : members) {
-    auto& obj_version = obj_versions.emplace_back();
-    obj_version.bucketId = bucket_id;
-    obj_version.objName = obj_name;
-    obj_version.version = version;
+  auto ret = fdb_revrange(dpp, bucket_id, obj_name, marker_version, count, obj_versions, continuation_token, y);
+  if (ret < 0 ) {
+    return ret;
   }
-
-  return ret;
+  return 0;
 }
-
-int FDBObjectDirectory::get_version_index(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& obj_name, const std::string& version, std::string& index, optional_yield y)
-{
-  return fdb_rank(dpp, bucket_id, obj_name, version, index, y);
-}
-
 
 int FDBBlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {

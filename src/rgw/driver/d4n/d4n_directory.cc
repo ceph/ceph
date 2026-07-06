@@ -10,12 +10,12 @@ namespace rgw::d4n {
 
 std::string ObjectDirectory::build_index(const std::string& bucket_id, const std::string& obj_name) 
 {
-  return bucket_id + "_" + obj_name;
+  return url_encode(bucket_id, true) + "#" + url_encode(obj_name, true);
 }
 
 std::string BlockDirectory::build_index(CacheBlock* block) 
 {
-  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
+  return url_encode(block->cacheObj.bucketName, true) + "#" + url_encode(block->cacheObj.objName, true) + "/block/" + std::to_string(block->blockID) + "/" + std::to_string(block->size);
 }
 
 
