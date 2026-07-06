@@ -163,6 +163,10 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         role = self.exec_cmd('ac-role-show', rolename='cluster-manager')
         self.assertEqual(role['scopes_permissions'][Scope.POOL], [Permission.READ])
 
+    def test_smb_manager_role_has_hosts_read(self):
+        role = self.exec_cmd('ac-role-show', rolename='smb-manager')
+        self.assertEqual(role['scopes_permissions'][Scope.HOSTS], [Permission.READ])
+
     def test_delete_system_role(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-role-delete', rolename='administrator')

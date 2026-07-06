@@ -292,6 +292,7 @@ GANESHA_MGR_ROLE = Role(
 SMB_MGR_ROLE = Role(
     'smb-manager', 'allows full permissions for the smb scope', {
         Scope.SMB: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+        Scope.HOSTS: [_P.READ],
         Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
