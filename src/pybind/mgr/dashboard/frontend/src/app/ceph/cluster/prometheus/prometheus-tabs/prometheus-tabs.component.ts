@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-prometheus-tabs',
@@ -8,5 +9,13 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
   styleUrls: ['./prometheus-tabs.component.scss']
 })
 export class PrometheusTabsComponent {
-  constructor(public prometheusAlertService: PrometheusAlertService) {}
+  canViewSilences: boolean;
+
+  constructor(
+    public prometheusAlertService: PrometheusAlertService,
+    private authStorageService: AuthStorageService
+  ) {
+    const prometheusPermission = this.authStorageService.getPermissions().prometheus;
+    this.canViewSilences = prometheusPermission.read;
+  }
 }
