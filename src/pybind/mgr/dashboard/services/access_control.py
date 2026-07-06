@@ -218,9 +218,9 @@ ADMIN_ROLE = Role(
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role(
     'read-only',
-    'allows read permission for all security scope except dashboard settings and config-opt', {
+    'allows read permission for all security scope except user, dashboard settings and config-opt', {
         scope_name: [_P.READ] for scope_name in Scope.all_scopes()
-        if scope_name not in (Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
+        if scope_name not in (Scope.USER, Scope.DASHBOARD_SETTINGS, Scope.CONFIG_OPT)
     })
 
 
