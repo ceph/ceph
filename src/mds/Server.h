@@ -215,6 +215,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(const MDRequestRef& mdr, int r = 0);
+  void group_commit_flush();
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      const MDRequestRef& mdr);
 
@@ -638,6 +639,25 @@ private:
 
   // record laggy clients due to laggy OSDs
   std::set<client_t> laggy_clients;
+
+  // Group Commit: piggyback flush with safety-net timer.
+  // Normally the next arriving op flushes the queue (zero extra cost).
+  // A one-shot timer is armed only for the first entry in an empty queue,
+  // as a safety net when no second op arrives. At that point there is
+  // no lock contention, so the extra mds_lock acquisition is harmless.
+  std::vector<MDRequestRef> group_commit_queue;
+  time group_commit_first_arrival = clock::zero();
+  Context *group_commit_safety_timer = nullptr;
+
+  // Adaptive tuning state
+  int group_commit_batch_count = 0;
+  int group_commit_total_ops = 0;
+  double group_commit_interval = 0.000005;  // start at 5us — near-instant
+
+  void group_commit_eval();
+  bool group_commit_is_adaptive() const;
+  double group_commit_get_interval() const;
+  bool group_commit_should_flush() const;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
