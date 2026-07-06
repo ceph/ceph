@@ -2933,6 +2933,122 @@ test_force_promote_before_initial_sync()
   start_mirrors "${secondary_cluster}"
 }
 
+# test demote snapshot unlink and removal post relocation
+declare -a test_demote_snap_unlink_and_removal_post_relocation_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" 2 128)
+
+test_demote_snap_unlink_and_removal_post_relocation_scenarios=1
+
+test_demote_snap_unlink_and_removal_post_relocation()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_count=$1 ; shift
+  local image_size=$1 ; shift
+
+  local group0=test-group0
+  local image_prefix="test_image"
+  # UUID of ${primary_cluster} used by ${secondary_cluster}
+  local primary_cluster_uuid
+  # UUID of ${secondary_cluster} used by ${primary_cluster}
+  local secondary_cluster_uuid
+  local promote_snap_id_old demote_snap_id_old
+  local promote_snap_id_new demote_snap_id_new
+  local group_snap_id
+
+  start_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}" "${image_size}"
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  get_peer_uuid "${secondary_cluster}" "${pool}" primary_cluster_uuid
+  get_peer_uuid "${primary_cluster}" "${pool}" secondary_cluster_uuid
+
+  for i in $(seq 1 10); do
+    # relocation: demote primary and promote secondary
+    wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type "${primary_cluster}" "${pool}/${group0}" 'primary' group_snap_id
+    mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+    # get newest demote snapshot ID
+    wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type "${primary_cluster}" "${pool}/${group0}" 'demoted' demote_snap_id_old
+    # wait for presence of demote snapshot on secondary
+    wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${demote_snap_id_old}" 1
+    # test unlinking of previous primary snapshot
+    wait_for_peer_uuid_not_in_group_snap_peers "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" "${secondary_cluster_uuid}"
+    # test for UUID presence in demote snapshot
+    test_peer_uuid_in_group_snap_peers "${secondary_cluster}" "${pool}/${group0}" "${demote_snap_id_old}" "${primary_cluster_uuid}"
+
+    mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+replaying' ${image_count}
+    # get newest promote snapshot ID
+    wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type "${secondary_cluster}" "${pool}/${group0}" 'primary' promote_snap_id_old
+    # wait for presence of promote snapshot on primary
+    wait_for_test_group_snap_present "${primary_cluster}" "${pool}/${group0}" "${promote_snap_id_old}" 1
+    wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 0
+    wait_for_peer_uuid_not_in_group_snap_peers "${secondary_cluster}" "${pool}/${group0}" "${demote_snap_id_old}" "${primary_cluster_uuid}"
+
+    mirror_group_demote "${secondary_cluster}" "${pool}/${group0}"
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+    # get newest demote snapshot ID
+    wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type "${secondary_cluster}" "${pool}/${group0}" 'demoted' demote_snap_id_new
+    # wait for presence of demote snapshot on primary
+    wait_for_test_group_snap_present "${primary_cluster}" "${pool}/${group0}" "${demote_snap_id_new}" 1
+    # test for UUID presence in demote snapshot
+    wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${demote_snap_id_old}" 0
+    wait_for_peer_uuid_not_in_group_snap_peers "${secondary_cluster}" "${pool}/${group0}" "${promote_snap_id_old}" "${primary_cluster_uuid}"
+    test_peer_uuid_in_group_snap_peers "${primary_cluster}" "${pool}/${group0}" "${demote_snap_id_new}" "${secondary_cluster_uuid}"
+
+    # go back to original state
+    mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' ${image_count}
+    # get newest promote snapshot ID
+    wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type "${primary_cluster}" "${pool}/${group0}" 'primary' promote_snap_id_new
+    # wait for presence of promote snapshot on secondary
+    wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${promote_snap_id_new}" 1
+    # wait for old demote snapshot's peer_uuid to be removed
+    wait_for_peer_uuid_not_in_group_snap_peers "${primary_cluster}" "${pool}/${group0}" "${demote_snap_id_old}" "${secondary_cluster_uuid}"
+    wait_for_peer_uuid_not_in_group_snap_peers "${primary_cluster}" "${pool}/${group0}" "${demote_snap_id_new}" "${secondary_cluster_uuid}"
+    wait_for_test_group_snap_present "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" 0
+
+    # cleanup
+    promote_snap_id_old=''
+    demote_snap_id_old=''
+    promote_snap_id_new=''
+    demote_snap_id_new=''
+  done
+
+  local count
+  # FIXME: change the count comparison to 3 when all snap cleanup is implemented correctly
+  # After each iteration:
+  # A cluster can have three mirror group snapshots:
+  # 1. demote primary, 2. demote non-primary or non-primary and 3. primary
+  # Hence at most 3 snapshots can be present in each cluster
+  get_group_snap_count "${primary_cluster}" "${pool}"/"${group0}" '*' count
+  test "${count}" -gt 4 && { fail "unexpected snap count=${count} after multiple relocation cycles"; return 1; }
+  get_group_snap_count "${secondary_cluster}" "${pool}"/"${group0}" '*' count
+  test "${count}" -gt 4 && { fail "unexpected snap count=${count} after multiple relocation cycles"; return 1; }
+
+  # cleanup
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # test group snapshot resync after relocate and force promote of primary
 declare -a test_resync_after_relocate_and_force_promote_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" 2 128)
 
@@ -4070,6 +4186,7 @@ run_all_tests()
   run_test_all_scenarios test_interrupted_sync_restarted_daemon
   run_test_all_scenarios test_interrupted_sync
   run_test_all_scenarios test_resync_after_relocate_and_force_promote
+  run_test_all_scenarios test_demote_snap_unlink_and_removal_post_relocation
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
