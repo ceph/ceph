@@ -799,6 +799,13 @@ void MDSRankDispatcher::shutdown()
 
   g_conf().remove_observer(this);
 
+  // Flush any pending group-commit entries before shutting down timer
+  // and mdlog. mds_lock is held, timer and mdlog are alive; stopping
+  // is already true so no new entries will be queued.
+  if (server) {
+    server->group_commit_flush();
+  }
+
   timer.shutdown();
 
   // MDLog has to shut down before the finisher, because some of its

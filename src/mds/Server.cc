@@ -2096,6 +2096,13 @@ void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn,
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
   ceph_assert(!mdr->has_completed);
 
+  // Piggyback: flush stale group-commit entries before processing.
+  // This replaces timer callbacks — every arriving metadata op does
+  // the check, so no extra mds_lock acquisition is needed.
+  if (group_commit_should_flush()) {
+    group_commit_flush();
+  }
+
   // note trace items for eventual reply.
   mdr->tracei = in;
   if (in)
@@ -2119,10 +2126,119 @@ void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn,
 
     mdr->set_queued_next_replay_op();
     mds->queue_one_replay();
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->handle_locks_for_early_reply(mdr.get());
-  else
+  } else if (g_conf().get_val<bool>("mds_group_commit_enable") &&
+             !mds->is_daemon_stopping()) {
+    if (group_commit_queue.empty()) {
+      group_commit_first_arrival = clock::now();
+      // Arm a safety-net timer for the case where no second op
+      // arrives to piggyback. At this point there is only 1 entry
+      // so lock contention is zero — the extra mds_lock is free.
+      double interval = group_commit_is_adaptive()
+        ? group_commit_interval
+        : group_commit_get_interval();
+      group_commit_safety_timer = mds->timer.add_event_after(
+          interval, new LambdaContext([this](int) {
+            group_commit_flush();
+          }));
+    }
+    group_commit_queue.push_back(mdr);
+    if (group_commit_queue.size() >=
+        (size_t)g_conf().get_val<Option::size_t>("mds_group_commit_max_entries")) {
+      group_commit_flush();
+    }
+    // Flush will be done by: (a) batch-full above, or (b) next
+    // arriving op's piggyback check at top of journal_and_reply,
+    // or (c) the safety-net timer above. No timer in the hot path.
+  } else {
     mdlog->flush();
+  }
+}
+
+bool Server::group_commit_is_adaptive() const
+{
+  return g_conf().get_val<double>("mds_group_commit_max_interval") == 0.0;
+}
+
+double Server::group_commit_get_interval() const
+{
+  double cfg = g_conf().get_val<double>("mds_group_commit_max_interval");
+  return (cfg > 0) ? cfg : GROUP_COMMIT_MIN_INTERVAL;
+}
+
+bool Server::group_commit_should_flush() const
+{
+  if (group_commit_queue.empty())
+    return false;
+
+  if (group_commit_queue.size() >=
+      (size_t)g_conf().get_val<Option::size_t>("mds_group_commit_max_entries"))
+    return true;
+
+  double max_wait = group_commit_is_adaptive()
+    ? group_commit_interval
+    : group_commit_get_interval();
+
+  auto elapsed = std::chrono::duration<double>(
+      clock::now() - group_commit_first_arrival);
+  return elapsed.count() >= max_wait;
+}
+
+void Server::group_commit_flush()
+{
+  // Cancel safety-net timer if piggyback (or batch-full) fired first
+  if (group_commit_safety_timer) {
+    mds->timer.cancel_event(group_commit_safety_timer);
+    group_commit_safety_timer = nullptr;
+  }
+  if (!group_commit_queue.empty()) {
+    size_t batch_size = group_commit_queue.size();
+    dout(10) << __func__ << " flushing batch of " << batch_size
+             << " entries, interval=" << group_commit_interval << dendl;
+
+    if (group_commit_is_adaptive()) {
+      group_commit_total_ops += batch_size;
+      group_commit_batch_count++;
+    }
+
+    mdlog->flush();
+    group_commit_queue.clear();
+
+    if (group_commit_is_adaptive() && group_commit_batch_count >= GROUP_COMMIT_EVAL_BATCHES) {
+      group_commit_eval();
+    }
+  }
+}
+
+void Server::group_commit_eval()
+{
+  if (group_commit_batch_count == 0) return;
+
+  double avg_size = (double)group_commit_total_ops / group_commit_batch_count;
+  double old_interval = group_commit_interval;
+
+  dout(10) << __func__ << " avg_batch=" << avg_size
+           << " batches=" << group_commit_batch_count
+           << " total_ops=" << group_commit_total_ops
+           << " interval=" << group_commit_interval << dendl;
+
+  if (avg_size >= 3.0) {
+    group_commit_interval = std::min(group_commit_interval * 2.0, GROUP_COMMIT_MAX_INTERVAL);
+  } else if (avg_size >= 2.0) {
+    group_commit_interval = std::min(group_commit_interval * 1.5, GROUP_COMMIT_MAX_INTERVAL);
+  } else {
+    group_commit_interval = std::max(group_commit_interval * 0.5, GROUP_COMMIT_MIN_INTERVAL);
+  }
+
+  if (group_commit_interval != old_interval) {
+    dout(5) << __func__ << " adaptive interval " << old_interval
+            << " -> " << group_commit_interval
+            << " (avg_batch=" << avg_size << ")" << dendl;
+  }
+
+  group_commit_batch_count = 0;
+  group_commit_total_ops = 0;
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, const MDRequestRef& mdr,
