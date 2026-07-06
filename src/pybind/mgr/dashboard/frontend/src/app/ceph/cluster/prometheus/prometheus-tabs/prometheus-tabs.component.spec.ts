@@ -40,6 +40,6 @@ describe('PrometheusTabsComponent', () => {
   });
 
   it('should show silences to users with read access', () => {
-    expect(component.canViewSilences).toBe(true);
+    expect(component.prometheusPermissions.read).toBe(true);
   });
 });
