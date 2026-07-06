@@ -593,6 +593,9 @@ void PGRecovery::enqueue_push(
   if (!added)
     return;
   peering_state.prepare_backfill_for_missing(obj, v, peers);
+  // release the budget_retry_releaser now that we're dispatching a real
+  // push -- recover_object_with_throttle will acquire its own slot
+  budget_retry_releaser.reset();
   std::ignore = recover_object_with_throttle(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
@@ -618,6 +621,10 @@ void PGRecovery::enqueue_drop(
 {
   LOG_PREFIX(PGRecovery::update_peers_last_backfill);
   DEBUGDPP("obj={} v={} target={}", *pg->get_dpp(), obj, v, target);
+  // release the budget_retry_releaser now that we're dispatching work
+  // (same as enqueue_push) -- slot was held to guarantee Enqueuing
+  // found budget available, drops don't need their own throttle slot
+  budget_retry_releaser.reset();
   // allocate a pair if target is seen for the first time
   auto& req = backfill_drop_requests[target];
   if (!req) {
@@ -705,9 +712,46 @@ bool PGRecovery::budget_available() const
   return ss.throttle_available();
 }
 
+PGRecovery::interruptible_future<>
+PGRecovery::do_request_budget_retry()
+{
+  LOG_PREFIX(PGRecovery::do_request_budget_retry);
+  DEBUGDPP("budget unavailable with nothing in flight, "
+           "waiting for throttle slot", *pg->get_dpp());
+  auto releaser = co_await get_backfill_throttle();
+  budget_retry_in_flight = false;
+  if (!backfill_state) {
+    DEBUGDPP("backfill_state is null, skipping BudgetAvailable "
+             "(pg cleaned or interval changed)", *pg->get_dpp());
+    co_return;
+  }
+  // hold the releaser so the slot stays acquired until Enqueuing
+  budget_retry_releaser.emplace(std::move(releaser));
+  if (backfill_state->is_triggered()) {
+    backfill_state->post_event(
+      BackfillState::BudgetAvailable{}.intrusive_from_this());
+  } else {
+    backfill_state->process_event(
+      BackfillState::BudgetAvailable{}.intrusive_from_this());
+  }
+}
+
+void PGRecovery::request_budget_retry()
+{
+  LOG_PREFIX(PGRecovery::request_budget_retry);
+  if (budget_retry_in_flight) {
+    DEBUGDPP("budget retry already in flight, skipping", *pg->get_dpp());
+    return;
+  }
+  budget_retry_in_flight = true;
+  std::ignore = do_request_budget_retry();
+}
+
 void PGRecovery::on_pg_clean()
 {
   replica_scan_throttle_releasers.clear();
+  budget_retry_releaser.reset();
+  budget_retry_in_flight = false;
   backfill_state.reset();
 }
 
@@ -775,6 +819,8 @@ void PGRecovery::on_activate_complete()
   LOG_PREFIX(PGRecovery::on_activate_complete);
   DEBUGDPP("backfill_state={}", *pg->get_dpp(), fmt::ptr(backfill_state.get()));
   replica_scan_throttle_releasers.clear();
+  budget_retry_releaser.reset();
+  budget_retry_in_flight = false;
   backfill_state.reset();
 }
 
