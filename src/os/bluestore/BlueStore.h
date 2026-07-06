@@ -238,7 +238,7 @@ enum {
   l_bluestore_zero_lat,
   l_bluestore_omap_set_lat,   // shared: omap setkeys/setheader/rmkeys/rmkey_range
   l_bluestore_rename_lat,
-  l_bluestore_collection_lat,   // shared read: list/exists/empty/bits
+  l_bluestore_collection_lat,   // shared read: list/exists/bits
   l_bluestore_other_write_lat,        // shared write: set_alloc_hint, set_collection_opts, collection create/remove/split/merge
   //****************************************
 
