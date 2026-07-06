@@ -1102,8 +1102,8 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
       s->track_enqueue(m, [this, priv, s, m]() {
-        s->track_dequeue(m);
         handle_osd_op_reply(cref_cast<MOSDOpReply>(m));
+        s->track_dequeue(m);
       });
     } else {
       handle_osd_op_reply(cref_cast<MOSDOpReply>(m));
@@ -1116,8 +1116,8 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
       s->track_enqueue(m, [this, priv, s, m]() {
-        s->track_dequeue(m);
         handle_watch_notify(cref_cast<MWatchNotify>(m));
+        s->track_dequeue(m);
       });
     } else {
       handle_watch_notify(cref_cast<MWatchNotify>(m));
@@ -1139,8 +1139,8 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
       s->track_enqueue(m, [this, priv, s, m]() {
-        s->track_dequeue(m);
         handle_osd_backoff(cref_cast<MOSDBackoff>(m));
+        s->track_dequeue(m);
       });
     } else {
       handle_osd_backoff(cref_cast<MOSDBackoff>(m));
@@ -1156,8 +1156,8 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
       auto s = static_cast<OSDSession*>(priv.get());
       if (s) {
         s->track_enqueue(m, [this, priv, s, m]() {
-          s->track_dequeue(m);
           handle_command_reply(cref_cast<MCommandReply>(m));
+          s->track_dequeue(m);
         });
       } else {
         handle_command_reply(cref_cast<MCommandReply>(m));
