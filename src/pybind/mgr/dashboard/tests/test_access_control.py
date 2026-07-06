@@ -159,6 +159,10 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'allows read permission for all security scope except user, dashboard settings and config-opt'
         )
 
+    def test_cluster_manager_role_has_pool_read(self):
+        role = self.exec_cmd('ac-role-show', rolename='cluster-manager')
+        self.assertEqual(role['scopes_permissions'][Scope.POOL], [Permission.READ])
+
     def test_delete_system_role(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-role-delete', rolename='administrator')
