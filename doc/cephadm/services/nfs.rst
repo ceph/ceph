@@ -112,6 +112,35 @@ Example with RDMA enabled:
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
 
+Transparent State Migration (TSM)
+----------------------------------
+
+Transparent State Migration (TSM) is a high-availability feature that allows NFS
+clients to maintain their state (open files, locks, etc.) when failing over to
+another NFS server. TSM is disabled by default.
+
+To enable TSM, set ``enable_tsm: true`` in the NFS service spec. You can optionally
+set ``tsm_port`` to use a custom TSM port. If omitted, NFS Ganesha uses its default.
+
+Example with TSM enabled:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      enable_tsm: true
+      tsm_port: 5000   # optional
+
+.. note::
+   * TSM is configured in the NFS_CORE_PARAM block of the ganesha.conf file.
+   * When using daemon colocation, each colocated daemon requires a unique ``tsm_port``
+     in the ``colocation_ports`` list. See :ref:`colocation-with-tsm` for a complete example.
+
 NFS Daemon Colocation
 ----------------------
 
@@ -169,6 +198,7 @@ In this configuration, 4 daemons total are deployed (2 per host), distributed ac
      to cover the node down scenario (or ``count_per_host - 1`` when using ``count_per_host``).
    * Each entry must specify ``data_port``, ``monitoring_port``, and ``qos_cluster_port``.
      When ``enable_rdma`` is true, each entry must also include ``rdma_port``.
+     When ``enable_tsm`` is true, each entry must also include ``tsm_port``.
    * If ``colocation_ports`` is not specified, ports will be automatically
      incremented for colocated daemons (e.g., 2049 → 2050 → 2051 for data ports,
      and 9587 → 9588 → 9589 for monitoring ports).
@@ -200,6 +230,54 @@ run on each host:
 
 This will deploy exactly 3 NFS daemons on each of the 3 hosts (9 daemons total),
 with custom ports for the 2nd and 3rd daemons on each host.
+
+Colocation with TSM
+~~~~~~~~~~~~~~~~~~~
+
+When TSM (Transparent State Migration) is enabled with colocation, each colocated daemon
+requires a unique ``tsm_port`` in addition to the standard ports. This example demonstrates
+both TSM colocation and the failure scenario where daemons may be redeployed to maintain
+the desired count:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 2
+      hosts:
+        - host1
+        - host2
+    spec:
+      port: 2049
+      monitoring_port: 9587
+      enable_tsm: true
+      tsm_port: 36369
+      colocation_ports:
+        - data_port: 3049
+          monitoring_port: 9588
+          cluster_qos_port: 31312
+          tsm_port: 36370
+
+**Normal operation** - 2 daemons total deployed (1 per host), distributed across
+``host1`` and ``host2``:
+
+* **host1, daemon 1**: ``port: 2049``, ``monitoring_port: 9587``, ``cluster_qos_port: 31311``, ``tsm_port: 36369``
+* **host2, daemon 1**: ``port: 2049``, ``monitoring_port: 9587``, ``cluster_qos_port: 31311``, ``tsm_port: 36369``
+
+**Failure scenario** - If ``host2`` becomes unavailable:
+
+* Cephadm automatically redeploys the daemon from ``host2`` onto ``host1``
+* Result: Both daemons now run on ``host1`` (temporarily colocated)
+* **host1, daemon 1**: ``port: 2049``, ``monitoring_port: 9587``, ``cluster_qos_port: 31311``, ``tsm_port: 36369``
+* **host1, daemon 2**: ``data_port: 3049``, ``monitoring_port: 9588``, ``cluster_qos_port: 31312``, ``tsm_port: 36370``
+* When ``host2`` recovers, cephadm may rebalance the daemons back to the original distribution
+
+.. note::
+   * Always provide ``colocation_ports`` entries equal to ``count - 1`` (or ``count_per_host - 1``)
+     to ensure sufficient port configurations for the worst-case scenario where all daemons
+     end up on a single host due to failures.
+   * If ``colocation_ports`` is not specified, cephadm will auto-increment ports as needed.
 
 TLS/SSL Example
 ---------------

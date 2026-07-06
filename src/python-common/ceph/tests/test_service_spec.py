@@ -638,6 +638,78 @@ def test_nfs_spec_from_json_rdma():
     assert out.get('spec', {}).get('rdma_port') == 1234
 
 
+def test_nfs_spec_tsm_default():
+    """NFS spec without TSM: enable_tsm is False."""
+    spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
+    assert spec.enable_tsm is False
+    assert spec.tsm_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
+
+
+def test_nfs_spec_tsm_enabled():
+    """NFS spec with enable_tsm: get_port_start returns 4 ports, default tsm_port 36369."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_tsm=True,
+    )
+    assert spec.enable_tsm is True
+    assert spec.tsm_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311, 36369]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'tsm_port']
+
+
+def test_nfs_spec_tsm_custom_port():
+    """NFS spec with enable_tsm and custom tsm_port."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_tsm=True,
+        tsm_port=40000,
+    )
+    assert spec.enable_tsm is True
+    assert spec.tsm_port == 40000
+    assert spec.get_port_start() == [2049, 9587, 31311, 40000]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'tsm_port']
+    
+
+def test_nfs_spec_colocation_with_tsm_and_rdma():
+    """NFS spec with both TSM and RDMA colocation."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        enable_tsm=True,
+        enable_rdma=True,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9597, 'cluster_qos_port': 31312, 'tsm_port': 36370, 'rdma_port': 20050},
+            {'data_port': 4049, 'monitoring_port': 9607, 'cluster_qos_port': 31313, 'tsm_port': 36371, 'rdma_port': 20051},
+        ]
+    )
+    spec.validate()
+    assert spec.enable_tsm is True
+    assert spec.enable_rdma is True
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'rdma_port', 'tsm_port']
+
+def test_nfs_spec_from_json_tsm():
+    """NFS spec enable_tsm and tsm_port roundtrip via from_json/to_json."""
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_tsm': True,
+            'tsm_port': 40000,
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.enable_tsm is True
+    assert spec.tsm_port == 40000
+    out = spec.to_json()
+    assert out.get('spec', {}).get('enable_tsm') is True
+    assert out.get('spec', {}).get('tsm_port') == 40000
+
+
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
 service_name: crash
