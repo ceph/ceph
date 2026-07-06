@@ -286,6 +286,85 @@ The specification can then be applied by running the following command:
 
    ceph orch apply -i nfs.yaml
 
+gRPC/mTLS Example
+-----------------
+
+Cephadm generates and manages gRPC certificates automatically by default (``cephadm-signed``). Admin can also provide its own
+certificates using ``inline``.
+
+Here's an example NFS service specification with inline gRPC/mTLS certificates:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+      - ceph-node-0
+    spec:
+      port: 2049
+      grpc_certificate_source: inline|cephadm-signed
+      grpc_server_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM cert contents here)
+        -----END CERTIFICATE-----
+      grpc_server_key: |
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      grpc_client_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM cert contents here)
+        -----END CERTIFICATE-----
+      grpc_client_key: |
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      grpc_ca_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM CA cert contents here)
+        -----END CERTIFICATE-----
+
+gRPC Parameters
+~~~~~~~~~~~~~~~~~~~~
+
+* ``grpc_certificate_source`` (string): Specifies the source of the gRPC mTLS
+  certificates. Options include:
+
+  - ``cephadm-signed`` (default): Cephadm automatically generates and signs the
+    gRPC certificates using its internal CA.
+  - ``inline``: Provide all five certificates and keys directly in the
+    specification.
+
+* ``grpc_server_cert`` (string): The gRPC server certificate in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_server_key`` (string): The gRPC server private key in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_client_cert`` (string): The gRPC client certificate in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_client_key`` (string): The gRPC client private key in PEM format.
+  Required when using ``inline`` certificate source.
+
+* ``grpc_ca_cert`` (string): The CA certificate in PEM format used to verify
+  both the server and client certificates. Required when using ``inline``
+  certificate source.
+
+* ``grpc_certs_dir`` (string): The path inside the container where gRPC
+  certificate files are stored. Default is ``/etc/ganesha/certs``.
+
+.. note:: When ``grpc_certificate_source`` is set to ``inline``, all five
+   fields (``grpc_server_cert``, ``grpc_server_key``, ``grpc_client_cert``,
+   ``grpc_client_key``, ``grpc_ca_cert``) must be provided.
+
+The specification can then be applied by running the following command:
+
+.. prompt:: bash #
+
+   ceph orch apply -i nfs.yaml
+
 .. _cephadm-ha-nfs:
 
 High-availability NFS
