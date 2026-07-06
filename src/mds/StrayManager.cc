@@ -685,6 +685,48 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
     return;
   }
 
+  /*
+   * Check for lock contention on both the source stray dentry and the
+   * destination dentry before sending the internal rename.  The rename
+   * will try to xlock both source and dest dentries, and wrlock both
+   * parent directories' filelock/nestlock.  If a client operation
+   * (lookup, unlink) already holds or is waiting for a conflicting lock
+   * on either dentry, the rename will block and become a slow request.
+   * Defer the reintegration — it will be retried the next time a
+   * dentry link operation on the remote parent triggers eval_remote().
+   *
+   * Check both the current lock state (held) and the waiter queue
+   * (waiting).  A lock that is currently held but has no waiters yet
+   * would pass a waiter-only check, but the rename would still block
+   * trying to acquire it.  Likewise the source stray dentry may be
+   * under contention from a client holding caps on the stray inode.
+   */
+  auto has_lock_contention = [](CDentry *dn) -> bool {
+    if (!dn->is_auth())
+      return false;
+    // lock is currently held in a conflicting mode
+    if (dn->lock.is_rdlocked() ||
+        dn->lock.is_wrlocked() ||
+        dn->lock.is_xlocked())
+      return true;
+    // lock has waiters queued for conflicting modes
+    if (dn->lock.is_waiter_for(SimpleLock::WAIT_WR) ||
+        dn->lock.is_waiter_for(SimpleLock::WAIT_XLOCK))
+      return true;
+    return false;
+  };
+
+  if (has_lock_contention(rdn)) {
+    dout(10) << __func__ << ": dest dentry " << *rdn
+             << " has lock contention, deferring" << dendl;
+    return;
+  }
+  if (has_lock_contention(straydn)) {
+    dout(10) << __func__ << ": stray dentry " << *straydn
+             << " has lock contention, deferring" << dendl;
+    return;
+  }
+
   logger->inc(l_mdc_strays_reintegrated);
 
   // rename it to remote linkage .
