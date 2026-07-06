@@ -4165,6 +4165,25 @@ int main(int argc, const char **argv)
     app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
     app.add_option("--uid,-i",  uid_str, "user id")->take_last();
 
+    // Ceph's globals are stripped by rgw_global_init() before CLI11 runs, so document
+    // them in the footer (descriptions from generic_usage(), common/ceph_argparse.cc).
+    // Set BEFORE the subcommands: footer_ is copied to children at construction, so
+    // every command's help stays self-contained.
+    // Disable paragraph formatting to emit the padding verbatim.
+    app.get_formatter()->enable_footer_formatting(false);
+    app.footer(
+        "Ceph options:\n"
+        "  --conf/-c FILE       read configuration from the given configuration file\n"
+        "  --cluster NAME       set cluster name (default: ceph)\n"
+        "  --id/--user ID       set ID portion of my name\n"
+        "  --name/-n TYPE.ID    set name\n"
+        "  --no-config-file     do not require a config file to be present\n"
+        "  --setuser USER       set uid to user or uid (and gid to user's gid)\n"
+        "  --setgroup GROUP     set gid to group or gid\n"
+        "  --version/-v         show version and quit\n"
+        "  --show_args          print the command-line arguments\n"
+        "  --<config>=<value>   set any ceph config option (e.g. --mon_host, --debug-rgw)");
+
     { // script command registrations
       auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
       auto* script_put = script->add_subcommand("put", "upload a Lua script to a context");
