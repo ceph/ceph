@@ -71,6 +71,8 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
         return AuthEntity('mon.')
     elif daemon_type in ['mgr', 'osd', 'mds']:
         return AuthEntity(f'{daemon_type}.{daemon_id}')
+    elif daemon_type == 'smb':
+        return AuthEntity(f'client.smb.config.{daemon_id}')
     else:
         raise OrchestratorError(f"unknown daemon type {daemon_type}")
 

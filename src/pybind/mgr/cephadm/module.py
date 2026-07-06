@@ -3140,7 +3140,7 @@ Then run the following:
 
         if action == 'rotate-key':
             if d.daemon_type not in ['mgr', 'osd', 'mds',
-                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi']:
+                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi', 'smb']:
                 raise OrchestratorError(
                     f'key rotation not supported for {d.daemon_type}'
                 )
