@@ -599,6 +599,28 @@ class Orchestrator(object):
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
+    def cert_store_vault_token_set(self, token: str) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_vault_token_rm(self) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_vault_issue(
+        self,
+        consumer: str,
+        common_name: str,
+        cert_name: str = '',
+        service_name: str = '',
+        hostname: str = '',
+        ca_cert_name: str = '',
+        alt_names: Optional[List[str]] = None,
+        ip_sans: Optional[List[str]] = None,
+        pki_mount: Optional[str] = None,
+        role: Optional[str] = None,
+        ttl: Optional[str] = None,
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
     def cert_store_rm_cert(
         self,
         cert_name: str,

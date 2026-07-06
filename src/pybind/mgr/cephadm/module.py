@@ -4163,6 +4163,19 @@ Then run the following:
 
 
     @handle_orch_error
+    def cert_store_vault_token_set(self, token: str) -> str:
+        token = token.strip()
+        if not token:
+            raise OrchestratorError('Vault token cannot be empty')
+        self.cert_mgr.set_vault_token(token)
+        return 'Vault token set correctly'
+
+    @handle_orch_error
+    def cert_store_vault_token_rm(self) -> str:
+        self.cert_mgr.rm_vault_token()
+        return 'Vault token removed correctly'
+
+    @handle_orch_error
     def cert_store_vault_issue(
         self,
         consumer: str,
