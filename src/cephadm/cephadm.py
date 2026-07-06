@@ -1175,12 +1175,16 @@ def deploy_daemon(
             cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
+                # Disable automatic systemd enable for NFS and keepalived; the mgr
+                # starts them when appropriate (see cephadm serve / DISABLED_SERVICES).
+                enable_daemon = daemon_type not in ('nfs', 'keepalived')
                 deploy_daemon_units(
                     ctx,
                     ident,
                     uid,
                     gid,
                     c,
+                    enable=enable_daemon,
                     osd_fsid=osd_fsid,
                     endpoints=endpoints,
                     init_containers=init_containers,
