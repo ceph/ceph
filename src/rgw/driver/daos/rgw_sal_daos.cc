@@ -202,7 +202,7 @@ int DaosUser::trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
 }
 
 int DaosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y) {
-  const string name = info.user_id.to_str();
+  const string name = get_info().user_id.to_str();
   ldpp_dout(dpp, 20) << "DEBUG: load_user, name=" << name << dendl;
 
   DaosUserInfo duinfo;
@@ -212,7 +212,7 @@ int DaosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y) {
     return ret;
   }
 
-  info = duinfo.info;
+  get_info_mut() = duinfo.info;
   attrs = duinfo.attrs;
   objv_tracker.read_version = duinfo.user_version;
   return 0;
@@ -230,7 +230,7 @@ int DaosUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int DaosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y,
                          bool exclusive, RGWUserInfo* old_info) {
-  const string name = info.user_id.to_str();
+  const string name = get_info().user_id.to_str();
   ldpp_dout(dpp, 10) << "DEBUG: Store_user(): User name=" << name << dendl;
 
   // Read user
@@ -319,19 +319,19 @@ std::unique_ptr<struct ds3_user_info> DaosUser::get_encoded_info(
     bufferlist& bl, obj_version& obj_ver) {
   // Encode user data
   struct DaosUserInfo duinfo;
-  duinfo.info = info;
+  duinfo.info = get_info();
   duinfo.attrs = attrs;
   duinfo.user_version = obj_ver;
   duinfo.encode(bl);
 
   // Initialize ds3_user_info
   access_ids.clear();
-  for (auto const& [id, key] : info.access_keys) {
+  for (auto const& [id, key] : get_info().access_keys) {
     access_ids.push_back(id.c_str());
   }
   return std::unique_ptr<struct ds3_user_info>(
-      new ds3_user_info{.name = info.user_id.to_str().c_str(),
-                        .email = info.user_email.c_str(),
+      new ds3_user_info{.name = get_info().user_id.to_str().c_str(),
+                        .email = get_info().user_email.c_str(),
                         .access_ids = access_ids.data(),
                         .access_ids_nr = access_ids.size(),
                         .encoded = bl.c_str(),
@@ -339,7 +339,7 @@ std::unique_ptr<struct ds3_user_info> DaosUser::get_encoded_info(
 }
 
 int DaosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y) {
-  const string name = info.user_id.to_str();
+  const string name = get_info().user_id.to_str();
 
   // TODO: the expectation is that the object version needs to be passed in as a
   // method arg see int DB::remove_user(const DoutPrefixProvider *dpp,
