@@ -397,10 +397,10 @@ class CertMgr:
                                 ttl: Optional[str] = None) -> TLSCredentials:
         """Issue a certificate from Vault PKI and store it in certmgr.
 
-        This is the manual Vault enrollment path. It intentionally stores the
-        resulting cert/key as non-editable and managed_by=vault so existing
-        services can consume the material through certificate_source=reference.
-        Renewal is not enabled here; later commits use the persisted metadata.
+        This stores the resulting cert/key as non-editable and
+        managed_by=vault. It is used by both the manual Vault enrollment path
+        and services using certificate_source=vault. The persisted metadata is
+        consumed by the periodic Vault renewal path.
         """
         scope, target = self._ensure_vault_issue_target(cert_name, key_name, service_name, host)
         self._ensure_vault_ca_scope(ca_cert_name, scope)

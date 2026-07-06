@@ -4161,7 +4161,6 @@ Then run the following:
         )
         return f'Key for {key_name} set correctly'
 
-
     @handle_orch_error
     def cert_store_vault_token_set(self, token: str) -> str:
         token = token.strip()
@@ -4495,6 +4494,19 @@ Then run the following:
                     f"certificate_source changed from '{old_source}' to '{new_source}' "
                     f"for service '{spec.service_name()}'. This will trigger a service "
                     f"reconfiguration."
+                )
+
+        if getattr(spec, 'certificate_source', None) == CertificateSource.VAULT.value:
+            vault_config = self.cert_mgr.get_vault_issuer_config()
+            missing_fields = vault_config.missing_required_fields()
+            if missing_fields:
+                raise OrchestratorError(
+                    f"SSL is configured with '{CertificateSource.VAULT.value}', but Vault issuer config is incomplete. "
+                    f"Missing: {', '.join(missing_fields)}."
+                )
+            if not self.cert_mgr.get_vault_token():
+                raise OrchestratorError(
+                    f"SSL is configured with '{CertificateSource.VAULT.value}', but no Vault token is configured."
                 )
 
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):

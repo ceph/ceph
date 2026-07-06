@@ -19,6 +19,7 @@ from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSO
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
 from cephadm.vault import VaultClientError, VaultIssuerConfig, VaultPKIClient
+from cephadm.services.cephadmservice import CephadmService, CERTIFICATE_SOURCE_VAULT
 from cephadm.cert_metadata import (
     VAULT_CERT_METADATA_STORE_PREFIX,
     VaultCertificateMetadata,
@@ -305,6 +306,130 @@ IwuZ9Cw+0P6sn81cI8FaeA==
 
 TLSOBJECT_STORE_CERT_PREFIX = f'{TLSOBJECT_STORE_PREFIX}cert.'
 TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
+
+
+
+
+class TestCertificateSourceVaultServiceSupport:
+
+    def _service(self):
+        mgr = mock.MagicMock()
+        mgr.inventory.get_addr.return_value = '10.0.0.10'
+        mgr.get_fqdn.return_value = 'rgw.example.com'
+        mgr.cert_mgr = mock.MagicMock()
+        mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = None
+        mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = None
+        return CephadmService(mgr)
+
+    def _spec(self):
+        spec = mock.MagicMock()
+        spec.service_name.return_value = 'rgw.foo'
+        spec.certificate_source = CERTIFICATE_SOURCE_VAULT
+        spec.custom_sans = ['rgw.alt.example.com']
+        return spec
+
+    def test_certificate_source_vault_issues_and_stores_certificate_on_first_use(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+        svc.mgr.cert_mgr.issue_vault_certificate.return_value = TLSCredentials(
+            cert='vault-cert',
+            key='vault-key',
+            ca_cert='vault-ca',
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=['rgw.alt.example.com'],
+        )
+
+        assert creds.cert == 'vault-cert'
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_called_once_with(
+            cert_name='rgw_ssl_cert',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            service_name='rgw.foo',
+            host='host1',
+            common_name='rgw.alt.example.com',
+            alt_names=['rgw.alt.example.com', 'rgw.example.com'],
+            ip_sans=['10.0.0.10'],
+        )
+
+    def test_certificate_source_vault_reuses_stored_vault_material(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+
+        def get_cert(name, service_name=None, host=None):
+            objects = {
+                'rgw_ssl_cert': Cert('stored-vault-cert', managed_by=TLSObjectManager.VAULT),
+                'rgw_ssl_ca_cert': Cert('stored-vault-ca', managed_by=TLSObjectManager.VAULT),
+            }
+            return objects.get(name)
+
+        svc.mgr.cert_mgr.cert_store.get_tlsobject_if_exists.side_effect = get_cert
+        svc.mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = PrivKey(
+            'stored-vault-key',
+            managed_by=TLSObjectManager.VAULT,
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ca_cert_name='rgw_ssl_ca_cert',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=[],
+        )
+
+        assert creds.cert == 'stored-vault-cert'
+        assert creds.key == 'stored-vault-key'
+        assert creds.ca_cert == 'stored-vault-ca'
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_not_called()
+
+    def test_certificate_source_vault_rejects_non_vault_existing_material(self):
+        svc = self._service()
+        daemon_spec = mock.MagicMock(host='host1')
+        spec = self._spec()
+        svc.mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = Cert(
+            'user-cert',
+            managed_by=TLSObjectManager.USER,
+        )
+        svc.mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = PrivKey(
+            'user-key',
+            managed_by=TLSObjectManager.USER,
+        )
+
+        creds = svc.get_certificates_generic(
+            svc_spec=spec,
+            daemon_spec=daemon_spec,
+            cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
+            cert_name='rgw_ssl_cert',
+            key_attr='ssl_key',
+            key_name='rgw_ssl_key',
+            ips=['10.0.0.10'],
+            fqdns=['rgw.example.com'],
+            custom_sans=[],
+        )
+
+        assert not creds.cert
+        assert not creds.key
+        svc.mgr.cert_mgr.issue_vault_certificate.assert_not_called()
 
 
 class TestCertMgr(object):
