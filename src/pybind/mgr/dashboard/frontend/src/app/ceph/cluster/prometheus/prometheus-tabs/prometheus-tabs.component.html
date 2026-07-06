@@ -14,14 +14,16 @@
     <cds-tag *ngIf="prometheusAlertService.activeWarningAlerts > 0"
         class="tag-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</cds-tag></a>
   </ng-container>
-  <ng-container ngbNavItem>
-    <a class="nav-link"
-       routerLink="/monitoring/silences"
-       routerLinkActive="active"
-       ariaCurrentWhenActive="page"
-       [routerLinkActiveOptions]="{exact: true}"
-       i18n>Silences</a>
-  </ng-container>
+  @if (canViewSilences) {
+    <ng-container ngbNavItem>
+      <a class="nav-link"
+         routerLink="/monitoring/silences"
+         routerLinkActive="active"
+         ariaCurrentWhenActive="page"
+         [routerLinkActiveOptions]="{exact: true}"
+         i18n>Silences</a>
+    </ng-container>
+  }
   <ng-container ngbNavItem>
     <a class="nav-link"
        routerLink="/monitoring/alerts"
