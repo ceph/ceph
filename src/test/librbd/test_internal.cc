@@ -2025,6 +2025,89 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   rados_ioctx_destroy(d_ioctx);
 }
 
+TEST_F(TestInternal, FlattenWhenOpenedSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN |
+                  RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *parent_ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &parent_ictx));
+
+  bufferlist bl;
+  bl.append(std::string(TEST_IO_SIZE, '1'));
+  ASSERT_EQ(TEST_IO_SIZE, api::Io<>::write(*parent_ictx, 0, bl.length(),
+                                           bufferlist{bl}, 0));
+  ASSERT_EQ(0, flush_writeback_cache(parent_ictx));
+
+  ASSERT_EQ(0, snap_create(*parent_ictx, "parent_snap"));
+  ASSERT_EQ(0, snap_protect(*parent_ictx, "parent_snap"));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(parent_ictx, &features));
+
+  std::string clone_name = get_temp_image_name();
+  int order = parent_ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "parent_snap",
+                             m_ioctx, clone_name.c_str(), features, &order, 0,
+                             0));
+
+  TestInternal *parent = this;
+  librbd::ImageCtx *clone_ictx = nullptr;
+  librbd::ImageCtx *snap_ictx = nullptr;
+  BOOST_SCOPE_EXIT( (&m_ioctx) (clone_name) (parent) (&clone_ictx) (&snap_ictx) ) {
+    if (snap_ictx != nullptr) {
+      parent->close_image(snap_ictx);
+    }
+    if (clone_ictx != nullptr) {
+      clone_ictx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(),
+                                          "clone_snap");
+      parent->close_image(clone_ictx);
+    }
+
+    librbd::NoOpProgressContext no_op;
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, no_op));
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, open_image(clone_name, &clone_ictx));
+  ASSERT_EQ(0, snap_create(*clone_ictx, "clone_snap"));
+
+  ASSERT_EQ(0, open_image(clone_name, "clone_snap", &snap_ictx));
+  ASSERT_NE(nullptr, snap_ictx->object_map);
+
+  bufferptr read_ptr(bl.length());
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+  librbd::io::ReadResult read_result{&read_bl};
+
+  ASSERT_EQ(TEST_IO_SIZE,
+            api::Io<>::read(*snap_ictx, 0, read_bl.length(),
+                            librbd::io::ReadResult{read_result}, 0));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, clone_ictx->operations->flatten(no_op));
+  // flatten's header-update notification only marks snap_ictx as needing
+  // a refresh; it doesn't reload any state itself, so the explicit
+  // refresh() below is required, not redundant
+  ASSERT_EQ(0, snap_ictx->state->refresh());
+
+  ASSERT_EQ(TEST_IO_SIZE,
+            api::Io<>::read(*snap_ictx, 0, read_bl.length(),
+                            librbd::io::ReadResult{read_result}, 0));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  librbd::ImageCtx *reopened_snap_ictx;
+  ASSERT_EQ(0, open_image(clone_name, "clone_snap", &reopened_snap_ictx));
+  BOOST_SCOPE_EXIT(parent, reopened_snap_ictx) {
+    parent->close_image(reopened_snap_ictx);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(TEST_IO_SIZE,
+            api::Io<>::read(*reopened_snap_ictx, 0, read_bl.length(),
+                            librbd::io::ReadResult{read_result}, 0));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+}
+
 TEST_F(TestInternal, FlattenInconsistentObjectMap)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP);
