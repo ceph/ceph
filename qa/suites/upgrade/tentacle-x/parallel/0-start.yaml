@@ -59,3 +59,6 @@ overrides:
       - OBJECT_UNFOUND
       - PG_DEGRADED
       - OSD_HOST_DOWN
+      - POOL_FULL
+      - pool full
+      - pool\(s\) full
