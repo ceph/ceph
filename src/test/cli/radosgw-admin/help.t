@@ -225,6 +225,8 @@
     restore status                   shows restoration status of object in a bucket
     restore list                     list restore status of each object in the bucket
                                      can be filtered with help of --restore-status which shows objects with specified status
+    cloud-delete list                list pending cloud-tier delete entries across shards
+                                     --shard-id to limit to a single shard, --max-entries to cap output
   options:
      --tenant=<tenant>                 tenant name
      --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)

@@ -345,13 +345,18 @@ int main(int argc, const char **argv)
 			      cfg,
 			      context_pool,
 			      site,
-			      false,
-			      false,
-			      false,
-			      false,
-			      false,
-			      false,
-			       true, true, true, null_yield, cfgstore.get(),
+			      false, // use_gc_thread
+			      false, // use_lc_thread
+			      false, // use_restore_thread
+			      false, // use_cloud_delete_thread
+			      false, // quota_threads
+			      false, // run_sync_thread
+			      false, // run_reshard_thread
+			      true,  // run_notification_thread
+			      true,  // run_bucket_logging_thread
+			      true,  // background_tasks
+			      null_yield,
+			      cfgstore.get(),
 			      false));
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;

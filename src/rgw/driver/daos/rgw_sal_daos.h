@@ -384,6 +384,7 @@ class DaosPlacementTier : public StorePlacementTier {
   virtual bool retain_head_object() { return tier.retain_head_object; }
   virtual bool allow_read_through() { return tier.allow_read_through; }
   virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
+  virtual bool allow_delete_through() { return tier.is_tier_type_s3() ? tier.t.s3.allow_delete_through : false; }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
@@ -940,6 +941,7 @@ class DaosStore : public StoreDriver {
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
   virtual std::unique_ptr<Restore> get_restore(const int n_objs,
 		 const std::vector<std::string_view>& obj_names) override;
+  virtual std::unique_ptr<CloudDelete> get_cloud_delete(void) override { return nullptr; }
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,

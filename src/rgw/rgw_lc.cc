@@ -805,12 +805,12 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     }
   }
 
+  auto& attrs = obj->get_attrs();
   auto have_notify = !event_types.empty();
   // etag is needed for both notifications and bucket-logging records
   if (have_notify || log_op_name) {
-    auto attrset = obj->get_attrs();
-    auto iter = attrset.find(RGW_ATTR_ETAG);
-    if (iter != attrset.end()) {
+    auto iter = attrs.find(RGW_ATTR_ETAG);
+    if (iter != attrs.end()) {
       etag = rgw_bl_str(iter->second);
     }
   }
@@ -824,7 +824,6 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   del_op->params.obj_owner.display_name = meta.owner_display_name;
   del_op->params.bucket_owner = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
-
   uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
                    ? rgw::sal::FLAG_LOG_OP : 0;
   if (remove_indeed && oc.skip_update_olh) {
@@ -3584,4 +3583,3 @@ void RGWLifecycleConfiguration::dump(Formatter *f) const
   }
   f->close_section();
 }
-
