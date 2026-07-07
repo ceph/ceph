@@ -2,28 +2,16 @@
   <ng-template #header>
     @if (cardTitle) {
     <h3 class="cds--type-heading-03" i18n>{{ cardTitle }}</h3>
-    @if (showEditButton) {
-    <button
-      cdsButton="ghost"
-      size="sm"
-      [disabled]="editButtonDisabled"
-      (click)="onEditClick()"
-      [attr.aria-label]="editButtonLabel"
-    >
-      {{ editButtonLabel }}
-      <cd-icon class="cds-ml-5" type="edit"></cd-icon>
-    </button>
-    }
     }
   </ng-template>
 
-  <div [cdsStack]="'vertical'" 
+  <div [cdsStack]="'vertical'"
        [gap]="0">
     @if (details && details.length > 0) {
     <div [cdsStack]="'horizontal'"
          [gap]="5">
       @for (detail of getVisibleDetails(); track detail.label) {
-      <div [cdsStack]="'vertical'" 
+      <div [cdsStack]="'vertical'"
            [gap]="2">
         <label class="cds--type-label-01">{{ detail.label }}</label>
         <div class="cds--type-body-01">
@@ -34,7 +22,7 @@
                 <span>{{ getDisplayValue(detail.value) }}</span>
               </div>
             }
-            
+
             @default {
               <span>{{ getDisplayValue(detail.value) }}</span>
             }

@@ -142,7 +142,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
 @NgModule({
   imports: [
     CommonModule,
-    ProductiveCardComponent,
     FormsModule,
     ReactiveFormsModule,
     NgbAlertModule,
@@ -186,7 +185,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TagModule,
     LinkModule,
     LayerModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
