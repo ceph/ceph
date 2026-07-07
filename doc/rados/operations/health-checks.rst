@@ -426,7 +426,7 @@ outputs
 
 ::
 
-    [ERR] AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE: 4 rotating auth service keys using insecure key types
+    [WRN] AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE: 4 rotating auth service keys using insecure key types
     rotating service keys for mon using insecure key type: aes
     rotating service keys for mds using insecure key type: aes
     rotating service keys for osd using insecure key type: aes
