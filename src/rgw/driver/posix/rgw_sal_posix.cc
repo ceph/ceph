@@ -3261,7 +3261,13 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     }
     break;
   case ATTRSMOD_NONE:
-    attrs = src_attrs;
+    {
+      auto tags = attrs.extract(RGW_ATTR_TAGS);
+      attrs = src_attrs;
+      if (!tags.empty()) {
+        attrs[RGW_ATTR_TAGS] = std::move(tags.mapped());
+      }
+    }
     ret = 0;
     break;
   }
