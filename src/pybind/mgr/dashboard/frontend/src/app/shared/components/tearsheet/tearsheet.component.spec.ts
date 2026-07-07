@@ -15,7 +15,7 @@ import { ActivatedRoute } from '@angular/router';
       [description]="description"
       (submitRequested)="onSubmit()"
     >
-      <cd-tearsheet-step>
+      <cd-tearsheet-step [stepValid]="step1Valid">
         <div class="step-1-content">Step 1 Content</div>
       </cd-tearsheet-step>
       <cd-tearsheet-step>
@@ -30,19 +30,9 @@ import { ActivatedRoute } from '@angular/router';
 })
 class MockHostComponent {
   steps = [
-    {
-      label: 'Step 1',
-      complete: false,
-      invalid: false
-    },
-    {
-      label: 'Step 2',
-      complete: false
-    },
-    {
-      label: 'Step 3',
-      complete: false
-    }
+    { label: 'Step 1', complete: false },
+    { label: 'Step 2', complete: false },
+    { label: 'Step 3', complete: false }
   ];
   title = 'Test Title';
   description = 'Test Description';
@@ -145,9 +135,63 @@ describe('TearsheetComponent', () => {
 
     it('should not go to next step on invalid', () => {
       tearsheetComponent.currentStep = 0;
-      hostComponent.steps[0].invalid = true;
+      hostComponent.step1Valid = false;
+      hostFixture.detectChanges();
       tearsheetComponent.onNext();
       expect(tearsheetComponent.currentStep).toBe(0);
+    });
+  });
+
+  describe('[stepValid] seeding and live sync', () => {
+    it('should seed step as invalid immediately when stepValid starts false', () => {
+      hostComponent.step1Valid = false;
+      hostFixture.detectChanges();
+      // After detectChanges the tearsheet re-runs setup() which seeds the flag.
+      expect(tearsheetComponent.steps[0].invalid).toBe(true);
+    });
+
+    it('should seed step as valid when stepValid starts true', () => {
+      hostComponent.step1Valid = true;
+      hostFixture.detectChanges();
+      expect(tearsheetComponent.steps[0].invalid).toBe(false);
+    });
+
+    it('should clear invalid flag when stepValid changes from false to true', () => {
+      hostComponent.step1Valid = false;
+      hostFixture.detectChanges();
+      expect(tearsheetComponent.steps[0].invalid).toBe(true);
+
+      hostComponent.step1Valid = true;
+      hostFixture.detectChanges();
+      expect(tearsheetComponent.steps[0].invalid).toBe(false);
+    });
+
+    it('should set invalid flag when stepValid changes from true to false', () => {
+      hostComponent.step1Valid = true;
+      hostFixture.detectChanges();
+      expect(tearsheetComponent.steps[0].invalid).toBe(false);
+
+      hostComponent.step1Valid = false;
+      hostFixture.detectChanges();
+      expect(tearsheetComponent.steps[0].invalid).toBe(true);
+    });
+
+    it('should not seed invalid for steps with stepValid null (default)', () => {
+      // Steps 2 and 3 have stepValid=null, so they must never be seeded invalid.
+      expect(tearsheetComponent.steps[1].invalid).toBeFalsy();
+      expect(tearsheetComponent.steps[2].invalid).toBeFalsy();
+    });
+
+    it('should keep Next enabled for steps that never use [stepValid]', () => {
+      // steps[1] has no [stepValid] binding and no #tearsheetStep form —
+      // Next must stay enabled regardless.
+      tearsheetComponent.currentStep = 1;
+      hostFixture.detectChanges();
+      const buttons = hostFixture.debugElement.queryAll(
+        By.css('.tearsheet-footer button[cdsButton="primary"]')
+      );
+      const nextBtn = buttons.find((btn) => btn.nativeElement.textContent.trim() === 'Next');
+      expect(nextBtn?.nativeElement.disabled).toBe(false);
     });
   });
 });
