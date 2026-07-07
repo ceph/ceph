@@ -4321,10 +4321,10 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 				    list_context->pool_id, string());
     }
   } else {
+    list_context->pos = response.handle;
     if (list_context->current_stage == NListContext::TGT_READ && response.handle.is_max()) {
       list_context->tgt_pos = list_context->pos; //if the handle is maxed meaning that we have reached the end of the pool then we want to save the last object of the tgt pool so we can come back to it in the second tgt read
     }
-    list_context->pos = response.handle;
   }
 
   int response_size = response.entries.size();
@@ -4338,8 +4338,12 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     response.entries.clear();
   }
 
-  //should only be able to early exit in this stage. This is also the default stage for a non migrating pool
-  if (list_context->current_stage == NListContext::TGT_READ) {
+  // Early exit only for non-migrating pools. During migration the full
+  // triple-read (TGT → SRC → TGT) must complete before any results are
+  // returned, otherwise the src and intermediate reads will re-emit every
+  // object that was already paged out, causing massive duplication.
+  if (list_context->current_stage == NListContext::TGT_READ &&
+      !pool->is_migrating()) {
     if (list_context->list.size() >= list_context->max_entries) {
       ldout(cct, 20) << " hit max, returning results so far, "
          << list_context->list << dendl;
