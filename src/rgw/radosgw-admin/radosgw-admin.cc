@@ -12388,6 +12388,10 @@ next:
         ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
       }
     }
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove notification: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
 #ifdef WITH_RADOSGW_RADOS
