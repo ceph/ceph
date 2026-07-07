@@ -5304,7 +5304,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
     attrs.erase(RGW_ATTR_CRYPT_PREFETCH_ALIGN);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dp_factory, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dp_factory, dpp, y,
+                         astate->accounted_size);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -5475,6 +5476,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
+               uint64_t src_accounted_size,
                bool log_op)
 {
   string tag;
@@ -5543,8 +5545,13 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       ldpp_dout(dpp, 0) << "ERROR: failed to read compression info" << dendl;
       return ret;
     }
-    // pass original size if compressed
-    accounted_size = compressed ? cs_info.orig_size : ofs;
+    // The bucket index accounted_size must be the object's logical (uncompressed)
+    // size. When the destination is compressed we take it from the compression info.
+    // Otherwise `ofs` is the number of RAW bytes read from the source: but if the source
+    // itself is compressed, the ofs is the *compressed* size, not the logical
+    // size. So, prefer the source's known logical size.
+    accounted_size = compressed ? cs_info.orig_size
+                                : (src_accounted_size ? src_accounted_size : ofs);
   }
 
   const req_context rctx{dpp, y, nullptr};
@@ -5650,6 +5657,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       nullptr, /* dp_factory */
                       dpp,
                       y,
+                      0, /* src_accounted_size: unknown here, keep ofs-based size */
                       log_op);
   if (ret < 0) {
     return ret;
