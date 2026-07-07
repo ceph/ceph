@@ -1459,6 +1459,7 @@ protected:
   void stop_pool_migration_toofull();
   void stop_pool_migration_revoked();
   void stop_pool_migration_error(int error_code);
+  void on_pool_migration_source_suspended() override;
   void on_pool_migration_target_reserved() override;
   void on_pool_migration_target_suspended(bool toofull) override;
 

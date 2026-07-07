@@ -16143,6 +16143,45 @@ void PrimaryLogPG::stop_pool_migration_error(int error_code)
         PeeringState::PoolMigrationStoppedError(error_code))));
 }
 
+void PrimaryLogPG::on_pool_migration_source_suspended()
+{
+  dout(10) << __func__ << " in_flight=" << pool_migrations_in_flight.size()
+           << " pending_deletes=" << pool_migration_source_delete_pending_lock.size()
+           << dendl;
+
+  // Clean up any pending delete operations
+  while (!pool_migration_source_delete_pending_lock.empty()) {
+    hobject_t pending_oid = *pool_migration_source_delete_pending_lock.begin();
+    pool_migration_source_delete_pending_lock.erase(pool_migration_source_delete_pending_lock.begin());
+
+    auto i = recovering.find(pending_oid);
+    if (i != recovering.end()) {
+      recovering.erase(i);
+      finish_recovery_op(pending_oid);
+    }
+    dout(20) << __func__ << " cleaned up pending delete for " << pending_oid << dendl;
+  }
+
+  // Clean up any in-flight migrations
+  while (!pool_migrations_in_flight.empty()) {
+    hobject_t migration_oid = *pool_migrations_in_flight.begin();
+    pool_migrations_in_flight.erase(pool_migrations_in_flight.begin());
+
+    auto i = recovering.find(migration_oid);
+    if (i != recovering.end()) {
+      recovering.erase(i);
+      finish_recovery_op(migration_oid);
+    }
+    dout(20) << __func__ << " cleaned up in-flight migration for " << migration_oid << dendl;
+  }
+
+  // Clear clone tracking
+  pool_migration_clones_in_flight.clear();
+
+  // Call parent implementation to clear PG state
+  PG::on_pool_migration_source_suspended();
+}
+
 void PrimaryLogPG::on_pool_migration_target_reserved() {
   dout(20) << __func__ << dendl;
 
