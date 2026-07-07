@@ -157,22 +157,59 @@
         </ng-template>
       </div>
       <!-- Roles -->
-      <div class="form-item"
-           *ngIf="allRoles">
-        <cds-combo-box label="Roles"
-                       type="multi"
-                       selectionFeedback="top-after-reopen"
-                       for="roles"
-                       formControlName="roles"
-                       id="roles"
-                       placeholder="Select Roles..."
-                       i18n-placeholder
-                       [appendInline]="true"
-                       [items]="allRoles"
-                       itemValueKey="name"
-                       i18n>
-          <cds-dropdown-list></cds-dropdown-list>
+      <div
+        class="form-item"
+        *ngIf="allRoles"
+      >
+        <cds-combo-box
+          label="Roles"
+          type="multi"
+          selectionFeedback="top-after-reopen"
+          for="roles"
+          formControlName="roles"
+          id="roles"
+          placeholder="Select Roles..."
+          i18n-placeholder
+          [appendInline]="true"
+          [items]="allRoles"
+          itemValueKey="name"
+          [cdRequiredField]="!isSSO ? 'Roles' : ''"
+          [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
+          [invalidText]="rolesError"
+          i18n
+        >
+          <cds-dropdown-list [listTpl]="roleItemTpl"></cds-dropdown-list>
         </cds-combo-box>
+
+        <ng-template #rolesError>
+          <span
+            class="invalid-feedback"
+            *ngIf="userForm.showError('roles', formDir, 'required')"
+            i18n
+            >This field is required.</span>
+        </ng-template>        
+        
+        <ng-template #roleItemTpl
+                    let-item="item">
+          <div class="cds--form-item cds--checkbox-wrapper">
+            <label class="cds--checkbox-label"
+                  [attr.data-contained-checkbox-disabled]="item.disabled ? 'true' : null"
+                  [attr.data-contained-checkbox-state]="item.selected ? 'true' : 'false'"
+                  [ngbTooltip]="item.disabled ? roleTooltipTpl : null">
+              <input class="cds--checkbox"
+                    type="checkbox"
+                    [checked]="item.selected"
+                    [disabled]="item.disabled"
+                    tabindex="-1"/>
+              <span class="cds--checkbox-appearance"></span>
+              <span class="cds--checkbox-label-text">{{ item.content }}</span>
+            </label>
+          </div>
+        </ng-template>
+
+        <ng-template #roleTooltipTpl>
+          <span i18n>You cannot remove the administrator role from your own account.</span>
+        </ng-template>
       </div>
       <!-- Enabled -->
       <div class="form-item"
