@@ -183,9 +183,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   }
 
   closeWideTearsheet() {
-    this.closeRequested.emit();
     this.isOpen = false;
     if (this.closeRequested.observers.length > 0) {
+      this.closeRequested.emit();
       return;
     }
     if (this.hasModalOutlet) {
