@@ -12,7 +12,6 @@ tasks:
         - cls/test_cls_refcount.sh
         - cls/test_cls_rgw.sh
         - cls/test_cls_rgw_gc.sh
-        - cls/test_cls_rgw_ratelimit.sh
         - cls/test_cls_rgw_stats.sh
         - cls/test_cls_cmpomap.sh
         - cls/test_cls_2pc_queue.sh
@@ -20,7 +19,7 @@ tasks:
         - cls/test_cls_sem_set.sh
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
-        - rgw/test_rgw_ratelimit_rados_store.sh
+        - rgw/test_rgw_ratelimit_integration.sh
         - rgw/test_rgw_datalog.sh
         - rgw/test_librgw_file.sh
         - rgw/test_awssdkv4_sig.sh
