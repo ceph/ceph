@@ -3,8 +3,11 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 
-class Formatter;
 class JSONObj;
+
+namespace ceph {
+class Formatter;
+}
 
 struct RGWRateLimitInfo {
   int64_t max_write_ops;
@@ -49,7 +52,7 @@ struct RGWRateLimitInfo {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWRateLimitInfo)

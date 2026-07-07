@@ -2,6 +2,7 @@
 #define CEPH_CLS_RGW_RATELIMIT_OPS_H
 
 #include "include/types.h"
+#include "include/rados/cls_traits.hpp"
 #include "rgw_ratelimit_core.h"
 
 struct cls_rgw_ratelimit_consume_op {
@@ -92,10 +93,15 @@ struct cls_rgw_ratelimit_decrease_bytes_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_ratelimit_decrease_bytes_op)
 
-namespace cls::rgw::ratelimit::method {
-  static constexpr char consume[] = "consume";
-  static constexpr char giveback[] = "giveback";
-  static constexpr char decrease_bytes[] = "decrease_bytes";
+namespace cls::rgw::ratelimit {
+struct ClassId {
+  static constexpr auto name = "rgw_ratelimit";
+};
+namespace method {
+constexpr auto consume = ClsMethod<RdWrTag, ClassId>("consume");
+constexpr auto giveback = ClsMethod<RdWrTag, ClassId>("giveback");
+constexpr auto decrease_bytes = ClsMethod<RdWrTag, ClassId>("decrease_bytes");
 }
+} // namespace cls::rgw::ratelimit
 
 #endif
