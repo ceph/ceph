@@ -520,6 +520,13 @@
 
 * NFS: cluster/export delete commands now throw a deprecation warning when
        used and will be removed in V release. 
+* BlueStore/OSD: A new option `bluestore_onode_prefetch` (default: false)
+  speculatively loads an object's onode into the BlueStore cache as soon as the
+  corresponding OSD operation is queued. This hides the onode lookup latency behind
+  the queuing time, so the write path avoids a blocking RocksDB read on a cold-cache
+  miss. A companion option `bluestore_onode_prefetch_max_queue_depth` (default: 64)
+  bounds the number of in-flight prefetch requests; prefetch hints beyond this depth
+  are dropped.
 
 >=19.2.1
 
