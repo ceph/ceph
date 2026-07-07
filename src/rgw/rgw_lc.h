@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <array>
 #include <string>
@@ -176,6 +177,7 @@ enum class LCFlagType : uint16_t
 {
   none = 0,
   ArchiveZone,
+  Filter,
 };
 
 class LCFlag {
@@ -201,11 +203,11 @@ class LCFilter
     }
    }
 
-  static constexpr std::array<LCFlag, 2> filter_flags =
-  {
-    LCFlag(LCFlagType::none, "none"),
-    LCFlag(LCFlagType::ArchiveZone, "ArchiveZone"),
-  };
+   static constexpr std::array<LCFlag, 3> filter_flags = {
+     LCFlag(LCFlagType::none, "none"),
+     LCFlag(LCFlagType::ArchiveZone, "ArchiveZone"),
+     LCFlag(LCFlagType::Filter, "Filter"),
+   };
 
 protected:
   std::string prefix;
@@ -217,7 +219,10 @@ protected:
 public:
 
   LCFilter() : flags(make_flag(LCFlagType::none))
-    {}
+  {}
+
+  ~LCFilter()
+  {}
 
   const std::string& get_prefix() const {
     return prefix;
@@ -229,6 +234,10 @@ public:
 
   const uint32_t get_flags() const {
     return flags;
+  }
+
+  void set_flag(LCFlagType flag) {
+    flags |= make_flag(flag);
   }
 
   bool empty() const {
