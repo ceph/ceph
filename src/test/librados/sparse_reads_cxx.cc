@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <map>
+#include <optional>
 #include <string>
 
 #include "gtest/gtest.h"
@@ -30,16 +31,22 @@ protected:
     return "sparse_read_test_";
   }
 
-  void SetUp() override {
-    SKIP_IF_CRIMSON();
-    PoolTypeTestFixture::SetUp();
-    if (GetParam() == PoolType::FAST_EC) {
+  static void SetUpTestSuite() {
+    PoolTypeTestFixture::SetUpTestSuite();
+    auto it = pool_names.find(PoolType::FAST_EC);
+    if (it != pool_names.end()) {
       ASSERT_EQ("", set_pool_flags_pp(
-        pool_name,
+        it->second,
         rados,
         pg_pool_t::FLAG_PRESERVE_ALLOCATION,
         true));
+      rados.wait_for_latest_osdmap();
     }
+  }
+
+  void SetUp() override {
+    SKIP_IF_CRIMSON();
+    PoolTypeTestFixture::SetUp();
   }
 
   void TearDown() override {
@@ -92,6 +99,22 @@ protected:
     int ret = ioctx.mapext(oid, offset, length, extents);
     ASSERT_EQ(ret, (int)expected_extents.size());
     ASSERT_EQ(extents, expected_extents);
+  }
+
+  std::optional<force_allocated_extents_t> get_force_allocated_extents(
+      const std::string& oid) {
+    bufferlist bl;
+    static_assert(OI_ATTR[0] == '_', "OI_ATTR must start with '_'");
+    int ret = ioctx.getxattr(oid, &OI_ATTR[1], bl);
+    if (ret < 0) {
+      ADD_FAILURE() << "getxattr OI failed: " << ret;
+      return std::nullopt;
+    }
+    object_info_t oi(bl);
+    if (oi.force_allocated_extents.empty()) {
+      return std::nullopt;
+    }
+    return oi.force_allocated_extents;
   }
 };
 
@@ -160,6 +183,83 @@ TEST_P(SparseReadTest, WriteOperation) {
   bufferlist read_bl;
   ASSERT_EQ(8192, ioctx.read(oid, read_bl, 8192, 0));
   ASSERT_TRUE(read_bl.contents_equal(write_bl));
+}
+
+TEST_P(SparseReadTest, WriteTracksAllZeroExtentOnFastEC) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "force-allocated extent tracking is only enabled for FastEC in this suite";
+  }
+
+  std::string oid = "write_tracks_zero_extent";
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, FAE_BLOCK_SIZE);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+TEST_P(SparseReadTest, WriteDoesNotTrackExtentWhenOnlyPrefixIsZero) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "force-allocated extent tracking is only enabled for FastEC in this suite";
+  }
+
+  std::string oid = "write_prefix_zero_only";
+  bufferlist write_bl;
+  std::string data(4096, '\0');
+  data[8] = 'X';
+  write_bl.append(data);
+  ASSERT_EQ(0, ioctx.write(oid, write_bl, write_bl.length(), 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+TEST_P(SparseReadTest, WriteTracksOnlyFullyCoveredZeroBlocks) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "force-allocated extent tracking is only enabled for FastEC in this suite";
+  }
+
+  std::string oid = "write_tracks_full_zero_blocks_only";
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 4096));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(4096, 8192);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+TEST_P(SparseReadTest, WriteSkipsPartialLeadingBlock) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "force-allocated extent tracking is only enabled for FastEC in this suite";
+  }
+
+  std::string oid = "write_skips_partial_leading_block";
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 2048));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+TEST_P(SparseReadTest, WriteClearsTrackedExtentWithNonZeroOverwrite) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "force-allocated extent tracking is only enabled for FastEC in this suite";
+  }
+
+  std::string oid = "write_clears_tracked_extent";
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  bufferlist data_bl = create_pattern_buffer(4096, 'Z');
+  ASSERT_EQ(0, ioctx.write(oid, data_bl, data_bl.length(), 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
 }
 
 // Test WRITEFULL operation
