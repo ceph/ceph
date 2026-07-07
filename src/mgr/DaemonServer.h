@@ -16,8 +16,10 @@
 #define DAEMON_SERVER_H_
 
 #include "PyModuleRegistry.h"
+#include "FailSlowOSDDetector.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -53,7 +55,7 @@ class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
 class StatsAutotuner;
-
+struct health_check_map_t;
 
 struct offline_pg_report {
   using ContainerType = std::variant<std::vector<int>, std::set<int>>;
@@ -224,6 +226,7 @@ private:
   std::optional<std::string> get_osd_metadata(
     const std::string& name,
     const std::string& osd_id);
+  std::vector<std::string> _get_osd_devices(int osd_id);
   void _update_upgraded_osds(
     const std::vector<int>& orig_osds,
     const std::vector<int>& to_upgrade,
@@ -311,6 +314,7 @@ private:
   // -- op tracking --
   OpTracker op_tracker;
   std::unique_ptr<StatsAutotuner> stats_autotuner;
+  FailSlowOSDDetector fail_slow_detector;
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
 
@@ -459,4 +463,3 @@ public:
   }
 };
 #endif
-
