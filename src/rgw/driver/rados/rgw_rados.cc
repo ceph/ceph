@@ -1455,6 +1455,8 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
   topic_cache->init(svc.cache);
 
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+
   lc = new RGWLC();
   lc->initialize(cct, this->driver);
 
@@ -1471,8 +1473,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
 
   if (use_restore_thread)
     restore->start_processor();
-
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
                              zone.bucket_index_max_shards);
