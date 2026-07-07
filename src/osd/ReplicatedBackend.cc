@@ -661,6 +661,7 @@ void ReplicatedBackend::submit_transaction(
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
 
+  if (orig_op) orig_op->mark_event("queue_transactions");
   parent->queue_transactions(tls, op.op);
   if (at_version != eversion_t()) {
     parent->op_applied(at_version);

@@ -174,6 +174,11 @@ enum {
   l_bluestore_pinned_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
+  l_bluestore_onode_prefetch_processed,
+  l_bluestore_onode_prefetch_hits,
+  l_bluestore_onode_prefetch_misses,
+  l_bluestore_onode_prefetch_enoent,
+  l_bluestore_onode_prefetch_error,
   l_bluestore_onode_shard_hits,
   l_bluestore_onode_shard_misses,
   l_bluestore_extents,
@@ -2408,6 +2413,17 @@ private:
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
 
+  // onode prefetch
+  struct PrefetchItem {
+    CollectionRef c;
+    ghobject_t oid;
+  };
+  ceph::mutex prefetch_lock = ceph::make_mutex("BlueStore::prefetch_lock");
+  ceph::condition_variable prefetch_cond;
+  std::deque<PrefetchItem> prefetch_queue;
+  bool prefetch_stop = false;
+  std::thread onode_prefetch_thread;
+
   PerfCounters *logger = nullptr;
 
   std::list<CollectionRef> removed_collections;
@@ -2909,6 +2925,7 @@ private:
   void _kv_stop();
   void _kv_sync_thread();
   void _kv_finalize_thread();
+  void _onode_prefetch_thread();
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);
   void _deferred_queue(TransContext *txc);
@@ -3334,6 +3351,10 @@ public:
 
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      ceph::buffer::ptr& value) override;
+  void prefetch_onode(CollectionHandle& c, const ghobject_t& oid) override;
+  std::atomic<bool> m_onode_prefetch_enabled = {true};
+  bool prefetch_onode_enabled() const override { return m_onode_prefetch_enabled.load(std::memory_order_relaxed); }
+
 
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
 	       std::map<std::string,ceph::buffer::ptr, std::less<>>& aset) override;

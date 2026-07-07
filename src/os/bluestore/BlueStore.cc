@@ -5828,6 +5828,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_warn_on_no_per_pg_omap"s,
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
+    "bluestore_onode_prefetch"s,
     "bluestore_allocator_lookup_policy"s,
     "bluestore_volume_selection_reserved_factor"s,
     "bluestore_volume_selection_reserved"s
@@ -5859,6 +5860,10 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_onode_segment_size")) {
     segment_size = (cct->_conf.get_val<Option::size_t>("bluestore_onode_segment_size"));
   }
+  if (changed.count("bluestore_onode_prefetch")) {
+    m_onode_prefetch_enabled = cct->_conf.get_val<bool>("bluestore_onode_prefetch");
+  }
+
   if (changed.count("bluestore_max_blob_size") ||
       changed.count("bluestore_max_blob_size_ssd") ||
       changed.count("bluestore_max_blob_size_hdd")) {
@@ -6470,6 +6475,16 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_onode_misses, "onode_misses",
 		    "Count of onode cache lookup misses",
 		    "o_ms", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_onode_prefetch_processed, "onode_prefetch_processed",
+		    "Prefetch requests popped from the queue by the prefetch thread");
+  b.add_u64_counter(l_bluestore_onode_prefetch_hits, "onode_prefetch_hits",
+		    "Prefetch requests skipped: onode already cached");
+  b.add_u64_counter(l_bluestore_onode_prefetch_misses, "onode_prefetch_misses",
+		    "Prefetch requests that warmed a cold onode");
+  b.add_u64_counter(l_bluestore_onode_prefetch_enoent, "onode_prefetch_enoent",
+		    "Prefetch requests where no onode existed on disk");
+        b.add_u64_counter(l_bluestore_onode_prefetch_error, "onode_prefetch_error",
+		    "Prefetch requests that failed with an error");
   b.add_u64_counter(l_bluestore_onode_shard_hits, "onode_shard_hits",
 		    "Count of onode shard cache lookups hits");
   b.add_u64_counter(l_bluestore_onode_shard_misses,
@@ -9397,6 +9412,7 @@ int BlueStore::_mount()
     use_write_v2 = rand() % 2;
   }
   segment_size = (cct->_conf.get_val<Option::size_t>("bluestore_onode_segment_size"));
+  m_onode_prefetch_enabled = cct->_conf.get_val<bool>("bluestore_onode_prefetch");  
   if (cct->_conf.get_val<bool>("bluestore_debug_onode_segmentation_random")) {
     srand(time(NULL) * 13 + 5);
     if (rand() % 2) {
@@ -14929,6 +14945,7 @@ void BlueStore::_kv_start()
   finisher.start();
   kv_sync_thread.create("bstore_kv_sync");
   kv_finalize_thread.create("bstore_kv_final");
+  onode_prefetch_thread = std::thread(&BlueStore::_onode_prefetch_thread, this);
 }
 
 void BlueStore::_kv_stop()
@@ -14950,6 +14967,18 @@ void BlueStore::_kv_stop()
     kv_finalize_stop = true;
     kv_finalize_cond.notify_all();
   }
+  {
+    std::lock_guard l(prefetch_lock);
+    prefetch_stop = true;
+    prefetch_cond.notify_all();
+  }
+  if (onode_prefetch_thread.joinable())
+    onode_prefetch_thread.join();
+  {
+    std::lock_guard l(prefetch_lock);
+    prefetch_stop = false;
+    prefetch_queue.clear();
+  }
   kv_sync_thread.join();
   kv_finalize_thread.join();
   ceph_assert(removed_collections.empty());
@@ -14965,6 +14994,82 @@ void BlueStore::_kv_stop()
   finisher.wait_for_empty();
   finisher.stop();
   dout(10) << __func__ << " stopped" << dendl;
+}
+
+void BlueStore::prefetch_onode(CollectionHandle& ch, const ghobject_t& oid)
+{
+  Collection *c = static_cast<Collection*>(ch.get());
+  if (!c->exists)
+    return;
+  // Quick cache check under cache lock — skip if already hot
+  if (c->onode_space.lookup(oid))
+    return;
+  std::lock_guard l(prefetch_lock);
+  if (prefetch_stop ||
+      prefetch_queue.size() >=
+        cct->_conf.get_val<uint64_t>("bluestore_onode_prefetch_max_queue_depth"))
+    return;
+  prefetch_queue.push_back({CollectionRef(c), oid});
+  prefetch_cond.notify_one();
+}
+
+void BlueStore::_onode_prefetch_thread()
+{
+  ceph_pthread_setname("onode_prefetch");
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock l(prefetch_lock);
+  while (true) {
+    if (prefetch_queue.empty()) {
+      if (prefetch_stop)
+        break;
+      prefetch_cond.wait(l);
+      continue;
+    }
+    PrefetchItem item = std::move(prefetch_queue.front());
+    prefetch_queue.pop_front();
+    l.unlock();
+    logger->inc(l_bluestore_onode_prefetch_processed);
+    if (item.c->exists) {
+      // Fast cache check — OnodeSpace has its own internal lock; no c->lock needed.
+      if (item.c->onode_space.lookup(item.oid)) {
+        logger->inc(l_bluestore_onode_prefetch_hits);
+      } else {
+        // Read from RocksDB without holding c->lock.  The slow I/O no longer
+        // blocks write ops that need an exclusive lock on the same collection.
+        // Non-existent onodes (new-write workloads) return immediately here.
+        std::string key;
+        get_object_key(cct, item.oid, &key);
+        bufferlist v;
+        int r = db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
+        dout(20) << __func__ << " oid " << item.oid << " r " << r
+                 << " v.len " << v.length() << dendl;
+        if (r == 0 && v.length() > 0) {
+          // Onode exists on disk: decode and insert into cache.
+          std::shared_lock cl(item.c->lock);
+          if (item.c->exists && !item.c->onode_space.lookup(item.oid)) {
+            Onode *on = Onode::create_decode(
+              item.c.get(), item.oid, key, v, true, segment_size != 0);
+            OnodeRef o;
+            o.reset(on);
+            item.c->onode_space.add_onode(item.oid, o);
+            logger->inc(l_bluestore_onode_prefetch_misses);
+          } else {
+            logger->inc(l_bluestore_onode_prefetch_hits);
+          }
+        } else if (r == -ENOENT || (r == 0 && v.length() == 0)) {
+          // r == -ENOENT or empty value: no onode on disk for this oid.
+          logger->inc(l_bluestore_onode_prefetch_enoent);
+        } else {
+          // Unexpected error from rocksdb
+          dout(1) << __func__ << " unexpected db->get r=" << r
+            << " oid " << item.oid << dendl;
+          logger->inc(l_bluestore_onode_prefetch_error); 
+        }
+      }
+    }
+    l.lock();
+  }
+  dout(10) << __func__ << " stop" << dendl;
 }
 
 void BlueStore::_kv_sync_thread()

@@ -2370,10 +2370,12 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     osd->logger->inc(l_osd_replica_read_served);
   }
 
+  op->mark_event("find_onode_start");
   int r = find_object_context(
     oid, &obc, can_create,
     m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
     &missing_oid);
+  op->mark_event("find_onode_end");
 
   // LIST_SNAPS needs the ssc too
   if (obc &&
@@ -4270,7 +4272,9 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   }
 
 
+  op->mark_event("prepare_transaction_start");
   int result = prepare_transaction(ctx);
+  op->mark_event("prepare_transaction_end");
 
   {
 #ifdef WITH_LTTNG
@@ -11545,6 +11549,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     soid,
     ctx->log,
     ctx->at_version);
+  ctx->op->mark_event("issue_repop");
   pgbackend->submit_transaction(
     soid,
     ctx->delta_stats,
