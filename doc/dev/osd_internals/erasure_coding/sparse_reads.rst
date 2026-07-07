@@ -53,6 +53,14 @@ This means:
 3. Clients cannot rely on sparse reads returning accurate allocation
    information
 
+**Parity Deallocation During Recovery**
+
+A further consequence of zero-detect during recovery is that parity shards
+may be deallocated when they would not otherwise be. When all data shards in
+a slice contain zeros (whether explicitly written or force-allocated), the
+reconstructed parity for that slice is also all zeros. The zero-detect rule
+then deallocates the parity extents — even when the data content is unchanged.
+
 **Impact**
 
 This limitation prevents use cases that require guaranteed allocation
@@ -70,7 +78,7 @@ The requirement is to provide:
 
 2. **Logical Allocation Preservation**: Track which 4K-aligned blocks contain
    explicitly written zeros, ensuring they remain allocated through recovery
-   and reconstruction
+   and reconstruction. This requires zero-detect to be enabled.
 
 The core technical challenge is that EC pools maintain allocation information
 at 4K resolution during normal operations, but this information is lost during
@@ -98,13 +106,38 @@ allocated-zeros and unallocated regions.
 
 **Key Design Decisions:**
 
-1. **OSD-side zero detection**: The OSD performs zero detection on write
-   operations when tracking is enabled. This benefits all RADOS clients (RBD,
-   CephFS, future clients) with a centralized implementation.
+1. **Zero detection in PrimaryLogPG**: Zero detection is performed in
+   ``PrimaryLogPG`` before the operation is dispatched to the backend. This
+   keeps the logic common to both EC and replicated pools. For fast EC pools,
+   the results are stored in ``force_allocated_extents`` and used during
+   recovery. For replicated pools, ``force_allocated_extents`` is not used;
+   however, zero detection results may be useful to replicated pool
+   applications in future (for example, to enable efficient storage by
+   avoiding writes of known-zero blocks).
 
-2. **Pool flag**: A pool flag (``FLAG_TRACK_ZERO_BLOCKS``) enables tracking for
-   all objects in the pool. Set via ``ceph osd pool set <pool> set_pool_flags
-   <flag_value> --yes-i-really-mean-it``.
+2. **Two mechanisms to enable zero detection**: Zero detection can be enabled
+   by either of two independent mechanisms:
+
+   - **Pool property** (``preserve_allocation``): enables zero detection for
+     every write to every object in the pool. Simple to deploy — no client
+     changes required — but applies unconditionally to all workloads on that
+     pool, including unencrypted ones. In a mixed pool where only a subset of
+     images are encrypted, all writes pay the zero-detection cost and all
+     objects accumulate ``force_allocated_extents`` metadata, regardless of
+     whether they need it. In the worst case (large objects with highly
+     fragmented zero patterns), the per-object OI overhead could be
+     significant.
+
+   - **MOSDOp flag** (``CEPH_OSD_FLAG_PRESERVE_ALLOCATION``): a flag carried on
+     the outer ``MOSDOp`` message, set by the client on a per-request basis.
+     This allows clients that know their data requires zero tracking (e.g. RBD
+     with encryption enabled) to opt in on a per-I/O basis, without affecting
+     unencrypted images sharing the same pool. Requires client-side support to
+     set the flag; older clients that do not set it receive no tracking.
+
+   Both mechanisms are supported. Zero detection is performed in PrimaryLogPG
+   whenever either the pool flag is set or the MOSDOp flag is present on the
+   incoming request.
 
 3. **4K block granularity**: Aligned with EC operations, LUKS2, and fscrypt
    block sizes.
@@ -124,25 +157,68 @@ Force-allocated extents are stored in ``object_info_t`` as an
 
     struct object_info_t {
       // ... existing fields ...
-      interval_set<uint64_t> force_allocated_extents;  // 4K-aligned extents
+      // Adaptive: interval_set<uint32_t> of 4K block indices, or bitmap.
+      // See section 6.1 for the representation choice.
+      force_allocated_extents_t force_allocated_extents;
       // ... existing fields ...
     };
 
+**Note:** ``force_allocated_extents`` is only populated and consulted for fast
+EC pools. It is never set or read for replicated pools.
+
+6.1. Adaptive Representation
+-----------------------------
+
+The representation used for ``force_allocated_extents`` is chosen dynamically
+on each encode: whichever of the two representations is smaller is used. No
+fixed threshold or hysteresis is applied — the decision is made purely on
+encoded size at the time of writing. Both directions of conversion must be
+supported (interval_set → bitmap and bitmap → interval_set) since the optimal
+choice can change as extents are added or removed.
+
+**interval_set<uint32_t> (sparse representation)**
+
+Each interval stores a start block index and a length in units of 4K blocks,
+using 32-bit values. Encoded size is proportional to the number of intervals.
+This is the smaller representation when extents are few and clustered.
+
+**Bitmap (dense representation)**
+
+A bit-count field is stored at the beginning of the bitmap, followed by one
+bit per 4K block of the object. Bit ``n`` is set if block ``n`` is
+force-allocated. The bitmap size is fixed by the object size rounded up to a
+4K boundary, regardless of how many bits are set. This is the smaller
+representation when extents are numerous and fragmented.
+
+The leading bit-count field allows the decoder to distinguish a bitmap from an
+interval_set encoding and to allocate the correct buffer without needing a
+separate tag byte.
+
 **Storage Characteristics**
 
-- Empty interval_set requires minimal storage (just a flag bit in OI)
-- For encrypted workloads, probability of producing all-zero 4K blocks is
-  pathologically low (theoretically 1 in 2^(4096*8))
-- For other workloads, zero-blocks are relatively rare though more common than
-  encrypted data
-- In practice, the interval_set will be empty most of the time
-- interval_set provides efficient storage for the rare cases with zero blocks
+- For encrypted workloads, the probability of a 4K block encrypting to all
+  zeros is pathologically low (theoretically 1 in 2^(4096×8)), so the
+  interval_set will almost always be empty and the bitmap will never be chosen.
+- For other workloads, force-allocated extents are relatively rare; the
+  interval_set will be smaller in almost all realistic cases.
+- The bitmap is a safety net for adversarial or highly fragmented patterns.
+  The dynamic selection means there is no sharp cliff — as fragmentation
+  increases, the representation transitions smoothly to bitmap at exactly the
+  point it becomes beneficial.
 
-**Note:** While object_info_t is generally suitable for this metadata, if
-extensive force-allocated extent tracking becomes necessary, alternative
-storage mechanisms should be evaluated.
+**OBC Cache Memory Requirement**
 
-6. Recovery Rules
+``object_info_t`` is cached in the Object Context (OBC) cache in memory for
+each open object. The encoded ``force_allocated_extents`` field contributes to
+the in-memory size of every cached OBC. The representation must therefore
+remain small: an unbounded or linearly-growing structure would cause memory
+pressure proportional to the number of concurrently cached objects. The bitmap
+representation imposes a hard upper bound of ``object_size / 4K / 8`` bytes
+per object (e.g. 512 bytes for a 4 MiB RBD object), which is acceptable. The
+adaptive selection between interval_set and bitmap ensures this bound is
+respected regardless of access pattern.
+
+7. Recovery Rules
 =================
 
 During EC recovery and backfill, the following rules apply:
@@ -157,6 +233,22 @@ During EC recovery and backfill, the following rules apply:
 
 - If recovered block is all zeros, deallocate it
 - Otherwise write it as-is
+
+- If no data has been recovered, deallocate (do not write a zero block)
+
+**Parity shards:**
+
+- Zero-detection is applied to parity shards in the same way as data shards.
+  If a parity shard extent is all zeros after encoding or reconstruction, it
+  is deallocated (left as a hole).
+- Zero-detection on parity is the responsibility of the EC plugin, which may
+  optimise the detection (for example by determining during encoding that
+  parity is zero without a separate pass). Early implementations may perform
+  zero-detection on the encoded parity output after the fact.
+- This deallocation of parity means that thick provisioning (``rbd
+  --thick-provision``) is not supported on EC pools: a subsequent ZERO op
+  against a thick-provisioned image will reclaim the reserved parity storage.
+  See section 10.
 
 **Code Locations**
 
@@ -173,7 +265,7 @@ Current code in ``src/osd/ECBackend.cc`` around line 670 has a comment about
 zero-padding during recovery. This area and similar code paths need careful
 review to ensure zero-block metadata is properly consulted.
 
-7. Modified RADOS Operations
+8. Modified RADOS Operations
 =============================
 
 7.1. SPARSE_READ
@@ -268,8 +360,10 @@ SPARSE_READ:
 
 **Behavior when tracking is enabled:**
 
-1. Check if pool has ``FLAG_TRACK_ZERO_BLOCKS`` flag set
-2. If pool flag is set, perform zero-detection on all writes to the pool
+1. Check if op needs zero tracking (pool has ``preserve_allocation`` set, or
+   ``CEPH_OSD_FLAG_PRESERVE_ALLOCATION`` is set on the MOSDOp)
+2. If zero tracking is needed, perform zero-detection on the write data in
+   ``PrimaryLogPG`` before dispatching to the backend
 3. Update object data as normal
 4. Perform zero-detection on write data using two-stage algorithm:
 
@@ -347,41 +441,82 @@ written (after merging new data with existing data).
 
 **CEPH_OSD_OP_ZERO**
 
-**Behavior when tracking is enabled:**
+``CEPH_OSD_OP_ZERO`` is semantically a deallocation operation — it punches a
+hole in the object, freeing the underlying storage. It is not a write of zeros.
 
-1. Remove ``force_allocated_extents`` for the zeroed regions
-2. Perform zero operation (explicitly deallocates data and writes zeros)
-3. Persist updated OI
+PrimaryLogPG converts a ZERO op at the end of an object to a truncate. The EC
+layer stripes the remaining ZERO range across the data shards and sends ZERO
+ops down to the object store.
 
-**Rationale:** ZERO operations explicitly deallocate storage, so these regions
-should not be preserved as allocated during recovery.
+For parity calculation, zeroed data extents are treated as a write of zeros.
+Any resulting parity that is all zeros is deallocated using the same mechanism
+as normal writes.
 
-8. Development Notes
+ZERO ops are permitted at any byte alignment. EC deallocates at 4K granularity.
+Any sub-4K-aligned portion of the range that cannot be deallocated is written
+as literal zeros.
+
+ZERO ops clear ``force_allocated_extents`` entries for any fully covered
+4K-aligned extent.
+
+9. Development Notes
 ====================
 
 8.1. Pool Flag
 --------------
 
-Zero-block tracking is enabled per-pool using the ``FLAG_TRACK_ZERO_BLOCKS``
-pool flag. This flag can be set using:
+Zero detection in PrimaryLogPG is triggered by either of the two mechanisms
+described in section 4. Both can be used simultaneously.
 
-.. code-block:: bash
+**Pool property (``preserve_allocation``)**
 
-   ceph osd pool set <pool> set_pool_flags <flag_value> --yes-i-really-mean-it
+A pool-level boolean property that enables zero detection for all writes to
+all objects in the pool. This is a coarse-grained mechanism: it applies to
+every write regardless of which client or image issued it. It is appropriate
+when all workloads on the pool require zero tracking, or when deploying
+without client changes.
 
-Where ``<flag_value>`` is the numeric value of ``FLAG_TRACK_ZERO_BLOCKS``.
+**MOSDOp flag (``CEPH_OSD_FLAG_PRESERVE_ALLOCATION``)**
 
-**Note:** This is a development tool and requires the ``--yes-i-really-mean-it``
-confirmation flag.
+A flag on the outer ``MOSDOp`` message, set by the client on individual
+requests. PrimaryLogPG checks for this flag in ``m->get_flags()`` when
+processing a write operation. If present, zero detection is performed for that
+request regardless of pool configuration. This is a fine-grained mechanism:
+only writes from clients that explicitly set the flag are tracked, avoiding
+unnecessary overhead and ``force_allocated_extents`` accumulation for
+unencrypted workloads sharing the same pool.
 
-8.2. Block Size
----------------
+**RBD implementation requirements**
+
+Once sparse read support is implemented, the following RBD client changes are
+needed:
+
+1. **EC pool validation**: When enabling encryption (``rbd encryption format``),
+   verify that the EC data pool has ``preserve_allocation`` set. Return a clear
+   error if not.
+
+2. **CLI guidance**: Update ``rbd encryption format`` to check pool
+   configuration and provide helpful error messages guiding users to enable
+   the property.
+
+**Documentation**
+
+Full user-facing documentation of how to enable each mechanism (pool property
+CLI syntax, librados API for setting the MOSDOp flag, and client-specific
+guidance for RBD and CephFS) will be provided in a separate documentation
+update once the feature is implemented.
+
+9.2. Block Size and Zero-Detection Algorithm
+--------------------------------------------
 
 The implementation uses 4K block granularity, aligned with EC operations,
-LUKS2, and fscrypt block sizes. ISA-L zero detection is optimized for 4K
-blocks.
+LUKS2, and fscrypt block sizes.
 
-8.3. Testing Requirements
+Zero detection uses the existing ``mem_is_zero()`` implementation. Improving
+the zero-detection algorithm (e.g. using platform-optimised SIMD routines) is
+a separate concern and out of scope for this design.
+
+9.3. Testing Requirements
 -------------------------
 
 **Most tests can be done without encryption** by using regular writes of zero
@@ -477,112 +612,43 @@ data and verifying allocation state is preserved through recovery.
     - Multiple recovery cycles
     - Verify allocation state remains consistent
 
-9. Client Configuration Requirements
-=====================================
+14. **ZERO op coverage in ceph_test_rados_io_sequence:**
 
-To use encryption on EC pools, clients must be configured appropriately:
+    ``ceph_test_rados_io_sequence`` exercises random sequences of RADOS
+    operations against EC and replicated pools and verifies correctness.
+    The ZERO operation must be added to the operation set so that the
+    following edge cases are exercised automatically:
 
-9.1. RBD Configuration
-----------------------
+    - **ZERO combined with writes in the same op**: include ZERO and WRITE
+      sub-ops in the same ``MOSDOp`` to verify correct ordering and that
+      allocation state after the compound op is consistent.
 
-**Current State**
+    - **Misaligned ZERO**: issue ZERO ops whose start and/or end are not
+      4K-aligned, verifying that sub-4K head and tail regions are written
+      with literal zeros while the 4K-aligned interior is deallocated.
 
-There is no explicit code restriction preventing RBD encryption on EC pools.
-However, encryption does not work correctly because:
+    - **Multiple ZERO ops in one sequence step**: issue several ZERO ops
+      covering overlapping or adjacent ranges within a single compound op,
+      verifying that the combined deallocation is handled correctly.
 
-1. EC sparse reads always report all data as allocated (even unallocated regions)
-2. During recovery, EC cannot distinguish explicitly-written zeros from
-   unallocated regions
-3. This causes data corruption for encrypted images where decrypted zeros get
-   deallocated
+    - **ZERO combined with TRUNCATE**: issue a ZERO followed by a TRUNCATE
+      (or vice versa) within the same op sequence step, verifying that
+      ``force_allocated_extents`` entries and physical allocation are both
+      updated correctly when the two operations interact at range boundaries.
 
-**Note on Journaling**: RBD encryption currently blocks images with journaling
-enabled (see ``librbd/crypto/LoadRequest.cc:57-61``). This is a separate
-restriction unrelated to EC pools - it applies to all pool types. Addressing
-the journaling restriction is out of scope for this design.
-
-**Required Changes**
-
-Once sparse read support is implemented, the following client-side changes are
-needed:
-
-1. **Add EC pool validation**: When enabling encryption, verify that EC data
-   pools have the ``FLAG_TRACK_ZERO_BLOCKS`` flag set. Return a clear error if
-   not.
-
-2. **CLI support**: Update ``rbd encryption format`` to check pool
-   configuration and provide helpful error messages guiding users to enable the
-   flag.
-
-**Configuration Steps**
-
-To enable RBD encryption on an EC pool:
-
-1. Enable zero-block tracking on the EC pool::
-
-     ceph osd pool set <ec-pool> set_pool_flags 4194304 --yes-i-really-mean-it
-
-2. Create or format the RBD image with encryption::
-
-     rbd create --size 10G --data-pool <ec-pool> mypool/myimage
-     rbd encryption format mypool/myimage luks2 passphrase.txt
-
-3. Load encryption when opening the image::
-
-     rbd encryption load mypool/myimage luks2 passphrase.txt
-
-9.2. CephFS Configuration
---------------------------
-
-**Current State**
-
-CephFS fscrypt operates at the MDS level and does not have explicit EC pool
-restrictions. The fscrypt implementation works with file metadata and should
-function transparently with EC pools that have sparse read support.
-
-**Verification Required**
-
-While no code changes are expected for CephFS, the following must be verified:
-
-1. fscrypt file encryption/decryption works correctly on EC pools
-2. Sparse reads return correct allocation information for encrypted files
-3. Performance is acceptable for typical workloads
-
-**Configuration Steps**
-
-To use CephFS fscrypt on an EC pool:
-
-1. Enable zero-block tracking on the EC data pool::
-
-     ceph osd pool set <ec-pool> set_pool_flags 4194304 --yes-i-really-mean-it
-
-2. Configure CephFS to use the EC pool as a data pool
-
-3. Enable fscrypt on directories as normal - no special configuration needed
-
-9.3. Other Clients
-------------------
-
-RGW and other RADOS clients are not explicitly supported in this design. While
-the OSD-side changes are client-agnostic, client-specific validation and
-configuration may be needed for other use cases.
-
-10. Features NOT Implemented
+11. Features NOT Implemented
 =============================
 
 The following features are explicitly out of scope for this design:
 
 **Thick Provisioning Support**
 
-The ``--thick-provision`` feature for RBD will be supported through the
-WRITESAME operation handling. When RBD creates a thick-provisioned image, it
-uses WRITESAME to write zeros across the entire image, and these zeros will be
-tracked as force-allocated extents, preventing deallocation during recovery.
-
-However, this design does not prevent BlueStore compression or other storage
-optimizations that may affect thick provisioning guarantees at the storage
-layer. Additionally, extensive testing of thick provisioning scenarios is not
-planned as part of this work - the primary focus is on encryption use cases.
+Thick provisioning (``rbd --thick-provision``) requires that all storage is
+physically allocated upfront and remains allocated even if zeros are written
+back into the image. This design does not support that guarantee: ZERO ops
+deallocate storage (via zero detection on encoded shard extents), so any
+subsequent ZERO issued against a thick-provisioned image would reclaim the
+reserved space. Thick provisioning on EC pools is out of scope for this design.
 
 **Alternative Block Size Support**
 
@@ -596,7 +662,44 @@ supported. Supporting 512-byte blocks would require:
 
 This can be added in a future iteration if there is demand.
 
-11. Rejected Implementation Approaches
+11. Optional Performance Improvement: ISA-L Zero Detection
+==========================================================
+
+``mem_is_zero()`` currently uses a portable C implementation with compile-time
+platform selection. An optional performance improvement is to replace it with
+calls into the ISA-L ``isal_zero_detect()`` function, which provides
+runtime-dispatched SIMD implementations (AVX-512, AVX2, AVX, SSE on x86-64;
+NEON and SVE variants on aarch64).
+
+**Pre-check on the first ``uint64_t``**
+
+Before calling ``isal_zero_detect()``, test the first 8 bytes of the buffer.
+If they are non-zero the block can be rejected immediately without invoking
+ISA-L at all. This pre-check is essentially free for two reasons:
+
+- The memory access is not wasted: loading the first 8 bytes brings the first
+  cache line into L1, which ISA-L will read anyway for the all-zero case. The
+  pre-check simply makes use of a cache line that was going to be fetched
+  regardless.
+
+- It is a correctness requirement for some ISA-L implementations. Certain
+  aarch64 implementations in ISA-L require a minimum buffer size (greater than
+  64 bytes) and assume the caller will not pass a trivially non-zero buffer.
+  The pre-check on the first ``uint64_t`` acts as a guard that makes it safe
+  to call ``isal_zero_detect()`` unconditionally for any buffer that passes
+  the initial test.
+
+For encrypted workloads — the primary use case — the probability of the first
+8 bytes being zero is negligible, so almost all blocks are rejected at the
+pre-check stage with a single comparison.
+
+This improvement will be implemented if performance measurements indicate that
+``mem_is_zero()`` is a bottleneck in the zero-detection path. It will be
+delivered under an independent PR, separate from the main sparse read
+implementation. It applies to all callers of ``mem_is_zero()`` throughout
+Ceph, not just the zero-detection path introduced here.
+
+12. Rejected Implementation Approaches
 =======================================
 
 11.1. Client-Side Zero Detection
@@ -656,5 +759,3 @@ The primary use case is encryption where zeros are pathologically rare. Force-
 allocated extent tracking optimizes for this case with minimal metadata
 overhead. Zero-detection is highly optimized (ISA-L, early exit) and operates
 on data already in CPU cache from EC encoding.
-
-.. Made with Bob
