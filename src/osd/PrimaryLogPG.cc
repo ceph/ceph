@@ -15946,15 +15946,16 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     }
 
     int action;
+    hobject_t snap_head;
     if (soid.is_snap()) {
-      if (pool_migrations_in_flight.count(soid.get_head())) {
+      snap_head = soid.get_head();
+      if (pool_migrations_in_flight.count(snap_head)) {
         // Head has been copied, so migrate the clone
         action = COPY_DELETE_NEXT;
       } else {
         // Head hasn't been copied yet, do that first
         action = COPY_HEAD;
       }
-      pool_migration_clones_in_flight[soid.get_head()]++;
     } else {
       if (pool_migrations_in_flight.count(soid.get_head())) {
         // Head has been copied, clones have been copied+deleted, now delete the head
@@ -16025,6 +16026,10 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     if (new_pool_migration_interval) {
       new_pool_migration_interval = false;
       new_pool_migration_interval_in_flight = true;
+    }
+
+    if (!snap_head.is_min()) {
+      pool_migration_clones_in_flight[snap_head]++;
     }
 
     ops++;
