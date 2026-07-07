@@ -10,6 +10,16 @@
 
 using namespace std::chrono_literals;
 
+static int64_t ratelimit_interval()
+{
+  return g_ceph_context->_conf->rgw_ratelimit_interval;
+}
+
+static int64_t expected_ops_delay(int64_t max_ops)
+{
+  return rgw::ratelimit::compute_delay(max_ops, 1, ratelimit_interval());
+}
+
 class RateLimitBackendFixture : public ::testing::Test {
 protected:
   void SetUp() override {
@@ -26,7 +36,7 @@ static void run_reject_op_over_limit(RateLimitStore& store)
   auto time = ceph::coarse_real_clock::now();
   EXPECT_EQ(0, store.should_rate_limit("GET", key, time, &info, ""));
   time = ceph::coarse_real_clock::now();
-  EXPECT_EQ(60, store.should_rate_limit("GET", key, time, &info, ""));
+  EXPECT_EQ(expected_ops_delay(1), store.should_rate_limit("GET", key, time, &info, ""));
 }
 
 static void run_giveback(RateLimitStore& store)
@@ -50,7 +60,7 @@ static void run_refill(RateLimitStore& store)
   const std::string key = "uuser789";
   auto time = ceph::coarse_real_clock::now();
   EXPECT_EQ(0, store.should_rate_limit("GET", key, time, &info, ""));
-  time += 61s;
+  time += std::chrono::seconds(ratelimit_interval() + 1);
   EXPECT_EQ(0, store.should_rate_limit("GET", key, time, &info, ""));
 }
 
@@ -76,7 +86,7 @@ static void run_list_op(RateLimitStore& store)
   auto time = ceph::coarse_real_clock::now();
   EXPECT_EQ(0, store.should_rate_limit("GET", key, time, &info, "list-type=2"));
   time = ceph::coarse_real_clock::now();
-  EXPECT_EQ(60, store.should_rate_limit("GET", key, time, &info, "list-type=2"));
+  EXPECT_EQ(expected_ops_delay(1), store.should_rate_limit("GET", key, time, &info, "list-type=2"));
 }
 
 TEST_F(RateLimitBackendFixture, LocalBackendSuite)
@@ -115,10 +125,11 @@ TEST_F(RateLimitBackendFixture, ClusterWideTwoGateways)
   EXPECT_EQ(0, rgw_a.should_rate_limit("GET", key, time, &info, ""));
   time = ceph::coarse_real_clock::now();
   EXPECT_EQ(0, rgw_b.should_rate_limit("GET", key, time, &info, ""));
+  const int64_t delay = expected_ops_delay(2);
   time = ceph::coarse_real_clock::now();
-  EXPECT_EQ(60, rgw_a.should_rate_limit("GET", key, time, &info, ""));
+  EXPECT_EQ(delay, rgw_a.should_rate_limit("GET", key, time, &info, ""));
   time = ceph::coarse_real_clock::now();
-  EXPECT_EQ(60, rgw_b.should_rate_limit("GET", key, time, &info, ""));
+  EXPECT_EQ(delay, rgw_b.should_rate_limit("GET", key, time, &info, ""));
 }
 
 TEST(RGWRateLimitCore, consume_matches_entry_semantics)
@@ -131,7 +142,8 @@ TEST(RGWRateLimitCore, consume_matches_entry_semantics)
   auto ts = ceph::coarse_real_clock::now().time_since_epoch();
 
   EXPECT_EQ(0, rgw::ratelimit::consume(state, OpType::Read, &info, ts, interval));
-  EXPECT_EQ(60, rgw::ratelimit::consume(state, OpType::Read, &info, ts, interval));
+  EXPECT_EQ(expected_ops_delay(1),
+            rgw::ratelimit::consume(state, OpType::Read, &info, ts, interval));
 }
 
 TEST(RGWRateLimitService, backend_factory_local_default)
@@ -167,9 +179,7 @@ TEST(RGWRateLimitService, backend_factory_redis)
   auto time = ceph::coarse_real_clock::now();
   EXPECT_EQ(0, store->should_rate_limit("GET", key, time, &info, ""));
   time = ceph::coarse_real_clock::now();
-  EXPECT_EQ(60, store->should_rate_limit("GET", key, time, &info, ""));
-
-  g_ceph_context->_conf.set_val("rgw_ratelimit_backend", "local");
+  EXPECT_EQ(expected_ops_delay(1), store->should_rate_limit("GET", key, time, &info, ""));
 }
 
 TEST(RGWRateLimitService, backend_factory_rados_fallback_without_pool)
