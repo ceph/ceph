@@ -1498,6 +1498,7 @@ def test_bucket_list_return_data_versioning():
         assert obj['Size'] == key_data['ContentLength']
         assert obj['Owner']['ID'] == key_data['ID']
         assert obj['VersionId'] == key_data['VersionId']
+        assert obj['IsLatest'] == True
         _compare_dates(obj['LastModified'],key_data['LastModified'])
 
 def test_bucket_list_objects_anonymous():
@@ -7762,6 +7763,14 @@ def test_versioning_obj_create_read_remove_head():
 
     (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
 
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert len(response['Versions']) == num_versions
+    assert response['Versions'][0]['IsLatest'] == True
+    assert response['Versions'][0]['VersionId'] == version_ids[-1]
+
+    for i in range(1, 4):
+      assert response['Versions'][i]['IsLatest'] == False
+
     # removes old head object, checks new one
     removed_version_id = version_ids.pop()
     contents.pop()
@@ -7783,8 +7792,28 @@ def test_versioning_obj_create_read_remove_head():
     assert len(response['Versions']) == num_versions
     assert len(response['DeleteMarkers']) == 1
     assert response['DeleteMarkers'][0]['VersionId'] == delete_marker_version_id
+    assert response['DeleteMarkers'][0]['IsLatest'] == True
+
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+    assert error_code == 'NoSuchKey'
+
+    # Remove the delete marker
+
+    response = client.delete_object(Bucket=bucket_name, Key=key, VersionId=delete_marker_version_id)
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert len(response['Versions']) == num_versions
+    assert response['Versions'][0]['IsLatest'] == True
+    assert not 'DeleteMarkers' in response
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    body = _get_body(response)
+    assert body == contents[-1]
 
     clean_up_bucket(client, bucket_name, key, version_ids)
+
 
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
