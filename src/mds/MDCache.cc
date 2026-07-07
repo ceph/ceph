@@ -5187,6 +5187,13 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
     ceph_assert(dir);
     auto q = p.second.cbegin();
     dir->_decode_base(q);
+    // If the dirfrag was invented during strong rejoin processing and is
+    // still in the undef set, remove it now since the survivor's ACK has
+    // fully defined it (both dentries and base were provided).
+    if (dir->state_test(CDir::STATE_REJOINUNDEF)) {
+      dir->state_clear(CDir::STATE_REJOINUNDEF);
+      rejoin_undef_dirfrags.erase(dir);
+    }
     dout(10) << " got dir replica " << *dir << dendl;
   }
 
@@ -6056,9 +6063,20 @@ bool MDCache::open_undef_inodes_dirfrags()
 
   // dirfrag -> (fetch_complete, keys_to_fetch)
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
-  for (auto& dir : rejoin_undef_dirfrags) {
-    ceph_assert(dir->get_version() == 0);
+  for (auto it = rejoin_undef_dirfrags.begin(); it != rejoin_undef_dirfrags.end(); ) {
+    CDir *dir = *it;
+    if (dir->get_version() != 0) {
+      // The ACK from a survivor may have already populated this dirfrag
+      // via _decode_base() in handle_cache_rejoin_ack(), setting its
+      // version.  Skip the fetch since it's already fully defined.
+      dout(10) << " dirfrag " << *dir << " already has version " << dir->get_version()
+               << ", skipping fetch" << dendl;
+      dir->state_clear(CDir::STATE_REJOINUNDEF);
+      it = rejoin_undef_dirfrags.erase(it);
+      continue;
+    }
     fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
+    ++it;
   }
 
   if (g_conf().get_val<bool>("mds_dir_prefetch")) {
