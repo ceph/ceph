@@ -40,17 +40,26 @@ def task(ctx,config):
         bench_cmd += ' --track-metrics ' + config.get('track_metrics')
 
     if work_load_type=='pg_log':
-        bench_cmd += ' --num-logs ' + str(config.get('num_logs', 4))
-        bench_cmd += ' --log-size ' + str(config.get('log_size', 1024))
-        bench_cmd += ' --log-length ' + str(config.get('log_length', 256))
-    
+        if 'num_logs' in config:
+            bench_cmd += ' --num-logs ' + str(config.get('num_logs'))
+        if 'log_size' in config:
+            bench_cmd += ' --log-size ' + str(config.get('log_size'))
+        if 'log_length' in config:
+            bench_cmd += ' --log-length ' + str(config.get('log_length'))
+
     elif work_load_type == 'rgw_index':
-        bench_cmd += ' --num_indices ' + str(config.get('num_indices', 16))
-        bench_cmd += ' --key_size ' + str(config.get('key_size', 1024))
-        bench_cmd += ' --value_size ' + str(config.get('value_size', 1024))
-        bench_cmd += ' --target_keys_per_bucket ' + str(config.get('target_keys_per_bucket', 256))
-        bench_cmd += ' --tolerance_range ' + str(config.get('tolerance_range', 10))
-        bench_cmd += ' --num_buckets_per_collection ' + str(config.get('num_buckets_per_collection', 16))
+        if 'num_indices' in config:
+            bench_cmd += ' --num_indices ' + str(config.get('num_indices'))
+        if 'key_size' in config:
+            bench_cmd += ' --key_size ' + str(config.get('key_size'))
+        if 'value_size' in config:
+            bench_cmd += ' --value_size ' + str(config.get('value_size'))
+        if 'target_keys_per_bucket' in config:
+            bench_cmd += ' --target_keys_per_bucket ' + str(config.get('target_keys_per_bucket'))
+        if 'tolerance_range' in config:
+            bench_cmd += ' --tolerance_range ' + str(config.get('tolerance_range'))
+        if 'num_buckets_per_collection' in config:
+            bench_cmd += ' --num_buckets_per_collection ' + str(config.get('num_buckets_per_collection'))
 
 
     elif work_load_type == 'random_write':
