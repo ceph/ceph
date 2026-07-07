@@ -645,7 +645,7 @@ bool AuthMonitor::check_health()
   if (!bad_rotating_service_keys.empty()) {
     std::ostringstream summary;
     summary << bad_rotating_service_keys.size() << " rotating auth service keys using insecure key types";
-    auto& check = next.add("AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE", HEALTH_ERR, summary.str(), bad_rotating_service_keys.size());
+    auto& check = next.add("AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE", HEALTH_WARN, summary.str(), bad_rotating_service_keys.size());
     for (auto& detail : bad_rotating_service_keys) {
       check.detail.push_back(detail);
     }
