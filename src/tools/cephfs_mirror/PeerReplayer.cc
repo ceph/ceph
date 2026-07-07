@@ -1324,7 +1324,7 @@ int PeerReplayer::SnapDiffSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -1505,7 +1505,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
     r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &estx,
                      CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                      CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                     AT_SYMLINK_NOFOLLOW);
     if (r < 0) {
       derr << ": failed to stat epath=" << epath << ", r=" << r << dendl;
       return r;
@@ -1622,7 +1622,7 @@ int PeerReplayer::RemoteSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -1709,7 +1709,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
                      CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                      CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                     AT_SYMLINK_NOFOLLOW);
     if (r < 0) {
       derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
            << dendl;
