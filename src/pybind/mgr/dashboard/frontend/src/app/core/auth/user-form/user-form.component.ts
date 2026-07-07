@@ -180,6 +180,13 @@ export class UserFormComponent extends CdForm implements OnInit {
       this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
+        if (this.authStorageService.getUsername() === username) {
+          this.allRoles = _.map(this.allRoles, (role) => {
+            role.disabled =
+              role.name.toLowerCase() === 'administrator' && this.isCurrentUser() ? true : false;
+            return role;
+          });
+        }
         this.loadingReady();
       });
     });
