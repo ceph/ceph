@@ -18,6 +18,7 @@ def task(ctx,config):
     log.info("Beginning crimson store bench test")
     testdir=teuthology.get_testdir(ctx)
     store_dir=os.path.join(testdir,'store_bench_dir')
+    output_dir=os.path.join(testdir,'store_bench_output')
     role='osd.0'
     (remote,)=ctx.cluster.only(role).remotes.keys()
 
@@ -72,24 +73,33 @@ def task(ctx,config):
         if 'colls_per_shard' in config:
             bench_cmd += ' --colls-per-shard ' + str(config.get('colls_per_shard'))
     
+    output_log=os.path.join(output_dir,'store_bench_output.log')
     full_cmd=(
-        'rm -rf {store_dir} && '
-        'mkdir -p {store_dir} && '
+        'set -o pipefail && '
+        'rm -rf {store_dir} {output_dir} && '
+        'mkdir -p {store_dir} {output_dir} && '
         'touch {store_dir}/block && '
         'truncate -s 10G {store_dir}/block && '
-        '{bench_cmd}'
-    ).format(store_dir=store_dir, bench_cmd=bench_cmd)
+        '{bench_cmd} 2>&1 | tee {output_log}'
+    ).format(store_dir=store_dir, output_dir=output_dir,
+             bench_cmd=bench_cmd, output_log=output_log)
 
     log.info("running the process %s",full_cmd)
     proc=remote.run(args=['bash','-c',full_cmd],
                     logger=log.getChild('actual_benchmark_output'),
                     stdin=run.PIPE,
                     wait=False)
-    
+
     try:
-        yield 
+        yield
     finally:
         log.info("waiting for the process to finish")
         proc.wait()
+        if ctx.archive is not None:
+            log.info("archiving crimson-store-bench output")
+            archive_dest = os.path.join(
+                ctx.archive, 'remote', remote.shortname, 'crimson_store_bench')
+            os.makedirs(archive_dest, exist_ok=True)
+            teuthology.pull_directory(remote, output_dir, archive_dest)
         log.info("cleaning up store_bench_dir")
-        remote.run(args=['rm', '-rf', store_dir])
+        remote.run(args=['rm', '-rf', store_dir, output_dir])
