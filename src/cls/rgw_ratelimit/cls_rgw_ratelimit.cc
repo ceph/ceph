@@ -1,4 +1,5 @@
 #include "objclass/objclass.h"
+#include "include/rados/objclass.h"
 
 #include <errno.h>
 
@@ -126,15 +127,12 @@ CLS_INIT(rgw_ratelimit)
   cls_method_handle_t h_giveback;
   cls_method_handle_t h_decrease_bytes;
 
-  cls_register("rgw_ratelimit", &h_class);
+  using namespace cls::rgw::ratelimit;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, cls::rgw::ratelimit::method::consume,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          handle_consume, &h_consume);
-  cls_register_cxx_method(h_class, cls::rgw::ratelimit::method::giveback,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          handle_giveback, &h_giveback);
-  cls_register_cxx_method(h_class, cls::rgw::ratelimit::method::decrease_bytes,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          handle_decrease_bytes, &h_decrease_bytes);
+  cls.register_cxx_method(method::consume, handle_consume, &h_consume);
+  cls.register_cxx_method(method::giveback, handle_giveback, &h_giveback);
+  cls.register_cxx_method(method::decrease_bytes, handle_decrease_bytes,
+                          &h_decrease_bytes);
 }

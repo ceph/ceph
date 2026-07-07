@@ -2789,7 +2789,7 @@ void RGWRateLimitInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
 
-void RGWRateLimitInfo::dump(Formatter *f) const
+void RGWRateLimitInfo::dump(ceph::Formatter *f) const
 {
   f->dump_int("max_read_ops", max_read_ops);
   f->dump_int("max_write_ops", max_write_ops);
