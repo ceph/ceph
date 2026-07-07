@@ -84,11 +84,10 @@ struct results_t {
     total_latency += other_result.total_latency;
     if (buckets_io_vector.empty()) {
       buckets_io_vector = other_result.buckets_io_vector;
-    }
-    else {
+    } else {
       // bucket counts are always in lockstep here: every coroutine merged
       // via this operator computed its bucket vector from the same
-      // common.bucket_size_time / common.get_duration(), so both sides are
+      // common.bucket_sample_period / common.get_duration(), so both sides are
       // guaranteed the same size.
       for (size_t i = 0; i < buckets_io_vector.size(); ++i) {
         buckets_io_vector[i] += other_result.buckets_io_vector[i];
@@ -152,7 +151,7 @@ public:
   bool dump_metrics = false;
   bool show_bucket_output = false;
   std::string track_metrics="";
-  unsigned bucket_size_time = 0;
+  unsigned bucket_sample_period = 0;
   std::string csv_output = "";
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
@@ -185,11 +184,11 @@ public:
       ("show-bucket-output", po::bool_switch(&show_bucket_output),
        "Show the per-bucket IO/latency (and tracked metrics) breakdown in "
        "the results dump")
-      ("bucket-size", po::value<unsigned>(&bucket_size_time),
+      ("bucket-sample-period", po::value<unsigned>(&bucket_sample_period),
        "collect metrics per bucket of this duration in seconds (0 = disabled)")
       ("csv-output", po::value<std::string>(&csv_output),
        "write per-bucket metrics to a CSV file at this path (requires "
-       "--bucket-size); one row per bucket, one column per shard per metric")
+       "--bucket-sample-period); one row per bucket, one column per shard per metric")
       ;
     return ret;
   }
@@ -488,8 +487,8 @@ seastar::future<results_t> PGLogWorkload::run(
     auto start = ceph::mono_clock::now();
 
     unsigned num_buckets = 0;
-    if (common.bucket_size_time > 0) {
-      num_buckets = common.get_duration().count() / common.bucket_size_time;
+    if (common.bucket_sample_period > 0) {
+      num_buckets = common.get_duration().count() / common.bucket_sample_period;
       if (num_buckets == 0) {
         num_buckets = 1;
       }
@@ -533,7 +532,7 @@ seastar::future<results_t> PGLogWorkload::run(
 
       if (num_buckets > 0) {
         std::chrono::duration<double> elapsed = latency_end - start;
-        unsigned bucket_index = elapsed.count() / common.bucket_size_time;
+        unsigned bucket_index = elapsed.count() / common.bucket_sample_period;
         if (bucket_index >= num_buckets) {
           bucket_index = num_buckets - 1;
         }
@@ -554,7 +553,7 @@ seastar::future<results_t> PGLogWorkload::run(
     common.get_duration(), common.num_concurrent_io, add_remove_entry);
   // --track-metrics without --show-bucket-output means "one summary value
   // per metric", not a per-bucket breakdown -- take a single snapshot here
-  // instead of using the (possibly-empty, if --bucket-size wasn't passed)
+  // instead of using the (possibly-empty, if --bucket-sample-period wasn't passed)
   // per-bucket snapshots collected above.
   if (!common.show_bucket_output && !common.track_metrics.empty()) {
     result.tracked_metrics =
