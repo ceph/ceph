@@ -4,7 +4,8 @@
 #include <string_view>
 
 #include "include/buffer.h"
-#include "rgw_common.h"
+#include "common/ceph_time.h"
+#include "rgw_ratelimit_types.h"
 
 enum class OpType { Read, Write, List, Delete };
 
