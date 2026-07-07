@@ -1284,7 +1284,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   enableRgwModule(): void {
-    this.mgrModuleService.updateModuleState('rgw', false, null, '', $localize`Enabled RGW Module`);
+    this.mgrModuleService.updateModuleState(
+      'rgw',
+      false,
+      undefined,
+      '',
+      $localize`Enabled RGW Module`
+    );
   }
 
   prePopulateId() {
