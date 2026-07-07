@@ -23,6 +23,7 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "rgw_lc.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -2074,6 +2075,19 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       }
     }
   }
+
+  lc = new RGWLC();
+  lc->initialize(cct, this);
+
+  if (use_lc_thread) { 
+    ret = userDB->createLCTables(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "Failed to create LC tables, ret=" << ret << dendl;
+      return ret;
+    }
+    lc->start_processor();
+  }
+
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
@@ -2301,6 +2315,11 @@ int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
 int POSIXDriver::cluster_stat(RGWClusterStat& stats)
 {
   return 0;
+}
+
+std::unique_ptr<Lifecycle> POSIXDriver::get_lifecycle(void)
+{
+  return std::make_unique<POSIXLifecycle>(this);
 }
 
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
@@ -3045,8 +3064,17 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs extra_attrs;
+  Attrs orig_attrs, extra_attrs;
   extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
+
+  ret = dir->read_attrs(dpp, y, orig_attrs);
+
+  for (auto attr : orig_attrs) {
+    if (auto found = attrs.find(attr.first); found == attrs.end()) {
+      /* Attribute needs to be erased */
+      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
+    }
+  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -4732,6 +4760,58 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                                             (exists ? 0 : 1), orig_size, accounted_size);
 
   return 0;
+}
+
+int POSIXLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const std::string& marker,
+                              LCEntry& entry)
+{
+  return driver->get_user_db()->get_entry(oid, marker, entry);
+}
+
+int POSIXLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+				   const std::string& oid, const std::string& marker,
+                                   LCEntry& entry)
+{
+  return driver->get_user_db()->get_next_entry(oid, marker, entry);
+}
+
+int POSIXLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const LCEntry& entry)
+{
+  return driver->get_user_db()->set_entry(oid, entry);
+}
+
+int POSIXLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+				const std::string& oid, const std::string& marker,
+                                uint32_t max_entries, std::vector<LCEntry>& entries)
+{
+  return driver->get_user_db()->list_entries(oid, marker, max_entries, entries);
+}
+
+int POSIXLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCEntry& entry)
+{
+  return driver->get_user_db()->rm_entry(oid, entry);
+}
+
+int POSIXLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCHead& head)
+{
+  return driver->get_user_db()->get_head(oid, head);
+}
+
+int POSIXLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCHead& head)
+{
+  return driver->get_user_db()->put_head(oid, head);
+}
+
+std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& lock_name,
+                                                             const std::string& oid,
+                                                             const std::string& cookie)
+{
+  return std::make_unique<LCPOSIXSerializer>(driver, oid, lock_name, cookie);
 }
 
 } } // namespace rgw::sal
