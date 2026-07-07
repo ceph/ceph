@@ -1332,6 +1332,12 @@ struct pg_pool_t {
     // Allow decreasing pg_num/pgp_num (PG merge) for crimson pools.
     // Note: requires that the pool is currently all bluestore.
     FLAG_CRIMSON_ALLOW_PG_MERGE = 1<<22,
+    // When set, the OSD tracks which 4K-aligned extents in each EC object
+    // contain only zeroes (force-allocated extents).  This enables sparse
+    // reads (MAPEXT / SPARSE_READ) and avoids unnecessary I/O for
+    // all-zero stripe units.  Only meaningful on EC pools with
+    // FLAG_EC_OPTIMIZATIONS; can be toggled without rebuilding existing data.
+    FLAG_PRESERVE_ALLOCATION = 1<<23,
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1359,6 +1365,7 @@ struct pg_pool_t {
     case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     case FLAG_OMAP: return "supports_omap";
     case FLAG_CRIMSON_ALLOW_PG_MERGE: return "crimson_allow_pg_merge";
+    case FLAG_PRESERVE_ALLOCATION: return "preserve_allocation";
     default: return "???";
     }
   }
@@ -1423,6 +1430,8 @@ struct pg_pool_t {
       return FLAG_CLIENT_SPLIT_READS;
     if (name == "supports_omap")
       return FLAG_OMAP;
+    if (name == "preserve_allocation")
+      return FLAG_PRESERVE_ALLOCATION;
     return 0;
   }
 
@@ -1851,6 +1860,19 @@ public:
 
   bool is_crimson() const {
     return has_flag(FLAG_CRIMSON);
+  }
+
+  /// Returns true when the pool is configured to track force-allocated
+  /// (all-zero) extents per object, enabling sparse read support.
+  bool tracks_zero_blocks() const {
+    return is_erasure() && allows_ecoptimizations() &&
+           has_flag(FLAG_PRESERVE_ALLOCATION);
+  }
+  void enable_track_zero_blocks() {
+    set_flag(FLAG_PRESERVE_ALLOCATION);
+  }
+  void disable_track_zero_blocks() {
+    unset_flag(FLAG_PRESERVE_ALLOCATION);
   }
 
   bool can_shift_osds() const {
