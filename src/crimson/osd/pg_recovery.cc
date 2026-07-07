@@ -542,6 +542,13 @@ PGRecovery::do_request_primary_scan(hobject_t begin)
       local_conf()->osd_backfill_scan_min,
       local_conf()->osd_backfill_scan_max,
       pg->get_peering_state().get_backfill_targets());
+    if (!backfill_state) {
+      // Backfill may finish (and tear down backfill_state) while this
+      // coroutine is suspended in scan_for_backfill_primary().
+      DEBUGDPP("primary scan result discarded, backfill finished",
+               *pg->get_dpp());
+      co_return;
+    }
     using BackfillState = crimson::osd::BackfillState;
     backfill_state->process_event(
       BackfillState::PrimaryScanned{ std::move(bi) }.intrusive_from_this());
