@@ -1,6 +1,7 @@
 #include "rgw_ratelimit_rados.h"
 
 #include "common/ceph_context.h"
+#include "common/errno.h"
 #include "include/rados/librados.hpp"
 
 namespace rgw::ratelimit {
@@ -27,7 +28,7 @@ int RadosRateLimitStore::init()
   }
   rados_client = std::make_unique<librados::Rados>();
   rados = rados_client.get();
-  int ret = rados->init_with_context(cct);
+  int ret = rados->init_with_context(get_cct());
   if (ret < 0) {
     ldpp_dout(this, 0) << "rados init_with_context failed: " << cpp_strerror(ret) << dendl;
     return fail_open ? 0 : ret;
