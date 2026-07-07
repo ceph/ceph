@@ -322,6 +322,10 @@ check "list: --format missing value"         114 "--format: 1 required TEXT miss
   bucket list --format
 check "list: --max-entries missing value"    114 "--max-entries: 1 required INT missing" \
   bucket list --max-entries
+# out-of-int-range value rejected by the strict base-10 setter (strict_strtol's
+# int range check), same shape as CLI11's own overflow rejection
+check "list: --max-entries out of int range" 104 "Could not convert: --max-entries = 5000000000" \
+  bucket list --max-entries 5000000000
 check "list: --marker missing value"         114 "--marker: 1 required TEXT missing" \
   bucket list --marker
 check "list: --object-version missing value" 114 "--object-version: 1 required TEXT missing" \
@@ -821,6 +825,20 @@ check "object shard: --num-shards missing value" 114 "--num-shards: 1 required I
 check "object shard: --num-shards non-integer"   104 "Could not convert: --num-shards = abc" \
   bucket object shard --object foo --num-shards abc
 
+# strict base-10 parsing, faithful to legacy strict_strtol: a leading 0 does not
+# switch to octal ("010" = 10, "08" = 8) and hex is rejected. CLI11's default
+# integer binding would auto-detect the base (010 -> 8, 0x10 -> 16, 08 -> error).
+# Object "bar" maps to shard 8 of 10 and shard 4 of 8 (probe-verified).
+check "object shard: --num-shards hex rejected" 104 "Could not convert: --num-shards = 0x10" \
+  bucket object shard --object bar --num-shards 0x10
+check_cluster "object shard: --num-shards 010 parses as decimal 10" 0 '"shard": 8' -- \
+  bucket object shard --object bar --num-shards 010
+check_cluster "object shard: --num-shards 08 parses as 8" 0 '"shard": 4' -- \
+  bucket object shard --object bar --num-shards 08
+check_warns "object shard: --num-shards 010 before subcommand (base-10 + warn)" 0 "" \
+  "Warning: --num-shards should appear after the subcommand" '"shard": 8' -- \
+  bucket --num-shards 010 object shard --object bar
+
 # handler-level (cluster): validations live inside cli11_action and run after
 # driver init. The handler returns a positive EINVAL (shell exit 22), faithful
 # to the legacy handler (note: this differs from set-min-shards' -EINVAL/234).
@@ -1080,6 +1098,17 @@ check "radoslist: --max-concurrent-ios non-integer" 104 "Could not convert: --ma
   bucket radoslist --max-concurrent-ios abc
 check "radoslist: --orphan-stale-secs non-integer"  104 "Could not convert: --orphan-stale-secs = abc" \
   bucket radoslist --orphan-stale-secs abc
+# a negative value wraps into the uint64, matching legacy (uint64_t)strict_strtoll
+check_cluster "radoslist: --orphan-stale-secs -5 accepted (wraps like legacy)" 0 "" -- \
+  bucket radoslist --bucket cli11chk --orphan-stale-secs -5
+# strict base-10 on the uint64 branch too: hex rejected, "08" accepted as 8
+# (CLI11's default binding would accept 0x10 as 16 and reject 08 as bad octal)
+check "radoslist: --orphan-stale-secs hex rejected" 104 "Could not convert: --orphan-stale-secs = 0x10" \
+  bucket radoslist --orphan-stale-secs 0x10
+check_cluster "radoslist: --orphan-stale-secs 08 accepted as 8" 0 "" -- \
+  bucket radoslist --bucket cli11chk --orphan-stale-secs 08
+check "radoslist: --orphan-stale-secs out of range" 104 "Could not convert: --orphan-stale-secs = 99999999999999999999" \
+  bucket radoslist --orphan-stale-secs 99999999999999999999
 
 # cluster: readonly command, lists rados objects backing the bucket (exit 0).
 check_cluster "radoslist: --bucket (lists, exit 0)" 0 "" -- \

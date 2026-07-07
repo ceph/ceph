@@ -3612,6 +3612,37 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
   return cmd->add_option(name, var, std::string(desc))->take_last();
 }
 
+// Multilevel strict base-10 integer option (sibling of add_multilevel_option):
+// binds through a string callback that parses with strict_strtol/strict_strtoll
+// (base 10), matching the legacy parse loop, instead of CLI11's integer binding,
+// which auto-detects the base ("010" -> octal 8, "0x10" -> hex 16, "08" ->
+// rejected). An invalid value fails the callback, so CLI11 emits its standard
+// conversion error (exit 104), same as a directly-bound integer.
+template <typename T>
+CLI::Option* add_multilevel_strict_int(CLI::App* cmd, const std::string& name,
+                                       T& target, std::string_view desc = {}) {
+  const std::string primary = name.substr(0, name.find(','));
+  CLI::callback_t setter = [&target](const CLI::results_t& res) {
+    std::string err;
+    if constexpr (std::is_same_v<T, int>) {
+      // int targets: strict_strtol, which adds an int range check
+      target = strict_strtol(res.back(), 10, &err);
+    } else {
+      // wider targets (e.g. uint64_t): strict_strtoll + the legacy cast
+      target = static_cast<T>(strict_strtoll(res.back(), 10, &err));
+    }
+    return err.empty();
+  };
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
+      p->add_option(name, setter)->group("")->take_last()
+          ->type_name(CLI::detail::type_name<T>());
+    }
+  }
+  return cmd->add_option(name, setter, std::string(desc))->take_last()
+      ->type_name(CLI::detail::type_name<T>());
+}
+
 // Maps a captured binary-flag value to its legacy int var. "false"/"0" -> 0,
 // anything else -> 1 (invalid values warn but set, like legacy's truthy -EINVAL).
 static void parse_binary_flag(const std::string& flag,
@@ -4377,9 +4408,9 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
       add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_list, "--format",          format,         format_desc);
-      // CLI11 validates the integer type (including overflow); sets max_entries_specified
+      // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
-      add_multilevel_option(bucket_list, "--max-entries",     max_entries,    max_entries_desc)
+      add_multilevel_strict_int(bucket_list, "--max-entries",     max_entries,    max_entries_desc)
           ->ignore_underscore()
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
@@ -4390,9 +4421,9 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
       add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc)->ignore_underscore();
       add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
-      // CLI11 validates the integer type (including overflow); sets max_entries_specified
+      // strict base-10 parsing (including overflow checks); sets max_entries_specified
       // to mirror the legacy argparse behavior
-      add_multilevel_option(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)
+      add_multilevel_strict_int(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)
           ->ignore_underscore()
           ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
       add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
@@ -4412,19 +4443,19 @@ int main(int argc, const char **argv)
       add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects")->ignore_underscore();
-      add_multilevel_option(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+      add_multilevel_strict_int(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
 
       // bucket check olh options
       add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_option(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+      add_multilevel_strict_int(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
       // bucket check unlinked options
       add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
       add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
-      add_multilevel_option(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
+      add_multilevel_strict_int(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys")->ignore_underscore();
       add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output")->ignore_underscore();
 
@@ -4493,7 +4524,7 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc)->ignore_underscore();
       // Track whether --num-shards was provided, so the handler can
       // distinguish an omitted option from an explicit value of 0.
-      add_multilevel_option(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
+      add_multilevel_strict_int(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
           ->option_text("<num-shards> REQUIRED")
           ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
@@ -4501,18 +4532,18 @@ int main(int argc, const char **argv)
       // bucket object shard options
       add_multilevel_option(bucket_object_shard, "--object,-o",  object, "object name")
           ->option_text("<object> REQUIRED");
-      add_multilevel_option(bucket_object_shard, "--num-shards", num_shards, "number of shards")
+      add_multilevel_strict_int(bucket_object_shard, "--num-shards", num_shards, "number of shards")
           ->option_text("<num-shards> REQUIRED")
           ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
       add_multilevel_option(bucket_object_shard, "--format",     format, format_desc);
 
       // bucket shard objects options
-      add_multilevel_option(bucket_shard_objects, "--num-shards", num_shards, "number of shards")
+      add_multilevel_strict_int(bucket_shard_objects, "--num-shards", num_shards, "number of shards")
           ->option_text("<num-shards> REQUIRED")
           ->ignore_underscore()
           ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
-      add_multilevel_option(bucket_shard_objects, "--shard-id", shard_id, "shard id")
+      add_multilevel_strict_int(bucket_shard_objects, "--shard-id", shard_id, "shard id")
           ->ignore_underscore()
           ->each([&specified_shard_id](const std::string&) { specified_shard_id = true; });
       // opt_prefix is a std::optional; bind a string sink and set it via ->each so it
@@ -4536,9 +4567,9 @@ int main(int argc, const char **argv)
            &rgw_obj_fs_val, &rgw_obj_fs, &yes_i_really_mean_it,
            &bucket_desc](CLI::App* cmd) {
         add_multilevel_option(cmd, "--bucket,-b", bucket_name, bucket_desc);
-        add_multilevel_option(cmd, "--max-concurrent-ios", max_concurrent_ios,
+        add_multilevel_strict_int(cmd, "--max-concurrent-ios", max_concurrent_ios,
                               "maximum concurrent ios for bucket operations (default: 32)")->ignore_underscore();
-        add_multilevel_option(cmd, "--orphan-stale-secs", orphan_stale_secs,
+        add_multilevel_strict_int(cmd, "--orphan-stale-secs", orphan_stale_secs,
                               "num of seconds to wait before declaring an object to be an orphan (default: 86400)")->ignore_underscore();
         add_multilevel_option(cmd, "--rgw-obj-fs", rgw_obj_fs_val,
                               "the field separator that will separate the rados object name from the rgw object name; "
