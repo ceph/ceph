@@ -102,7 +102,7 @@ public:
     }
     OpType type = rgw_ratelimit_op_type(method, resource, ratelimit_info);
     auto& entry = find_or_create(key);
-    const int64_t interval = cct->_conf->rgw_ratelimit_interval;
+    const int64_t interval = get_cct()->_conf->rgw_ratelimit_interval;
     return entry.should_rate_limit(type, ratelimit_info,
                                    curr_timestamp.time_since_epoch(), interval);
   }
