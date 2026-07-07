@@ -108,6 +108,7 @@ about Ceph, see our `Architecture`_ section.
    cephfs/index
    rbd/index
    radosgw/index
+   csi/index
    mgr/index
    mgr/dashboard
    monitoring/index
