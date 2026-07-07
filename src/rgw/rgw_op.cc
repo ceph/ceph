@@ -2724,6 +2724,7 @@ void RGWGetObj::execute(optional_yield y)
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
+  
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
     op_ret = 0;
     goto done_err;
@@ -2922,6 +2923,10 @@ void RGWGetObj::execute(optional_yield y)
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
+    if (!get_data) {
+      rgw::op_counters::inc(counters, l_rgw_op_head_obj, 1);
+      rgw::op_counters::tinc(counters, l_rgw_op_head_obj_lat, s->time_elapsed());
+    }
     return;
   }
 

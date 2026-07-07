@@ -87,7 +87,10 @@ enum {
 
   l_rgw_op_list_buckets,
   l_rgw_op_list_buckets_lat,
-
+  
+  l_rgw_op_head_obj,
+  l_rgw_op_head_obj_lat,
+  
   l_rgw_op_last
 };
 
