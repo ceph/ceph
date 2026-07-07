@@ -11,10 +11,7 @@
 
 using namespace librados;
 
-static int64_t ratelimit_interval()
-{
-  return g_conf().rgw_ratelimit_interval;
-}
+static constexpr int64_t ratelimit_interval = 60;
 
 static int wait_for_osd_map()
 {
@@ -41,7 +38,7 @@ TEST(ClsRgwRatelimit, ConsumeGivebackAndBytes)
   info.enabled = true;
   info.max_read_ops = 1;
   info.max_read_bytes = 1024;
-  const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+  const int64_t interval = ratelimit_interval;
   auto ts = ceph::coarse_real_clock::now().time_since_epoch();
 
   int64_t delay = 0;
@@ -83,7 +80,7 @@ TEST(ClsRgwRatelimit, ClusterWideAcrossObjectsSameShard)
   RGWRateLimitInfo info;
   info.enabled = true;
   info.max_read_ops = 2;
-  const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+  const int64_t interval = ratelimit_interval;
   auto ts = ceph::coarse_real_clock::now().time_since_epoch();
 
   int64_t delay = 0;
