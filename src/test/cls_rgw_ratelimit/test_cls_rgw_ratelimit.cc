@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "cls/rgw_ratelimit/cls_rgw_ratelimit_client.h"
+#include "global/global_context.h"
 #include "include/rados/librados.hpp"
 #include "rgw_ratelimit_core.h"
 #include "test/librados/test_cxx.h"
@@ -45,7 +46,7 @@ TEST(ClsRgwRatelimit, ConsumeGivebackAndBytes)
 
   ASSERT_EQ(0, cls::rgw::ratelimit::consume(&ioctx, oid, key, OpType::Read,
                                             info, ts, interval, &delay));
-  EXPECT_EQ(60, delay);
+  EXPECT_EQ(rgw::ratelimit::compute_delay(1, 1, interval), delay);
 
   ASSERT_EQ(0, cls::rgw::ratelimit::giveback(&ioctx, oid, key, OpType::Read));
   ASSERT_EQ(0, cls::rgw::ratelimit::consume(&ioctx, oid, key, OpType::Read,
@@ -89,7 +90,7 @@ TEST(ClsRgwRatelimit, ClusterWideAcrossObjectsSameShard)
   EXPECT_EQ(0, delay);
   ASSERT_EQ(0, cls::rgw::ratelimit::consume(&ioctx, oid, key, OpType::Read,
                                             info, ts, interval, &delay));
-  EXPECT_EQ(60, delay);
+  EXPECT_EQ(rgw::ratelimit::compute_delay(2, 1, interval), delay);
 
   ASSERT_EQ(0, ioctx.remove(oid));
   ASSERT_EQ(0, cluster.pool_delete(pool_name.c_str()));
