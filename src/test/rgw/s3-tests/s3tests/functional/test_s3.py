@@ -5743,6 +5743,113 @@ def test_object_copy_replacing_metadata():
         assert metadata == response['Metadata']
         assert size == response['ContentLength']
 
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_retaining_tagging():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_tagging_directive_copy():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo', TaggingDirective='COPY')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_tagging_ignored_without_directive():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo', Tagging='key3=value3&key4=value4')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_replacing_metadata_and_copying_tagging():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo',
+                      Metadata={'old': 'metadata'},
+                      Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo',
+                       Metadata={'new': 'metadata'},
+                       MetadataDirective='REPLACE',
+                       TaggingDirective='COPY')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+    response = client.get_object(Bucket=bucket_name, Key='bar321foo')
+    assert response['Metadata'] == {'new': 'metadata'}
+
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo-default',
+                       Metadata={'default': 'metadata'},
+                       MetadataDirective='REPLACE')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo-default')
+    assert response['TagSet'] == [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+    response = client.get_object(Bucket=bucket_name, Key='bar321foo-default')
+    assert response['Metadata'] == {'default': 'metadata'}
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_replacing_tagging():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo', TaggingDirective='REPLACE', Tagging='key3=value3&key4=value4')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == [{'Key': 'key3', 'Value': 'value3'}, {'Key': 'key4', 'Value': 'value4'}]
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_replacing_tagging_with_none():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='bar321foo', TaggingDirective='REPLACE')
+
+    response = client.get_object_tagging(Bucket=bucket_name, Key='bar321foo')
+    assert response['TagSet'] == []
+
+@pytest.mark.tagging
+@pytest.mark.fails_on_dbstore
+def test_object_copy_to_itself_replacing_tagging():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo', Tagging='key1=value1&key2=value2')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, CopySource=copy_source, Key='foo123bar', TaggingDirective='REPLACE', Tagging='key3=value3&key4=value4')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidRequest'
+
 def test_object_copy_bucket_not_found():
     bucket_name = get_new_bucket()
     client = get_client()
