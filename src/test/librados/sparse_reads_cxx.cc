@@ -33,6 +33,13 @@ protected:
   void SetUp() override {
     SKIP_IF_CRIMSON();
     PoolTypeTestFixture::SetUp();
+    if (GetParam() == PoolType::FAST_EC) {
+      ASSERT_EQ("", set_pool_flags_pp(
+        pool_name,
+        rados,
+        pg_pool_t::FLAG_PRESERVE_ALLOCATION,
+        true));
+    }
   }
 
   void TearDown() override {
@@ -877,3 +884,372 @@ INSTANTIATE_TEST_SUITE_P(
     return ceph::test::pool_type_name(info.param);
   }
 );
+
+// ---------------------------------------------------------------------------
+// Tests for the per-request MOSDOp flag CEPH_OSD_FLAG_PRESERVE_ALLOCATION /
+// OPERATION_PRESERVE_ALLOCATION.
+//
+// All tests use a FastEC pool whose pool-level FLAG_PRESERVE_ALLOCATION is
+// explicitly *disabled*, verifying that the per-request flag alone is
+// sufficient to trigger zero-block tracking.
+// ---------------------------------------------------------------------------
+
+/**
+ * Test fixture for the per-request PRESERVE_ALLOCATION MOSDOp flag.
+ *
+ * Unlike SparseReadTest, the pool-level FLAG_PRESERVE_ALLOCATION is intentionally
+ * left unset.  Each test that needs tracking must pass
+ * librados::OPERATION_PRESERVE_ALLOCATION to ioctx.operate().
+ */
+class SparseReadFlagTest : public ::testing::Test {
+protected:
+  static librados::Rados rados;
+  static std::string pool_name;
+  librados::IoCtx ioctx;
+
+  static void SetUpTestSuite() {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+    pool_name = get_temp_pool_name("sparse_read_flag_test_");
+    // Create a FastEC pool (with EC overwrites enabled) but do NOT set the
+    // pool-level track_zero_blocks flag.
+    ASSERT_EQ("", create_ec_pool_pp(pool_name, rados, /*ec_optimizations=*/true));
+    ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, rados, true));
+    // Explicitly ensure the pool flag is off.
+    ASSERT_EQ("", set_pool_flags_pp(
+      pool_name, rados, pg_pool_t::FLAG_PRESERVE_ALLOCATION, false));
+    rados.wait_for_latest_osdmap();
+  }
+
+  static void TearDownTestSuite() {
+    destroy_ec_pool_pp(pool_name, rados);
+    rados.shutdown();
+  }
+
+  void SetUp() override {
+    SKIP_IF_CRIMSON();
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+
+  void TearDown() override {
+    SKIP_IF_CRIMSON();
+    ioctx.close();
+  }
+
+  // Returns the force_allocated_extents from the object's OI xattr, or
+  // nullopt if the FAE is empty or cannot be read.
+  std::optional<force_allocated_extents_t> get_force_allocated_extents(
+      const std::string& oid) {
+    bufferlist bl;
+    static_assert(OI_ATTR[0] == '_', "OI_ATTR must start with '_'");
+    int ret = ioctx.getxattr(oid, &OI_ATTR[1], bl);
+    if (ret < 0) {
+      ADD_FAILURE() << "getxattr OI failed: " << ret;
+      return std::nullopt;
+    }
+    object_info_t oi(bl);
+    if (oi.force_allocated_extents.empty()) {
+      return std::nullopt;
+    }
+    return oi.force_allocated_extents;
+  }
+
+  bufferlist create_zero_buffer(size_t size) {
+    bufferlist bl;
+    bl.append(std::string(size, '\0'));
+    return bl;
+  }
+
+  bufferlist create_pattern_buffer(size_t size, char pattern) {
+    bufferlist bl;
+    bl.append(std::string(size, pattern));
+    return bl;
+  }
+
+  // Perform a WRITE sub-op via operate() with the tracking flag set.
+  int write_with_flag(const std::string& oid,
+                      const bufferlist& bl,
+                      uint64_t offset) {
+    ObjectWriteOperation op;
+    op.write(offset, bl);
+    return ioctx.operate(oid, &op,
+                         librados::OPERATION_PRESERVE_ALLOCATION);
+  }
+};
+
+librados::Rados SparseReadFlagTest::rados;
+std::string SparseReadFlagTest::pool_name;
+
+// Writing an all-zero block with the MOSDOp flag set must populate FAE
+// even when the pool-level flag is off.
+TEST_F(SparseReadFlagTest, FlagWriteTracksZeroBlock) {
+  const std::string oid = "flag_write_zero";
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, FAE_BLOCK_SIZE);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+// Writing non-zero data with the MOSDOp flag set must NOT populate FAE.
+TEST_F(SparseReadFlagTest, FlagWriteNoFAEForNonZero) {
+  const std::string oid = "flag_write_nonzero";
+  bufferlist data_bl = create_pattern_buffer(4096, 'A');
+  ASSERT_EQ(0, write_with_flag(oid, data_bl, 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// Without the MOSDOp flag, writing zeros must NOT populate FAE (the pool
+// flag is also off, so no tracking mechanism is active).
+TEST_F(SparseReadFlagTest, NoFlagNoFAEForZeroWrite) {
+  const std::string oid = "no_flag_write_zero";
+  bufferlist zero_bl = create_zero_buffer(4096);
+  // Plain ioctx.write — no tracking flag, no pool flag.
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// WRITEFULL with the MOSDOp flag and zero data must populate FAE.
+TEST_F(SparseReadFlagTest, FlagWritefullZeroSetsFAE) {
+  const std::string oid = "flag_writefull_zero";
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ObjectWriteOperation op;
+  op.write_full(zero_bl);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, 8192);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+// WRITEFULL without the flag must NOT set FAE (pool flag also off).
+TEST_F(SparseReadFlagTest, NoFlagWritefullZeroNoFAE) {
+  const std::string oid = "no_flag_writefull_zero";
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write_full(oid, zero_bl));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// WRITEFULL with the flag and non-zero data must clear any pre-existing FAE.
+TEST_F(SparseReadFlagTest, FlagWritefullNonZeroClearsFAE) {
+  const std::string oid = "flag_writefull_nonzero_clears";
+
+  // First, populate FAE using the flag.
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  // WRITEFULL with non-zero data and the flag: FAE must be cleared.
+  bufferlist data_bl = create_pattern_buffer(4096, 'B');
+  ObjectWriteOperation op;
+  op.write_full(data_bl);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// ZERO op with the MOSDOp flag must remove matching FAE entries.
+TEST_F(SparseReadFlagTest, FlagZeroOpRemovesFAE) {
+  const std::string oid = "flag_zero_removes_fae";
+
+  // Populate FAE for two blocks via the tracking flag.
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  {
+    auto fae = get_force_allocated_extents(oid);
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_TRUE(fae->intervals.contains(0, 8192));
+  }
+
+  // ZERO the first block with the flag set.
+  ObjectWriteOperation op;
+  op.zero(0, 4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  auto fae = get_force_allocated_extents(oid);
+  // Block at offset 4096 must still be tracked.
+  ASSERT_TRUE(fae.has_value());
+  ASSERT_FALSE(fae->intervals.intersects(0, FAE_BLOCK_SIZE));
+  ASSERT_TRUE(fae->intervals.contains(4096, FAE_BLOCK_SIZE));
+}
+
+// ZERO op without the flag must NOT remove FAE entries (pool flag also off).
+TEST_F(SparseReadFlagTest, NoFlagZeroOpPreservesFAE) {
+  const std::string oid = "no_flag_zero_preserves_fae";
+
+  // Populate FAE using the tracking flag.
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  auto fae_before = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_before.has_value());
+
+  // ZERO the first block WITHOUT the flag.
+  ObjectWriteOperation op;
+  op.zero(0, 4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));  // no flag
+
+  // FAE should be unchanged since neither the pool flag nor the op flag is set.
+  auto fae_after = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_after.has_value());
+  ASSERT_EQ(fae_before->intervals, fae_after->intervals);
+}
+
+// Misaligned ZERO with the flag: unaligned start and end preserve edge FAE.
+TEST_F(SparseReadFlagTest, FlagZeroOpMisalignedBothEndsPreservesEdgeFAE) {
+  const std::string oid = "flag_zero_misaligned_both";
+
+  // Populate FAE for three blocks using the tracking flag.
+  bufferlist zero_bl = create_zero_buffer(3 * FAE_BLOCK_SIZE);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  {
+    auto fae = get_force_allocated_extents(oid);
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_TRUE(fae->intervals.contains(0, 3 * FAE_BLOCK_SIZE));
+  }
+
+  // ZERO [2048, 10240) with the flag:
+  //   head:     [2048, 4096) — literal-zero write, block 0 FAE stays
+  //   interior: [4096, 8192) — block 1 deallocated, FAE gone
+  //   tail:     [8192,10240) — literal-zero write, block 2 FAE stays
+  ObjectWriteOperation op;
+  op.zero(2048, 2 * FAE_BLOCK_SIZE);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+  // Block 0 (head): literal-zero write — FAE must remain.
+  ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+  // Block 1 (interior): deallocated — FAE must be gone.
+  ASSERT_FALSE(fae->intervals.intersects(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE));
+  // Block 2 (tail): literal-zero write — FAE must remain.
+  ASSERT_TRUE(fae->intervals.contains(2 * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE));
+}
+
+// Sub-block ZERO with the flag: range within one block, FAE preserved.
+TEST_F(SparseReadFlagTest, FlagZeroOpSubBlockPreservesFAE) {
+  const std::string oid = "flag_zero_subblock";
+
+  // Populate FAE for one block.
+  bufferlist zero_bl = create_zero_buffer(FAE_BLOCK_SIZE);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  // ZERO 512 bytes inside block 0 — no full block covered, literal-zero write.
+  ObjectWriteOperation op;
+  op.zero(1024, 512);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+  ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+}
+
+// TRUNCATE with the MOSDOp flag must remove FAE entries beyond the new size.
+TEST_F(SparseReadFlagTest, FlagTruncateRemovesFAEBeyondNewSize) {
+  const std::string oid = "flag_truncate_removes_fae";
+
+  // Write zeros to populate FAE at blocks 0 and 2 (offset 8192).
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 8192));
+  {
+    auto fae = get_force_allocated_extents(oid);
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+    ASSERT_TRUE(fae->intervals.contains(8192, FAE_BLOCK_SIZE));
+  }
+
+  // Truncate to 4096 bytes with the tracking flag.
+  ObjectWriteOperation op;
+  op.truncate(4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op,
+                              librados::OPERATION_PRESERVE_ALLOCATION));
+
+  auto fae = get_force_allocated_extents(oid);
+  // Block 0 still within the object — must remain.
+  ASSERT_TRUE(fae.has_value());
+  ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+  // Block at 8192 is beyond the new size — must be gone.
+  ASSERT_FALSE(fae->intervals.intersects(8192, FAE_BLOCK_SIZE));
+}
+
+// TRUNCATE without the flag must NOT remove FAE entries (pool flag also off).
+TEST_F(SparseReadFlagTest, NoFlagTruncatePreservesFAE) {
+  const std::string oid = "no_flag_truncate_preserves_fae";
+
+  // Populate FAE at block 0 and block 2 via the tracking flag.
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 8192));
+  auto fae_before = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_before.has_value());
+
+  // Truncate to 4096 WITHOUT the flag — FAE should not be updated.
+  ObjectWriteOperation op;
+  op.truncate(4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));  // no flag
+
+  auto fae_after = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_after.has_value());
+  // Without the flag, the stale FAE entry at offset 8192 must still be there.
+  ASSERT_EQ(fae_before->intervals, fae_after->intervals);
+}
+
+// Writing multiple zero blocks with the flag tracks all of them.
+TEST_F(SparseReadFlagTest, FlagWriteMultipleZeroBlocks) {
+  const std::string oid = "flag_write_multi_zero";
+  bufferlist zero_bl = create_zero_buffer(16384);  // 4 × 4 KiB blocks
+  ASSERT_EQ(0, write_with_flag(oid, zero_bl, 0));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, 16384);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+// The flag has no effect for non-EC (replicated) pools — no FAE is set.
+TEST_F(SparseReadFlagTest, FlagOnReplicatedPoolNoFAE) {
+  // Use a temporary replicated pool for this single test.
+  std::string rep_pool = get_temp_pool_name("sparse_flag_rep_");
+  ASSERT_EQ("", create_pool_pp(rep_pool, rados));
+  librados::IoCtx rep_ioctx;
+  ASSERT_EQ(0, rados.ioctx_create(rep_pool.c_str(), rep_ioctx));
+
+  const std::string oid = "flag_rep_no_fae";
+  bufferlist zero_bl;
+  zero_bl.append(std::string(4096, '\0'));
+
+  ObjectWriteOperation op;
+  op.write(0, zero_bl);
+  ASSERT_EQ(0, rep_ioctx.operate(oid, &op,
+                                  librados::OPERATION_PRESERVE_ALLOCATION));
+
+  // Replicated pools never set FAE — the OI xattr may not exist at all.
+  bufferlist bl;
+  static_assert(OI_ATTR[0] == '_', "OI_ATTR must start with '_'");
+  int ret = rep_ioctx.getxattr(oid, &OI_ATTR[1], bl);
+  if (ret >= 0) {
+    object_info_t oi(bl);
+    ASSERT_TRUE(oi.force_allocated_extents.empty());
+  }
+  // ret < 0 (no xattr) is also acceptable.
+
+  rep_ioctx.close();
+  destroy_pool_pp(rep_pool, rados);
+}
