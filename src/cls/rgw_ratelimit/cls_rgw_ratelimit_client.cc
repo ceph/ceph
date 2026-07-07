@@ -4,15 +4,27 @@
 
 namespace cls::rgw::ratelimit {
 
-static int exec(librados::IoCtx* ioctx,
-                const std::string& oid,
-                const char* method,
-                bufferlist& in,
-                bufferlist* out)
+template <typename Method>
+static int exec_write(librados::IoCtx* ioctx,
+                      const std::string& oid,
+                      const Method& method,
+                      bufferlist& in)
+{
+  librados::ObjectWriteOperation op;
+  op.exec(method, in);
+  return ioctx->operate(oid, &op);
+}
+
+template <typename Method>
+static int exec_write(librados::IoCtx* ioctx,
+                      const std::string& oid,
+                      const Method& method,
+                      bufferlist& in,
+                      bufferlist* out)
 {
   librados::ObjectWriteOperation op;
   int rval = 0;
-  op.exec("rgw_ratelimit", method, in, out, &rval);
+  op.exec(method, in, out, &rval);
   return ioctx->operate(oid, &op);
 }
 
@@ -35,7 +47,7 @@ int consume(librados::IoCtx* ioctx,
   bufferlist in;
   encode(cop, in);
   bufferlist out;
-  int ret = exec(ioctx, oid, method::consume, in, &out);
+  int ret = exec_write(ioctx, oid, method::consume, in, &out);
   if (ret < 0) {
     return ret;
   }
@@ -64,7 +76,7 @@ int giveback(librados::IoCtx* ioctx,
 
   bufferlist in;
   encode(gop, in);
-  return exec(ioctx, oid, method::giveback, in, nullptr);
+  return exec_write(ioctx, oid, method::giveback, in);
 }
 
 int decrease_bytes(librados::IoCtx* ioctx,
@@ -82,7 +94,7 @@ int decrease_bytes(librados::IoCtx* ioctx,
 
   bufferlist in;
   encode(dop, in);
-  return exec(ioctx, oid, method::decrease_bytes, in, nullptr);
+  return exec_write(ioctx, oid, method::decrease_bytes, in);
 }
 
 } // namespace cls::rgw::ratelimit
