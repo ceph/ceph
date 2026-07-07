@@ -4818,7 +4818,6 @@ options:
   desc: RADOS pool for distributed rate limit counters
   long_desc: Pool used when ``rgw_ratelimit_backend`` is ``rados``. When empty,
     the rados backend falls back to the in-memory shared counter registry.
-  default: ""
   services:
   - rgw
   flags:
