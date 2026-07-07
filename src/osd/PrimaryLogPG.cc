@@ -5046,46 +5046,47 @@ int PrimaryLogPG::add_trim_to_ctx(
     ceph_assert(p != snapset.clones.end());
 
     snapid_t last = coid.snap;
-    ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
-    if (p != snapset.clones.begin()) {
-      // not the oldest... merge overlap into next older clone
-      vector<snapid_t>::iterator n = p - 1;
-      hobject_t prev_coid = coid;
-      prev_coid.snap = *n;
-      bool adjust_prev_bytes = is_present_clone(prev_coid);
-
-      if (adjust_prev_bytes)
-	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
-
-      snapset.clone_overlap[*n].intersection_of(
-	snapset.clone_overlap[*p]);
-
-      if (adjust_prev_bytes)
-	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
-    }
-    ctx->delta_stats.num_objects--;
-    if (coi.is_dirty())
-      ctx->delta_stats.num_objects_dirty--;
-    if (coi.is_omap())
-      ctx->delta_stats.num_objects_omap--;
-    if (coi.is_whiteout()) {
-      dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
-      ctx->delta_stats.num_whiteouts--;
-    }
-    ctx->delta_stats.num_object_clones--;
-    if (coi.is_cache_pinned())
-      ctx->delta_stats.num_objects_pinned--;
-    if (coi.has_manifest()) {
-      dec_all_refcount_manifest(coi, ctx);
-      ctx->delta_stats.num_objects_manifest--;
-    }
-
-    snapset.clones.erase(p);
-    snapset.clone_overlap.erase(last);
-    snapset.clone_size.erase(last);
-    snapset.clone_snaps.erase(last);
+    // Only adjust stats if the clone existed in this PG.
+    // When pool migration copies a clone that is removed before
+    // process_copy_chunk runs, the snap will be in removed_snaps, and we
+    // end up here without having incremented the stats for this clone.
     if (obc->obs.exists) {
+      ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
+
+      if (p != snapset.clones.begin()) {
+        // not the oldest... merge overlap into next older clone
+        vector<snapid_t>::iterator n = p - 1;
+        hobject_t prev_coid = coid;
+        prev_coid.snap = *n;
+        bool adjust_prev_bytes = is_present_clone(prev_coid);
+
+        if (adjust_prev_bytes)
+          ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
+
+        snapset.clone_overlap[*n].intersection_of(
+          snapset.clone_overlap[*p]);
+
+        if (adjust_prev_bytes)
+          ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
+      }
+      ctx->delta_stats.num_objects--;
+      if (coi.is_dirty())
+        ctx->delta_stats.num_objects_dirty--;
+      if (coi.is_omap())
+        ctx->delta_stats.num_objects_omap--;
+      if (coi.is_whiteout()) {
+        dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
+        ctx->delta_stats.num_whiteouts--;
+      }
+      ctx->delta_stats.num_object_clones--;
+      if (coi.is_cache_pinned())
+        ctx->delta_stats.num_objects_pinned--;
+      if (coi.has_manifest()) {
+        dec_all_refcount_manifest(coi, ctx);
+        ctx->delta_stats.num_objects_manifest--;
+      }
+
       obc->obs.exists = false;
       ctx->log.push_back(
         pg_log_entry_t(
@@ -5104,7 +5105,20 @@ int PrimaryLogPG::add_trim_to_ctx(
         coid,
         std::move(old_snaps),
         std::move(new_snaps));
+    } else {
+      // Clone doesn't exist in this PG, but still update the overlap for
+      // the next oldest clone so the snapset stays consistent.
+      if (p != snapset.clones.begin()) {
+        vector<snapid_t>::iterator n = p - 1;
+        snapset.clone_overlap[*n].intersection_of(
+          snapset.clone_overlap[*p]);
+      }
     }
+
+    snapset.clones.erase(p);
+    snapset.clone_overlap.erase(last);
+    snapset.clone_size.erase(last);
+    snapset.clone_snaps.erase(last);
 
     coi = object_info_t(coid);
   } else {
@@ -9093,8 +9107,13 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     ctx->at_version.version++;
   }
 
-  // update most recent clone_overlap and usage stats
-  if (ctx->new_snapset.clones.size() > 0) {
+  // Update most recent clone_overlap and usage stats.
+  // Skip the clone_overlap update for pool migration copies unless a new
+  // clone was just created above (ctx->clone_obc != nullptr).
+  // Without a new clone, the existing clone_overlap values are already
+  // correct from the source pool. If a new clone was created, its overlap
+  // must be reduced.
+  if (ctx->new_snapset.clones.size() > 0 && (!ctx->pool_migration || ctx->clone_obc)) {
     // the clone_overlap is difference of range between head and clones.
     // we need to check whether the most recent clone exists, if it's
     // been evicted, it's not included in the stats, but the clone_overlap
@@ -10473,6 +10492,9 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ctx->op_t->remove(obs.oi.soid);
   } else {
     ctx->delta_stats.num_objects++;
+    if (obs.oi.soid.is_snap()) {
+      ctx->delta_stats.num_object_clones++;
+    }
     obs.exists = true;
   }
   cb->results->fill_in_final_tx(ctx->op_t.get());
@@ -10540,13 +10562,36 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   ctx->modified_ranges.union_of(ch);
   ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, cb->get_data_size()));
 
-  if (cb->get_data_size() != obs.oi.size) {
+  if (cb->pool_migration && obs.oi.soid.is_snap()) {
+    // Clones share bytes with newer clones or the HEAD object. Count only
+    // the unique bytes (clone_size - clone_overlap) to avoid double-counting
+    // shared bytes.
+    //
+    // Use the live snapset (obc->ssc->snapset) for get_clone_bytes() because
+    // ctx->new_snapset is a point-in-time copy that may be stale in the pool
+    // migration case if the HEAD was re-copied after this OpContext was
+    // created.
+    //
+    // Use ctx->obs->exists (the pre-operation state) rather than
+    // obs.exists to decide whether to subtract old bytes. obs.exists is set
+    // to true at the top of this function, so it cannot be used as a guard.
+    // ctx->obs->exists is true only when the clone already existed in the target PG.
+    const SnapSet &ss = ctx->obc->ssc->snapset;
+    if (ctx->obs->exists) {
+      ctx->delta_stats.num_bytes -= ss.get_clone_bytes(obs.oi.soid.snap);
+    }
+    obs.oi.size = cb->get_data_size();
+    ctx->delta_stats.num_bytes += ss.get_clone_bytes(obs.oi.soid.snap);
+  } else if (cb->get_data_size() != obs.oi.size) {
     ctx->delta_stats.num_bytes -= obs.oi.size;
     obs.oi.size = cb->get_data_size();
     ctx->delta_stats.num_bytes += obs.oi.size;
   }
 
-  if (!cb->pool_migration) {
+  if (cb->pool_migration) {
+    // Let make_writeable() know this is a pool migration copy.
+    ctx->pool_migration = true;
+  } else {
     ctx->delta_stats.num_wr++;
     ctx->delta_stats.num_wr_kb += shift_round_up(obs.oi.size, 10);
   }
