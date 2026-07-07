@@ -352,7 +352,7 @@ outputs
 
 ::
 
-    [ERR] AUTH_INSECURE_SERVICE_TICKETS: Monitors are configured to issue insecure service key types
+    [ERR] AUTH_INSECURE_SERVICE_TICKETS: Monitors are configured to issue insecure service tickets
 
 .. warning:: This warning should only be addressed when all service daemons have been upgraded to a version supporting a secure cipher type.
 
