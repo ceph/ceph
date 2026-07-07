@@ -11,6 +11,11 @@
 
 using namespace librados;
 
+static int64_t ratelimit_interval()
+{
+  return g_conf().rgw_ratelimit_interval;
+}
+
 static int wait_for_osd_map()
 {
   Rados cluster;
