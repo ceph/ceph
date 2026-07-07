@@ -7,7 +7,9 @@
 #include "gtest/gtest.h"
 
 #include "include/buffer.h"
+#include "include/interval_set.h"
 #include "include/rados/librados.hpp"
+#include "osd/osd_types.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "crimson_utils.h"
