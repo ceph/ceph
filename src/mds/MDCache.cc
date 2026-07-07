@@ -6061,6 +6061,14 @@ bool MDCache::open_undef_inodes_dirfrags()
 	   << rejoin_undef_inodes.size() << " inodes "
 	   << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
 
+  // kill point 1: crash at undef dirfrag processing during rejoin.
+  // Before the fix for https://tracker.ceph.com/issues/77786,
+  // recovering from this crash could trigger the assert
+  // dir->get_version() == 0 due to a race between strong rejoin
+  // inventing undef dirfrags and the survivor's ACK populating
+  // their version via _decode_base().
+  ceph_assert(g_conf()->mds_kill_undef_dirfrag_at != 1);
+
   // dirfrag -> (fetch_complete, keys_to_fetch)
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
   for (auto it = rejoin_undef_dirfrags.begin(); it != rejoin_undef_dirfrags.end(); ) {
