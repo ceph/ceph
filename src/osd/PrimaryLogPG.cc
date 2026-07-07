@@ -117,6 +117,47 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
   return pg->gen_prefix(*_dout);
 }
 
+static force_allocated_extents_t detect_zero_blocks(
+  const bufferlist& bl,
+  uint64_t write_offset)
+{
+  force_allocated_extents_t zero_blocks;
+  if (bl.length() == 0) {
+    return zero_blocks;
+  }
+
+  const uint64_t write_end = write_offset + bl.length();
+  const uint64_t first_block = round_up_to(write_offset, FAE_BLOCK_SIZE) /
+    FAE_BLOCK_SIZE;
+  const uint64_t last_block = write_end / FAE_BLOCK_SIZE;
+
+  for (uint64_t block = first_block; block < last_block; ++block) {
+    const uint64_t block_offset = block * FAE_BLOCK_SIZE;
+    const uint64_t in_bl_offset = block_offset - write_offset;
+
+    ceph_assert(block_offset >= write_offset);
+    ceph_assert(in_bl_offset + FAE_BLOCK_SIZE <= bl.length());
+
+    bufferlist block_bl;
+    block_bl.substr_of(bl, in_bl_offset, FAE_BLOCK_SIZE);
+
+    // Stage 1: cheap check — if the first word of the first bufferptr is
+    // non-zero the block cannot be all-zero; skip the full scan.
+    const auto& first_ptr = block_bl.front();
+    if (first_ptr.length() >= sizeof(uint64_t) &&
+        !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+      continue;
+    }
+
+    // Stage 2: full scan using mem_is_zero across all bufferptrs.
+    if (block_bl.is_zero()) {
+      zero_blocks.insert_exact(block_offset, FAE_BLOCK_SIZE);
+    }
+  }
+
+  return zero_blocks;
+}
+
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -7008,6 +7049,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
+	if (pool.info.is_erasure() &&
+	    pool.info.allows_ecoptimizations() &&
+	    pool.info.tracks_zero_blocks()) {
+	  if (op.extent.length > 0) {
+	    oi.force_allocated_extents.remove(op.extent.offset,
+	                                      op.extent.length);
+	  }
+	  oi.force_allocated_extents.union_of(
+	    detect_zero_blocks(osd_op.indata, op.extent.offset));
+	}
 	dout(10) << "clean_regions modified" << ctx->clean_regions << dendl;
       }
       break;
