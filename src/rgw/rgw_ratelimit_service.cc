@@ -11,7 +11,7 @@ struct RateLimitService::Impl {
   CephContext* cct;
   std::unique_ptr<ActiveRateLimiter> local;
   std::shared_ptr<RateLimitStore> distributed;
-  std::unique_ptr<rgw::ratelimit::RadosRateLimitStore> rados;
+  std::shared_ptr<rgw::ratelimit::RadosRateLimitStore> rados;
   std::string backend;
 
   explicit Impl(CephContext* _cct) : cct(_cct)
@@ -27,7 +27,7 @@ struct RateLimitService::Impl {
       return;
     }
     if (backend == "rados") {
-      rados = std::make_unique<rgw::ratelimit::RadosRateLimitStore>(
+      rados = std::make_shared<rgw::ratelimit::RadosRateLimitStore>(
           cct,
           cct->_conf->rgw_ratelimit_rados_pool,
           cct->_conf->rgw_ratelimit_rados_oid_prefix,
@@ -36,8 +36,9 @@ struct RateLimitService::Impl {
       if (ret < 0) {
         ldout(cct, 0) << "rados rate limit init failed, using shared fallback"
                       << dendl;
-        distributed = std::make_shared<SharedCounterRateLimitStore>(
+        distributed = std::make_shared<rgw::ratelimit::SharedCounterRateLimitStore>(
             cct, cct->_conf->rgw_ratelimit_redis_key_prefix);
+        rados.reset();
         return;
       }
       distributed = rados;
@@ -51,10 +52,10 @@ struct RateLimitService::Impl {
   {
     if (rados) {
       rados->shutdown();
+      rados.reset();
     }
     local.reset();
     distributed.reset();
-    rados.reset();
   }
 
   std::shared_ptr<RateLimitStore> get_active()
