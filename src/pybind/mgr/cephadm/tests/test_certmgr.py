@@ -314,6 +314,11 @@ TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
 
 class TestCertificateSourceVaultServiceSupport:
 
+    class VaultTestService(CephadmService):
+        @property
+        def TYPE(self) -> str:
+            return 'rgw'
+
     def _service(self):
         mgr = mock.MagicMock()
         mgr.inventory.get_addr.return_value = '10.0.0.10'
@@ -321,7 +326,7 @@ class TestCertificateSourceVaultServiceSupport:
         mgr.cert_mgr = mock.MagicMock()
         mgr.cert_mgr.cert_store.get_tlsobject_if_exists.return_value = None
         mgr.cert_mgr.key_store.get_tlsobject_if_exists.return_value = None
-        return CephadmService(mgr)
+        return self.VaultTestService(mgr)
 
     def _spec(self):
         spec = mock.MagicMock()
@@ -361,7 +366,7 @@ class TestCertificateSourceVaultServiceSupport:
             ca_cert_name='rgw_ssl_ca_cert',
             service_name='rgw.foo',
             host='host1',
-            common_name='rgw.alt.example.com',
+            common_name='rgw.example.com',
             alt_names=['rgw.alt.example.com', 'rgw.example.com'],
             ip_sans=['10.0.0.10'],
         )
@@ -1069,6 +1074,8 @@ class TestCertMgr(object):
                     )
                     for key_name, (target, key_value, scope) in chain(keys.items(), unknown_keys.items())
                 }
+            elif key == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
             else:
                 raise Exception(f'Unexpected key access in store: {key}')
 
@@ -1155,6 +1162,9 @@ class TestCertMgr(object):
                     "-----BEGIN PRIVATE KEY-----\nSNIP\n-----END PRIVATE KEY-----"  # raw PEM
                 )
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -1273,6 +1283,9 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_KEY_PREFIX}totally_unknown_key_global': _dump_key(None, 'ignored-key-3', TLSObjectScope.GLOBAL),
                 }
                 return store
+
+            if prefix == VAULT_CERT_METADATA_STORE_PREFIX:
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
