@@ -8,7 +8,6 @@ import {
   ViewChild
 } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -142,7 +141,6 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private router: Router,
-    private location: Location,
     private formatterService: FormatterService,
     private modalService: ModalService,
     private osdService: OsdService,
@@ -501,34 +499,15 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       this.cancelled.emit();
       return;
     }
-    this.location.back();
+    this.router.navigate(['osd', { outlets: { modal: null } }]);
   }
 
   private navigateAfterCreate() {
-    const returnUrl = window.history.state?.returnUrl;
-
     if (this.osdCreated.observers.length > 0) {
       this.osdCreated.emit();
       return;
     }
-
-    if (returnUrl === '/add-storage') {
-      this.router.navigate(['/add-storage']);
-      return;
-    }
-
-    const hasSafeReturnUrl =
-      typeof returnUrl === 'string' &&
-      returnUrl.startsWith('/') &&
-      !returnUrl.startsWith('//') &&
-      returnUrl !== '/osd/create';
-
-    if (hasSafeReturnUrl) {
-      this.router.navigateByUrl(returnUrl);
-      return;
-    }
-
-    this.router.navigate(['/osd']);
+    this.router.navigate(['osd', { outlets: { modal: null } }]);
   }
 
   submit() {
