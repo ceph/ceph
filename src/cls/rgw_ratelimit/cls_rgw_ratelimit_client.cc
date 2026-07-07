@@ -3,8 +3,32 @@
 #include <errno.h>
 
 #include "include/encoding.h"
+#include "include/rados/librados.hpp"
 
 namespace cls::rgw::ratelimit {
+
+template <typename Method>
+static int exec_write(librados::IoCtx* ioctx,
+                      const std::string& oid,
+                      const Method& method,
+                      bufferlist& in,
+                      bufferlist* out = nullptr)
+{
+  int rval = 0;
+  librados::ObjectWriteOperation op;
+  if (out) {
+    op.exec(method, in, out, &rval);
+  } else {
+    bufferlist discard;
+    op.exec(method, in, &discard, &rval);
+  }
+
+  const int ret = ioctx->operate(oid, &op, librados::OPERATION_RETURNVEC);
+  if (ret < 0) {
+    return ret;
+  }
+  return rval;
+}
 
 int consume(librados::IoCtx* ioctx,
             const std::string& oid,
@@ -25,7 +49,7 @@ int consume(librados::IoCtx* ioctx,
   bufferlist in;
   encode(cop, in);
   bufferlist out;
-  int ret = ioctx->exec(oid, method::consume, in, out);
+  int ret = exec_write(ioctx, oid, method::consume, in, &out);
   if (ret < 0) {
     return ret;
   }
@@ -54,8 +78,7 @@ int giveback(librados::IoCtx* ioctx,
 
   bufferlist in;
   encode(gop, in);
-  bufferlist out;
-  return ioctx->exec(oid, method::giveback, in, out);
+  return exec_write(ioctx, oid, method::giveback, in);
 }
 
 int decrease_bytes(librados::IoCtx* ioctx,
@@ -73,8 +96,7 @@ int decrease_bytes(librados::IoCtx* ioctx,
 
   bufferlist in;
   encode(dop, in);
-  bufferlist out;
-  return ioctx->exec(oid, method::decrease_bytes, in, out);
+  return exec_write(ioctx, oid, method::decrease_bytes, in);
 }
 
 } // namespace cls::rgw::ratelimit
