@@ -141,6 +141,56 @@ options:
   default: false
   services:
   - mgr
+- name: mgr_fail_slow_osd_check_period
+  type: int
+  level: basic
+  desc: Period in seconds of checking for fail slow devices
+  default: 10
+  services:
+  - mgr
+- name: mgr_fail_slow_osd_enabled
+  type: bool
+  level: advanced
+  desc: Enable detection of OSDs with abnormally high commit latency
+  default: true
+  services:
+  - mgr
+- name: mgr_fail_slow_osd_min_osds
+  type: uint
+  level: advanced
+  desc: Minimum steady-state OSDs required in a fail-slow comparison cohort
+  default: 5
+  services:
+  - mgr
+- name: mgr_fail_slow_osd_score_threshold
+  type: float
+  level: advanced
+  desc: Minimum median device score required to report a fail-slow OSD warning
+  default: 10.0
+  services:
+  - mgr
+- name: mgr_fail_slow_osd_min_latency_ms
+  type: float
+  level: advanced
+  desc: Minimum median device commit latency required to report a fail-slow OSD warning
+  default: 100.0
+  services:
+  - mgr
+- name: mgr_fail_slow_osd_mad_floor_ms
+  type: float
+  level: advanced
+  desc: Minimum median absolute deviation used when scoring OSD commit latency
+  default: 1.0
+  services:
+  - mgr
+  min: 1.0
+- name: mgr_fail_slow_osd_persistence
+  type: uint
+  level: advanced
+  desc: Consecutive Manager reports required before reporting a fail-slow OSD warning
+  default: 3
+  services:
+  - mgr
 - name: mgr_max_pg_num_change
   type: int
   level: advanced
