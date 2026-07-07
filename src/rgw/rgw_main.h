@@ -32,7 +32,7 @@
 #include "rgw_dedup.h"
 #endif
 #include "rgw_dmclock_scheduler_ctx.h"
-#include "rgw_ratelimit.h"
+#include "rgw_ratelimit_store.h"
 
 
 class RGWPauser : public RGWRealmReloader::Pauser {
@@ -80,7 +80,7 @@ class AppMain {
 #endif
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
   std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
-  std::unique_ptr<ActiveRateLimiter> ratelimiter;
+  std::unique_ptr<RateLimitService> ratelimiter;
   std::map<std::string, std::string> service_map_meta;
   // wow, realm reloader has a lot of parts
   std::unique_ptr<RGWRealmReloader> reloader;

@@ -579,7 +579,8 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_placement_rule& rul
   return out << rule.to_str();
 }
 
-class RateLimiter;
+class RateLimitStore;
+class RateLimitService;
 struct RGWRateLimitInfo {
   int64_t max_write_ops;
   int64_t max_read_ops;
@@ -1315,7 +1316,7 @@ struct req_state : DoutPrefixProvider {
   rgw::io::BasicClient *cio{nullptr};
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
-  std::shared_ptr<RateLimiter> ratelimit_data;
+  std::shared_ptr<RateLimitStore> ratelimit_data;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
   int64_t ratelimit_retry_after{0};

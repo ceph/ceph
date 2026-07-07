@@ -437,7 +437,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
 
   sched_ctx.reset(new rgw::dmclock::SchedulerCtx{dpp->get_cct()});
-  ratelimiter.reset(new ActiveRateLimiter{dpp->get_cct()});
+  ratelimiter.reset(new RateLimitService{dpp->get_cct()});
   ratelimiter->start();
 
   // initialize RGWProcessEnv

@@ -98,6 +98,10 @@ set(librgw_common_srcs
   rgw_rest_dedup.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
+  rgw_ratelimit_core.cc
+  rgw_ratelimit_shared.cc
+  rgw_ratelimit_rados.cc
+  rgw_ratelimit_service.cc
   rgw_rest_role.cc
   rgw_rest_iam_account.cc
   rgw_rest_iam_group.cc
@@ -382,6 +386,7 @@ if(WITH_RADOSGW_RADOS)
 	  cls_lock_client
 	  cls_log_client
 	  cls_otp_client
+	  cls_rgw_ratelimit_client
 	  cls_refcount_client
 	  cls_rgw_gc_client
 	  cls_timeindex_client
