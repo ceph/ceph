@@ -1596,6 +1596,7 @@ void PG::on_pool_migration_source_reserved()
 
 void PG::on_pool_migration_source_suspended()
 {
+  state_clear(PG_STATE_MIGRATING);
 }
 
 void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)
