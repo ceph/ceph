@@ -6342,8 +6342,49 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
                                *md_directive);
 
+  /*
+   * The destination object is tagged whether the tag-set is replaced (from the
+   * request) or copied (from the source), so both paths must authorize object
+   * tagging and expose the tags to policy conditions. For a copied tag-set the
+   * source is read here to learn whether the destination will carry tags.
+   */
+  std::optional<RGWObjTags> dest_obj_tags = obj_tags;
+  if (!dest_obj_tags && copy_source_tags &&
+      s->local_source && source_zone.empty()) {
+    op_ret = s->src_object->get_obj_attrs(y, this);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+    const auto& src_attrs = s->src_object->get_attrs();
+    auto titer = src_attrs.find(RGW_ATTR_TAGS);
+    if (titer != src_attrs.end()) {
+      RGWObjTags tagset;
+      try {
+        auto bliter = titer->second.cbegin();
+        tagset.decode(bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(s, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+        return -EIO;
+      }
+      dest_obj_tags = std::move(tagset);
+    }
+  }
+
+  if (dest_obj_tags) {
+    for (const auto& kv : dest_obj_tags->get_tags()) {
+      rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/" + kv.first, kv.second);
+    }
+  }
+
   if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
                                 rgw::IAM::s3PutObject)) {
+    return -EACCES;
+  }
+
+  // writing or clearing object tags requires the tagging permission too
+  if (dest_obj_tags &&
+      !verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3PutObjectTagging)) {
     return -EACCES;
   }
 
@@ -6383,6 +6424,10 @@ int RGWCopyObj::init_common()
     return op_ret;
   }
   populate_with_generic_attrs(s, attrs);
+
+  if (obj_tags) {
+    obj_tags->encode(attrs[RGW_ATTR_TAGS]);
+  }
 
   return 0;
 }
@@ -6438,12 +6483,19 @@ void RGWCopyObj::execute(optional_yield y)
   if (init_common() < 0)
     return;
 
+  // expose replacement tags to the notification event payload
+  if (obj_tags) {
+    s->tagset = *obj_tags;
+  }
+
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
 				   = driver->get_notification(
 				     s->object.get(), s->src_object.get(),
 				     s, rgw::notify::ObjectCreatedCopy, y);
-  op_ret = res->publish_reserve(this);
+
+  // expose replacement tags to notification filtering
+  op_ret = res->publish_reserve(this, obj_tags ? &*obj_tags : nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -6529,6 +6581,13 @@ void RGWCopyObj::execute(optional_yield y)
   op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, obj_size, this, y, false, false);
   if (op_ret < 0) {
     return;
+  }
+
+  if (copy_source_tags && attrs_mod == rgw::sal::ATTRSMOD_REPLACE) {
+    bufferlist tags_bl;
+    if (s->src_object->get_attr(RGW_ATTR_TAGS, tags_bl)) {
+      attrs[RGW_ATTR_TAGS] = std::move(tags_bl);
+    }
   }
 
   /*

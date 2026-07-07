@@ -3971,6 +3971,32 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     md_directive = tmp_md_d;
   }
 
+  copy_source_tags = true;
+
+  auto tagging_directive = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
+  if (tagging_directive) {
+    if (strcasecmp(tagging_directive, "REPLACE") == 0) {
+      RGWObjTags new_tags;
+      auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+      if (tag_str) {
+        int r = new_tags.set_from_string(tag_str);
+        if (r < 0) {
+          ldpp_dout(this, 0) << "setting obj tags failed with " << r << dendl;
+          if (r == -ERR_INVALID_TAG) {
+            r = -EINVAL;
+          }
+          return r;
+        }
+      }
+      obj_tags = std::move(new_tags);
+      copy_source_tags = false;
+    } else if (strcasecmp(tagging_directive, "COPY") != 0) {
+      s->err.message = "Unknown tagging directive.";
+      ldpp_dout(this, 0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+  }
+
   if (source_zone.empty() &&
       (s->bucket->get_tenant() == s->src_tenant_name) &&
       (s->bucket->get_name() == s->src_bucket_name) &&
