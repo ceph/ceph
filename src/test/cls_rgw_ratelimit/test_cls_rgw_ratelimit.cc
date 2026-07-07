@@ -4,7 +4,6 @@
 #include <gtest/gtest.h>
 
 #include "cls/rgw_ratelimit/cls_rgw_ratelimit_client.h"
-#include "global/global_context.h"
 #include "include/rados/librados.hpp"
 #include "rgw_ratelimit_core.h"
 #include "test/librados/test_cxx.h"
@@ -13,18 +12,8 @@ using namespace librados;
 
 static constexpr int64_t ratelimit_interval = 60;
 
-static int wait_for_osd_map()
-{
-  Rados cluster;
-  cluster.init_with_context(g_ceph_context);
-  cluster.connect();
-  return cluster.wait_for_latest_osdmap();
-}
-
 TEST(ClsRgwRatelimit, ConsumeGivebackAndBytes)
 {
-  ASSERT_EQ(0, wait_for_osd_map());
-
   Rados cluster;
   std::string pool_name = get_temp_pool_name("rgw-rl");
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -61,13 +50,11 @@ TEST(ClsRgwRatelimit, ConsumeGivebackAndBytes)
   EXPECT_GT(delay, 0);
 
   ASSERT_EQ(0, ioctx.remove(oid));
-  ASSERT_EQ(0, cluster.pool_delete(pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST(ClsRgwRatelimit, ClusterWideAcrossObjectsSameShard)
 {
-  ASSERT_EQ(0, wait_for_osd_map());
-
   Rados cluster;
   std::string pool_name = get_temp_pool_name("rgw-rl-shard");
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -95,5 +82,5 @@ TEST(ClsRgwRatelimit, ClusterWideAcrossObjectsSameShard)
   EXPECT_EQ(rgw::ratelimit::compute_delay(2, 1, interval), delay);
 
   ASSERT_EQ(0, ioctx.remove(oid));
-  ASSERT_EQ(0, cluster.pool_delete(pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
