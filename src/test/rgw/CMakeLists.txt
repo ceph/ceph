@@ -198,7 +198,8 @@ target_link_libraries(ceph_test_rgw_ratelimit_rados_store
   global
   ${rgw_libs}
   ${UNITTEST_LIBS}
-  ${EXTRALIBS})
+  ${EXTRALIBS}
+  radostest-cxx)
 install(TARGETS ceph_test_rgw_ratelimit_rados_store DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_ceph_test(ceph_test_rgw_ratelimit_rados_store
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph_test_rgw_ratelimit_rados_store)
