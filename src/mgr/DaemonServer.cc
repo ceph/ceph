@@ -48,14 +48,15 @@
 #include "common/JSONFormatter.h"
 #include "common/pick_address.h"
 #include "common/TextTable.h"
-#include "crush/CrushWrapper.h"
 
 #include <boost/algorithm/string.hpp>
 
 #include <iomanip>
 
+#include <algorithm>
 #include <list>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -1515,6 +1516,135 @@ std::optional<std::string> DaemonServer::get_osd_metadata(
       return p->second;
     }
     return std::nullopt;
+}
+
+std::vector<std::string> DaemonServer::_get_osd_devices(int osd_id)
+{
+  DaemonKey key{"osd", stringify(osd_id)};
+  DaemonStatePtr daemon = daemon_state.get(key);
+  if (!daemon) {
+    return {"osd." + stringify(osd_id)};
+  }
+
+  std::lock_guard l(daemon->lock);
+  std::vector<std::string> devices;
+  devices.reserve(daemon->devices.size());
+  for (const auto& [devid, _] : daemon->devices) {
+    devices.push_back(devid);
+  }
+  if (!devices.empty()) {
+    return devices;
+  }
+
+  auto devices_meta = daemon->metadata.find("devices");
+  if (devices_meta != daemon->metadata.end() && !devices_meta->second.empty()) {
+    std::vector<std::string> devnames;
+    get_str_vec(devices_meta->second, devnames);
+    return devnames;
+  }
+
+  return {"osd." + stringify(osd_id)};
+}
+
+std::vector<fail_slow_device_score> DaemonServer::_find_fail_slow_devices(
+  const OSDMap& osdmap,
+  const PGMap& pgmap)
+{
+  fail_slow_osd_detector_config config;
+  config.min_osds =
+    g_conf().get_val<uint64_t>("mgr_fail_slow_osd_min_osds");
+  config.score_threshold =
+    g_conf().get_val<double>("mgr_fail_slow_osd_score_threshold");
+  config.min_latency_ms =
+    g_conf().get_val<double>("mgr_fail_slow_osd_min_latency_ms");
+  config.mad_floor_ms =
+    g_conf().get_val<double>("mgr_fail_slow_osd_mad_floor_ms");
+
+  return find_fail_slow_devices(
+    osdmap,
+    pgmap,
+    config,
+    [this](int osd) {
+      return _get_osd_devices(osd);
+    });
+}
+
+void DaemonServer::_check_fail_slow_osds(
+  const OSDMap& osdmap,
+  const PGMap& pgmap,
+  health_check_map_t *checks)
+{
+  dout(20) << "" << dendl;
+  if (!g_conf().get_val<bool>("mgr_fail_slow_osd_enabled")) {
+    fail_slow_device_counts.clear();
+    return;
+  }
+
+  auto now = ceph_clock_now();
+  if (now - last_fail_slow <
+      g_conf().get_val<int64_t>("mgr_fail_slow_osd_check_period")) {
+    dout(20) << "skipped, waiting for fail slow check period" << dendl;
+    return;
+  }
+  last_fail_slow = now;
+
+  auto devices = _find_fail_slow_devices(osdmap, pgmap);
+  std::set<std::string> current_devices;
+  for (const auto& device : devices) {
+    current_devices.insert(device.device);
+  }
+
+  for (auto p = fail_slow_device_counts.begin();
+       p != fail_slow_device_counts.end(); ) {
+    if (!current_devices.contains(p->first)) {
+      p = fail_slow_device_counts.erase(p);
+    } else {
+      ++p;
+    }
+  }
+  for (const auto& device : current_devices) {
+    ++fail_slow_device_counts[device];
+  }
+
+  const auto persistence =
+    g_conf().get_val<uint64_t>("mgr_fail_slow_osd_persistence");
+  std::vector<fail_slow_device_score> persistent_devices;
+  for (const auto& device : devices) {
+    if (fail_slow_device_counts[device.device] >= persistence) {
+      persistent_devices.push_back(device);
+    }
+  }
+  if (persistent_devices.empty()) {
+    return;
+  }
+
+  auto& check = checks->add(
+    "OSD_FAIL_SLOW",
+    HEALTH_WARN,
+    stringify(persistent_devices.size()) +
+    " device(s) with abnormally high OSD commit latency",
+    persistent_devices.size());
+
+  for (const auto& device : persistent_devices) {
+    std::vector<std::string> osds;
+    osds.reserve(device.osds.size());
+    for (const auto& osd : device.osds) {
+      osds.push_back("osd." + stringify(osd.osd));
+    }
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2)
+       << "device " << device.device
+       << " has fail-slow score " << device.score
+       << " after " << fail_slow_device_counts[device.device]
+       << " observations ("
+       << boost::algorithm::join(osds, ",")
+       << "; median commit latency " << device.latency_ms << " ms"
+       << "; " << device.cohort
+       << " median " << device.cohort_median << " ms"
+       << "; MAD " << device.cohort_mad << " ms)";
+    check.detail.push_back(ss.str());
+  }
 }
 
 void upgrade_osd_report::dump(Formatter *f) const {
@@ -3245,6 +3375,7 @@ void DaemonServer::send_report()
 
 	  pg_map.get_health_checks(g_ceph_context, osdmap,
 				   &m->health_checks);
+	  _check_fail_slow_osds(osdmap, pg_map, &m->health_checks);
 
 	  dout(10) << m->health_checks.checks.size() << " health checks"
 		   << dendl;
