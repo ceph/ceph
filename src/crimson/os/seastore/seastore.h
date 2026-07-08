@@ -440,10 +440,12 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
-    // Histogram bucket upper bounds in microseconds (0.25ms–20ms).
-    // Ops above 20ms land in the last bucket as overflow.
-    static constexpr std::array<double, 14> lat_hist_bounds_us = {
-      250, 500, 1000,
+    // Histogram bucket upper bounds in microseconds (1ms–100ms).
+    // Ops above 100ms land in the last bucket as overflow. The smallest
+    // bucket is 1ms: sub-ms latencies are below lowres_clock resolution
+    // (~task_quota) and cannot be resolved, so no finer buckets are kept.
+    static constexpr std::array<double, 12> lat_hist_bounds_us = {
+      1000,
       1500, 2000, 3000,
       5000,
       7500, 10000,
@@ -456,9 +458,11 @@ public:
     static constexpr std::size_t REPLAY_BUCKETS = 16;
 
     static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
-    // Upper bounds (microseconds) for the per-stage do_transaction latency histograms
-    static constexpr std::array<uint64_t, 14> STAGE_LAT_BUCKETS_US = {
-      250, 500, 1000, 1500, 2000, 3000, 5000, 7500,
+    // Upper bounds (microseconds) for the per-stage do_transaction latency
+    // histograms. Smallest bucket is 1ms; sub-ms is below lowres_clock
+    // resolution (~task_quota) and cannot be resolved.
+    static constexpr std::array<uint64_t, 12> STAGE_LAT_BUCKETS_US = {
+      1000, 1500, 2000, 3000, 5000, 7500,
       10000, 15000, 20000, 30000, 50000, 100000
     };
 
