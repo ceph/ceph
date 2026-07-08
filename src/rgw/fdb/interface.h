@@ -432,6 +432,7 @@ inline transactor make_transactor(database_handle dbh, const transaction_options
 // Basic Generators:
 namespace ceph::libfdb {
 
+// For ordinary range scans, pair_generator() is usually the right default:
 template <typename ValueT = std::string>
 inline auto pair_generator(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range) 
   -> std::generator<std::pair<std::string, ValueT>>
@@ -450,7 +451,17 @@ inline auto pair_generator(const ceph::libfdb::database_handle& dbh, ceph::libfd
 }
 
 // Note: block_generator() uses split planning to tackle large sets; use pair_generator() for 
-// direct scans. This is meant to be straightforward and easy-to-understand-- hence, there's not
+// direct scans. 
+//
+// What block_generator() gives you:
+// 	- avoids one huge transaction getting too old
+//	- gives caller block-at-a-time processing
+//	- can bound memory and transaction duration better than a monolithic scan
+//
+// Note: block_generator() was originally parallel, and could be again, but preliminary benchmarking
+// showed it to be a significant performance impediment. The database must be truly large to see benefits.
+//
+// Note: This is meant to be straightforward and easy-to-understand-- hence, there's not
 // a recover strategy or other things (you can replay the entire query)-- as new needs arise, this
 // can be made more flexible via selector options, dynamic range-splitting, etc., but so far there
 // has been no need:

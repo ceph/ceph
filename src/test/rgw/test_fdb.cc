@@ -273,6 +273,20 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
  CHECK(make_key(0) == out.front().first);
  CHECK(make_key(nentries - 1) == out.back().first);
 
+ SECTION("reverse order") {
+  auto reverse_all = select_all;
+  reverse_all.options.reverse_order = true;
+
+  out.clear();
+  lfdb::get(dbh, reverse_all, std::back_inserter(out));
+
+  REQUIRE(nentries == out.size());
+  CHECK(make_key(nentries - 1) == out.front().first);
+  CHECK(make_key(0) == out.back().first);
+  CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                               &std::pair<std::string, std::string>::first));
+ }
+
  lfdb::set(dbh, "keyx", "outside");
  out.clear();
  lfdb::get(dbh, lfdb::select { "key_" }, std::back_inserter(out));
@@ -402,20 +416,89 @@ TEST_CASE("basic generators", "[fdb]") {
  const auto kvs_in = write_monotonic_kvs(dbh, nkeys);
  REQUIRE(nkeys == kvs_in.size());
 
- SECTION("pair_generator, kv pair return") {
-    std::map<std::string, std::string> out;
+ SECTION("pair_generator forward") {
+    std::vector<std::pair<std::string, std::string>> out;
 
-    // pair_generator returns key-value pairs, keeping the specified transaction (or implicitly created one)
-    // alive until exhausted (note that this may cause the transaction to expire if approaching 5s or so):
+    // pair_generator returns key-value pairs:
     for(auto&& kvp : lfdb::pair_generator(dbh, lfdb::select { make_key(0), make_key(nkeys) }))
-     out.emplace(kvp);
+     out.emplace_back(std::move(kvp));
 
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
     REQUIRE(nkeys == out.size());
 
     // Be sure we captured the head and the tail:
     if(0 < nkeys) {
-      CHECK(out.contains(make_key(0)));
-      CHECK(out.contains(make_key(nkeys - 1)));
+      CAPTURE(out.front().first);
+      CAPTURE(out.back().first);
+      CHECK(make_key(0) == out.front().first);
+      CHECK(make_key(nkeys - 1) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::less {},
+                                   &std::pair<std::string, std::string>::first));
+    }
+ }
+
+ SECTION("pair_generator reverse") {
+    auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+    selector.options.reverse_order = true;
+
+    std::vector<std::pair<std::string, std::string>> out;
+    std::ranges::copy(lfdb::pair_generator(dbh, selector), std::back_inserter(out));
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if(0 < nkeys) {
+      CAPTURE(out.front().first);
+      CAPTURE(out.back().first);
+      CHECK(make_key(nkeys - 1) == out.front().first);
+      CHECK(make_key(0) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                                   &std::pair<std::string, std::string>::first));
+    }
+ }
+
+ SECTION("pair_generator forward, paged") {
+    auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+    selector.options.stride = 5; // one of the most prime of prime numbers
+
+    std::vector<std::pair<std::string, std::string>> out;
+    std::ranges::copy(lfdb::pair_generator(dbh, selector), std::back_inserter(out));
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if(0 < nkeys) {
+      CAPTURE(out.front().first);
+      CAPTURE(out.back().first);
+      CHECK(make_key(0) == out.front().first);
+      CHECK(make_key(nkeys - 1) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::less {},
+                                   &std::pair<std::string, std::string>::first));
+    }
+ }
+
+ SECTION("pair_generator reverse, paged") {
+    auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+    selector.options.reverse_order = true;
+    selector.options.stride = 5; // one of the most prime of prime numbers
+
+    std::vector<std::pair<std::string, std::string>> out;
+    std::ranges::copy(lfdb::pair_generator(dbh, selector), std::back_inserter(out));
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if(0 < nkeys) {
+      CAPTURE(out.front().first);
+      CAPTURE(out.back().first);
+      CHECK(make_key(nkeys - 1) == out.front().first);
+      CHECK(make_key(0) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                                   &std::pair<std::string, std::string>::first));
     }
  }
 
@@ -432,6 +515,8 @@ TEST_CASE("basic generators", "[fdb]") {
 
     std::ranges::copy(gen, std::inserter(out, std::end(out)));
 
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
     REQUIRE(nkeys == out.size());
 
     if(0 < nkeys) {
@@ -679,9 +764,9 @@ SCENARIO("options", "[fdb]")
                 { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },  
                 { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } });         
 
-  auto dbh1 = lfdb::create_database("fishing for databass!",       // name
-                { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } }, // database options
-                { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } });        // network options
+  auto dbh1 = lfdb::create_database("fishing for databass!",             // name
+                { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },      // database options
+                { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } }); // network options
  
   auto txn = lfdb::make_transaction(dbh0, 
                { { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag } });
