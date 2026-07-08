@@ -79,12 +79,31 @@ target_include_directories(cephfs-tool PRIVATE ${PROJECT_SOURCE_DIR}/src/include
 target_link_libraries(cephfs-tool ceph-common librados cephfs osdc global uring::uring
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
+set(auditman_srcs
+  auditman.cc)
+if(WITH_AUDITLOGGING)
+  add_executable(auditman ${auditman_srcs})
+  target_link_libraries(auditman
+    ceph-common
+    librados
+    global
+    audit_db
+    cephsqlite
+    SQLite3::SQLite3
+    Boost::program_options
+    fmt::fmt)
+endif()
+
 install(TARGETS
   cephfs-journal-tool
   cephfs-table-tool
   cephfs-data-scan
   cephfs-tool
   DESTINATION bin)
+
+if(WITH_AUDITLOGGING)
+  install(TARGETS auditman DESTINATION bin)
+endif()
 
 option(WITH_CEPHFS_SHELL "install cephfs-shell" OFF)
 if(WITH_CEPHFS_SHELL)
