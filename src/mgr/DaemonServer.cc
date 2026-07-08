@@ -441,6 +441,10 @@ void DaemonServer::tick()
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+
+  if (!(audit_pool_exists && audit_pool_appified)) {
+    _ensure_audit_pool();
+  }
 }
 
 void DaemonServer::maybe_adjust_stats_period() {
@@ -3853,4 +3857,92 @@ will start to track new ops received afterwards.";
 
 out:
   return false;
+}
+
+// caller must hold lock
+bool DaemonServer::_enough_osds_exist() const {
+  uint64_t count = 0;
+  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+      if (osdmap.is_up(i) && osdmap.is_in(i)) {
+        count++;
+      }
+    }
+  });
+
+  return count >= g_conf().get_val<uint64_t>("osd_pool_default_size");
+}
+
+// unlock the ceph mutex before calling 
+std::pair<int, std::string> DaemonServer::_create_audit_pool() {
+  Command osd_pool_create;
+  std::string cmd = R"({"prefix":"osd pool create",)"
+  R"("pool":".audit",)"
+  R"("pg_num":1,)"
+  R"("pg_num_min":1,)"
+  R"("pg_num_max":32,)"
+  R"("yes_i_really_mean_it":true})";
+
+  osd_pool_create.run(monc, cmd);
+  osd_pool_create.wait();
+
+  return {osd_pool_create.r, osd_pool_create.outs};
+}
+
+// unlock the ceph mutex before calling
+std::pair<int, std::string> DaemonServer::_appify_audit_pool() {
+  Command appify_pool;
+  std::string cmd = R"({"prefix":"osd pool application enable",)"
+  R"("pool":".audit",)"
+  R"("app":"audit",)"
+  R"("yes_i_really_mean_it":true})";
+
+  appify_pool.run(monc, cmd);
+  appify_pool.wait();
+
+  return {appify_pool.r, appify_pool.outs};
+}
+
+void DaemonServer::ensure_audit_pool() {
+  lock.lock();
+  _ensure_audit_pool();
+  lock.unlock();
+}
+
+void DaemonServer::_ensure_audit_pool() {
+  if (!_enough_osds_exist()) {
+    dout(10) << "not enough OSDs to start .audit pool" << dendl;
+    return;
+  }
+
+  bool need_create = !audit_pool_exists;
+  bool need_appify = audit_pool_exists && !audit_pool_appified;
+
+  bool created{false}, appified{false};
+  // release lock while blocking on mon; lock.lock() below before touching
+  // audit_pool_exists / audit_pool_appified (caller still holds lock on return)
+  lock.unlock();
+  if (need_create) {
+    auto [r, outs] = _create_audit_pool();
+    if (r != 0) {
+      clog->warn() << "failed to create .audit pool: " << outs << "; audit logging disabled until pool is available";
+    } else {
+      clog->info() << outs;
+      created = true;
+    }
+  }
+
+  if ((need_create && created) || need_appify) {
+    auto [r, outs] = _appify_audit_pool();
+    if (r != 0) {
+      clog->warn() << "failed to appify .audit pool: " << outs;
+    } else {
+      clog->info() << outs;
+      appified = true;
+    }
+  }
+
+  lock.lock();
+  if (created) audit_pool_exists = true;
+  if (appified) audit_pool_appified = true;
 }

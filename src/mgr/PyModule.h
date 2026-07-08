@@ -115,6 +115,8 @@ public:
 
   ~PyModule();
 
+  static void export_log_entry();
+
   bool is_option(const std::string &option_name);
   const std::map<std::string,MgrMap::ModuleOption>& get_options() const {
     return options;

@@ -1017,6 +1017,12 @@ if(WITH_LIBCEPHSQLITE)
   install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif(WITH_LIBCEPHSQLITE)
 
+if (WITH_LIBCEPHSQLITE)
+  add_library(audit_db STATIC common/AuditDB.cc)
+  target_link_libraries(audit_db PRIVATE cephsqlite ceph-common librados SQLite3::SQLite3)
+  target_compile_definitions(audit_db PUBLIC WITH_LIBCEPHSQLITE)
+endif()
+
 if(WITH_FUSE)
   set(ceph_fuse_srcs
     ceph_fuse.cc

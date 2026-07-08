@@ -628,11 +628,13 @@ void ActivePyModules::notify_all(const std::string &notify_type,
 
 void ActivePyModules::notify_all(const LogEntry &log_entry)
 {
+  std::string channel = log_entry.channel;
+
   std::lock_guard l(lock);
 
-  dout(10) << __func__ << ": notify_all (clog)" << dendl;
+  dout(10) << __func__ << ": notify_all (" << channel << ")" << dendl;
   for (auto& [name, module] : modules) {
-    if (!py_module_registry.should_notify(name, "clog")) {
+    if (!py_module_registry.should_notify(name, channel)) {
       continue;
     }
     // Send all python calls down a Finisher to avoid blocking
@@ -641,11 +643,11 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // Note intentional use of non-reference lambda binding on
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
-    dout(15) << "queuing notify (clog) to " << name << dendl;
+    dout(15) << "queuing notify (" << channel << ")) to " << name << dendl;
     Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    mod_finisher.queue(new LambdaContext([module=module, log_entry](int r){
-      module->notify_clog(log_entry);
+    mod_finisher.queue(new LambdaContext([module=module, log_entry, channel](int r) {
+      module->notify_log_channel(log_entry, channel);
     }));
   }
 }
@@ -1757,6 +1759,13 @@ PyObject *ActivePyModules::get_mds_perf_counters(MetricQueryID query_id)
   f.close_section(); // metrics
 
   return f.get();
+}
+
+void ActivePyModules::audit_log_subscribe(unsigned int seq)
+{
+  dout(20) << __func__ << ": subscribing to audit log (seq=" << seq
+           << ")" << dendl;
+  monc.sub_want("log-audit", seq, 0);
 }
 
 void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,

@@ -82,6 +82,9 @@ public:
   void debug(std::stringstream &s) final {
     do_log(CLOG_DEBUG, s);
   }
+  void debug(LogMsg &&m) final {
+    do_log(CLOG_DEBUG, std::move(m));
+  }
   /**
    * Convenience function mapping health status to
    * the appropriate cluster log severity.
@@ -105,11 +108,17 @@ public:
   void info(std::stringstream &s) final {
     do_log(CLOG_INFO, s);
   }
+  void info(LogMsg &&m) final {
+    do_log(CLOG_INFO, std::move(m));
+  }
   OstreamTemp warn() final {
     return OstreamTemp(CLOG_WARN, this);
   }
   void warn(std::stringstream &s) final {
     do_log(CLOG_WARN, s);
+  }
+  void warn(LogMsg &&m) final {
+    do_log(CLOG_WARN, std::move(m));
   }
   OstreamTemp error() final {
     return OstreamTemp(CLOG_ERROR, this);
@@ -117,11 +126,17 @@ public:
   void error(std::stringstream &s) final {
     do_log(CLOG_ERROR, s);
   }
+  void error(LogMsg &&m) final {
+    do_log(CLOG_ERROR, std::move(m));
+  }
   OstreamTemp sec() final {
     return OstreamTemp(CLOG_SEC, this);
   }
   void sec(std::stringstream &s) final {
     do_log(CLOG_SEC, s);
+  }
+  void sec(LogMsg &&m) final {
+    do_log(CLOG_SEC, std::move(m));
   }
 
   void set_log_to_monitors(bool v);
@@ -170,6 +185,7 @@ public:
 
   void do_log(clog_type prio, std::stringstream& ss) final;
   void do_log(clog_type prio, const std::string& s) final;
+  void do_log(clog_type prio, LogMsg &&m) final;
 
 private:
   CephContext *cct;
@@ -188,6 +204,8 @@ private:
   void update_config(const clog_targets_conf_t& conf_strings);
 
   clog_targets_conf_t parse_log_client_options(CephContext* conf_cct);
+
+  void _do_log(LogEntry &&e);
 };
 
 typedef LogChannel::Ref LogChannelRef;
