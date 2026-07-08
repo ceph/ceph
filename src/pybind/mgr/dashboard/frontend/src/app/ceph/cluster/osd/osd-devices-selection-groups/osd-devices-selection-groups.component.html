@@ -15,53 +15,77 @@
     </cd-helper>
   </label>
   <div class="cd-col-form-input">
-    @if (devices.length === 0 && inlineSelection) {
-    @if (!canSelect) {
+    @if (inlineSelection) {
+    @if (showAddPrimaryFirstAlert) {
     <cd-alert-panel type="info"
                     size="slim"
                     [showTitle]="false">
       <ng-container i18n>{{ tooltips.addPrimaryFirst }}</ng-container>
     </cd-alert-panel>
     }
-    @if (canSelect) {
-    @if (availDevices.length === 0) {
+    @if (showNoAvailDevicesAlert) {
     <cd-alert-panel type="warning"
                     size="slim"
                     [showTitle]="false">
       <ng-container i18n>No available devices</ng-container>
     </cd-alert-panel>
     }
-    @if (availDevices.length > 0 && !canInlineSubmit) {
+    @if (showFilterSection) {
+    @if (!canInlineSubmit) {
     <cd-alert-panel type="warning"
                     size="slim"
                     [showTitle]="false">
-      <ng-container i18n>At least one of these filters must be applied in order to proceed:</ng-container>
+      <ng-container i18n>Select at least one of these filters to fetch the data:</ng-container>
       @for (filter of requiredFilters; track filter) {
       <cds-tag class="tag-dark ms-2">{{ filter }}</cds-tag>
       }
     </cd-alert-panel>
     }
-    <cd-inventory-devices [devices]="availDevices"
+    <div class="device-filter-form">
+      <div class="filter-dropdown-row">
+        @for (field of filterFields; track field.prop) {
+        <div class="filter-dropdown">
+          <cds-select (valueChange)="onFilterFieldChange(field.prop, $event)"
+                      [id]="'device_filter_' + field.prop"
+                      [label]="field.name"
+                      size="md"
+                      [attr.data-testid]="'device-filter-' + field.prop">
+            <option value=""
+                    i18n>Any</option>
+            @for (option of field.options; track option.raw) {
+            <option [value]="option.raw"
+                    [selected]="selectedFilters[field.prop] === option.raw">
+              {{ option.formatted }}
+            </option>
+            }
+          </cds-select>
+        </div>
+        }
+      </div>
+    </div>
+    @if (showSelectionSummary) {
+    <div class="selection-summary pb-2 my-2 border-bottom">
+      @for (filter of displayedFilters; track filter.prop) {
+      <cds-tag class="tag-dark me-2">{{ filter.name }}: {{ filter.value.formatted }}</cds-tag>
+      }
+      <a class="tc_clearSelections"
+         href=""
+         (click)="clearDevices(); false">
+        <svg [cdsIcon]="icons.clearFilters"
+             [size]="icons.size16"></svg>
+        <ng-container i18n>Clear</ng-container>
+      </a>
+      <div class="selection-capacity cds-mt-2">
+        <span i18n>Raw capacity: {{ inlineCapacity | dimlessBinary }}.</span>
+      </div>
+    </div>
+    }
+    <cd-inventory-devices [devices]="tableDevices"
                           [hostname]="hostname"
                           [diskType]="name === 'Primary' ? 'hdd' : 'ssd'"
                           [hiddenColumns]="['available', 'osd_ids']"
-                          [filterColumns]="filterColumns"
-                          (filterChange)="onInlineFilterChange($event)">
+                          [filterColumns]="[]">
     </cd-inventory-devices>
-    @if (canInlineSubmit) {
-    <div class="text-center cds-mt-3 cds-mb-3">
-      <span i18n>Number of devices: {{ inlineFilteredDevices.length }}. Raw capacity:
-        {{ inlineCapacity | dimlessBinary }}.</span>
-    </div>
-    }
-    <button type="button"
-            class="btn btn-light"
-            (click)="submitInlineSelection()"
-            [disabled]="!canInlineSubmit || inlineFilteredDevices.length === 0">
-      <svg [cdsIcon]="icons.add"
-           [size]="icons.size16"></svg>
-      <ng-container i18n>Add</ng-container>
-    </button>
     }
     } @else {
     @if (devices.length === 0) {
@@ -94,11 +118,6 @@
                             [filterColumns]="[]">
       </cd-inventory-devices>
     </div>
-    @if (type === 'data') {
-    <div class="float-end">
-      <span i18n>Raw capacity: {{ capacity | dimlessBinary }}</span>
-    </div>
-    }
     }
     }
   </div>
