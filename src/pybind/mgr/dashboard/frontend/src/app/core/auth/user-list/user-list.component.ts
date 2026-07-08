@@ -68,7 +68,8 @@ export class UserListComponent implements OnInit {
       permission: 'update',
       icon: Icons.edit,
       routerLink: () =>
-        this.selection.first() && this.urlBuilder.getEdit(this.selection.first().username),
+        this.selection.first() &&
+        this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().username)),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
