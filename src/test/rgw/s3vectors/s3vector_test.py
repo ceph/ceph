@@ -2221,6 +2221,58 @@ def test_put_vectors_must_exist():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
+
+def test_background_index_rebuild():
+    """Test that vector index is rebuilt in the background when unindexed rows exceed threshold.
+    The default threshold is 256 rows. We insert 500 vectors (above LanceDB's IVF_PQ minimum)
+    and wait for the background manager to build the vector index."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'rebuild-test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors in batches (exceeds default threshold of 256 and
+    # LanceDB's IVF_PQ minimum for reliable index creation)
+    batch_size = 100
+    total_vectors = 500
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        # offset keys to avoid duplicates across batches
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify no index exists before rebuild
+    stats = get_index_stats(conn, bucket_name, index_name)
+    log.info('pre-rebuild stats: %s', stats)
+    assert stats['numIndexSegments'] == 0, 'index should not exist before rebuild'
+    assert stats['numUnindexedRows'] == total_vectors
+
+    # poll until background rebuild completes
+    stats = wait_for_index_rebuild(conn, bucket_name, index_name)
+    assert stats['numIndexedRows'] == total_vectors
+
+    # verify query works after rebuild — just check the response is valid
+    top_k = 10
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+
+    # verify we can get specific vectors
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-0', 'vec-250', 'vec-499'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+
 def test_query_vectors_filter():
     """Test metadata filtering during vector queries."""
     conn = connection()
@@ -2663,6 +2715,94 @@ def test_sal_error_propagation():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
+def get_index_stats(conn, bucket_name, index_name):
+    """Call the GetIndexStats extension API.
+    Requires the botocore s3vectors service model to include GetIndexStats.
+    Returns dict with numIndexedRows, numUnindexedRows, numIndexSegments."""
+    result = conn.get_index_stats(vectorBucketName=bucket_name, indexName=index_name)
+    return result['indexStats']
+
+
+def wait_for_index_rebuild(conn, bucket_name, index_name, timeout=60, poll_interval=2):
+    """Poll GetIndexStats until the index is fully built (numUnindexedRows == 0 and numIndexSegments > 0).
+    Returns the final stats dict."""
+    for i in range(timeout // poll_interval):
+        stats = get_index_stats(conn, bucket_name, index_name)
+        if stats['numIndexSegments'] > 0 and stats['numUnindexedRows'] == 0:
+            log.info('index rebuild complete after %ds: %s', i * poll_interval, stats)
+            return stats
+        time.sleep(poll_interval)
+    stats = get_index_stats(conn, bucket_name, index_name)
+    raise AssertionError(f'index rebuild did not complete within {timeout}s, stats: {stats}')
+
+
+def test_delete_vectors_triggers_rebuild():
+    """Test that delete_vectors triggers the background rebuild notification.
+    Insert vectors above threshold, wait for initial build, then delete and re-insert
+    to trigger a second rebuild cycle."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'delete-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors
+    vectors = generate_vectors(500, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # poll until initial rebuild completes
+    wait_for_index_rebuild(conn, bucket_name, index_name)
+
+    # wait for rate-limit window to expire so delete/insert notifications are not suppressed
+    time.sleep(6)
+
+    # delete vectors in small batches to avoid deep OR-chain in LanceDB SQL planner
+    delete_batch_size = 20
+    for batch_start in range(0, 100, delete_batch_size):
+        keys_to_delete = [f'vec-{i}' for i in range(batch_start, batch_start + delete_batch_size)]
+        result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=keys_to_delete)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert new vectors to trigger another rebuild notification
+    new_vectors = []
+    for i in range(500, 800):
+        new_vectors.append({
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i)
+        })
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=new_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # log stats before second rebuild
+    stats = get_index_stats(conn, bucket_name, index_name)
+    log.info('after delete+insert stats (before rebuild): %s', stats)
+
+    # poll until second rebuild completes (longer timeout: rate-limit delay + build time)
+    wait_for_index_rebuild(conn, bucket_name, index_name, timeout=90)
+
+    # verify queries work correctly with the updated index
+    top_k = 5
+    query_vector = generate_data(dimension, 500)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+
+    # verify deleted vectors are gone
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['vec-0', 'vec-50'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # verify new vectors are present
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-500', 'vec-600', 'vec-700'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
 @pytest.mark.vector_bucket_test
 def test_cross_owner_vector_bucket():
     """When the S3 bucket owner differs from the vector bucket owner,
@@ -2794,3 +2934,94 @@ def test_versioned_s3_bucket():
             s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
     s3conn.delete_bucket(Bucket=bucket_name)
 
+
+
+def test_concurrent_conditional_lock_acquisition():
+    """Test that when multiple threads race to acquire the same lock via
+    conditional PUT (If-None-Match: *), exactly one wins and all others fail
+    with PreconditionFailed."""
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    s3conn.create_bucket(Bucket=bucket_name)
+    lock_key = '.s3v-lock-concurrent-test.lock'
+
+    num_threads = 10
+    results = [None] * num_threads
+
+    def try_acquire(thread_id):
+        """Each thread creates its own S3 client and attempts a conditional PUT."""
+        thread_conn = connection('s3')
+        body = json.dumps({'token': f'thread-{thread_id}', 'timestamp': int(time.time())})
+        try:
+            resp = thread_conn.put_object(Bucket=bucket_name, Key=lock_key,
+                                          Body=body.encode(), IfNoneMatch='*')
+            results[thread_id] = ('won', resp.get('ETag', '').strip('"'))
+        except thread_conn.exceptions.ClientError as e:
+            results[thread_id] = ('lost', e.response['Error']['Code'])
+
+    threads = [threading.Thread(target=try_acquire, args=(i,)) for i in range(num_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    winners = [(i, r) for i, r in enumerate(results) if r[0] == 'won']
+    losers = [(i, r) for i, r in enumerate(results) if r[0] == 'lost']
+
+    log.info('concurrent lock results: %d winners, %d losers', len(winners), len(losers))
+    for i, r in winners:
+        log.info('  thread %d: WON (ETag=%s)', i, r[1])
+    for i, r in losers:
+        log.info('  thread %d: lost (%s)', i, r[1])
+
+    assert len(winners) == 1, f'exactly one thread must win, but {len(winners)} won: {winners}'
+    assert len(losers) == num_threads - 1
+    for _, r in losers:
+        assert r[1] == 'PreconditionFailed', f'losers must get PreconditionFailed, got {r[1]}'
+
+    # verify the winner's token is in the lock object
+    winner_id = winners[0][0]
+    get_result = s3conn.get_object(Bucket=bucket_name, Key=lock_key)
+    body = json.loads(get_result['Body'].read().decode())
+    assert body['token'] == f'thread-{winner_id}'
+    log.info('verified: lock object contains winner thread-%d token', winner_id)
+
+    # cleanup
+    s3conn.delete_object(Bucket=bucket_name, Key=lock_key)
+    s3conn.delete_bucket(Bucket=bucket_name)
+
+
+
+def test_below_threshold_no_rebuild():
+    """Test that inserting fewer vectors than the threshold does not trigger a rebuild.
+    Queries should still work via brute-force search (no vector index needed)."""
+    dimension = 16
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'no-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert only 100 vectors (below default threshold of 256)
+    vectors = generate_vectors(100, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for background manager to process the notification, then verify no rebuild
+    time.sleep(5)
+    stats = get_index_stats(conn, bucket_name, index_name)
+    log.info('below-threshold stats: %s', stats)
+    assert stats['numIndexSegments'] == 0, 'index should not be built below threshold'
+
+    # queries should work via brute-force (no vector index)
+    top_k = 5
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    assert 'vec-42' in [v['key'] for v in result['vectors']]
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)

@@ -248,8 +248,6 @@ private:
     bool ok = false;
   };
 
-  static constexpr const char* vector_index_name = "data_idx";
-
   index_stats_result get_vector_index_stats(const LanceDBTable* table) {
     index_stats_result result;
     char* error_message = nullptr;
