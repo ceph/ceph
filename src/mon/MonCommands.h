@@ -572,7 +572,7 @@ COMMAND("mon set_location " \
 	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
 	"mon", "rw")
 COMMAND("mon set " \
-	"name=name,type=CephString "
+	"name=name,type=CephChoices,strings=auth_service_cipher|auth_allowed_ciphers|auth_preferred_cipher "
 	"name=value,type=CephString",
 	"set mon configuration", \
 	"mon", "rw")
