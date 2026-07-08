@@ -2314,34 +2314,6 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     }
   }
 
-  // pool migration
-  if (pi->is_migration_src()) {
-    if (!op->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA)) {
-      // client doesn't support pool migration - meant to
-      // be blocked by min_compat_client
-      osd->reply_op_error(op, -EIO);
-      return;
-    }
-    if (m->get_hobj() < pool_migration_watermark) {
-      // object has been migrated to the target pool - request
-      // Op is redirected and provide client with updated
-      // migration watermark
-      dout(20) << __func__ << ": object " << m->get_hobj()
-	       << " has been migrated to pool " << *pi->migration_target
-               << " watermark " << pool_migration_watermark << dendl;
-      auto m = op->get_req<MOSDOp>();
-      int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
-      MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT, get_osdmap_epoch(),
-                                       flags, false);
-      request_redirect_t redir(m->get_object_locator(),
-			       *pool.info.migration_target,
-			       pool_migration_watermark);
-      reply->set_redirect(redir);
-      m->get_connection()->send_message(reply);
-      return;
-    }
-  }
-
   dout(10) << "do_op " << *m
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
@@ -2445,6 +2417,34 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 						 op_returns);
 	op->mark_delayed("waiting for ondisk");
       }
+      return;
+    }
+  }
+
+  // pool migration
+  if (pi->is_migration_src()) {
+    if (!op->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA)) {
+      // client doesn't support pool migration - meant to
+      // be blocked by min_compat_client
+      osd->reply_op_error(op, -EIO);
+      return;
+    }
+    if (m->get_hobj() < pool_migration_watermark) {
+      // object has been migrated to the target pool - request
+      // Op is redirected and provide client with updated
+      // migration watermark
+      dout(20) << __func__ << ": object " << m->get_hobj()
+	       << " has been migrated to pool " << *pi->migration_target
+               << " watermark " << pool_migration_watermark << dendl;
+      auto m = op->get_req<MOSDOp>();
+      int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
+      MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT, get_osdmap_epoch(),
+                                       flags, false);
+      request_redirect_t redir(m->get_object_locator(),
+			       *pool.info.migration_target,
+			       pool_migration_watermark);
+      reply->set_redirect(redir);
+      m->get_connection()->send_message(reply);
       return;
     }
   }
