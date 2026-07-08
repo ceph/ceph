@@ -221,6 +221,18 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
     {txn_stage_t::SUBMIT_RESERVE,        sm::label_instance("stage", "submit_reserve")},
     {txn_stage_t::SUBMIT_OOL_WRITE,      sm::label_instance("stage", "submit_ool_write")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED,
+     sm::label_instance("stage", "submit_ool_write_seg_delayed")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_WAIT,
+     sm::label_instance("stage", "submit_ool_write_seg_delayed_wait")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL,
+     sm::label_instance("stage", "submit_ool_write_seg_delayed_roll")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_IO,
+     sm::label_instance("stage", "submit_ool_write_seg_delayed_io")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_RBM,
+     sm::label_instance("stage", "submit_ool_write_rbm")},
+    {txn_stage_t::SUBMIT_OOL_WRITE_RBM_IO,
+     sm::label_instance("stage", "submit_ool_write_rbm_io")},
     {txn_stage_t::SUBMIT_LBA_UPDATE,     sm::label_instance("stage", "submit_lba_update")},
     {txn_stage_t::SUBMIT_PREPARE_ENTER,  sm::label_instance("stage", "submit_prepare_enter")},
     {txn_stage_t::SUBMIT_PREPARE_RECORD, sm::label_instance("stage", "submit_prepare_record")},
@@ -1778,6 +1790,18 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     auto& pd = ctx.transaction->get_phase_durations();
     add_stage_latency_sample(txn_stage_t::SUBMIT_RESERVE, pd.reserve);
     add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE, pd.ool_write);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED,
+                             pd.ool_write_seg_delayed);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_WAIT,
+                             pd.ool_write_seg_delayed_wait);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_ROLL,
+                             pd.ool_write_seg_delayed_roll);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_SEG_DELAYED_IO,
+                             pd.ool_write_seg_delayed_io);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_RBM,
+                             pd.ool_write_rbm);
+    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE_RBM_IO,
+                             pd.ool_write_rbm_io);
     add_stage_latency_sample(txn_stage_t::SUBMIT_LBA_UPDATE, pd.lba_update);
     add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_ENTER, pd.prepare_enter);
     add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record);

@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
+#include <seastar/core/lowres_clock.hh>
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/backref_entry.h"
@@ -475,6 +476,14 @@ public:
   struct phase_durations_t {
     std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
     std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+    // Segmented backend (SegmentedOolWriter) — nested under ool_write:
+    seastar::lowres_clock::duration ool_write_seg_delayed{0};      // write_delayed_ool_extents
+    seastar::lowres_clock::duration ool_write_seg_delayed_wait{0}; // RecordSubmitter::wait_available
+    seastar::lowres_clock::duration ool_write_seg_delayed_roll{0}; // RecordSubmitter::roll_segment
+    seastar::lowres_clock::duration ool_write_seg_delayed_io{0};   // write_record futures
+    // Random-block backend (RandomBlockOolWriter) — nested under ool_write:
+    seastar::lowres_clock::duration ool_write_rbm{0};    // write_preallocated_ool_extents
+    seastar::lowres_clock::duration ool_write_rbm_io{0}; // RBM::write device futures
     std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
     std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
     std::chrono::steady_clock::duration prepare_record{0};  // prepare_record

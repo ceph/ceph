@@ -66,10 +66,13 @@ SegmentedOolWriter::write_record(
     extent_addr = extent_addr.as_seg_paddr().add_offset(
         extent->get_length());
   }
+  const auto io_start = seastar::lowres_clock::now();
   return std::move(ret.future
   ).safe_then([this, FNAME, &t,
-               record_base=ret.record_base_regardless_md
-              ](record_locator_t ret) {
+               record_base=ret.record_base_regardless_md,
+               io_start](record_locator_t ret) {
+    t.get_phase_durations().ool_write_seg_delayed_io +=
+      seastar::lowres_clock::now() - io_start;
     TRACET("{} finish {}=={}",
            t, segment_allocator.get_name(), ret, record_base);
     // ool won't write metadata, so the paddrs must be equal
@@ -88,9 +91,12 @@ SegmentedOolWriter::do_write(
     DEBUGT("{} extents={} wait ...",
            t, segment_allocator.get_name(),
            extents.size());
+    const auto wait_start = seastar::lowres_clock::now();
     return trans_intr::make_interruptible(
       record_submitter.wait_available()
-    ).si_then([this, &t, &extents] {
+    ).si_then([this, &t, &extents, wait_start] {
+      t.get_phase_durations().ool_write_seg_delayed_wait +=
+        seastar::lowres_clock::now() - wait_start;
       return do_write(t, extents);
     });
   }
@@ -119,9 +125,12 @@ SegmentedOolWriter::do_write(
             t, std::move(record), std::move(pending_extents),
             true/* with_atomic_roll_segment */);
       }
+      const auto roll_start = seastar::lowres_clock::now();
       return trans_intr::make_interruptible(
         record_submitter.roll_segment(
-        ).safe_then([fut_write=std::move(fut_write)]() mutable {
+        ).safe_then([fut_write=std::move(fut_write), &t, roll_start]() mutable {
+          t.get_phase_durations().ool_write_seg_delayed_roll +=
+            seastar::lowres_clock::now() - roll_start;
           return std::move(fut_write);
         })
       ).si_then([this, &t, &extents] {
@@ -1205,6 +1214,7 @@ RandomBlockOolWriter::do_write(
     }
   }
 
+  const auto io_start = seastar::lowres_clock::now();
   return trans_intr::make_interruptible(
     seastar::do_with(std::move(writes),
       [&t, this](auto& writes) {
@@ -1222,7 +1232,10 @@ RandomBlockOolWriter::do_write(
         );
       });
     })
-  );
+  ).si_then([&t, io_start] {
+    t.get_phase_durations().ool_write_rbm_io +=
+      seastar::lowres_clock::now() - io_start;
+  });
 }
 
 }
