@@ -102,53 +102,53 @@ function TEST_stretch_ec() {
     ceph osd crush move dc2 root=default
 
     ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2  2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2  2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host1 host
     ceph osd crush move host1 datacenter=dc1
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host2 host
     ceph osd crush move host2 datacenter=dc1
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 2 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 2 items of type host" || return 1
 
     ceph osd crush add-bucket host3 host
     ceph osd crush move host3 datacenter=dc1
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.0 1.0 host=host1
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.1 1.0 host=host2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.2 1.0 host=host3
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host4 host
     ceph osd crush move host4 datacenter=dc2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host5 host
     ceph osd crush move host5 datacenter=dc2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 2 items of type host" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 2 items of type host" || return 1
 
     ceph osd crush add-bucket host6 host
     ceph osd crush move host6 datacenter=dc2
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.3 1.0 host=host4
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.4 1.0 host=host5
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.5 1.0 host=host6
 
-    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num_zones 2 || return 1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 || return 1
 
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].op' | grep "choose_firstn" || return 1
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].num' | grep "0" || return 1
@@ -182,51 +182,51 @@ function TEST_pool_create_stretch_ec() {
     ceph mon set_location c datacenter=dc3
 
     ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host1 host
     ceph osd crush move host1 datacenter=dc1
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host2 host
     ceph osd crush move host2 datacenter=dc1
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 2 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 2 items of type host" || return 1
 
     ceph osd crush add-bucket host3 host
     ceph osd crush move host3 datacenter=dc1
     
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.0 1.0 host=host1
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.1 1.0 host=host2
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.2 1.0 host=host3
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host4 host
     ceph osd crush move host4 datacenter=dc2
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host5 host
     ceph osd crush move host5 datacenter=dc2
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 2 items of type host" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 2 items of type host" || return 1
 
     ceph osd crush add-bucket host6 host
     ceph osd crush move host6 datacenter=dc2
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.3 1.0 host=host4
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.4 1.0 host=host5
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.5 1.0 host=host6
 
-    ceph osd pool create data0 erasure stretch_ec_profile --num_zones 2 || return 1
+    ceph osd pool create data0 erasure stretch_ec_profile --num-zones 2 || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[3].op' | grep "choose_firstn" || return 1
     ceph osd crush rule dump data0 | jq '.steps[3].num' | grep "0" || return 1
@@ -259,37 +259,37 @@ function TEST_pool_create_stretch_replica() {
     ceph mon set_location b datacenter=dc2
     ceph mon set_location c datacenter=dc3
 
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host1 host
     ceph osd crush move host1 datacenter=dc1
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host2 host
     ceph osd crush move host2 datacenter=dc1
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.0 1.0 host=host1
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.1 1.0 host=host2
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host3 host
     ceph osd crush move host3 datacenter=dc2
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host4 host
     ceph osd crush move host4 datacenter=dc2
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
 
     ceph osd crush set osd.2 1.0 host=host3
-    ceph osd pool create data0 --num_zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.3 1.0 host=host4
 
-    ceph osd pool create data0 --num_zones 2 || return 1
+    ceph osd pool create data0 --num-zones 2 || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[1].op' | grep "choose_firstn" || return 1
     ceph osd crush rule dump data0 | jq '.steps[1].num' | grep "0" || return 1
@@ -420,9 +420,9 @@ function TEST_stretch_ec_with_class() {
     ceph osd crush set-device-class ssd osd.0 osd.1 osd.2 osd.3 osd.4 osd.5
     ceph osd crush set-device-class hdd osd.6 osd.7 osd.8 osd.9
 
-    ceph osd crush rule create-erasure stretch_ssd stretch_ec_ssd --num_zones 2 || return 1
+    ceph osd crush rule create-erasure stretch_ssd stretch_ec_ssd --num-zones 2 || return 1
 
-    ceph osd crush rule create-erasure stretch_hdd stretch_ec_hdd --num_zones 2 2>&1 | grep "Error EINVAL: zone dc1~hdd does not have 3 hosts with at least one OSD" || return 1
+    ceph osd crush rule create-erasure stretch_hdd stretch_ec_hdd --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1~hdd does not have 3 hosts with at least one OSD" || return 1
 
     ceph osd crush add-bucket host11 host
     ceph osd crush add-bucket host12 host
@@ -435,7 +435,7 @@ function TEST_stretch_ec_with_class() {
     ceph osd crush set osd.10 1.0 host=host11
     ceph osd crush set osd.11 1.0 host=host12
 
-    ceph osd crush rule create-erasure stretch_hdd stretch_ec_hdd --num_zones 2 || return 1
+    ceph osd crush rule create-erasure stretch_hdd stretch_ec_hdd --num-zones 2 || return 1
 }
 
 # Test adding a pool with different sites than other stretch mode pools
@@ -514,7 +514,7 @@ EOF
     crushtool -c $dir/crushmap.txt -o $dir/crushmap.new.bin || return 1
     ceph osd setcrushmap -i $dir/crushmap.new.bin || return 1
 
-    ceph osd pool create data2 --num_zones 2 --rule=bad_rule 2>&1 | grep "CRUSH rule 4 uses different datacenter buckets than configured for stretch mode" || return 1
+    ceph osd pool create data2 --num-zones 2 --rule=bad_rule 2>&1 | grep "CRUSH rule 4 uses different datacenter buckets than configured for stretch mode" || return 1
 
     ceph osd pool create data2 || return 1
 
@@ -589,7 +589,7 @@ function TEST_stretch_replica_device_class_pools() {
 
     ceph mon enable_stretch_mode a stretch_ssd datacenter
 
-    ceph osd pool create data0 replicated --rule=stretch_ssd --num_zones 2 || return 1
+    ceph osd pool create data0 replicated --rule=stretch_ssd --num-zones 2 || return 1
 
     ceph osd pool create pool_hdd
     ceph osd pool stretch set pool_hdd 2 2 datacenter stretch_hdd 4 2 || return 1
@@ -750,7 +750,7 @@ function TEST_stretch_diff_bucket_barrier() {
 
     ceph mon enable_stretch_mode a stretch_zone zone
 
-    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num_zones 2 --class=ssd 2>&1 | grep "Error EINVAL: CRUSH rule 2 is stretched across datacenter instead of zone" || return 1
+    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "Error EINVAL: CRUSH rule 2 is stretched across datacenter instead of zone" || return 1
 
     ceph osd pool create pool_dc || return 1
     ceph osd pool stretch set pool_dc 2 2 datacenter pool_dc 4 2 --yes-i-really-mean-it 2>&1 | grep "Error EINVAL: CRUSH rule 2 is stretched across datacenter instead of zone" || return 1
