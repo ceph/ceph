@@ -2215,7 +2215,20 @@ Then run the following:
         :param host: host name
         """
         HostSpec.validate(spec)
-        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        # Drop the cached SSH connection when re-adding a host with a new
+        # address. Otherwise check-host may reuse the old connection and
+        # validate the wrong machine.
+        addr_changed = spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr
+        if addr_changed:
+            self.ssh.reset_con(spec.hostname)
+        try:
+            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        except Exception:
+            # Validation failed. Clear the connection we just created to the
+            # wrong address so future operations use a fresh connection.
+            if addr_changed:
+                self.ssh.reset_con(spec.hostname)
+            raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
 
@@ -2440,6 +2453,9 @@ Then run the following:
 
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
+        # Drop the cached connection before validating so check-host
+        # runs on the new address, not the old one.
+        self.ssh.reset_con(host)
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
