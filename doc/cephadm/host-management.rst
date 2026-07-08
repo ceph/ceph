@@ -689,7 +689,7 @@ requires the bare host name when adding a host to the cluster:
 ``ceph orch host add <bare-name>``.
 
 Sudo Hardening
-=============
+==============
 
 Cephadm supports sudo hardening to enhance security by restricting sudo privilege
 escalation for non-root SSH users. When sudo hardening is enabled, cephadm uses the
@@ -697,7 +697,7 @@ escalation for non-root SSH users. When sudo hardening is enabled, cephadm uses 
 privilege escalation.
 
 Enabling Sudo Hardening
-----------------------
+-----------------------
 
 To enable sudo hardening for the entire cluster, use the following command:
 
@@ -730,7 +730,7 @@ You can manually prepare a host for sudo hardening using:
    access will be used for ongoing operations.
 
 Sudo Hardening Workflow
-----------------------
+-----------------------
 
 When sudo hardening is enabled, the following workflow is used:
 
@@ -770,7 +770,7 @@ Sudo hardening provides the following security benefits:
 
 
 Disabling Sudo Hardening
------------------------
+------------------------
 
 To disable sudo hardening:
 

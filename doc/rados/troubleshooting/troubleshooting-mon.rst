@@ -565,7 +565,7 @@ from a service shell), the restored ``kv_backend`` file and the rehydrated
 them.
 
 Restoring a multi-monitor cluster
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each monitor has its own Paxos state (rank, accepted proposal numbers,
 ``last_committed``), so backups are per-monitor: a backup taken from

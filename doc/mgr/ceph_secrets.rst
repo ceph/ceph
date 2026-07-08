@@ -25,7 +25,7 @@ service spec instead of the plaintext token.  A cephadm integration can then
 resolve the URI at deploy time and write the token only into the daemon files
 that need it.
 
-Secrets are stored in the Mon KV store under the ``secret_store/v1/`` prefix
+Secrets are stored in the Monitor KV store under the ``secret_store/v1/`` prefix
 and are organised by namespace, scope, and name.  Each secret is versioned and
 carries ``created``/``updated`` timestamps.  A per-namespace epoch counter
 is incremented on every ``set`` and on any ``rm`` that actually removes a
@@ -34,7 +34,7 @@ list.
 
 .. note::
 
-   The ``mon`` backend stores secrets in the Mon KV store, which is not an
+   The ``mon`` backend stores secrets in the Monitor KV store, which is not an
    external KMS or vault.  Users and MGR modules with sufficient Ceph
    permissions can still reveal or resolve stored secret values.  Namespaces
    provide logical and storage isolation, not an authorisation boundary.
@@ -429,9 +429,6 @@ Configuration
 .. mgr_module:: ceph_secrets
 .. confval:: secrets_backend
 
-   :type: str
-   :default: ``mon``
-
-   The storage backend used for secrets.  Currently only the Mon KV store
+   The storage backend used for secrets.  Currently only the Monitor KV store
    (``mon``) is supported.  This option is reserved for future backends
    (e.g. HashiCorp Vault).

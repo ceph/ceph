@@ -458,7 +458,7 @@ Arguments:
 
 
 prepare-host-sudo-hardening
---------------------------
+---------------------------
 
 Prepare a host for sudo hardening by authorizing SSH keys, installing/upgrading
 the cephadm package, and setting up restricted sudoers permissions::

@@ -466,7 +466,7 @@ These operations provide the same semantics as in replicated pools, ensuring
 compatibility with existing applications.
 
 Read Operation Flow
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Read operations follow a simple flow:
 
@@ -906,7 +906,7 @@ Required Settings
 
 To enable the new features, the following OSDMap pool settings are required:
 
-- ``allows_ec_overwrites = true`
+- ``allows_ec_overwrites = true``
 - ``allows_ec_optimizations = true``
 - ``supports_omap = true``
 

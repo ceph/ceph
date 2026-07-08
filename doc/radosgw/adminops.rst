@@ -2946,7 +2946,7 @@ CLI commands.
 
 To view dedup status, the user must have ``dedup=read`` capability. To
 control dedup operations, the user must have ``dedup=write`` capability.
-See the `Admin Guide`_ for details.
+See the :ref:`radosgw-admin-guide` for details.
 
 Get Dedup Stats
 ~~~~~~~~~~~~~~~

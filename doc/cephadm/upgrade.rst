@@ -136,7 +136,7 @@ Requirements:
   (same shape as ``ceph_version_short`` in ``ceph osd metadata``).
 * If the Monitors indicate to cephadm that no OSDs in the selected CRUSH bucket
   are okay to upgrade, cephadm will log details and then retry the operation.
-*  If the bucket parameters for a ceph ``osd ok-to-upgrade`` upgrade are not provided,
+* If the bucket parameters for a ceph ``osd ok-to-upgrade`` upgrade are not provided,
   cephadm will fall back to the default ceph osd ok-to-stop gate for OSD upgrades.
 * Bucket-scope upgrades apply only to OSDs. CRUSH buckets do not influence upgrades
   of other daemon types, for example Monitors, Managers, and MDSes.
