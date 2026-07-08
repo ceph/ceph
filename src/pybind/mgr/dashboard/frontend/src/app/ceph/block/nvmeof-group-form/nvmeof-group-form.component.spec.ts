@@ -166,7 +166,7 @@ describe('NvmeofGroupFormComponent', () => {
       } as any;
 
       component.groupForm.get('groupName').setValue('encrypted-group');
-      component.groupForm.get('enableEncryption').setValue(true);
+      component.groupForm.get('enable_auth').setValue(true);
       component.groupForm.get('encryptionKey').setValue('encryption-key-123');
       component.onSubmit();
 
