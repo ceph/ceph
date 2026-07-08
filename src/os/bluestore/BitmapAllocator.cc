@@ -15,6 +15,7 @@ BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t alloc_unit,
 					 std::string_view name) :
     AllocatorBase(name, capacity, alloc_unit),
+    AllocatorLevel02<AllocatorLevel01Loose>(_cct, name),
     cct(_cct)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << capacity << "/"

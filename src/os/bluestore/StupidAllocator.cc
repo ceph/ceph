@@ -15,6 +15,7 @@ StupidAllocator::StupidAllocator(CephContext* cct,
                                  int64_t _block_size,
                                  std::string_view name)
   : AllocatorBase(name, capacity, _block_size),
+    AllocatorPerf(cct, name),
     cct(cct), num_free(0),
     free(10)
 {
@@ -56,7 +57,12 @@ int64_t StupidAllocator::allocate_int(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
+  auto lock_wait_start = mono_clock::now();
+
   std::lock_guard l(lock);
+
+  auto lock_acquired = mono_clock::now();
+
   ldout(cct, 10) << __func__ << " want_size 0x" << std::hex << want_size
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
@@ -164,6 +170,13 @@ int64_t StupidAllocator::allocate_int(
   num_free -= *length;
   ceph_assert(num_free >= 0);
   last_alloc = *offset + *length;
+
+  logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+  logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
   return 0;
 }
 

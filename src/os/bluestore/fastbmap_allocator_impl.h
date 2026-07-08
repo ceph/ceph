@@ -15,6 +15,7 @@
 #include <vector>
 #include <algorithm>
 #include <mutex>
+#include <string_view>
 
 typedef uint64_t slot_t;
 
@@ -36,6 +37,7 @@ typedef std::vector<slot_t> slot_vector_t;
 #include "include/ceph_assert.h"
 #include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
+#include "AllocatorBase.h"
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
@@ -566,9 +568,13 @@ public:
 };
 
 template <class L1>
-class AllocatorLevel02 : public AllocatorLevel
+class AllocatorLevel02 : public AllocatorLevel, public AllocatorPerf
 {
 public:
+  AllocatorLevel02(CephContext* cct, std::string_view name)
+    : AllocatorPerf(cct, name)
+  {}
+
   uint64_t debug_get_free(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
     std::lock_guard l(lock);
@@ -805,9 +811,19 @@ protected:
 
     uint64_t l1_w = slots_per_slotset * l1._children_per_slot();
 
+    auto lock_wait_start = mono_clock::now();
+
     std::lock_guard l(lock);
 
+    auto lock_acquired = mono_clock::now();
+
     if (available < min_length) {
+      logger->tinc_with_max(
+        l_bluestore_allocator_alloc_process_lat,
+        mono_clock::now() - lock_acquired);
+      logger->tinc_with_max(
+        l_bluestore_allocator_lock_wait_lat,
+        lock_acquired - lock_wait_start);
       return;
     }
     if (hint != -1) {
@@ -868,6 +884,13 @@ protected:
     auto allocated_here = *allocated - prev_allocated;
     ceph_assert(available >= allocated_here);
     available -= allocated_here;
+
+    logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+    logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
   }
 
 #ifndef NON_CEPH_BUILD

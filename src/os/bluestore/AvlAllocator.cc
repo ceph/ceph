@@ -368,6 +368,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            uint64_t max_mem,
                            std::string_view name) :
   AllocatorBase(name, device_size, block_size),
+  AllocatorPerf(cct, name),
   cct(cct),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
@@ -421,8 +422,22 @@ int64_t AvlAllocator::allocate(
       max_alloc_size >= cap) {
     max_alloc_size = p2align(uint64_t(cap), (uint64_t)block_size);
   }
+  auto lock_wait_start = mono_clock::now();
+
   std::lock_guard l(lock);
-  return _allocate(want, unit, max_alloc_size, hint, extents);
+
+  auto lock_acquired = mono_clock::now();
+
+  auto ret = _allocate(want, unit, max_alloc_size, hint, extents);
+
+  logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+  logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
+
+  return ret;
 }
 
 void AvlAllocator::release(const release_set_t& release_set) {
