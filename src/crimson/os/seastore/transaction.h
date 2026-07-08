@@ -444,6 +444,26 @@ public:
     std::for_each(existing_block_list.begin(), existing_block_list.end(), f);
   }
 
+  template <typename F>
+  void for_each_mutated_extent(F &&f) {
+    std::for_each(
+      retired_set.begin(),
+      retired_set.end(),
+      [&f](auto &link) {
+        std::invoke(f, *link.extent);
+      });
+    std::for_each(
+      mutated_block_list.begin(),
+      mutated_block_list.end(),
+      [&f](auto &e) {
+        if (!e->is_valid() ||
+            e->is_exist_mutation_pending()) {
+          return;
+        }
+        std::invoke(f, *e->get_prior_instance());
+      });
+  }
+
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
   }
@@ -971,7 +991,6 @@ constexpr bool should_use_no_conflict_publish(const Transaction &t,
 
   return !t.force_rewrite_conflict && is_rewrite_transaction(t.get_src());
 }
-
 
 }
 
