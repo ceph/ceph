@@ -1688,10 +1688,11 @@ cluster has been configured for at least one share. The ``placement`` field of
 the cluster resource is passed onto the orchestration layer and is used to
 determine on what nodes of the Ceph cluster Samba containers will be run.
 
-At this time Samba services can only listen on port 445. Due to this
-restriction only one Samba server, as part of one cluster, may run on a single
-Ceph node at a time. Ensure that the placement specs on each cluster do not
-overlap.
+The Samba containers may run on the same hosts if, and only if, the services
+use different IP addresses and/or ports. If the placement spec allows more than
+one container to run on the same host, use the ``bind_addrs`` field, the
+``custom_ports`` field, or some combination, in the cluster resource to ensure
+that the Samba server instances do not conflict.
 
 The ``smb`` clusters are fully isolated from each other. This means that, as
 long as you have sufficient resources in your Ceph cluster, you can run multiple
