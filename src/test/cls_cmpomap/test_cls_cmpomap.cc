@@ -459,7 +459,7 @@ TEST_F(CmpOmap, atomic_omap_set_conditional_match)
   }
 
   librados::ObjectWriteOperation op;
-  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value1}}, 0), 0);
+  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value1}}, std::nullopt), 0);
   op.omap_set({{"eq", value2}});
   ASSERT_EQ(ioctx.operate(oid, &op), 0);
   {
@@ -484,7 +484,7 @@ TEST_F(CmpOmap, atomic_omap_set_conditional_mismatch)
   }
 
   librados::ObjectWriteOperation op;
-  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value2}}, 0), 0);
+  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value2}}, std::nullopt), 0);
   op.omap_set({{"eq", value3}});
   ASSERT_EQ(ioctx.operate(oid, &op), -ECANCELED);
   {
