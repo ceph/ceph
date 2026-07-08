@@ -2959,6 +2959,9 @@ TEST(pg_pool_t, TrackZeroBlocksFlagDefaultOff)
 TEST(pg_pool_t, TrackZeroBlocksFlagEnableDisable)
 {
   pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.flags |= pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+
   pool.enable_track_zero_blocks();
   EXPECT_TRUE(pool.tracks_zero_blocks());
   EXPECT_TRUE(pool.has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
