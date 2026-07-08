@@ -321,6 +321,9 @@ level_t Node::level() const
 eagain_ifuture<Node::search_result_t> Node::lower_bound(
     context_t c, const key_hobj_t& key)
 {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  ++c.t.get_onode_tree_stats().lookup_count;
+#endif
   return seastar::do_with(
     MatchHistory(), [this, c, &key](auto& history) {
       return lower_bound_tracked(c, key, history);
@@ -334,6 +337,9 @@ eagain_ifuture<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
     value_config_t vconf,
     Ref<Node>&& this_ref)
 {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  ++c.t.get_onode_tree_stats().lookup_count;
+#endif
   return seastar::do_with(
     MatchHistory(), [this, c, &key, vconf,
                      this_ref = std::move(this_ref)] (auto& history) mutable {
@@ -1267,7 +1273,15 @@ eagain_ifuture<Node::search_result_t>
 InternalNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history)
 {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  auto& tstats = c.t.get_onode_tree_stats();
+  ++tstats.nodes_visited;
+  auto cmp0 = key.ncmp_str;
   auto result = impl->lower_bound(key, history);
+  tstats.string_cmp_count += key.ncmp_str - cmp0;
+#else
+  auto result = impl->lower_bound(key, history);
+#endif
   return get_or_track_child(c, result.position, result.p_value->value
   ).si_then([c, &key, &history](auto child) {
     // XXX(multi-type): pass result.mstat to child
@@ -1956,7 +1970,15 @@ LeafNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history)
 {
   key_view_t index_key;
+#ifdef CRIMSON_DETAILED_SAMPLING
+  auto& tstats = c.t.get_onode_tree_stats();
+  ++tstats.nodes_visited;
+  auto cmp0 = key.ncmp_str;
   auto result = impl->lower_bound(key, history, &index_key);
+  tstats.string_cmp_count += key.ncmp_str - cmp0;
+#else
+  auto result = impl->lower_bound(key, history, &index_key);
+#endif
   Ref<tree_cursor_t> cursor;
   if (result.position.is_end()) {
     assert(!result.p_value);

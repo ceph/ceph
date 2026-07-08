@@ -465,7 +465,24 @@ public:
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
       seastar::metrics::histogram conflict_replays;
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat;
+      uint64_t onode_lookups = 0;      // tree lookups
+      uint64_t onode_lookup_nodes = 0; // nodes searched (~depth/lookup)
+      uint64_t onode_str_cmp_count = 0;// ns/oid memcmp calls
+      uint64_t onode_inserts = 0;
+      uint64_t onode_updates = 0;
+      uint64_t onode_erases = 0;
+      int64_t  onode_extents_delta = 0;
     } stats;
+
+    void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
+      stats.onode_lookups        += ts.lookup_count;
+      stats.onode_lookup_nodes   += ts.nodes_visited;
+      stats.onode_str_cmp_count  += ts.string_cmp_count;
+      stats.onode_inserts        += ts.num_inserts;
+      stats.onode_updates        += ts.num_updates;
+      stats.onode_erases         += ts.num_erases;
+      stats.onode_extents_delta  += ts.extents_num_delta;
+    }
 
     seastar::metrics::histogram& get_latency(
       op_type_t op_type) {

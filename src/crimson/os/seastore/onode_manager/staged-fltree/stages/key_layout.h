@@ -406,6 +406,10 @@ bool is_valid_key(const Key& key);
  */
 class key_hobj_t {
  public:
+  // number of ns/oid comparisons this query key participated in during lookup.
+  // Only incremented under CRIMSON_DETAILED_SAMPLING; otherwise stays zero.
+  mutable uint64_t ncmp_str = 0;
+
   explicit key_hobj_t(const ghobject_t& _ghobj) {
     if (_ghobj.is_max()) {
       ghobj = _MAX_OID();
@@ -920,6 +924,12 @@ auto operator<=>(const T& key, const shard_pool_crush_t& target) {
 
 template <IsFullKey T>
 auto operator<=>(const T& key, const ns_oid_view_t& target) {
+#ifdef CRIMSON_DETAILED_SAMPLING
+  // only key_hobj_t carries the counter
+  if constexpr (requires { key.ncmp_str; }) {
+    ++key.ncmp_str;
+  }
+#endif
   auto ret = key.nspace() <=> string_view_masked_t{target.nspace};
   if (ret != 0)
     return ret;
