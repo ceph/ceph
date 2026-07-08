@@ -74,8 +74,12 @@ export class UpgradeComponent implements OnInit, OnDestroy {
 
     this.subs.add(
       this.summaryService.subscribe((summary) => {
-        const version = summary.version.replace(VERSION_PREFIX, '').split('-');
-        this.version = version[0];
+        const versionString = summary.version.replace(VERSION_PREFIX, '').trim();
+        // Match legacy Ceph versions that include a build suffix
+        // (e.g. 13.1.0-419-g251e2515b5) and extract only the semantic version.
+        // Newer version formats without this suffix are left unchanged.
+        const match = versionString.match(/^(\d+\.\d+\.\d+)-\d+-g[0-9a-f]+/i);
+        this.version = match ? match[1] : versionString;
         this.executingTasks = summary.executing_tasks.filter((tasks) =>
           tasks.name.includes('progress/Upgrade')
         )[0];
