@@ -2097,6 +2097,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       f->flush(ds);
       err = 0;
     } else {
+      ss << "format type \"" << format << "\" not supported by this command; try json";
       err = -EINVAL;
     }
     goto done;
