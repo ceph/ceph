@@ -16,8 +16,6 @@
 #ifndef CEPH_RGW_FDB_H
  #define CEPH_RGW_FDB_H
 
-#include "base.h"
 #include "interface.h"
-#include "conversion.h"
 
 #endif
