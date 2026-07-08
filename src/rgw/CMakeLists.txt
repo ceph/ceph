@@ -580,6 +580,8 @@ endif(WITH_RADOSGW_FDB)
 
 install(TARGETS radosgw DESTINATION bin)
 
+find_package(CLI11 REQUIRED)
+
 set(radosgw_admin_srcs
   radosgw-admin/radosgw-admin.cc
   radosgw-admin/sync_checkpoint.cc
@@ -606,7 +608,7 @@ target_link_libraries(radosgw-admin
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${LIB_RESOLV}
-  OATH::OATH
+  OATH::OATH CLI11::CLI11
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 endif()
 
