@@ -6,6 +6,7 @@ from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
+from cephadm.cert_mgr import TLSObjectScope
 
 from orchestrator import (
     OrchestratorError,
@@ -19,6 +20,9 @@ from .. import utils
 
 logger = logging.getLogger(__name__)
 NVMEOF_CLIENT_CERT_LABEL = 'client'
+NVMEOF_ENCRYPTION_KEY = 'nvmeof_encryption_key'
+NVMEOF_ENCRYPTION_KEY_SIZE = 4096
+NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH = '/encryption.key'
 
 
 class NvmeofTLSBundle(NamedTuple):
@@ -116,6 +120,82 @@ class NvmeofService(CephService):
             'root_ca_cert': tls_creds.ca_cert,
         })
 
+    def _get_encryption_key_path(self, spec: NvmeofServiceSpec) -> Optional[str]:
+        source = spec.get_encryption_key_source()
+
+        if source is None:
+            return None
+
+        if source == 'source_file':
+            return spec.encryption_key_path
+
+        return NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH
+
+    def _get_or_create_encryption_key(self, spec: NvmeofServiceSpec) -> Optional[str]:
+        source = spec.get_encryption_key_source()
+        service_name = spec.service_name()
+
+        if source is None:
+            return None
+
+        if source == 'source_file':
+            return None
+
+        if source == 'inline':
+            encryption_key = spec.encryption_key
+            if not encryption_key:
+                raise OrchestratorError(
+                    "encryption_key_source is set to 'inline', but encryption_key is missing"
+                )
+
+            logger.warning(
+                "The nvmeof spec field 'encryption_key' is deprecated because "
+                "it contains secret material. Use encryption_key_source=reference "
+                "or encryption_key_source=source_file instead."
+            )
+            self.mgr.cert_mgr.save_key(
+                NVMEOF_ENCRYPTION_KEY,
+                encryption_key,
+                service_name=service_name,
+                user_made=True,
+                editable=False,
+            )
+            return encryption_key
+
+        key = self.mgr.cert_mgr.get_key(
+            NVMEOF_ENCRYPTION_KEY,
+            service_name=service_name,
+        )
+
+        if source == 'reference':
+            if not key:
+                raise OrchestratorError(
+                    f"NVMe-oF encryption_key_source is set to 'reference', "
+                    f"but certmgr key '{NVMEOF_ENCRYPTION_KEY}' is missing "
+                    f"for service '{service_name}'"
+                )
+            return key
+
+        if source == 'cephadm':
+            if key:
+                return key
+
+            key = self.mgr.cert_mgr.generate_private_key(
+                key_size=NVMEOF_ENCRYPTION_KEY_SIZE
+            )
+            self.mgr.cert_mgr.save_key(
+                NVMEOF_ENCRYPTION_KEY,
+                key,
+                service_name=service_name,
+                user_made=False,
+                editable=False,
+            )
+            return key
+
+        raise OrchestratorError(
+            f"Invalid NVMe-oF encryption_key_source: {source}"
+        )
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
@@ -130,6 +210,12 @@ class NvmeofService(CephService):
 
         super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name(), NVMEOF_CLIENT_CERT_LABEL)
+        self.mgr.cert_mgr.register_key_object(
+            self.TYPE,
+            NVMEOF_ENCRYPTION_KEY,
+            TLSObjectScope.SERVICE,
+        )
+
         self.configure_tls(spec, daemon_spec)
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
@@ -145,6 +231,7 @@ class NvmeofService(CephService):
         self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
         discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
         self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
+        encryption_key_path = self._get_encryption_key_path(spec)
         context = {
             'spec': spec,
             'name': name,
@@ -156,7 +243,8 @@ class NvmeofService(CephService):
             'rpc_socket_name': 'spdk.sock',
             'transport_tcp_options': transport_tcp_options,
             'iobuf_options': iobuf_options,
-            'rados_id': rados_id
+            'rados_id': rados_id,
+            'encryption_key_path': encryption_key_path,
         }
         gw_conf = self.mgr.template.render('services/nvmeof/ceph-nvmeof.conf.j2', context)
 
@@ -177,8 +265,9 @@ class NvmeofService(CephService):
         if spec.enable_dsa_acceleration:
             daemon_spec.extra_files['enable_dsa_acceleration'] = str(spec.enable_dsa_acceleration)
 
-        if spec.encryption_key:
-            daemon_spec.extra_files['encryption_key'] = spec.encryption_key
+        encryption_key = self._get_or_create_encryption_key(spec)
+        if encryption_key:
+            daemon_spec.extra_files['encryption_key'] = encryption_key
 
         daemon_spec.final_config, _ = self.generate_config(daemon_spec)
         daemon_spec.deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)

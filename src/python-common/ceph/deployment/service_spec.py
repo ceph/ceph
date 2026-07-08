@@ -1855,6 +1855,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
+                 enable_encryption: bool = False,
+                 encryption_key_source: Optional[str] = None,
+                 encryption_key_path: Optional[str] = None,
                  ssl: Optional[bool] = False,
                  certificate_source: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
@@ -1986,6 +1989,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
+        #: ``enable_encryption`` enables NVMe-oF gateway encryption key configuration
+        self.enable_encryption = enable_encryption
+
+        self.encryption_key_source = encryption_key_source
+        self.encryption_key_path = encryption_key_path
+
         self.ssl = ssl or enable_auth  # to force enabling ssl field when auth is enabled
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
         self.state_update_notify = state_update_notify
@@ -2239,6 +2248,75 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         verify_boolean(self.enable_auth, "Enable authentication")
+        verify_boolean(self.enable_encryption, "Enable encryption")
+
+        valid_encryption_key_sources = ['inline', 'reference', 'cephadm', 'source_file']
+
+        if self.encryption_key_source is not None:
+            if self.encryption_key_source not in valid_encryption_key_sources:
+                raise SpecValidationError(
+                    f'encryption_key_source must be one of {valid_encryption_key_sources}'
+                )
+
+        encryption_key_source = self.get_encryption_key_source()
+        legacy_inline = bool(self.encryption_key and self.encryption_key_source is None)
+
+        if encryption_key_source is None:
+            if self.encryption_key_path:
+                raise SpecValidationError(
+                    'encryption_key_path requires encryption_key_source=source_file'
+                )
+
+        elif legacy_inline:
+            # old specs with encryption_key and no source.
+            # Treated as implicit inline. No enable_encryption requirement.
+            if self.encryption_key_path:
+                raise SpecValidationError(
+                    'encryption_key_path cannot be set with legacy inline encryption_key'
+                )
+
+        else:
+            if not self.enable_encryption:
+                raise SpecValidationError(
+                    'encryption_key_source requires enable_encryption=true'
+                )
+
+            if encryption_key_source == 'inline':
+                if not self.encryption_key:
+                    raise SpecValidationError(
+                        'encryption_key_source=inline requires encryption_key'
+                    )
+                if self.encryption_key_path:
+                    raise SpecValidationError(
+                        'encryption_key_path cannot be set with encryption_key_source=inline'
+                    )
+
+            elif encryption_key_source in ['reference', 'cephadm']:
+                if self.encryption_key:
+                    raise SpecValidationError(
+                        f'encryption_key cannot be set with '
+                        f'encryption_key_source={encryption_key_source}'
+                    )
+                if self.encryption_key_path:
+                    raise SpecValidationError(
+                        f'encryption_key_path cannot be set with '
+                        f'encryption_key_source={encryption_key_source}'
+                    )
+
+            elif encryption_key_source == 'source_file':
+                if self.encryption_key:
+                    raise SpecValidationError(
+                        'encryption_key cannot be set with encryption_key_source=source_file'
+                    )
+                if not self.encryption_key_path:
+                    raise SpecValidationError(
+                        'encryption_key_source=source_file requires encryption_key_path'
+                    )
+                if not self.encryption_key_path.startswith('/'):
+                    raise SpecValidationError(
+                        'encryption_key_path must be an absolute container path'
+                    )
+
         if self.enable_auth or self.ssl:
             if self.certificate_source == CertificateSource.INLINE.value:
                 if not all([self.server_key, self.server_cert, self.client_key,
@@ -2348,6 +2426,15 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError(
                 '"spdk_mem_size" and "spdk_huge_pages" are mutually exclusive'
                 )
+
+    def get_encryption_key_source(self) -> Optional[str]:
+        if self.encryption_key and not self.encryption_key_source:
+            return 'inline'
+
+        if self.enable_encryption and not self.encryption_key_source:
+            return 'cephadm'
+
+        return self.encryption_key_source
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)

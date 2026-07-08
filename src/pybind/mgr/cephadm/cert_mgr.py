@@ -275,6 +275,17 @@ class CertMgr:
     def register_key(self, consumer: str, key_name: str, scope: TLSObjectScope) -> None:
         self._register_tls_object(consumer, key_name, scope, "keys")
 
+    def register_key_object(
+        self,
+        consumer: str,
+        key_name: str,
+        scope: TLSObjectScope,
+    ) -> None:
+        self.register_key(consumer, key_name, scope)
+
+        if hasattr(self, 'key_store') and self.key_store:
+            self.key_store.register_object_name(key_name, scope)
+
     def _register_tls_object(self, consumer: str, obj_name: str, scope: TLSObjectScope, obj_type: str) -> None:
         """
         Registers a TLS-related object (certificate or key) for a given consumer under a specific scope.
@@ -326,6 +337,9 @@ class CertMgr:
         )
         ca_cert = self.mgr.cert_mgr.get_root_ca()
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
+
+    def generate_private_key(self, key_size: int = 4096) -> str:
+        return self.ssl_certs.generate_private_key(key_size=key_size)
 
     def cert_exists(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         cert_obj = self.cert_store.get_tlsobject(cert_name, service_name, host)

@@ -259,6 +259,19 @@ class SSLCerts:
 
         return (cert_str, key_str)
 
+    def generate_private_key(self, key_size: int = 4096) -> str:
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=key_size,
+            backend=default_backend(),
+        )
+
+        return private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode('utf-8')
+
     def renew_cert(
         self,
         old_cert: str,
