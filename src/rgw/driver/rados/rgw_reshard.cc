@@ -1743,6 +1743,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
       if (logshard_lock.should_renew(now)) {
         ret = logshard_lock.renew(now);
         if (ret < 0) {
+          logshard_lock.unlock();
           return ret;
         }
       }
