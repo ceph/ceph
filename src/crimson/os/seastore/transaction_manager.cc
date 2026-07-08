@@ -634,9 +634,6 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().prepare_enter +=
     std::chrono::steady_clock::now() - prepare_enter_start;
 
-  while (tref.need_wait_visibility) {
-    co_await trans_intr::make_interruptible(seastar::yield());
-  }
   if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
     SUBTRACET(seastore_t, "trim backref_bufs to {}", tref, *trim_alloc_to);
     cache->trim_backref_bufs(*trim_alloc_to);
