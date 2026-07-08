@@ -16,14 +16,40 @@ Key Features:
 supported top-level scopes.
 """
 
+import sys
 import errno
 import enum
 import logging
-from typing import List, NamedTuple, Optional, Tuple, Protocol
+
+from typing import (
+    Any,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Protocol,
+    TYPE_CHECKING,
+    Tuple,
+    Type,
+    Union,
+)
+
+if sys.version_info >= (3, 11):  # pragma: no cover
+    from typing import Self
+elif TYPE_CHECKING:  # pragma: no cover
+    from typing_extensions import Self
+else:  # pragma: no cover
+    # fallback type that should be ignored at runtime
+    Self = Any  # type: ignore
 
 log = logging.getLogger(__name__)
 
 XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
+
+
+class EarmarkTopScope(enum.Enum):
+    NFS = "nfs"
+    SMB = "smb"
 
 
 class FSOperations(Protocol):
@@ -38,9 +64,17 @@ class FSOperations(Protocol):
     def getxattr(self, path: str, key: str) -> bytes: ...
 
 
-class EarmarkTopScope(enum.Enum):
-    NFS = "nfs"
-    SMB = "smb"
+class EarmarkContents(Protocol):
+    @property
+    def top(self) -> EarmarkTopScope: ...
+
+    @property
+    def subsections(self) -> List[str]: ...
+
+    def __str__(self) -> str: ...
+
+    @classmethod
+    def parse(cls, value: str) -> Self: ...
 
 
 class EarmarkException(Exception):
@@ -55,13 +89,127 @@ class EarmarkException(Exception):
         return f"{self.errno} ({self.error_str})"
 
 
-class EarmarkContents(NamedTuple):
-    top: 'EarmarkTopScope'
-    subsections: List[str]
-
-
 class EarmarkParseError(ValueError):
     pass
+
+
+class NFSEarmark(NamedTuple):
+    top: EarmarkTopScope
+    # to be backwards compatible we allow freeform subsections in nfs
+    # (for now) but we may want to get stricter about this in the
+    # future since this is never used in practice
+    subsections: List[str]
+
+    def __str__(self) -> str:
+        return f'{self.top.value}'
+
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        parts = value.split('.')
+        if parts[0] != EarmarkTopScope.NFS.value:
+            raise EarmarkParseError(
+                f'wrong top scope for NFS earmark: {value!r}'
+            )
+        for part in parts[1:]:
+            if not part:
+                raise EarmarkParseError(
+                    f'empty subsection in NFS earmark: {value!r}'
+                )
+        return cls(EarmarkTopScope.NFS, parts[1:])
+
+    @classmethod
+    def default(cls) -> Self:
+        return cls(EarmarkTopScope.NFS, [])
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, str):
+            try:
+                _other = self.parse(other)
+            except EarmarkParseError:
+                return False
+        elif isinstance(other, self.__class__):
+            _other = other
+        else:
+            return NotImplemented
+        return (
+            self.top is _other.top and self.subsections == _other.subsections
+        )
+
+
+class SMBEarmark(NamedTuple):
+    top: EarmarkTopScope
+    cluster_id: str
+
+    @property
+    def subsections(self) -> List[str]:
+        return [] if not self.cluster_id else ['cluster', self.cluster_id]
+
+    def __str__(self) -> str:
+        earmark = f'{self.top.value}'
+        if self.cluster_id:
+            earmark = f'{earmark}.cluster.{self.cluster_id}'
+        return earmark
+
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        cid = ''
+        parts = value.split('.')
+        if parts[0] != EarmarkTopScope.SMB.value:
+            raise EarmarkParseError(
+                f'wrong top scope for SMB earmark: {value!r}'
+            )
+        if len(parts) > 3:
+            raise EarmarkParseError(
+                f'too many subsections for SMB earmark: {value!r}'
+            )
+        elif len(parts) == 3:
+            cflag, cid = parts[1:]
+            if cflag != 'cluster' or not cid:
+                raise EarmarkParseError(
+                    f'invalid subsection in SMB earmark: {value!r}'
+                )
+        elif len(parts) == 2:
+            raise EarmarkParseError(
+                f'too few subsections for SMB earmark: {value!r}'
+            )
+        return cls(EarmarkTopScope.SMB, cid)
+
+    @classmethod
+    def from_cluster_id(cls, cluster_id: str) -> Self:
+        return cls(EarmarkTopScope.SMB, cluster_id)
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, str):
+            try:
+                _other = self.parse(other)
+            except EarmarkParseError:
+                return False
+        elif isinstance(other, self.__class__):
+            _other = other
+        else:
+            return NotImplemented
+        return self.top is _other.top and self.cluster_id == _other.cluster_id
+
+
+_earmark_types: Dict[EarmarkTopScope, Type[EarmarkContents]] = {
+    EarmarkTopScope.NFS: NFSEarmark,
+    EarmarkTopScope.SMB: SMBEarmark,
+}
+
+
+def parse_earmark(value: str) -> Optional[EarmarkContents]:
+    """Given an earmark string return an EarmarkContents object from
+    parsing the string. If the value is empty return None.
+    If the value can not be parsed raise EarmarkParseError.
+    """
+    if not value:
+        return None
+    _top = value.split('.', 1)[0]
+    try:
+        top = EarmarkTopScope(_top)
+    except ValueError:
+        raise EarmarkParseError(f"Invalid top-level scope: {_top}")
+    return _earmark_types[top].parse(value)
 
 
 class CephFSVolumeEarmarking:
@@ -101,53 +249,22 @@ class CephFSVolumeEarmarking:
         :param value: The earmark string to parse.
         :return: An EarmarkContents instance if valid, None if empty.
         """
-        if not value:
-            return None
+        return parse_earmark(value)
 
-        parts = value.split('.')
-
-        # Check if the top-level scope is valid
-        if parts[0] not in (scope.value for scope in EarmarkTopScope):
-            raise EarmarkParseError(f"Invalid top-level scope: {parts[0]}")
-
-        # Check if all parts are non-empty to ensure valid dot-separated format
-        if not all(parts):
-            raise EarmarkParseError("Earmark contains empty sections.")
-
-        # Return parsed earmark with top scope and subsections
-        return EarmarkContents(
-            top=EarmarkTopScope(parts[0]), subsections=parts[1:]
-        )
-
-    def _validate_earmark(self, earmark: str) -> bool:
+    def _validate_earmark(self, earmark: Union[str, EarmarkContents]) -> bool:
         """
-        Validates the earmark string further by checking specific conditions for scopes like 'smb'.
+        Validates the earmark. If the earmark is a string, it will be parsed
+        and checked.
 
         :param earmark: The earmark string to validate.
         :return: True if valid, False otherwise.
         """
+        if not isinstance(earmark, str):
+            return True
         try:
-            parsed = self.parse_earmark(earmark)
+            self.parse_earmark(earmark)
         except EarmarkParseError:
             return False
-
-        # If parsed is None, it's considered valid since the earmark is empty
-        if not parsed:
-            return True
-
-        # Specific validation for 'smb' scope
-        if parsed.top == EarmarkTopScope.SMB:
-            # Valid formats: 'smb' or 'smb.cluster.{cluster_id}'
-            if not (
-                len(parsed.subsections) == 0
-                or (
-                    len(parsed.subsections) == 2
-                    and parsed.subsections[0] == 'cluster'
-                    and parsed.subsections[1]
-                )
-            ):
-                return False
-
         return True
 
     def get_earmark(self) -> Optional[str]:
