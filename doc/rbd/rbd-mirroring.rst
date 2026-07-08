@@ -558,6 +558,10 @@ For example::
    local cluster's ``rbd-mirror`` daemon process is responsible for performing
    the resync asynchronously.
 
+.. note:: For snapshot-based mirroring, resync replicates the image contents
+   only up to the most recent mirror-snapshot. Create a new mirror-snapshot on
+   the primary image to sync the latest updates.
+
 Mirror Status
 =============
 
