@@ -2812,7 +2812,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  if (total_migrating_objects != 0) {
+  if (total_migrating_objects != 0 && total_migrating_pools != 0) {
     double percent_migrated = (double)total_migrated_objects /
       (double)total_migrating_objects * (double)100.0;
     char pm[20];
