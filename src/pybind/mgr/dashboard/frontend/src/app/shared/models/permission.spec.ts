@@ -28,6 +28,7 @@ describe('cd-notification classes', () => {
   it('should show full permissions', () => {
     const fullyGranted = {
       cephfs: ['create', 'read', 'update', 'delete'],
+      'cephfs-mirror': ['create', 'read', 'update', 'delete'],
       'config-opt': ['create', 'read', 'update', 'delete'],
       grafana: ['create', 'read', 'update', 'delete'],
       hosts: ['create', 'read', 'update', 'delete'],
@@ -47,7 +48,7 @@ describe('cd-notification classes', () => {
     };
     expect(new Permissions(fullyGranted)).toEqual({
       cephfs: { create: true, delete: true, read: true, update: true },
-      cephfsMirror: { create: false, delete: false, read: false, update: false },
+      cephfsMirror: { create: true, delete: true, read: true, update: true },
       configOpt: { create: true, delete: true, read: true, update: true },
       grafana: { create: true, delete: true, read: true, update: true },
       hosts: { create: true, delete: true, read: true, update: true },
