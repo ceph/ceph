@@ -2071,7 +2071,7 @@ def test_background_index_rebuild():
     # verify no index exists before rebuild
     stats = get_index_stats(conn, bucket_name, index_name)
     log.info('pre-rebuild stats: %s', stats)
-    assert stats['numIndices'] == 0, 'index should not exist before rebuild'
+    assert stats['numIndexSegments'] == 0, 'index should not exist before rebuild'
     assert stats['numUnindexedRows'] == total_vectors
 
     # poll until background rebuild completes
@@ -2504,18 +2504,18 @@ def count_vectors(conn, bucket_name, index_name):
 def get_index_stats(conn, bucket_name, index_name):
     """Call the GetIndexStats extension API.
     Requires the botocore s3vectors service model to include GetIndexStats.
-    Returns dict with numIndexedRows, numUnindexedRows, numIndices."""
+    Returns dict with numIndexedRows, numUnindexedRows, numIndexSegments."""
     result = conn.get_index_stats(vectorBucketName=bucket_name, indexName=index_name)
     return result['indexStats']
 
 
 
 def wait_for_index_rebuild(conn, bucket_name, index_name, timeout=60, poll_interval=2):
-    """Poll GetIndexStats until the index is fully built (numUnindexedRows == 0 and numIndices > 0).
+    """Poll GetIndexStats until the index is fully built (numUnindexedRows == 0 and numIndexSegments > 0).
     Returns the final stats dict."""
     for i in range(timeout // poll_interval):
         stats = get_index_stats(conn, bucket_name, index_name)
-        if stats['numIndices'] > 0 and stats['numUnindexedRows'] == 0:
+        if stats['numIndexSegments'] > 0 and stats['numUnindexedRows'] == 0:
             log.info('index rebuild complete after %ds: %s', i * poll_interval, stats)
             return stats
         time.sleep(poll_interval)
@@ -2830,7 +2830,7 @@ def test_below_threshold_no_rebuild():
     time.sleep(5)
     stats = get_index_stats(conn, bucket_name, index_name)
     log.info('below-threshold stats: %s', stats)
-    assert stats['numIndices'] == 0, 'index should not be built below threshold'
+    assert stats['numIndexSegments'] == 0, 'index should not be built below threshold'
 
     # queries should work via brute-force (no vector index)
     top_k = 5

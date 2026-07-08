@@ -343,7 +343,7 @@ struct get_index_stats_t {
 struct get_index_stats_reply_t {
   size_t num_indexed_rows = 0;
   size_t num_unindexed_rows = 0;
-  unsigned int num_indices = 0;
+  unsigned int num_index_segments = 0;
 
   void dump(ceph::Formatter* f) const;
 };
@@ -540,6 +540,7 @@ int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser
 // table field names
 inline constexpr const char* data_field = "data";
 inline constexpr const char* key_field = "key";
+inline constexpr const char* vector_index_name = "data_idx";
 
 // utility functions used by the background manager
 LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name);

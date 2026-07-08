@@ -871,7 +871,7 @@ namespace rgw::s3vector {
     f->open_object_section("indexStats");
     ::encode_json("numIndexedRows", num_indexed_rows, f);
     ::encode_json("numUnindexedRows", num_unindexed_rows, f);
-    ::encode_json("numIndices", num_indices, f);
+    ::encode_json("numIndexSegments", num_index_segments, f);
     f->close_section();
     f->close_section();
   }
@@ -887,18 +887,21 @@ namespace rgw::s3vector {
 
     char* error_message = nullptr;
     LanceDBIndexStats stats = {};
-    if (const auto err = lancedb_table_index_stats(table, "data_idx", &stats, &error_message);
+    if (const auto err = lancedb_table_index_stats(table, vector_index_name, &stats, &error_message);
         err == LANCEDB_SUCCESS) {
       reply.num_indexed_rows = stats.num_indexed_rows;
       reply.num_unindexed_rows = stats.num_unindexed_rows;
-      reply.num_indices = stats.num_indices;
+      reply.num_index_segments = stats.num_indices;
     } else {
+      ldpp_dout(dpp, 5) << "WARNING: failed to get index stats for "
+          << configuration.index_name << ": "
+          << (error_message ? error_message : "unknown") << dendl;
       if (error_message) {
         lancedb_free_string(error_message);
       }
       reply.num_indexed_rows = 0;
       reply.num_unindexed_rows = lancedb_table_count_rows(table);
-      reply.num_indices = 0;
+      reply.num_index_segments = 0;
     }
 
     lancedb_table_free(table);
