@@ -446,6 +446,55 @@ TEST_F(CmpOmap, cmp_set_vals_str)
   }
 }
 
+TEST_F(CmpOmap, atomic_omap_set_conditional_match)
+{
+  const std::string oid = __PRETTY_FUNCTION__;
+  const bufferlist value1 = u64_buffer(1);
+  const bufferlist value2 = u64_buffer(42);
+  {
+    std::map<std::string, bufferlist> vals = {
+      {"eq", value1},
+    };
+    ASSERT_EQ(ioctx.omap_set(oid, vals), 0);
+  }
+
+  librados::ObjectWriteOperation op;
+  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value1}}, 0), 0);
+  op.omap_set({{"eq", value2}});
+  ASSERT_EQ(ioctx.operate(oid, &op), 0);
+  {
+    std::map<std::string, bufferlist> vals;
+    ASSERT_EQ(get_vals(oid, &vals), 0);
+    ASSERT_EQ(vals.size(), 1);
+    EXPECT_EQ(value2, vals["eq"]);
+  }
+}
+
+TEST_F(CmpOmap, atomic_omap_set_conditional_mismatch)
+{
+  const std::string oid = __PRETTY_FUNCTION__;
+  const bufferlist value1 = u64_buffer(1);
+  const bufferlist value2 = u64_buffer(2);
+  const bufferlist value3 = u64_buffer(42);
+  {
+    std::map<std::string, bufferlist> vals = {
+      {"eq", value1},
+    };
+    ASSERT_EQ(ioctx.omap_set(oid, vals), 0);
+  }
+
+  librados::ObjectWriteOperation op;
+  ASSERT_EQ(cmp_vals(op, Mode::U64, Op::EQ, {{"eq", value2}}, 0), 0);
+  op.omap_set({{"eq", value3}});
+  ASSERT_EQ(ioctx.operate(oid, &op), -ECANCELED);
+  {
+    std::map<std::string, bufferlist> vals;
+    ASSERT_EQ(get_vals(oid, &vals), 0);
+    ASSERT_EQ(vals.size(), 1);
+    EXPECT_EQ(value1, vals["eq"]); // Nothing is changed
+  }
+}
+
 TEST_F(CmpOmap, cmp_set_vals_u64)
 {
   const std::string oid = __PRETTY_FUNCTION__;

@@ -28,7 +28,7 @@ static constexpr uint32_t max_keys = 1000;
 /// comparisons with Mode::U64, failure to decode an input value is reported
 /// as -EINVAL, an empty stored value is compared as 0, and failure to decode
 /// a stored value is reported as -EIO
-[[nodiscard]] int cmp_vals(librados::ObjectReadOperation& op,
+[[nodiscard]] int cmp_vals(librados::ObjectOperation& op,
                            Mode mode, Op comparison, ComparisonMap values,
                            std::optional<ceph::bufferlist> default_value);
 
@@ -38,6 +38,16 @@ static constexpr uint32_t max_keys = 1000;
 /// to decode an input value is reported as -EINVAL. an empty stored value is
 /// compared as 0, while decode failure of a stored value is treated as an
 /// unsuccessful comparison and is not reported as an error
+///
+/// NOTE: This function cannot be used to set different values when Op::EQ
+/// is used. To accomplish this, one may utilize the transactional operation
+/// with librados::ObjectWriteOperation in combination of cmp_vals(). For example,
+///
+///   librados::ObjectWriteOperation op;
+///   // cmp_vals() fails the operation with ECANCELED if any comparison fails
+///   cls::cmpomap::cmp_vals(op, mode, comparison, cmp_values, std::nullopt);
+///   // write new values on success
+///   op.omap_set(set_values);
 [[nodiscard]] int cmp_set_vals(librados::ObjectWriteOperation& writeop,
                                Mode mode, Op comparison, ComparisonMap values,
                                std::optional<ceph::bufferlist> default_value);
