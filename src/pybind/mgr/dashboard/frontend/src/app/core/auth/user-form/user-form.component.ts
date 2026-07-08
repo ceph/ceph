@@ -1,4 +1,4 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -33,7 +33,8 @@ import { UserFormModel } from './user-form.model';
   selector: 'cd-user-form',
   templateUrl: './user-form.component.html',
   styleUrls: ['./user-form.component.scss'],
-  standalone: false
+  standalone: false,
+  encapsulation: ViewEncapsulation.None
 })
 export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
@@ -59,6 +60,8 @@ export class UserFormComponent extends CdForm implements OnInit {
   selectedRole: string[];
   passwordexp: boolean = false;
   isSSO = false;
+  isAdminRoleProtected: boolean = false;
+
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
@@ -180,13 +183,13 @@ export class UserFormComponent extends CdForm implements OnInit {
       this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
-        if (this.authStorageService.getUsername() === username) {
-          this.allRoles = _.map(this.allRoles, (role) => {
-            role.disabled =
-              role.name.toLowerCase() === 'administrator' && this.isCurrentUser() ? true : false;
-            return role;
-          });
+        if (this.authStorageService.getUsername() === userFormModel.username) {
+          this.allRoles = _.map(this.allRoles, (role) => ({
+            ...role,
+            disabled: role.name.toLowerCase() === 'administrator'
+          }));
         }
+        this.isAdminRoleProtected = this.disableRolesClearButton();
         this.loadingReady();
       });
     });
@@ -274,6 +277,26 @@ export class UserFormComponent extends CdForm implements OnInit {
 
   public isCurrentUser(): boolean {
     return this.authStorageService.getUsername() === this.userForm.getValue('username');
+  }
+
+  disableRolesClearButton(): boolean {
+    if (!this.isCurrentUser() || !this.allRoles) {
+      return false;
+    }
+    const administratorRole = this.allRoles.find(
+      (role) => role.name.toLowerCase() === 'administrator'
+    );
+    return !!administratorRole?.disabled;
+  }
+
+  onRolesClear(): void {
+    if (!this.disableRolesClearButton()) {
+      return;
+    }
+    const roles = this.userForm.getValue('roles') ?? [];
+    if (!roles.includes('administrator')) {
+      this.userForm.get('roles').setValue([...roles, 'administrator'], { emitEvent: false });
+    }
   }
 
   private isUserChangingRoles(): boolean {
