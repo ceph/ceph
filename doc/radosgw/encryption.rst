@@ -160,6 +160,7 @@ Secrets are stored using the `Linux Kernel Key Retention Service`_ in
 the RGW processes' process keyring. This is subject to a global quota
 and must be set in accordance with the configured cache size.
 Depending on whether RGW runs as root, these quotas can be managed by adjusting:
+
 - ``/proc/sys/kernel/keys/root_maxkeys`` and ``/proc/sys/kernel/keys/root_maxbytes``
 - ``/proc/sys/kernel/keys/maxkeys`` and ``/proc/sys/kernel/keys/maxbytes``
 
@@ -167,6 +168,7 @@ Exceeding a quota will disable the cache, fail the request with an
 internal error, and log a failure message.
 
 Three different Cache Time-to-Live (TTL) values can be set:
+
 - **Positive TTL**: How long a successfully retrieved secret remains
   in the cache.
 - **Negative TTL**: How long to remember that a key does not exist,
@@ -178,6 +180,7 @@ Metrics
 ---------
 
 The cache exports metrics under the ``kms-cache`` collection.
+
 - ``hit``: Hit counter
 - ``miss``:  Miss counter
 - ``expired``: Number of TTL expired entries
@@ -187,6 +190,7 @@ The cache exports metrics under the ``kms-cache`` collection.
   ``miss``, ``expired``
 
 In addition the ``rgw`` collection has:
+
 - ``kms_fetch_lat``: Average KMS fetch latency. Also includes a
   successful request counter. Each event results in a positive cache
   entry.

@@ -88,7 +88,7 @@ Once QE has determined a stopping point in the working (e.g., ``squid``) branch,
 Notify the "Build Lead" that the release branch is ready.
 
 2a. Starting the build
-=====================
+======================
 
 We'll use a stable/regular 19.2.2 release of Squid as an example throughout this document.
 
