@@ -19,8 +19,7 @@ describe('CephfsMirroringErrorComponent', () => {
   };
 
   const mgrModuleServiceMock = {
-    updateModuleState: jest.fn(),
-    updateCompleted$: { subscribe: jest.fn().mockReturnValue({ unsubscribe: jest.fn() }) }
+    updateModuleState: jest.fn()
   };
 
   beforeEach(async () => {
@@ -45,11 +44,11 @@ describe('CephfsMirroringErrorComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should call mgrModuleService.updateModuleState when enableModule is called', () => {
+  it('should enable mirroring and snap_schedule modules when enableModule is called', () => {
     fixture.detectChanges();
     component.enableModule();
     expect(mgrModuleServiceMock.updateModuleState).toHaveBeenCalledWith(
-      'mirroring',
+      ['mirroring', 'snap_schedule'],
       false,
       null,
       'cephfs/mirroring',
