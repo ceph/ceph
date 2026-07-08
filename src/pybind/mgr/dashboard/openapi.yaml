@@ -18118,6 +18118,47 @@ paths:
       summary: Update RGW account info
       tags:
       - RgwUserAccounts
+  /api/rgw/accounts/exists:
+    get:
+      description: "\n        Check if an account with the given name exists\n   \
+        \     Returns True if account exists, False otherwise\n        "
+      parameters:
+      - description: Account name
+        in: query
+        name: account_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Name of the daemon
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Check if account name exists
+      tags:
+      - RgwUserAccounts
   /api/rgw/accounts/{account_id}:
     delete:
       description: "\n        Removes an account\n\n        :param account_id: account\
