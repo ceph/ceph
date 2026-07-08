@@ -6769,3 +6769,91 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         except:
             pass
         raise
+
+def test_stale_bucket_owner_after_concurrent_chown():
+    """ Integration test for https://tracker.ceph.com/issues/77731 """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('test_stale_bucket_owner_after_concurrent_chown requires at least 2 read-write zones')
+
+    master = zonegroup_conns.master_zone
+    secondary = next(z for z in zonegroup_conns.rw_zones if z != master)
+
+    uid_a = run_prefix + '-chown-a'
+    uid_b1 = run_prefix + '-chown-b1'
+    uid_b2 = run_prefix + '-chown-b2'
+    ak_a, sk_a = uid_a + 'AK', uid_a + 'SK'
+    ak_b1, sk_b1 = uid_b1 + 'AK', uid_b1 + 'SK'
+    ak_b2, sk_b2 = uid_b2 + 'AK', uid_b2 + 'SK'
+
+    for uid, ak, sk in ((uid_a, ak_a, sk_a), (uid_b1, ak_b1, sk_b1), (uid_b2, ak_b2, sk_b2)):
+        master.zone.cluster.admin(['user', 'create',
+                                   '--uid', uid, '--display-name', uid,
+                                   '--access-key', ak, '--secret-key', sk])
+
+    zonegroup_meta_checkpoint(zonegroup)
+    bucket_name = gen_bucket_name()
+
+    try:
+        region = zonegroup.name
+        owner_a_conn = get_gateway_connection(master.zone.gateways[0], Credentials(ak_a, sk_a), region)
+        owner_a_conn.create_bucket(Bucket=bucket_name)
+        owner_a_conn.head_bucket(Bucket=bucket_name)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        instance_list_json, _ = master.zone.cluster.admin(
+            ['metadata', 'list', 'bucket.instance'] + master.zone.zone_args(),
+            read_only=True)
+        instance_key = next(k for k in json.loads(instance_list_json)
+                            if k.startswith(bucket_name + ':'))
+
+        errors = []
+
+        def link_b2():
+            try:
+                master.zone.cluster.admin(['bucket', 'link',
+                                           '--bucket', bucket_name, '--uid', uid_b2,
+                                           '--rgw-inject-delay-sec=1',
+                                           '--rgw-inject-delay-pattern=delay_distribute_cache'])
+            except Exception as e:
+                errors.append(e)
+
+        def link_b1():
+            try:
+                time.sleep(0.2)
+                master.zone.cluster.admin(['bucket', 'link',
+                                           '--bucket', bucket_name, '--uid', uid_b1])
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=link_b1)
+        t2 = threading.Thread(target=link_b2)
+        t2.start()
+        t1.start()
+        t1.join()
+        t2.join()
+
+        assert not errors, 'bucket link failed: %s' % errors
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        def get_owner(zone_conn, key):
+            meta_json, _ = zone_conn.zone.cluster.admin(
+                ['metadata', 'get', 'bucket.instance:' + key] + zone_conn.zone.zone_args(),
+                read_only=True)
+            return json.loads(meta_json)['data']['bucket_info']['owner']
+
+        master_owner = get_owner(master, instance_key)
+        second_owner = get_owner(secondary, instance_key)
+
+        log.info('master owner=%s secondary owner=%s', master_owner, second_owner)
+        assert master_owner == uid_b1, \
+            'master has stale owner %r, expected %r' % (master_owner, uid_b1)
+        assert second_owner == uid_b1, \
+            'secondary has stale owner %r, expected %r' % (second_owner, uid_b1)
+    finally:
+        for uid in (uid_a, uid_b1, uid_b2):
+            master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
+                                      check_retcode=False)
