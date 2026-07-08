@@ -158,6 +158,22 @@ static force_allocated_extents_t detect_zero_blocks(
   return zero_blocks;
 }
 
+static bool should_track_zero_blocks(
+  const pg_pool_t& pool_info,
+  PrimaryLogPG::OpContext *ctx)
+{
+  if (pool_info.tracks_zero_blocks()) {
+    return true;
+  }
+  if (pool_info.is_erasure() && ctx->op && ctx->op->get_req()) {
+    const auto *m = ctx->op->get_req<MOSDOp>();
+    if (m && m->has_flag(CEPH_OSD_FLAG_PRESERVE_ALLOCATION)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -7049,9 +7065,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
-	if (pool.info.is_erasure() &&
-	    pool.info.allows_ecoptimizations() &&
-	    pool.info.tracks_zero_blocks()) {
+	if (should_track_zero_blocks(pool.info, ctx)) {
 	  if (op.extent.length > 0) {
 	    oi.force_allocated_extents.remove(op.extent.offset,
 	                                      op.extent.length);
@@ -7100,6 +7114,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           std::max((uint64_t)op.extent.length, oi.size));
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
+	if (should_track_zero_blocks(pool.info, ctx)) {
+	  // WRITEFULL replaces the entire object: reset FAE and re-detect.
+	  oi.force_allocated_extents.clear();
+	  oi.force_allocated_extents.union_of(
+	    detect_zero_blocks(osd_op.indata, 0));
+	}
       }
       break;
 
@@ -7137,6 +7157,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
 	  ctx->delta_stats.num_wr++;
 	  oi.clear_data_digest();
+	  if (pool.info.is_erasure() &&
+	      pool.info.allows_ecoptimizations() &&
+	      pool.info.tracks_zero_blocks()) {
+	    // ZERO punches a hole: remove FAE entries for the zeroed region.
+	    oi.force_allocated_extents.remove(op.extent.offset,
+	                                      op.extent.length);
+	  }
 	} else {
 	  // no-op
 	}
@@ -7226,6 +7253,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
 
 	oi.clear_data_digest();
+	if (should_track_zero_blocks(pool.info, ctx)) {
+	  // TRUNCATE removes all data at or beyond the new size:
+	  // drop any FAE entries that fall beyond the truncate point.
+	  oi.force_allocated_extents.truncate(op.extent.offset);
+	}
       }
       break;
 
