@@ -975,6 +975,259 @@ TEST_P(SparseReadTest, ZeroOpMisalignedDataCorrectness) {
 }
 
 
+// --- 8.4 WRITEFULL ---
+
+// WRITEFULL with non-zero data must clear any existing FAE entries.
+TEST_P(SparseReadTest, WritefullClearsFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "writefull_clears_fae";
+
+  // Write zeros so FAE is populated.
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  // WRITEFULL with non-zero data must clear FAE completely.
+  bufferlist data_bl = create_pattern_buffer(4096, 'A');
+  ASSERT_EQ(0, ioctx.write_full(oid, data_bl));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// WRITEFULL with zero data must set FAE to cover the written range.
+TEST_P(SparseReadTest, WritefullZeroDataSetsFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "writefull_zero_sets_fae";
+
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write_full(oid, zero_bl));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, 8192);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+// WRITEFULL replaces a larger object: previous FAE beyond new size is gone.
+TEST_P(SparseReadTest, WritefullSmallerObjectClearsPriorFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "writefull_smaller_clears_fae";
+
+  // Write zeros at offset 8192 to set FAE there.
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 8192));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  // WRITEFULL with 4096 bytes of non-zero data — new object is only 4 KiB.
+  bufferlist data_bl = create_pattern_buffer(4096, 'B');
+  ASSERT_EQ(0, ioctx.write_full(oid, data_bl));
+
+  // All prior FAE entries must have been cleared.
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// --- 8.5 WRITESAME ---
+
+// WRITESAME with an all-zero pattern must track the written range as FAE.
+TEST_P(SparseReadTest, WritesameZeroPatternTracksFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "writesame_zero_fae";
+
+  // Write 16 KiB of zeros via WRITESAME (pattern = one 4 KiB zero block).
+  bufferlist zero_pattern = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.writesame(oid, zero_pattern, 16384, 0));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+
+  interval_set<uint64_t> expected;
+  expected.insert(0, 16384);
+  ASSERT_EQ(expected, fae->intervals);
+}
+
+// WRITESAME with a non-zero pattern must not set FAE.
+TEST_P(SparseReadTest, WritesameNonZeroPatternNoFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "writesame_nonzero_no_fae";
+
+  bufferlist pattern = create_pattern_buffer(4096, 'C');
+  ASSERT_EQ(0, ioctx.writesame(oid, pattern, 16384, 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// --- 8.6 TRUNCATE / TRIMTRUNC ---
+
+// TRUNCATE must remove FAE entries that lie entirely beyond the new size.
+TEST_P(SparseReadTest, TruncateRemovesFAEBeyondNewSize) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "truncate_removes_fae";
+
+  // Write zeros at block 0 (offset 0) and block 2 (offset 8192).
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 8192));
+
+  {
+    auto fae = get_force_allocated_extents(oid);
+    ASSERT_TRUE(fae.has_value());
+    // Both blocks should be tracked.
+    ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+    ASSERT_TRUE(fae->intervals.contains(8192, FAE_BLOCK_SIZE));
+  }
+
+  // Truncate to 4096: block at offset 8192 must be removed from FAE.
+  ASSERT_EQ(0, ioctx.trunc(oid, 4096));
+
+  {
+    auto fae = get_force_allocated_extents(oid);
+    // Block 0 is still within the object — it should remain.
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+    // Block at 8192 is now beyond the object size — it must be gone.
+    ASSERT_FALSE(fae->intervals.intersects(8192, FAE_BLOCK_SIZE));
+  }
+}
+
+// TRUNCATE to zero size clears all FAE entries.
+TEST_P(SparseReadTest, TruncateToZeroClearsFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "truncate_zero_clears_fae";
+
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  ASSERT_EQ(0, ioctx.trunc(oid, 0));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// TRUNCATE to a larger size (extend) must not change existing FAE entries.
+TEST_P(SparseReadTest, TruncateExtendPreservesFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "truncate_extend_preserves_fae";
+
+  bufferlist zero_bl = create_zero_buffer(4096);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+
+  auto fae_before = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_before.has_value());
+
+  // Truncate to a larger size (extend the object).
+  ASSERT_EQ(0, ioctx.trunc(oid, 8192));
+
+  auto fae_after = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae_after.has_value());
+  // The existing tracked block must still be there.
+  ASSERT_EQ(fae_before->intervals, fae_after->intervals);
+}
+
+// --- 8.7 ZERO ---
+
+// ZERO on an aligned region must remove existing FAE entries for that region.
+TEST_P(SparseReadTest, ZeroOpRemovesFAEForZeroedRegion) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "zero_op_removes_fae";
+
+  // Write zeros to create FAE entries at blocks 0 and 1.
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+
+  {
+    auto fae = get_force_allocated_extents(oid);
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_TRUE(fae->intervals.contains(0, 8192));
+  }
+
+  // ZERO the first 4 KiB — FAE entry for that block must be removed.
+  ObjectWriteOperation op;
+  op.zero(0, 4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  {
+    auto fae = get_force_allocated_extents(oid);
+    // The second block (offset 4096) must still be tracked.
+    ASSERT_TRUE(fae.has_value());
+    ASSERT_FALSE(fae->intervals.intersects(0, FAE_BLOCK_SIZE));
+    ASSERT_TRUE(fae->intervals.contains(4096, FAE_BLOCK_SIZE));
+  }
+}
+
+// ZERO that covers the entire object clears all FAE entries.
+TEST_P(SparseReadTest, ZeroOpClearsAllFAE) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "zero_op_clears_all_fae";
+
+  bufferlist zero_bl = create_zero_buffer(8192);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+  ASSERT_TRUE(get_force_allocated_extents(oid).has_value());
+
+  ObjectWriteOperation op;
+  op.zero(0, 8192);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  ASSERT_FALSE(get_force_allocated_extents(oid).has_value());
+}
+
+// ZERO does not affect FAE entries outside the zeroed range.
+TEST_P(SparseReadTest, ZeroOpPreservesFAEOutsideRange) {
+  if (GetParam() != PoolType::FAST_EC) {
+    GTEST_SKIP() << "FAE tracking only on FastEC";
+  }
+
+  std::string oid = "zero_op_preserves_outside_fae";
+
+  // Write zeros to create FAE entries at blocks 0, 1, 2.
+  bufferlist zero_bl = create_zero_buffer(12288);
+  ASSERT_EQ(0, ioctx.write(oid, zero_bl, zero_bl.length(), 0));
+
+  // ZERO only block 1 (offset 4096..8192).
+  ObjectWriteOperation op;
+  op.zero(4096, 4096);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  auto fae = get_force_allocated_extents(oid);
+  ASSERT_TRUE(fae.has_value());
+  // Blocks 0 and 2 must still be tracked.
+  ASSERT_TRUE(fae->intervals.contains(0, FAE_BLOCK_SIZE));
+  ASSERT_TRUE(fae->intervals.contains(8192, FAE_BLOCK_SIZE));
+  // Block 1 must be gone.
+  ASSERT_FALSE(fae->intervals.intersects(4096, FAE_BLOCK_SIZE));
+}
+
 // Instantiate tests for both Replicated and FastEC pools
 INSTANTIATE_TEST_SUITE_P(
   SparseReadTests,
