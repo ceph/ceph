@@ -785,8 +785,9 @@ TransactionManager::rewrite_logical_extent(
     // the LBA update likely involves insertions/splits (structural
     // btree changes), which the no-conflict publish-to-prior path
     // does not currently cover safely. Fall back to optimistic
-    // conflict handling.
-    t.force_rewrite_conflict = (extents.size() > 1);
+    // conflict handling. a batch transaction rewrites many extents,
+    // and any structural rewrite taints them all.
+    t.force_rewrite_conflict |= (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
       bool first_extent = (off == 0);
