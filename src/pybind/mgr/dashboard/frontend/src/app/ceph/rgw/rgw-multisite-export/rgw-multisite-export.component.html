@@ -1,5 +1,5 @@
 <cds-modal
-  size="sm"
+  size="md"
   [open]="open"
   [hasScrollingContent]="true"
   (overlaySelected)="closeModal()"
@@ -11,13 +11,13 @@
       Export multi-site realm token
   </cds-modal-header>
 
-  <ng-container *cdFormLoading="loading">
+  <div cdsModalContent>
     <form
       name="exportTokenForm"
       [formGroup]="exportTokenForm"
       novalidate
     >
-      <div cdsModalContent>
+      <ng-container *cdFormLoading="loading">
         <div class="form-item">
           @if (!tokenValid) {
           <cd-alert-panel
@@ -77,13 +77,13 @@
           </div>
         </div>
         }
-      </div>
-      <cd-form-button-panel
-        [modalForm]="true"
-        [showSubmit]="false"
-        (backActionEvent)="closeModal()"
-      >
-      </cd-form-button-panel>
+      </ng-container>
     </form>
-  </ng-container>
+  </div>
+  <cd-form-button-panel
+    [modalForm]="true"
+    [showSubmit]="false"
+    (backActionEvent)="closeModal()"
+  >
+  </cd-form-button-panel>
 </cds-modal>
