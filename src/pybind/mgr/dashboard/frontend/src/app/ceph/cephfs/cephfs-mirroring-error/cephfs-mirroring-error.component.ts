@@ -13,13 +13,13 @@ export class CephfsMirroringErrorComponent {
 
   enableModule(): void {
     this.mgrModuleService.updateModuleState(
-      'mirroring',
+      ['mirroring', 'snap_schedule'],
       false,
       null,
       'cephfs/mirroring',
-      $localize`CephFS Mirroring module enabled`,
+      $localize`CephFS Mirroring and Snapshot Schedule modules enabled`,
       false,
-      $localize`Enabling CephFS Mirroring. Reconnecting, please wait ...`
+      $localize`Enabling CephFS Mirroring and Snapshot schedule modules. Reconnecting, please wait ...`
     );
   }
 }
