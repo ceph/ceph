@@ -11899,6 +11899,12 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
     return 0;
   }
 
+  if (bucket_info.uses_ordered_index()) {
+    ldpp_dout(dpp, 0) <<
+      "INFO: currently buckets with ordered indexes cannot be resharded dynamically" << dendl;
+    return 0;
+  }
+
   // TODO: consider per-bucket sync policy here?
 
   bool need_resharding = false;
