@@ -289,6 +289,7 @@ BuildRequires:	gperftools-devel >= 2.4
 %endif
 BuildRequires:	libaio-devel
 BuildRequires:	pkgconfig(blkid) >= 2.17
+BuildRequires:	pkgconfig(CLI11)
 BuildRequires:	pkgconfig(libcryptsetup)
 BuildRequires:	pkgconfig(libnbd)
 BuildRequires:	pkgconfig(libcurl)
