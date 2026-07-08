@@ -233,7 +233,7 @@ enum {
   l_bluestore_fiemap_lat,
   l_bluestore_omap_get_lat,
   l_bluestore_clone_lat,
-  l_bluestore_attr_lat,      // shared: setattr/setattrs/rmattr/rmattrs
+  l_bluestore_change_attr_lat,      // shared: setattr/setattrs/rmattr/rmattrs
   l_bluestore_touch_lat,
   l_bluestore_zero_lat,
   l_bluestore_omap_set_lat,   // shared: omap setkeys/setheader/rmkeys/rmkey_range

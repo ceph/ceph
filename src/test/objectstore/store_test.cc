@@ -1864,7 +1864,7 @@ TEST_P(StoreTest, InterfacePerfCounters) {
       t.clone(cid, oid, coid);
       t.clone_range(cid, oid, coid, 0, 4096, 0); }); });
 
-  check("attr_lat (setattr+setattrs+rmattr+rmattrs)", l_bluestore_attr_lat, 4, [&]{
+  check("chgattr_lat (setattr+setattrs+rmattr+rmattrs)", l_bluestore_change_attr_lat, 4, [&]{
     bufferlist v; v.append("x");
     std::map<std::string, bufferptr, std::less<>> aset{{"b", bufferptr("y", 1)}};
     submit([&](auto& t){
