@@ -168,9 +168,9 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   };
 
   for (auto& hist : stats.op_lat) {
-    hist.buckets.resize(lat_hist_bounds_us.size());
-    for (std::size_t i = 0; i < lat_hist_bounds_us.size(); ++i) {
-      hist.buckets[i].upper_bound = lat_hist_bounds_us[i];
+    hist.buckets.resize(lat_hist_bounds_ms.size());
+    for (std::size_t i = 0; i < lat_hist_bounds_ms.size(); ++i) {
+      hist.buckets[i].upper_bound = lat_hist_bounds_ms[i];
       hist.buckets[i].count = 0;
     }
   }
@@ -239,9 +239,9 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     for (auto& [stage, label] : labels_by_stage) {
       auto idx = static_cast<std::size_t>(stage);
       auto& hist = (*arr_ptr)[idx];
-      hist.buckets.resize(STAGE_LAT_BUCKETS_US.size());
-      for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_US.size(); ++i) {
-        hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_US[i];
+      hist.buckets.resize(STAGE_LAT_BUCKETS_MS.size());
+      for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_MS.size(); ++i) {
+        hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_MS[i];
         hist.buckets[i].count = 0;
       }
       metrics.add_group(
@@ -252,7 +252,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
             [arr_ptr, idx]() -> seastar::metrics::histogram& {
               return (*arr_ptr)[idx];
             },
-            sm::description("per-stage latency (microseconds) of do_transaction"),
+            sm::description("per-stage latency (milliseconds) of do_transaction"),
             {label,
              sm::label_instance("tail", tail),
              sm::label_instance("shard_store_index", std::to_string(store_index))}
@@ -1835,8 +1835,8 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   {
     auto& pd = ctx.transaction->get_phase_durations();
     auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
-    auto total_us = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(total).count());
+    auto total_ms = std::chrono::duration_cast<
+      std::chrono::duration<double, std::milli>>(total).count();
 
     const std::array<
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
@@ -1857,10 +1857,10 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
     for (auto& [stage, dur] : stage_samples) {
       add_stage_latency_sample(stats.stage_lat, stage, dur);
-      if (total_us > TAIL_SLOW_US) {
+      if (total_ms > TAIL_SLOW_MS) {
         add_stage_latency_sample(stats.stage_lat_slow, stage, dur);
       }
-      if (total_us > TAIL_VERY_SLOW_US) {
+      if (total_ms > TAIL_VERY_SLOW_MS) {
         add_stage_latency_sample(stats.stage_lat_very_slow, stage, dur);
       }
     }

@@ -440,34 +440,34 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
-    // Histogram bucket upper bounds in microseconds (1ms–100ms).
+    // Histogram bucket upper bounds in milliseconds (1ms–100ms).
     // Ops above 100ms land in the last bucket as overflow. The smallest
     // bucket is 1ms: sub-ms latencies are below lowres_clock resolution
     // (~task_quota) and cannot be resolved, so no finer buckets are kept.
-    static constexpr std::array<double, 12> lat_hist_bounds_us = {
-      1000,
-      1500, 2000, 3000,
-      5000,
-      7500, 10000,
-      15000, 20000,
-      30000, 50000,
-      100000
+    static constexpr std::array<double, 12> lat_hist_bounds_ms = {
+      1,
+      1.5, 2, 3,
+      5,
+      7.5, 10,
+      15, 20,
+      30, 50,
+      100
     };
 
     // Buckets for the per-transaction conflict/replay distribution.
     static constexpr std::size_t REPLAY_BUCKETS = 16;
 
     static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
-    // Upper bounds (microseconds) for the per-stage do_transaction latency
+    // Upper bounds (milliseconds) for the per-stage do_transaction latency
     // histograms. Smallest bucket is 1ms; sub-ms is below lowres_clock
     // resolution (~task_quota) and cannot be resolved.
-    static constexpr std::array<uint64_t, 12> STAGE_LAT_BUCKETS_US = {
-      1000, 1500, 2000, 3000, 5000, 7500,
-      10000, 15000, 20000, 30000, 50000, 100000
+    static constexpr std::array<double, 12> STAGE_LAT_BUCKETS_MS = {
+      1, 1.5, 2, 3, 5, 7.5,
+      10, 15, 20, 30, 50, 100
     };
 
-    static constexpr uint64_t TAIL_SLOW_US = 5000;        // 5 ms
-    static constexpr uint64_t TAIL_VERY_SLOW_US = 10000;  // 10 ms
+    static constexpr double TAIL_SLOW_MS = 5;        // 5 ms
+    static constexpr double TAIL_VERY_SLOW_MS = 10;  // 10 ms
 
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
@@ -505,12 +505,13 @@ public:
     void add_latency_sample(op_type_t op_type,
         seastar::lowres_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
-      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
       lat.sample_count++;
-      lat.sample_sum += us;
+      lat.sample_sum += ms;
       bool found = false;
       for (auto& b : lat.buckets) {
-        if (static_cast<double>(us) <= b.upper_bound) {
+        if (ms <= b.upper_bound) {
           ++b.count;
           found = true;
           break;
@@ -536,7 +537,7 @@ public:
       hist.sample_sum += num_replays;
     }
 
-    // Record the latency of one do_transaction stage (microseconds). Buckets are
+    // Record the latency of one do_transaction stage (milliseconds). Buckets are
     // non-cumulative (bucket = first upper_bound >= value); values above the top
     // bound aren't bucketed but still land in sample_count/sample_sum.
     void add_stage_latency_sample(
@@ -548,15 +549,16 @@ public:
         // register_metrics() did not run (store inactive); nothing to record.
         return;
       }
-      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
       for (auto& b : hist.buckets) {
-        if (static_cast<double>(us) <= b.upper_bound) {
+        if (ms <= b.upper_bound) {
           ++b.count;
           break;
         }
       }
       ++hist.sample_count;
-      hist.sample_sum += us;
+      hist.sample_sum += ms;
     }
 
     /*
