@@ -20,6 +20,8 @@
         <cds-text-label
           labelInputID="username"
           cdRequiredField="Username"
+          helperText="Username can only contain letters, numbers, '.', '_', '@', '+' or '-'."
+          i18n-helperText
           [invalid]="!userForm.controls.username.valid && userForm.controls.username.dirty"
           [invalidText]="usernameError"
           i18n
@@ -43,6 +45,12 @@
           </span>
           <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
             <ng-container i18n> The username already exists. </ng-container>
+          </span>
+          <span
+            *ngIf="userForm.showError('username', formDir, 'pattern')"
+            i18n
+          >
+            Username can only contain letters, numbers, '.', '_', '&#64;', '+' or '-'.
           </span>
         </ng-template>
       </div>
