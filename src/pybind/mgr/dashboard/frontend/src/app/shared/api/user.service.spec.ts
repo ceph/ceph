@@ -46,6 +46,12 @@ describe('UserService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
+  it('should URL-encode username on delete', () => {
+    service.delete('??').subscribe();
+    const req = httpTesting.expectOne('api/user/%3F%3F');
+    expect(req.request.method).toBe('DELETE');
+  });
+
   it('should call update', () => {
     const user = new UserFormModel();
     user.username = 'user0';
@@ -62,6 +68,12 @@ describe('UserService', () => {
   it('should call get', () => {
     service.get('user0').subscribe();
     const req = httpTesting.expectOne('api/user/user0');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should URL-encode username on get', () => {
+    service.get('??').subscribe();
+    const req = httpTesting.expectOne('api/user/%3F%3F');
     expect(req.request.method).toBe('GET');
   });
 
