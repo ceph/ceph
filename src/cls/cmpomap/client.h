@@ -41,10 +41,10 @@ static constexpr uint32_t max_keys = 1000;
 ///
 /// NOTE: This function cannot be used to set different values when Op::EQ
 /// is used. To accomplish this, one may utilize the transactional operation
-/// with librados::ObjectWriteOperation in combination of cmp_vals(). For example,
+/// with librados::ObjectWriteOperation in combination with cmp_vals(). For example,
 ///
 ///   librados::ObjectWriteOperation op;
-///   // cmp_vals() fails the operation with ECANCELED if any comparison fails
+///   // cmp_vals() fails the operation with -ECANCELED if any comparison fails
 ///   cls::cmpomap::cmp_vals(op, mode, comparison, cmp_values, std::nullopt);
 ///   // write new values on success
 ///   op.omap_set(set_values);
