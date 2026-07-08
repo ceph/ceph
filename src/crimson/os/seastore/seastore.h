@@ -261,11 +261,11 @@ public:
       TransactionRef transaction;
 
       ceph::os::Transaction::iterator iter;
-      std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
+      seastar::lowres_clock::time_point begin_timestamp = seastar::lowres_clock::now();
 
-      std::chrono::steady_clock::duration build_time{0};
-      std::chrono::steady_clock::duration get_onode_time{0};
-      std::chrono::steady_clock::duration submit_time{0};
+      seastar::lowres_clock::duration build_time{0};
+      seastar::lowres_clock::duration get_onode_time{0};
+      seastar::lowres_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
         tm.reset_transaction_preserve_handle(*transaction);
@@ -287,7 +287,7 @@ public:
       op_type_t op_type,
       cache_hint_t cache_hint_flags,
       F &&f) const {
-      auto begin_time = std::chrono::steady_clock::now();
+      auto begin_time = seastar::lowres_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
         [this, ch, src, op_type, begin_time, tname, cache_hint_flags
@@ -317,7 +317,7 @@ public:
           });
         }).safe_then([&ret, op_type, begin_time, this] {
           const_cast<Shard*>(this)->add_latency_sample(op_type,
-                     std::chrono::steady_clock::now() - begin_time);
+                     seastar::lowres_clock::now() - begin_time);
           return seastar::make_ready_future<Ret>(ret);
         });
       });
@@ -499,7 +499,7 @@ public:
     }
 
     void add_latency_sample(op_type_t op_type,
-        std::chrono::steady_clock::duration dur) {
+        seastar::lowres_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
       auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
       lat.sample_count++;
@@ -538,7 +538,7 @@ public:
     void add_stage_latency_sample(
         std::array<seastar::metrics::histogram, STAGE_MAX>& arr,
         txn_stage_t stage,
-        std::chrono::steady_clock::duration dur) {
+        seastar::lowres_clock::duration dur) {
       auto& hist = arr[static_cast<std::size_t>(stage)];
       if (hist.buckets.empty()) {
         // register_metrics() did not run (store inactive); nothing to record.

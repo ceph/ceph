@@ -11,6 +11,7 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
@@ -1751,11 +1752,11 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   --(shard_stats.starting_io_num);
   ++(shard_stats.waiting_collock_io_num);
 
-  auto t_pre_collock = std::chrono::steady_clock::now();
+  auto t_pre_collock = seastar::lowres_clock::now();
   co_await ctx.transaction->get_handle().take_collection_lock(
     static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
   );
-  auto t_post_collock = std::chrono::steady_clock::now();
+  auto t_post_collock = seastar::lowres_clock::now();
   auto collock_wait = t_post_collock - t_pre_collock;
   ctx.transaction->get_handle().set_lock_acquire_time(t_post_collock);
 
@@ -1763,9 +1764,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   --(shard_stats.waiting_collock_io_num);
   ++(shard_stats.waiting_throttler_io_num);
 
-  auto t_pre_throttler = std::chrono::steady_clock::now();
+  auto t_pre_throttler = seastar::lowres_clock::now();
   co_await throttler.get(1);
-  auto throttler_wait = std::chrono::steady_clock::now() - t_pre_throttler;
+  auto throttler_wait = seastar::lowres_clock::now() - t_pre_throttler;
 
   assert(shard_stats.waiting_throttler_io_num);
   --(shard_stats.waiting_throttler_io_num);
@@ -1804,7 +1805,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       const size_t total_ops = ctx.ext_transaction.get_num_ops();
       size_t current_op = 0;
 
-      auto build_start = std::chrono::steady_clock::now();
+      auto build_start = seastar::lowres_clock::now();
       while (ctx.iter.have_op()) {
         current_op++;
 
@@ -1813,13 +1814,13 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 	co_await _do_transaction_step(
 	  ctx, ctx.ch, onodes, ctx.iter);
       }
-      ctx.build_time += std::chrono::steady_clock::now() - build_start;
+      ctx.build_time += seastar::lowres_clock::now() - build_start;
 
       DEBUGT("completed all {} ops for cid={}",
              t, total_ops, ctx.ch->get_cid());
-      auto submit_start = std::chrono::steady_clock::now();
+      auto submit_start = seastar::lowres_clock::now();
       co_await transaction_manager->submit_transaction(*ctx.transaction);
-      ctx.submit_time += std::chrono::steady_clock::now() - submit_start;
+      ctx.submit_time += seastar::lowres_clock::now() - submit_start;
     })
   ).handle_error(
     crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
@@ -1833,12 +1834,12 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
-    auto total = std::chrono::steady_clock::now() - ctx.begin_timestamp;
+    auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
     auto total_us = static_cast<uint64_t>(
       std::chrono::duration_cast<std::chrono::microseconds>(total).count());
 
     const std::array<
-      std::pair<txn_stage_t, std::chrono::steady_clock::duration>, STAGE_MAX>
+      std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
         {txn_stage_t::COLLOCK_WAIT,          collock_wait},
         {txn_stage_t::COLLOCK_HOLD,          ctx.transaction->get_handle().get_lock_hold_time()},
@@ -1867,7 +1868,8 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   }
   add_latency_sample(
     op_type_t::DO_TRANSACTION,
-    std::chrono::steady_clock::now() - ctx.begin_timestamp);
+    seastar::lowres_clock::now() - ctx.begin_timestamp);
+
   add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
 
   throttler.put();
@@ -1969,7 +1971,7 @@ SeaStore::Shard::_do_transaction_step(
   }
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
-    auto t0 = std::chrono::steady_clock::now();
+    auto t0 = seastar::lowres_clock::now();
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
@@ -1980,7 +1982,7 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
-      ctx.get_onode_time += std::chrono::steady_clock::now() - t0;
+      ctx.get_onode_time += seastar::lowres_clock::now() - t0;
       return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
     });
   }
