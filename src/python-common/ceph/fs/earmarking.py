@@ -32,6 +32,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
 )
 
 if sys.version_info >= (3, 11):  # pragma: no cover
@@ -73,11 +74,17 @@ class EarmarkContents(Protocol):
 
     def __str__(self) -> str: ...
 
+    def upgrades(self, other: 'EarmarkContents') -> bool: ...
+
     @classmethod
     def parse(cls, value: str) -> Self: ...
 
 
-class EarmarkException(Exception):
+class EarmarkError(Exception):
+    pass
+
+
+class EarmarkException(EarmarkError):
     def __init__(self, error_code: int, error_message: str) -> None:
         self.errno = error_code
         self.error_str = error_message
@@ -89,8 +96,17 @@ class EarmarkException(Exception):
         return f"{self.errno} ({self.error_str})"
 
 
-class EarmarkParseError(ValueError):
+class EarmarkParseError(ValueError, EarmarkError):
     pass
+
+
+class EarmarkConflictError(EarmarkError):
+    def __init__(
+        self, msg: str, current: Any = None, wanted: Any = None
+    ) -> None:
+        super().__init__(msg)
+        self.current_earmark = current
+        self.wanted_earmark = wanted
 
 
 class NFSEarmark(NamedTuple):
@@ -134,6 +150,16 @@ class NFSEarmark(NamedTuple):
         return (
             self.top is _other.top and self.subsections == _other.subsections
         )
+
+    def upgrades(self, current: EarmarkContents) -> bool:
+        if self.top != current.top:
+            raise EarmarkConflictError(
+                f'earmark has already been set by {current.top.value}',
+                current,
+                self,
+            )
+        # No need to upgrade nfs at this time
+        return False
 
 
 class SMBEarmark(NamedTuple):
@@ -189,6 +215,24 @@ class SMBEarmark(NamedTuple):
         else:
             return NotImplemented
         return self.top is _other.top and self.cluster_id == _other.cluster_id
+
+    def upgrades(self, current: EarmarkContents) -> bool:
+        if self.top != current.top:
+            raise EarmarkConflictError(
+                f'earmark has already been set by {current.top.value}',
+                current,
+                self,
+            )
+        ce = cast(SMBEarmark, current)
+        if not ce.cluster_id:
+            return True
+        if ce.cluster_id == self.cluster_id:
+            return False
+        raise EarmarkConflictError(
+            f'earmark has already been set by smb cluster {ce.cluster_id}',
+            current,
+            self,
+        )
 
 
 _earmark_types: Dict[EarmarkTopScope, Type[EarmarkContents]] = {
@@ -276,7 +320,13 @@ class CephFSVolumeEarmarking:
         except Exception as e:
             return self._handle_cephfs_error(e, "getting")
 
-    def set_earmark(self, earmark: str) -> None:
+    def get_parsed_earmark(self) -> Optional[EarmarkContents]:
+        earmark_value = self.get_earmark()
+        if earmark_value is None:
+            return None
+        return parse_earmark(earmark_value)
+
+    def set_earmark(self, earmark: Union[str, EarmarkContents]) -> None:
         # Validate the earmark before attempting to set it
         if not self._validate_earmark(earmark):
             raise EarmarkException(
@@ -291,7 +341,7 @@ class CephFSVolumeEarmarking:
             self.fs.setxattr(
                 self.path,
                 XATTR_SUBVOLUME_EARMARK_NAME,
-                earmark.encode('utf-8'),
+                str(earmark).encode('utf-8'),
                 0,
             )
             log.info(f"Earmark '{earmark}' set on {self.path}.")
@@ -300,3 +350,32 @@ class CephFSVolumeEarmarking:
 
     def clear_earmark(self) -> None:
         self.set_earmark("")
+
+    def test_and_set(
+        self, earmark: EarmarkContents
+    ) -> Tuple[bool, Optional[EarmarkContents]]:
+        current = self.get_parsed_earmark()
+        if not _upgrade_earmark(current, earmark):
+            return False, current
+        self.set_earmark(earmark)
+        return True, earmark
+
+
+def _upgrade_earmark(
+    current: Optional[EarmarkContents],
+    wanted: EarmarkContents,
+) -> bool:
+    """Given two earmarks, current and wanted, return True if the wanted
+    earmark is an "upgrade" from the current earmark.
+    If the current earmark is None/falsey then the earmark may be upgraded.
+    If the earmarks are equal they do not need to be upgraded (returns false).
+    Otherwise, the `upgrades` method of the wanted earmark will be passed
+    the current earmark.
+    This function will raise a EarmarkConflictError if the earmarks are
+    totally incompatible.
+    """
+    if not current:
+        return True
+    if current == wanted:
+        return False
+    return wanted.upgrades(current)
