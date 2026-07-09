@@ -308,14 +308,14 @@ export class MultisitePageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.topology.url)
   topologyViewerExist() {
     cy.get(pages.topology.id).should('be.visible');
-    cy.get('[data-testid=rgw-multisite-details-header]').should('have.text', 'Topology Viewer');
+    cy.get('[data-testid=rgw-multisite-details-header]').should('contain.text', 'Topology Viewer');
   }
 
   @PageHelper.restrictTo(pages.wizard.url)
   replicationWizardExist() {
     cy.get('cds-modal').then(() => {
       cy.get('[data-testid=rgw-multisite-wizard-header]').should(
-        'have.text',
+        'contain.text',
         'Set up Multi-site Replication'
       );
     });

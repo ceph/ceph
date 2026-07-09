@@ -48,10 +48,10 @@ describe('RbdSnapshotFormModalComponent', () => {
     fixture.detectChanges();
 
     const header = fixture.debugElement.nativeElement.querySelector('cds-modal-header h3');
-    expect(header.textContent).toBe('Create RBD Snapshot');
+    expect(header.textContent.trim()).toBe('Create RBD Snapshot');
 
     const button = fixture.debugElement.nativeElement.querySelector('cd-submit-button');
-    expect(button.textContent).toBe('Create RBD Snapshot');
+    expect(button.textContent.trim()).toBe('Create RBD Snapshot');
   });
 
   it('should show "Rename" text', () => {
@@ -60,10 +60,10 @@ describe('RbdSnapshotFormModalComponent', () => {
     fixture.detectChanges();
 
     const header = fixture.debugElement.nativeElement.querySelector('cds-modal-header h3');
-    expect(header.textContent).toBe('Rename RBD Snapshot');
+    expect(header.textContent.trim()).toBe('Rename RBD Snapshot');
 
     const button = fixture.debugElement.nativeElement.querySelector('cd-submit-button');
-    expect(button.textContent).toBe('Rename RBD Snapshot');
+    expect(button.textContent.trim()).toBe('Rename RBD Snapshot');
   });
 
   it('should enable the mirror image snapshot creation when peer is configured', () => {

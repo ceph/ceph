@@ -28,7 +28,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 })
 export class BootstrapCreateModalComponent
   extends BaseModal
-  implements OnDestroy, OnInit, AfterViewInit {
+  implements OnDestroy, OnInit, AfterViewInit
+{
   pools: any[] = [];
   token: string;
 

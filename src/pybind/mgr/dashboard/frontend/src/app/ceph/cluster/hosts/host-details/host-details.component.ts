@@ -19,7 +19,10 @@ export class HostDetailsComponent implements OnInit, OnDestroy {
   hostname = '';
   sidebarItems: SidebarItem[] = [];
 
-  constructor(private route: ActivatedRoute, private authStorageService: AuthStorageService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private authStorageService: AuthStorageService
+  ) {}
 
   ngOnInit(): void {
     const permissions = this.authStorageService.getPermissions();
