@@ -1102,7 +1102,11 @@ def deploy_daemon(
     daemon_type = ident.daemon_type
     # only check port in use if fresh deployment since service
     # we are redeploying/reconfiguring will already be using the port
-    if deployment_type == DeploymentType.DEFAULT:
+    if (
+        deployment_type == DeploymentType.DEFAULT
+        and 'skip_port_check' in ctx
+        and not ctx.skip_port_check
+    ):
         if any([port_in_use(ctx, e) for e in endpoints]):
             if daemon_type == 'mgr':
                 # non-fatal for mgr when we are in mgr_standby_modules=false, but we can't
@@ -3235,6 +3239,7 @@ def apply_deploy_config_to_ctx(
     """
     ctx.name = config_data['name']
     image = config_data.get('image', '')
+    ctx.skip_port_check = config_data.get('skip_port_check', False)
     if image:
         ctx.image = image
     if 'fsid' in config_data:

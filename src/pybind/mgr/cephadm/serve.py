@@ -1576,6 +1576,7 @@ class CephadmServe:
                     daemon_spec.name(), daemon_spec.host))
 
                 termination_grace_period = None
+                skip_port_check = False
                 if daemon_spec.service_name in self.mgr.spec_store:
                     svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
                     termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
@@ -1593,6 +1594,7 @@ class CephadmServe:
                         name=daemon_spec.name(),
                         image=image,
                         params=daemon_params,
+                        skip_port_check=skip_port_check,
                         meta=exchange.DeployMeta(
                             service_name=daemon_spec.service_name,
                             ports=daemon_spec.ports,

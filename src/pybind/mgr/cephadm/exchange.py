@@ -132,6 +132,7 @@ class Deploy:
     params = _DataField(field_type=dict)
     meta = _DataField(field_type=DeployMeta.convert)
     config_blobs = _DataField(field_type=dict)
+    skip_port_check = _DataField(field_type=bool)
 
     def __init__(
         self,
@@ -144,6 +145,7 @@ class Deploy:
         params: Optional[Dict[str, Any]] = None,
         meta: Optional[DeployMeta] = None,
         config_blobs: Optional[Dict[str, Any]] = None,
+        skip_port_check: bool = False
     ):
         self.data = dict(init_data or {})
         # set fields
@@ -154,6 +156,7 @@ class Deploy:
         self.params = params or {}
         self.meta = DeployMeta.convert(meta)
         self.config_blobs = config_blobs or {}
+        self.skip_port_check = skip_port_check
 
     def get_data(self) -> Dict[str, Any]:
         """Return the underlying data dict."""
