@@ -13,8 +13,10 @@
            class="form-heading form-item">
       <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
-      <div cdsRow
-           class="form-item">
+      <div
+        cdsRow
+        class="form-item"
+      >
         <div cdsCol>
           <cds-text-label
             labelInputID="name"
@@ -38,11 +40,18 @@
           <span
             class="invalid-feedback"
             *ngIf="groupForm.showError('groupName', formDir, 'required')"
-            i18n>This field is required.</span>
+            i18n
+            >This field is required.</span
+          >
           <span
             class="invalid-feedback"
-            *ngIf="groupForm.get('groupName')?.hasError('notUnique') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
-            i18n>Group name must be unique.</span>
+            *ngIf="
+              groupForm.get('groupName')?.hasError('notUnique') &&
+              (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
+            "
+            i18n
+            >Group name must be unique.</span
+          >
           <span
             class="invalid-feedback"
             *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
@@ -128,17 +137,22 @@
         cdsRow
         class="form-item"
       >
-      <div cdsCol>
-        <h1 class="cds--type-heading-02">Select target nodes</h1>
-      <cd-help-text>
-        <span i18n>
-          Gateway nodes to run NVMe-oF target pods/services
-        </span>
-      </cd-help-text>
+        <div cdsCol>
+          <h1 class="cds--type-heading-02">Select target nodes</h1>
+          <cd-help-text>
+            <span i18n> Gateway nodes to run NVMe-oF target pods/services </span>
+          </cd-help-text>
+        </div>
+        <div
+          cdsCol
+          class="cds-pt-3 cds-pb-3"
+        >
+          <cd-nvmeof-gateway-node (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
+        </div>
       </div>
       <div
-        cdsCol
-        class="cds-pt-3 cds-pb-3"
+        cdsRow
+        class="form-item cds-mb-0"
       >
         <cd-nvmeof-gateway-node
           (hostsLoaded)="onHostsLoaded($event)"
@@ -150,7 +164,7 @@
         <cd-form-button-panel
           (submitActionEvent)="onSubmit()"
           [form]="groupForm"
-          [submitText]="(action | titlecase) + ' ' + (resource)"
+          [submitText]="(action | titlecase) + ' ' + resource"
           [disabled]="isCreateDisabled"
           wrappingClass="text-right form-button"
         >

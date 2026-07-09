@@ -30,7 +30,6 @@
                 [preserveFragment]="action.preserveFragment ? '' : null"
                 [disabled]="tableActions.disableSelectionAction(action)"
                 [attr.aria-label]="action.name"
-                type="button"
                 i18n>
           {{ action.name }}
         </button>
@@ -94,7 +93,6 @@
       <!-- show hide columns -->
       <button cdsButton="ghost"
               class="toolbar-action"
-              type="button"
               [cdsOverflowMenu]="showHideColumnsRef"
               placement="bottom"
               [flip]="true"
@@ -106,8 +104,6 @@
       <ng-template #showHideColumnsRef>
         <div class="vstack gap-3 p-3"
              (click)="$event.stopPropagation()"
-             tabindex="0"
-             (keydown.enter)="$event.stopPropagation()"
              [cdsTheme]="theme">
           <ng-container *ngFor="let column of localColumns">
             <cds-checkbox *ngIf="!column?.isInvisible"

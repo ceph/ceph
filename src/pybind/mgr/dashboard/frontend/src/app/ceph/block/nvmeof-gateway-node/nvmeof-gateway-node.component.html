@@ -21,7 +21,8 @@
       class="table-actions"
       [permission]="permission"
       [selection]="selection"
-      [tableActions]="tableActions">
+      [tableActions]="tableActions"
+    >
     </cd-table-actions>
   </cd-table>
 </div>
@@ -66,12 +67,13 @@
   #labelsTpl
   let-value="data.value"
 >
-@if (value && value.length > 0) {
-  <cds-tag *ngFor="let label of value"
-           class="tag tag-dark">{{ label }}</cds-tag>
-} @else {
-  <span>-</span>
-}
+  @if (value && value.length > 0) {
+    <cds-tag
+      *ngFor="let label of value"
+      class="tag tag-dark"
+      >{{ label }}</cds-tag
+    >
+  } @else {
+    <span>-</span>
+  }
 </ng-template>
-
-
