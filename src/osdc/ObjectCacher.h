@@ -569,6 +569,13 @@ class ObjectCacher {
 
  public:
   bool CFG_block_writes_upfront(void) { return cfg_block_writes_upfront; }
+  
+    /* --- config snapshot getters (for ceph_client_counters) --- */
+  uint64_t get_max_size()    const { return max_size; }
+  uint64_t get_max_dirty()   const { return max_dirty; }
+  uint64_t get_max_objects() const { return max_objects; }
+  uint64_t get_object_count() const { return ob_lru.lru_get_size(); }
+
   void bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 		      loff_t offset, uint64_t length,
 		      ceph::buffer::list &bl, int r,
@@ -589,6 +596,7 @@ class ObjectCacher {
   loff_t get_stat_clean() const { return stat_clean; }
   loff_t get_stat_zero() const { return stat_zero; }
   loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  loff_t get_stat_missing() const { return stat_missing; }
   size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
 
