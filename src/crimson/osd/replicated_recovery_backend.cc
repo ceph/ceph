@@ -134,6 +134,12 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     if (recovery.obc) {
       recovery.obc->drop_recovery_read();
     }
+    for (auto& kv : recovery.pushing) {
+      kv.second.clone_lock_manager.release_locks();
+    }
+    if (recovery.pull_info) {
+      recovery.pull_info->clone_lock_manager.release_locks();
+    }
     recovering.erase(soid);
     return seastar::make_exception_future<>(e);
   });
@@ -386,6 +392,7 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
   auto& obc = recovery_waiter.obc;
   SnapSet push_info_ss; // only populated if soid is_snap()
   crimson::osd::subsets_t subsets;
+  RecoveryCloneLockManager clone_lock_manager;
   const auto& missing =
     pg.get_shard_missing().find(pg_shard)->second;
 
@@ -413,30 +420,35 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
     push_info_ss = ssc->snapset;
     DEBUGDPP("snapset is {}", pg, ssc->snapset);
 
-    subsets = crimson::osd::calc_clone_subsets(
-      ssc->snapset, soid,
-      missing,
-      // get_peer_info() asserts `peer_info` existence.
-      pg.get_peering_state().get_peer_info(
-        pg_shard).last_backfill);
+    subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_clone_subsets(
+        ssc->snapset, soid,
+        missing,
+        // get_peer_info() asserts `peer_info` existence.
+        pg.get_peering_state().get_peer_info(
+          pg_shard).last_backfill),
+      clone_lock_manager);
   } else if (soid.snap == CEPH_NOSNAP) {
     // pushing head or unversioned object.
     // base this on partially on replica's clones?
     auto ssc = obc->ssc;
     ceph_assert(ssc);
     DEBUGDPP("snapset is {}", pg, ssc->snapset);
-    subsets = crimson::osd::calc_head_subsets(
-      obc->obs.oi.size,
-      ssc->snapset, soid,
-      missing,
-      pg.get_peering_state().get_peer_info(
-        pg_shard).last_backfill);
+    subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_head_subsets(
+        obc->obs.oi.size,
+        ssc->snapset, soid,
+        missing,
+        pg.get_peering_state().get_peer_info(
+          pg_shard).last_backfill),
+      clone_lock_manager);
   }
   return prep_push(soid,
                    need,
                    pg_shard,
                    subsets,
-                   push_info_ss);
+                   push_info_ss,
+                   std::move(clone_lock_manager));
 }
 
 RecoveryBackend::interruptible_future<PushOp>
@@ -445,7 +457,8 @@ ReplicatedRecoveryBackend::prep_push(
   eversion_t need,
   pg_shard_t pg_shard,
   const crimson::osd::subsets_t& subsets,
-  const SnapSet push_info_ss)
+  const SnapSet push_info_ss,
+  RecoveryCloneLockManager&& clone_lock_manager)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::prep_push);
   DEBUGDPP("{}, {}", pg, soid, need);
@@ -459,6 +472,7 @@ ReplicatedRecoveryBackend::prep_push(
   assert(missing_iter != pmissing_iter->second.get_items().end());
 
   push_info.obc = obc;
+  push_info.clone_lock_manager = std::move(clone_lock_manager);
   push_info.recovery_info.size = obc->obs.oi.size;
   push_info.recovery_info.copy_subset = subsets.data_subset;
   push_info.recovery_info.clone_subset = subsets.clone_subsets;
@@ -503,7 +517,7 @@ void ReplicatedRecoveryBackend::prepare_pull(
   pg_shard_t fromshard = *(iter);
 
   pull_op.recovery_info =
-    set_recovery_info(soid, head_obc->ssc);
+    set_recovery_info(soid, head_obc->ssc, pull_info.clone_lock_manager);
   pull_op.soid = soid;
   pull_op.recovery_progress.data_complete = false;
   pull_op.recovery_progress.omap_complete =
@@ -520,7 +534,8 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
 ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
   const hobject_t& soid,
-  const crimson::osd::SnapSetContextRef ssc)
+  const crimson::osd::SnapSetContextRef ssc,
+  RecoveryCloneLockManager& clone_lock_manager)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::set_recovery_info);
   pg_missing_tracker_t local_missing = pg.get_local_missing();
@@ -530,8 +545,10 @@ ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
     assert(!local_missing.is_missing(soid.get_head()));
     assert(ssc);
     recovery_info.ss = ssc->snapset;
-    auto subsets = crimson::osd::calc_clone_subsets(
-      ssc->snapset, soid, local_missing, pg.get_info().last_backfill);
+    auto subsets = commit_clone_overlap_plan(
+      crimson::osd::calc_clone_subsets(
+        ssc->snapset, soid, local_missing, pg.get_info().last_backfill),
+      clone_lock_manager);
     crimson::osd::set_subsets(subsets, recovery_info);
     DEBUGDPP("pulling {}", pg, recovery_info);
     ceph_assert(ssc->snapset.clone_size.count(soid.snap));
@@ -892,7 +909,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     if (pull_info.recovery_info.soid.snap &&
 	pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
       recalc_subsets(pull_info.recovery_info,
-		     ssc);
+		     ssc,
+		     pull_info.clone_lock_manager);
     }
 
     pull_info.obc = recovery_waiter.obc =
@@ -931,6 +949,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 
   if (complete) {
     pull_info.stat.num_objects_recovered++;
+    pull_info.clone_lock_manager.release_locks();
     auto manager = pg.obc_loader.get_obc_manager(
       recovery_waiter.obc);
     manager.lock_excl_sync(); /* cannot already be locked */
@@ -959,13 +978,65 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 
 void ReplicatedRecoveryBackend::recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
-    crimson::osd::SnapSetContextRef ssc)
+    crimson::osd::SnapSetContextRef ssc,
+    RecoveryCloneLockManager& clone_lock_manager)
 {
   assert(ssc);
-  auto subsets = crimson::osd::calc_clone_subsets(
-    ssc->snapset, recovery_info.soid, pg.get_local_missing(),
-    pg.get_info().last_backfill);
+  clone_lock_manager.release_locks();
+  auto subsets = commit_clone_overlap_plan(
+    crimson::osd::calc_clone_subsets(
+      ssc->snapset, recovery_info.soid, pg.get_local_missing(),
+      pg.get_info().last_backfill),
+    clone_lock_manager);
   crimson::osd::set_subsets(subsets, recovery_info);
+}
+
+subsets_t ReplicatedRecoveryBackend::commit_clone_overlap_plan(
+  clone_overlap_plan_t plan,
+  RecoveryCloneLockManager& clone_lock_manager)
+{
+  LOG_PREFIX(ReplicatedRecoveryBackend::commit_clone_overlap_plan);
+  subsets_t subsets;
+  subsets.data_subset = std::move(plan.data_subset);
+  interval_set<uint64_t> cloning;
+
+  auto try_commit = [&](std::vector<clone_candidate_t>& candidates) {
+    for (auto& c : candidates) {
+      // missing was already filtered in calc_*; re-check local missing
+      // in case the set changed, then try the read lock.
+      if (pg.get_local_missing().is_missing(c.clone)) {
+        DEBUGDPP("skip candidate {}, now missing", pg, c.clone);
+        continue;
+      }
+      if (!clone_lock_manager.try_lock_for_read(c.clone, pg.obc_registry)) {
+        DEBUGDPP("skip candidate {}, cannot lock for read", pg, c.clone);
+        continue;
+      }
+      DEBUGDPP("locked candidate {} overlap {}", pg, c.clone, c.overlap);
+      subsets.clone_subsets[c.clone] = c.overlap;
+      cloning.union_of(c.overlap);
+      return;
+    }
+  };
+
+  try_commit(plan.older_candidates);
+  try_commit(plan.newer_candidates);
+
+#ifndef UNIT_TESTS_BUILT
+  if (cloning.num_intervals() >
+      crimson::common::local_conf().get_val<uint64_t>(
+        "osd_recover_clone_overlap_limit")) {
+    DEBUGDPP("skipping clone, too many holes", pg);
+    clone_lock_manager.release_locks();
+    subsets.clone_subsets.clear();
+    cloning.clear();
+  }
+#endif
+
+  subsets.data_subset.subtract(cloning);
+  DEBUGDPP("data_subset {} clone_subsets {}",
+           pg, subsets.data_subset, subsets.clone_subsets);
+  return subsets;
 }
 
 RecoveryBackend::interruptible_future<>
@@ -1122,6 +1193,7 @@ ReplicatedRecoveryBackend::_handle_push_reply(
       }).handle_exception_interruptible(
         [recovering_iter, &push_info, peer] (auto e) {
         push_info.recovery_progress.error = true;
+        push_info.clone_lock_manager.release_locks();
         recovering_iter->second->set_push_failed(peer, e);
         return seastar::make_ready_future<std::optional<PushOp>>();
       });
@@ -1131,6 +1203,7 @@ ReplicatedRecoveryBackend::_handle_push_reply(
                                                  soid,
                                                  push_info.recovery_info);
     }
+    push_info.clone_lock_manager.release_locks();
     recovering_iter->second->set_pushed(peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
   }

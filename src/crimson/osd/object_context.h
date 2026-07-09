@@ -234,6 +234,12 @@ public:
     return lock.is_acquired();
   }
 
+  bool try_get_read_lock() {
+    return lock.try_lock_for_read();
+  }
+  void put_read_lock() {
+    lock.unlock_for_read();
+  }
   bool get_recovery_read() {
     if (lock.try_lock_for_read()) {
       recovery_read_marker = true;
