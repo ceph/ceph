@@ -255,7 +255,11 @@ namespace file::listing {
       sf::path wp{rp / dname};
       int wd = inotify_add_watch(wfd, wp.c_str(), aw_mask);
       if (wd == -1) {
-	std::cerr << fmt::format("{} inotify_add_watch {} failed with {}", __func__, dname, wd) << std::endl;
+	int err = errno;
+	if (err != ENOENT) {
+	  std::cerr << fmt::format("{} inotify_add_watch {} failed: {} ({})",
+	    __func__, dname, strerror(err), err) << std::endl;
+	}
       } else {
 	std::lock_guard lock(map_mutex);
 	wd_callback_map.insert(wd_callback_map_t::value_type(wd, WatchRecord(wd, dname, opaque)));
