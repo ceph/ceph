@@ -197,7 +197,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Option(
             'facts_cache_timeout',
             type='secs',
-            default=1 * 60,
+            default=10 * 60,
             desc='Seconds for which to cache host facts data',
         ),
         Option(
