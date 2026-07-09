@@ -7138,35 +7138,83 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ZERO:
       tracepoint(osd, do_osd_op_pre_zero, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
       if (pool.info.requires_aligned_append()) {
-	result = -EOPNOTSUPP;
-	break;
+        result = -EOPNOTSUPP;
+        break;
       }
       ++ctx->num_write;
       { // zero
-	result = check_offset_and_length(
-	  op.extent.offset, op.extent.length,
+        result = check_offset_and_length(
+          op.extent.offset, op.extent.length,
           *osd->osd_max_object_size, get_dpp());
-	if (result < 0)
-	  break;
+        if (result < 0)
+          break;
 
-	if (op.extent.length && obs.exists && !oi.is_whiteout()) {
-	  t->zero(soid, op.extent.offset, op.extent.length);
-	  interval_set<uint64_t> ch;
-	  ch.insert(op.extent.offset, op.extent.length);
-	  ctx->modified_ranges.union_of(ch);
-	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
-	  ctx->delta_stats.num_wr++;
-	  oi.clear_data_digest();
-	  if (pool.info.is_erasure() &&
-	      pool.info.allows_ecoptimizations() &&
-	      pool.info.tracks_zero_blocks()) {
-	    // ZERO punches a hole: remove FAE entries for the zeroed region.
-	    oi.force_allocated_extents.remove(op.extent.offset,
-	                                      op.extent.length);
-	  }
-	} else {
-	  // no-op
-	}
+        if (op.extent.length && obs.exists && !oi.is_whiteout()) {
+          const uint64_t zero_off = op.extent.offset;
+          const uint64_t zero_len = op.extent.length;
+          const uint64_t zero_end = zero_off + zero_len;
+
+          // For EC pools with ecoptimizations, ZERO is a deallocation
+          // operation at 4K (FAE_BLOCK_SIZE) granularity.  Full blocks
+          // entirely covered by the range are deallocated; partial leading
+          // and trailing blocks are written with literal zeros instead.
+          // For all other pools, use the original single zero() call.
+          if (pool.info.is_erasure() && pool.info.allows_ecoptimizations()) {
+            // Inward-rounded boundaries: only fully-covered 4K blocks.
+            const uint64_t interior_start =
+              round_up_to(zero_off, FAE_BLOCK_SIZE);
+            const uint64_t interior_end =
+              round_down_to(zero_end, FAE_BLOCK_SIZE);
+
+            if (interior_start >= interior_end) {
+              // No fully-covered blocks: write literal zeros for the whole range.
+              bufferlist whole_bl;
+              whole_bl.append_zero(zero_len);
+              t->write(soid, zero_off, zero_len, whole_bl, op.flags);
+            } else {
+              // Sub-4K head: partial leading block gets a literal-zero write.
+              if (zero_off < interior_start) {
+                const uint64_t head_len = interior_start - zero_off;
+                bufferlist head_bl;
+                head_bl.append_zero(head_len);
+                t->write(soid, zero_off, head_len, head_bl, op.flags);
+              }
+              // 4K-aligned interior: fully-covered blocks are deallocated.
+              t->zero(soid, interior_start, interior_end - interior_start);
+              // Sub-4K tail: partial trailing block gets a literal-zero write.
+              if (zero_end > interior_end) {
+                const uint64_t tail_len = zero_end - interior_end;
+                bufferlist tail_bl;
+                tail_bl.append_zero(tail_len);
+                t->write(soid, interior_end, tail_len, tail_bl, op.flags);
+              }
+            }
+          } else {
+            t->zero(soid, zero_off, zero_len);
+          }
+
+          interval_set<uint64_t> ch;
+          ch.insert(zero_off, zero_len);
+          ctx->modified_ranges.union_of(ch);
+          ctx->clean_regions.mark_data_region_dirty(zero_off, zero_len);
+          ctx->delta_stats.num_wr++;
+          oi.clear_data_digest();
+          if (should_track_zero_blocks(pool.info, ctx)) {
+            // ZERO punches holes only in fully-covered 4K blocks; partial
+            // leading/trailing blocks are written as zeros (not holes) so
+            // their FAE entries must not be removed here.
+            const uint64_t interior_start =
+              round_up_to(zero_off, FAE_BLOCK_SIZE);
+            const uint64_t interior_end =
+              round_down_to(zero_end, FAE_BLOCK_SIZE);
+            if (interior_start < interior_end) {
+              oi.force_allocated_extents.remove(interior_start,
+                                               interior_end - interior_start);
+            }
+          }
+        } else {
+          // no-op
+        }
       }
       break;
     case CEPH_OSD_OP_CREATE:
@@ -7236,6 +7284,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	maybe_create_new_object(ctx);
 	t->truncate(soid, op.extent.offset);
+	if (pool.info.is_erasure() && pool.info.allows_ecoptimizations() &&
+	    op.extent.offset < oi.size &&
+	    op.extent.offset % FAE_BLOCK_SIZE != 0) {
+	  const uint64_t head_end =
+	    std::min(round_up_to(op.extent.offset, FAE_BLOCK_SIZE), oi.size);
+	  const uint64_t head_len = head_end - op.extent.offset;
+	  t->zero(soid, op.extent.offset, head_len);
+	}
 	if (oi.size > op.extent.offset) {
 	  interval_set<uint64_t> trim;
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
