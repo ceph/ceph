@@ -1,4 +1,5 @@
 import ipaddress
+import posixpath
 import socket
 from typing import Tuple, Optional, Any, List
 from urllib.parse import urlparse
@@ -208,3 +209,31 @@ def validate_ip(ip_addr: Optional[str]) -> None:
         raise SpecValidationError(
             f"Invalid virtual_ip: {ip_addr}. Must be a valid IP address."
         )
+
+
+def verify_dir_path(field: Any, field_name: str) -> None:
+    """
+    Validate an absolute filesystem path string
+    """
+    if field is None:
+        return
+    verify_non_empty_string(field, field_name)
+    if not field.startswith('/'):
+        raise SpecValidationError(
+            f'{field_name} must be an absolute path starting with /, got {field!r}')
+    if '..' in field.split('/'):
+        raise SpecValidationError(
+            f"{field_name} must not contain '..' path components, got {field!r}")
+    normalized = '/' + posixpath.normpath(field).lstrip('/')
+    if normalized == '/':
+        raise SpecValidationError(
+            f'{field_name} must not be the filesystem root (/), got {field!r}')
+    protected_dirs = frozenset([
+        '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib32', '/lib64',
+        '/libx32', '/log', '/media', '/mnt', '/opt', '/proc', '/root', '/run',
+        '/sbin', '/srv', '/sys', '/tmp', '/usr', '/var',
+    ])
+    if normalized in protected_dirs:
+        raise SpecValidationError(
+            f'{field_name} must not be a protected system directory, '
+            f'got {field!r}. Use a subdirectory of it instead.')

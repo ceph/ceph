@@ -1,6 +1,13 @@
 import pytest
 
-from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6, valid_addr
+from ceph.deployment.hostspec import SpecValidationError
+from ceph.deployment.utils import (
+    is_ipv6,
+    unwrap_ipv6,
+    wrap_ipv6,
+    valid_addr,
+    verify_dir_path,
+)
 from ceph.utils import with_units_to_int
 from typing import NamedTuple
 
@@ -126,3 +133,34 @@ def test_with_units_to_int_invalid(value):
     # Callers guard on ValueError only, so every bad value must be one.
     with pytest.raises(ValueError, match='invalid size'):
         with_units_to_int(value)
+
+
+def test_verify_dir_path():
+    verify_dir_path(None, 'path')
+    verify_dir_path('/var/log/ceph', 'path')
+    verify_dir_path('/var/log/ceph/custom', 'path')
+
+    with pytest.raises(SpecValidationError, match='non-empty string'):
+        verify_dir_path('', 'path')
+    with pytest.raises(SpecValidationError, match='non-empty string'):
+        verify_dir_path('   ', 'path')
+    with pytest.raises(SpecValidationError, match='absolute path'):
+        verify_dir_path('relative/path', 'path')
+    with pytest.raises(SpecValidationError, match='filesystem root'):
+        verify_dir_path('/', 'path')
+
+
+@pytest.mark.parametrize('path', ['/etc', '/var/', '//etc'])
+def test_verify_dir_path_rejects_protected_dirs(path):
+    with pytest.raises(SpecValidationError, match='path must not be a protected system'):
+        verify_dir_path(path, 'path')
+
+
+@pytest.mark.parametrize('path', [
+    '/var/log/ceph/',
+    '//var/log/ceph',
+    '/etc/ceph/logs',
+    '/vary',
+])
+def test_verify_dir_path_accepts_paths_below_protected_dirs(path):
+    verify_dir_path(path, 'path')
