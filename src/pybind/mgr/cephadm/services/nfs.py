@@ -161,6 +161,18 @@ class NFSService(CephService):
             return f'{service_name}.{rank}'
         return str(rank)
 
+    @staticmethod
+    def _cephfs_client_log_ceph_conf(spec: NFSServiceSpec) -> Optional[str]:
+        if not spec.enable_cephfs_client_log:
+            return None
+        level = 10 if spec.cephfs_client_log_level is None else spec.cephfs_client_log_level
+        return f'\n[client]\n\tdebug client = {level}\n\tlog file = /var/log/ceph/$name.$pid.log\n'
+
+    def _get_cephfs_client_log_dir(self, spec: NFSServiceSpec) -> str:
+        if spec.cephfs_client_log_dir:
+            return spec.cephfs_client_log_dir
+        return f'/var/log/ceph/{self.mgr._cluster_fsid}'
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
@@ -329,9 +341,13 @@ class NFSService(CephService):
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
                     keyring=rados_keyring,
-                    host=host
+                    host=host,
+                    extra_ceph_config=self._cephfs_client_log_ceph_conf(spec),
                 )
             )
+            if spec.enable_cephfs_client_log:
+                config['enable_cephfs_client_log'] = True
+                config['cephfs_client_log_dir'] = self._get_cephfs_client_log_dir(spec)
             config['rgw'] = {
                 'cluster': 'ceph',
                 'user': rgw_user,
