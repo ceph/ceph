@@ -164,6 +164,10 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(1U, num_images);
 
   rbd_group_image_info_t images[1];
+  ASSERT_EQ(-ENOENT, rbd_group_image_list(ioctx, "group_does_not_exist",
+                                          images,
+                                          sizeof(rbd_group_image_info_t),
+                                          &num_images));
   ASSERT_EQ(1, rbd_group_image_list(ioctx, group_name, images,
                                     sizeof(rbd_group_image_info_t),
                                     &num_images));
@@ -233,6 +237,9 @@ TEST_F(TestGroup, add_imagePP)
                 RBD_OPERATION_FEATURE_GROUP);
 
   std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(-ENOENT, rbd.group_image_list(ioctx, "group_does_not_exist",
+                                          &images,
+                                          sizeof(librbd::group_image_info_t)));
   ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, &images,
                                     sizeof(librbd::group_image_info_t)));
   ASSERT_EQ(1U, images.size());
@@ -342,6 +349,9 @@ TEST_F(TestGroup, add_snapshot)
   ASSERT_EQ(1U, num_snaps);
 
   rbd_group_snap_info_t snaps[1];
+  ASSERT_EQ(-ENOENT, rbd_group_snap_list(ioctx, "group_does_not_exist", snaps,
+                                         sizeof(rbd_group_snap_info_t),
+                                         &num_snaps));
   ASSERT_EQ(1, rbd_group_snap_list(ioctx, group_name, snaps,
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
