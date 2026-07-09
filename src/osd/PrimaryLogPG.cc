@@ -16330,6 +16330,9 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
 
 void PrimaryLogPG::pool_migration_release_target_reservation()
 {
+  if (!pool_migration_reservations_granted_source || !pool_migration_target_pg.has_value()) {
+    return;  // nothing to release, do nothing
+  }
   dout(20) << __func__ << " Sending release to target PG "
            << *pool_migration_target_pg << dendl;
 

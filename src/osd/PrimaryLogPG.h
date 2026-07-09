@@ -1456,7 +1456,7 @@ protected:
   pg_t get_target_pg_from_hash(const hobject_t &hobj);
   uint16_t count_remaining_target_pgs(const hobject_t &hobj);
   void pool_migration_request_target_reservation() override;
-  void pool_migration_release_target_reservation();
+  void pool_migration_release_target_reservation() override;
 
   void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
   void stop_target_pool_migration();

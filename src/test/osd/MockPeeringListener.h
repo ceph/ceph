@@ -434,6 +434,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     pool_migraiton_target_reservation = true;
   }
 
+  void pool_migration_release_target_reservation() override {
+    pool_migration_target_release_reservation = true;
+  }
+
   bool try_reserve_recovery_space(
     int64_t primary_num_bytes,
     int64_t local_num_bytes,
@@ -541,6 +545,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool recovery_cancelled = false;
   bool pool_migration_source_suspended = false;
   bool pool_migration_source_reserved = false;
+  bool pool_migration_target_release_reservation = false;
   bool pool_migration_target_reserved = false;
   bool pool_migration_target_suspended = false;
   bool pool_migration_target_suspended_toofull = false;
