@@ -951,7 +951,7 @@ namespace rgw::sal {
            const char *if_nomatch)
   {
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    MD5 hash;
+    MD5NonCrypto hash;
     bool truncated;
     int ret;
 

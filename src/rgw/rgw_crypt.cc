@@ -2083,9 +2083,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return -EINVAL;
       }
 
-      MD5 key_hash;
-      // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-      key_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+      MD5NonCrypto key_hash;
       unsigned char key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
       key_hash.Update(reinterpret_cast<const unsigned char*>(key_bin.c_str()), key_bin.size());
       key_hash.Final(key_hash_res);
@@ -2562,9 +2560,7 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    MD5 key_hash;
-    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-    key_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    MD5NonCrypto key_hash;
     uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
     key_hash.Update(reinterpret_cast<const unsigned char*>(key_bin.c_str()), key_bin.size());
     key_hash.Final(key_hash_res);
@@ -2652,9 +2648,7 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    MD5 key_hash;
-    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-    key_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    MD5NonCrypto key_hash;
     uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
     key_hash.Update(reinterpret_cast<const unsigned char*>(key_bin.c_str()), key_bin.size());
     key_hash.Final(key_hash_res);

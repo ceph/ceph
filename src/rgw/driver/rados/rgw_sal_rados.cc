@@ -1510,7 +1510,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
     std::ignore = store->getRados()->decode_policy(dpp, i->second, &owner);
   }
   head_obj_wop.meta.owner = owner;
-  const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl_data).to_str();
+  const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5NonCrypto>(bl_data).to_str();
   bufferlist bl_etag;
   bl_etag.append(etag.c_str());
   obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
@@ -4268,9 +4268,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   bool truncated;
   int ret;
 

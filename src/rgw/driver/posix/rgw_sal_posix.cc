@@ -3994,9 +3994,7 @@ int POSIXObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int64_t left = get_size();
   int64_t cur_ofs = 0;
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
   while (left > 0) {
@@ -4340,9 +4338,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   bool truncated;
   int ret;
 

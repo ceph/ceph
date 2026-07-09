@@ -2504,7 +2504,7 @@ inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
   return 0;
 } /* encode_dlo_manifest_attr */
 
-inline void complete_etag(MD5& hash, std::string* etag)
+inline void complete_etag(MD5NonCrypto& hash, std::string* etag)
 {
   if (!etag) {
     return;
