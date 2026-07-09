@@ -1685,6 +1685,7 @@ class CephadmUpgrade:
             # do mgr and mon keyrings as one off after mons have been upgraded
             mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
             _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
+            need_rotate_self = False
             if not mons_needing_upgrade:
                 if not self.upgrade_state.has_set_cephx_allowed_ciphers:
                     # all mons have been upgraded if we get here so keyrings can be rotated
@@ -1701,7 +1702,14 @@ class CephadmUpgrade:
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
                         continue
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    if self.mgr.daemon_is_self(dd.daemon_type, dd.daemon_id):
+                        logger.info('Delaying rotation of %s, cannot rotate self', dd.name())
+                        need_rotate_self = True
+                        continue
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
+                    logger.info('Rotating keyring for %s', dd.name())
                     self.mgr.key_rotate(daemon_spec)
                     assert dd.daemon_type is not None
                     assert dd.daemon_id is not None
@@ -1711,15 +1719,14 @@ class CephadmUpgrade:
                         dd.daemon_type,
                         dd.daemon_id
                     )
-                    if self.mgr.daemon_is_self(daemon_spec.daemon_type, daemon_spec.daemon_id):
-                        self.mgr._schedule_daemon_action(daemon_spec.name(), 'redeploy')
-                    else:
-                        self.mgr._daemon_action(daemon_spec, action='redeploy')
+                    logger.info('Redeploying %s with new keyring', dd.name())
+                    self.mgr._daemon_action(daemon_spec, action='redeploy')
                     self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
                     self._save_upgrade_state()
                 # mon daemons share a key, only do one key rotation
                 # but still trigger redeploy for each mon
                 if 'mon' not in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
+                    logger.info('Rotating mon keyring')
                     self.mgr.key_rotate(
                         CephadmDaemonDeploySpec.from_daemon_description(
                             mon_daemons[0]
@@ -1732,6 +1739,7 @@ class CephadmUpgrade:
                         continue
                     assert dd.daemon_type is not None
                     assert dd.daemon_id is not None
+                    logger.info('Redeploying %s with new keyring', dd.name())
                     self.mgr._daemon_action_set_image(
                         'redeploy',
                         target_image,
@@ -1744,6 +1752,9 @@ class CephadmUpgrade:
                     self._save_upgrade_state()
             else:
                 self.mgr.log.debug('Skipping mgr/mon key rotation, mons not upgraded')
+            if need_rotate_self:
+                logger.info('Failing over to standby mgr to handle key rotation of current active mgr')
+                self.mgr.mgr_service.fail_over()
 
     def _upgrade_daemons(self, to_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str, target_digests: Optional[List[str]] = None) -> None:
         assert self.upgrade_state is not None
