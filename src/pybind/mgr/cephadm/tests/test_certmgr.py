@@ -1868,6 +1868,36 @@ class TestCertMgr(object):
         assert cm.get_cert('ingress_ssl_cert', service_name=svc) == 'ref-cert'
         assert cm.get_key('ingress_ssl_key', service_name=svc) == 'ref-key'
 
+    def test_register_key_object_registers_existing_key_store(self, cephadm_module: CephadmOrchestrator):
+        cert_mgr = cephadm_module.cert_mgr
+        cert_mgr.key_store = mock.MagicMock()
+
+        cert_mgr.register_key_object(
+            'nvmeof',
+            'nvmeof_encryption_key',
+            TLSObjectScope.SERVICE,
+        )
+
+        cert_mgr.key_store.register_object_name.assert_called_once_with(
+            'nvmeof_encryption_key',
+            TLSObjectScope.SERVICE,
+        )
+
+    def test_generate_private_key(self, cephadm_module: CephadmOrchestrator):
+        cephadm_module._init_cert_mgr()
+
+        key = cephadm_module.cert_mgr.generate_private_key(key_size=2048)
+
+        assert isinstance(key, str)
+        assert (
+            '-----BEGIN RSA PRIVATE KEY-----' in key
+            or '-----BEGIN PRIVATE KEY-----' in key
+        )
+        assert (
+            '-----END RSA PRIVATE KEY-----' in key
+            or '-----END PRIVATE KEY-----' in key
+        )
+
 
 class MockTLSObject(TLSObjectProtocol):
     STORAGE_PREFIX = "mocktls"

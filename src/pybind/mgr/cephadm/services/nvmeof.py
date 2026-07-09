@@ -6,7 +6,7 @@ from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
-from cephadm.cert_mgr import TLSObjectScope
+from cephadm.tlsobject_types import TLSObjectScope
 
 from orchestrator import (
     OrchestratorError,

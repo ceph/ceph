@@ -20,6 +20,19 @@ ceph_generated_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaL
 ceph_generated_key = """-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\n39gnaegswnz9KMQAvzKFdg==\n-----END PRIVATE KEY-----\n"""
 
 
+TEST_KEY = """-----BEGIN RSA PRIVATE KEY-----
+test-key
+-----END RSA PRIVATE KEY-----"""
+
+CERTMGR_KEY = """-----BEGIN RSA PRIVATE KEY-----
+certmgr-key
+-----END RSA PRIVATE KEY-----"""
+
+GENERATED_KEY = """-----BEGIN RSA PRIVATE KEY-----
+generated-key
+-----END RSA PRIVATE KEY-----"""
+
+
 class FakeInventory:
     def get_addr(self, name: str) -> str:
         return '1.2.3.4'
@@ -106,7 +119,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -357,7 +369,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -550,7 +561,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -697,6 +707,275 @@ timeout = 1.0
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    def test_nvmeof_encryption_key_source_defaults(self):
+        disabled = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+        )
+        assert disabled.get_encryption_key_source() is None
+
+        cephadm = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+        )
+        assert cephadm.get_encryption_key_source() == 'cephadm'
+
+        legacy_inline = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            encryption_key=TEST_KEY,
+        )
+        assert legacy_inline.get_encryption_key_source() == 'inline'
+
+        explicit_reference = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='reference',
+        )
+        assert explicit_reference.get_encryption_key_source() == 'reference'
+
+        source_file = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='source_file',
+            encryption_key_path='/etc/nvmeof/tls/encryption.key',
+        )
+        assert source_file.get_encryption_key_source() == 'source_file'
+
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            # disabled
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+            ),
+
+            # implicit cephadm
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                enable_encryption=True,
+            ),
+
+            # explicit cephadm
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                enable_encryption=True,
+                encryption_key_source='cephadm',
+            ),
+
+            # reference
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                enable_encryption=True,
+                encryption_key_source='reference',
+            ),
+
+            # source_file
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                enable_encryption=True,
+                encryption_key_source='source_file',
+                encryption_key_path='/etc/nvmeof/tls/encryption.key',
+            ),
+
+            # legacy inline
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                encryption_key=TEST_KEY,
+            ),
+
+            # explicit inline
+            NvmeofServiceSpec(
+                service_id='testpool.group1',
+                pool='testpool',
+                group='group1',
+                enable_encryption=True,
+                encryption_key_source='inline',
+                encryption_key=TEST_KEY,
+            ),
+        ],
+    )
+    def test_nvmeof_encryption_key_validation_success(self, spec):
+        spec.validate()
+
+    def test_nvmeof_encryption_key_path_by_source(self, cephadm_module: CephadmOrchestrator):
+        service = NvmeofService(cephadm_module)
+
+        disabled = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+        )
+        assert service._get_encryption_key_path(disabled) is None
+
+        cephadm = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+        )
+        assert service._get_encryption_key_path(cephadm) == '/encryption.key'
+
+        reference = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='reference',
+        )
+        assert service._get_encryption_key_path(reference) == '/encryption.key'
+
+        inline = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            encryption_key=TEST_KEY,
+        )
+        assert service._get_encryption_key_path(inline) == '/encryption.key'
+
+        source_file = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='source_file',
+            encryption_key_path='/etc/nvmeof/tls/encryption.key',
+        )
+        assert service._get_encryption_key_path(source_file) == '/etc/nvmeof/tls/encryption.key'
+
+    def test_nvmeof_get_or_create_encryption_key_disabled(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+        cephadm_module.cert_mgr = MagicMock()
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+        )
+
+        assert service._get_or_create_encryption_key(spec) is None
+        cephadm_module.cert_mgr.get_key.assert_not_called()
+        cephadm_module.cert_mgr.save_key.assert_not_called()
+        cephadm_module.cert_mgr.generate_private_key.assert_not_called()
+
+    def test_nvmeof_get_or_create_encryption_key_source_file(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+        cephadm_module.cert_mgr = MagicMock()
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='source_file',
+            encryption_key_path='/etc/nvmeof/tls/encryption.key',
+        )
+
+        assert service._get_or_create_encryption_key(spec) is None
+        cephadm_module.cert_mgr.get_key.assert_not_called()
+        cephadm_module.cert_mgr.save_key.assert_not_called()
+        cephadm_module.cert_mgr.generate_private_key.assert_not_called()
+
+    def test_nvmeof_get_or_create_encryption_key_inline_imports_key(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+        cephadm_module.cert_mgr = MagicMock()
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            encryption_key=TEST_KEY,
+        )
+
+        assert service._get_or_create_encryption_key(spec) == TEST_KEY
+        cephadm_module.cert_mgr.save_key.assert_called_once_with(
+            'nvmeof_encryption_key',
+            TEST_KEY,
+            service_name='nvmeof.testpool.group1',
+            user_made=True,
+            editable=False,
+        )
+        cephadm_module.cert_mgr.get_key.assert_not_called()
+        cephadm_module.cert_mgr.generate_private_key.assert_not_called()
+
+    def test_nvmeof_get_or_create_encryption_key_reference_success(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+        cephadm_module.cert_mgr = MagicMock()
+        cephadm_module.cert_mgr.get_key.return_value = CERTMGR_KEY
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='reference',
+        )
+
+        assert service._get_or_create_encryption_key(spec) == CERTMGR_KEY
+        cephadm_module.cert_mgr.get_key.assert_called_once_with(
+            'nvmeof_encryption_key',
+            service_name='nvmeof.testpool.group1',
+        )
+        cephadm_module.cert_mgr.save_key.assert_not_called()
+        cephadm_module.cert_mgr.generate_private_key.assert_not_called()
+
+    def test_nvmeof_get_or_create_encryption_key_reference_missing_fails(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+        cephadm_module.cert_mgr = MagicMock()
+        cephadm_module.cert_mgr.get_key.return_value = None
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_source='reference',
+        )
+
+        with pytest.raises(
+            OrchestratorError,
+            match="encryption_key_source is set to 'reference'",
+        ):
+            service._get_or_create_encryption_key(spec)
+
+        cephadm_module.cert_mgr.save_key.assert_not_called()
+        cephadm_module.cert_mgr.generate_private_key.assert_not_called()
 
 
 class TestNvmeofTLSBundle:
