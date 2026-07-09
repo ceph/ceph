@@ -997,12 +997,26 @@ IOHandler::read_message(
     utime_t throttle_stamp,
     std::size_t msg_size)
 {
-  return frame_assembler->read_frame_payload<false>(
+  return frame_assembler->read_frame_payload<false>(true
   ).then([this, throttle_stamp, msg_size, &ctx](auto payload) {
     if (unlikely(ctx.get_io_state() != io_state_t::open)) {
       logger().debug("{} triggered {} during read_message()",
                      conn, ctx.get_io_state());
       abort_protocol();
+    }
+
+    if (payload == nullptr) {
+      // The sender aborted the message frame late (e.g. the kernel client
+      // revoking an in-flight osd op to resend it after an osdmap change).
+      // The frame has been consumed from the wire; drop it and release the
+      // policy throttle budget taken for it (the classic messenger does the
+      // same via reset_throttle()).
+      logger().info("{} read_message: message frame aborted by the sender,"
+                    " skipping", conn);
+      if (conn.policy.throttler_bytes && msg_size) {
+        conn.policy.throttler_bytes->put(msg_size);
+      }
+      return seastar::now();
     }
 
     utime_t recv_stamp{seastar::lowres_system_clock::now()};
