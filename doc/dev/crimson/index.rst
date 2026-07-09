@@ -420,3 +420,5 @@ Code Walkthroughs
    BackfillMachine <backfillmachine>
    SeaStore <seastore>
    PoseidonStore <poseidonstore>
+   PG Merge Synchronization <pgmerging>
+   The Logical Address in SeaStore <seastore_laddr>

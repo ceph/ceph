@@ -17,6 +17,7 @@ API
    Service Ops <s3/serviceops>
    Bucket Ops <s3/bucketops>
    Object Ops <s3/objectops>
+   S3 Control <s3/s3control>
    C++ <s3/cpp>
    C# <s3/csharp>
    Java <s3/java>
