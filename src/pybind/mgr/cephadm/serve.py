@@ -906,6 +906,9 @@ class CephadmServe:
                     self.mgr.cache.get_schedulable_hosts()
                 )
         host_selector = _host_selector(svc)
+
+        use_same_port = False
+
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -924,6 +927,7 @@ class CephadmServe:
             rank_map=rank_map,
             upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
             host_selector=host_selector,
+            use_same_port=use_same_port,
         )
 
         try:
