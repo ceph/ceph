@@ -1675,20 +1675,6 @@ def build_branch(args):
 
     G = git.Repo(args.git)
 
-    try:
-        c = resolve_ref(G, 'main', BASE_REMOTE_URL, args.always_fetch)
-        githubmap_content = G.git.show(f"{c.hexsha}:.githubmap")
-        comment = re.compile(r"\s*#")
-        patt = re.compile(r"([\w-]+)\s+(.*)")
-        for line in githubmap_content.splitlines():
-            if comment.match(line):
-                continue
-            m = patt.match(line)
-            if m:
-                CONTRIBUTORS[m.group(1)] = m.group(2)
-    except git.exc.GitCommandError as e:
-        raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
-
     R = None
     if args.create_qa or args.update_qa or args.audit or args.final_merge:
         log.info("connecting to %s", REDMINE_ENDPOINT)
@@ -1738,6 +1724,21 @@ def build_branch(args):
         args.credits = False
         args.always_fetch = True
         args.skip_conflict_check = True
+
+    if args.credits:
+        try:
+            c = resolve_ref(G, 'main', BASE_REMOTE_URL, args.always_fetch)
+            githubmap_content = G.git.show(f"{c.hexsha}:.githubmap")
+            comment = re.compile(r"\s*#")
+            patt = re.compile(r"([\w-]+)\s+(.*)")
+            for line in githubmap_content.splitlines():
+                if comment.match(line):
+                    continue
+                m = patt.match(line)
+                if m:
+                    CONTRIBUTORS[m.group(1)] = m.group(2)
+        except git.exc.GitCommandError as e:
+            raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
 
     # Compute branch names now that integration flags and auto-detect have settled
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
