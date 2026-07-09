@@ -5014,8 +5014,6 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     return ret;
   }
 
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name());
-
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
 
@@ -5026,7 +5024,14 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 
   ret = shadow->list(dpp, params, num_parts + 1, results, y);
   if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: list_parts: shadow->list failed ret="
+      << ret << " upload=" << get_upload_id() << dendl;
     return ret;
+  }
+  if (results.objs.empty()) {
+    ldpp_dout(dpp, 0) << "WARNING: list_parts: 0 results for upload="
+      << get_upload_id() << " shadow=" << shadow->get_name()
+      << " marker=" << params.marker.name << dendl;
   }
   for (rgw_bucket_dir_entry& ent : results.objs) {
     std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
