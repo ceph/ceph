@@ -1,3 +1,5 @@
+.. _radosgw-s3-dedup:
+
 =====================
 Full RGW Object Dedup
 =====================
