@@ -1605,6 +1605,7 @@ class CephadmUpgrade:
             logger.info('All osd/mds daemons upgraded, checking for keys needing rotation')
             save_counter = 0
             rotated = False
+            skipped = False
             already_rotated = self._get_rotated_daemon_ids()
             rotated_osd_ids: List[str] = already_rotated.get('osd', [])
             rotated_mds_ids: List[str] = already_rotated.get('mds', [])
@@ -1616,8 +1617,18 @@ class CephadmUpgrade:
                 if str(osd_daemon.daemon_id) in rotated_osd_ids:
                     logger.debug('Skipping rotation of osd.%s, already rotated', str(osd_daemon.daemon_id))
                     continue
+                r = service_registry.get_service('osd').ok_to_stop([osd_daemon.daemon_id])
+                if r.retval:
+                    logger.info('Delaying rotation of keyring for %s, not ok-to-stop', osd_daemon.name())
+                    skipped = True
+                    continue
                 if not _rotate_key(CephadmDaemonDeploySpec.from_daemon_description(osd_daemon)):
                     return False
+                logger.info('Redeploying %s with new keyring', osd_daemon.name())
+                self.mgr._daemon_action(
+                    CephadmDaemonDeploySpec.from_daemon_description(osd_daemon),
+                    action='redeploy'
+                )
                 rotated_osd_ids.append(str(osd_daemon.daemon_id))
                 unsaved_rotated_osds.append(str(osd_daemon.daemon_id))
                 save_counter += 1
@@ -1632,8 +1643,19 @@ class CephadmUpgrade:
                 if str(mds_daemon.daemon_id) in rotated_mds_ids:
                     logger.debug('Skipping rotation of mds.%s, already rotated', str(mds_daemon.daemon_id))
                     continue
+                if self._enough_mds_for_ok_to_stop(mds_daemon):
+                    r = service_registry.get_service('mds').ok_to_stop([mds_daemon.daemon_id])
+                    if r.retval:
+                        logger.info('Delaying rotation of keyring for %s, not ok-to-stop', mds_daemon.name())
+                        skipped = True
+                        continue
                 if not _rotate_key(CephadmDaemonDeploySpec.from_daemon_description(mds_daemon)):
                     return False
+                logger.info('Redeploying %s with new keyring', mds_daemon.name())
+                self.mgr._daemon_action(
+                    CephadmDaemonDeploySpec.from_daemon_description(mds_daemon),
+                    action='redeploy'
+                )
                 rotated_mds_ids.append(str(mds_daemon.daemon_id))
                 unsaved_rotated_mdss.append(str(mds_daemon.daemon_id))
                 save_counter += 1
@@ -1644,8 +1666,9 @@ class CephadmUpgrade:
                     unsaved_rotated_mdss = []
 
             self._save_rotated_daemon_ids(unsaved_rotated_osds, unsaved_rotated_mdss)
-            if not rotated:
-                # we found no keyrings to rotate, rotation is complete
+            if not rotated and not skipped:
+                # we found no keyrings to rotate and no daemons
+                # were skipped for ok-to-stop checks. Mark rotation complete
                 logger.info('OSD/mds daemon key rotation completed')
                 self.upgrade_state.rotated_osd_mds_keyrings = True
                 self._save_upgrade_state()
