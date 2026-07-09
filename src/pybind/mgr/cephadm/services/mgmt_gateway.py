@@ -143,7 +143,7 @@ class MgmtGatewayService(CephadmService):
 
         if svc_spec.ssl:
             ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
-            tls_pair = self.get_certificates(daemon_spec, [ip])
+            tls_pair = self.get_certificates(daemon_spec, ips=[ip])
             daemon_config["files"]["nginx.crt"] = tls_pair.cert
             daemon_config["files"]["nginx.key"] = tls_pair.key
 

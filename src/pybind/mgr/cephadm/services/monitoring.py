@@ -159,7 +159,7 @@ class GrafanaService(CephadmService):
     def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -301,7 +301,7 @@ class AlertmanagerService(CephadmService):
     def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -524,7 +524,7 @@ class PrometheusService(CephadmService):
     def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def get_service_discovery_cfg(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Dict[str, List[str]]:
         """
