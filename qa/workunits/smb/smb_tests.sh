@@ -23,5 +23,5 @@ fi
 trap cleanup EXIT
 
 cd "${HERE}"
-"${VENV}/bin/${PY}" -m pip install pytest smbprotocol
+"${VENV}/bin/${PY}" -m pip install pytest 'smbprotocol<1.17.0'
 "${VENV}/bin/${PY}" -m pytest -v "$@"
