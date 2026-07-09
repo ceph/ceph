@@ -83,7 +83,7 @@ class OAuth2ProxyService(CephadmService):
             }
         }
 
-        return daemon_config, sorted(OAuth2ProxyService.get_dependencies(self.mgr))
+        return daemon_config, sorted(OAuth2ProxyService.get_dependencies(self.mgr, svc_spec))
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """

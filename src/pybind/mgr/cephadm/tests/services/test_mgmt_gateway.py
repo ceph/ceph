@@ -6,6 +6,7 @@ from typing import List
 from orchestrator._interface import DaemonDescription
 
 from cephadm.module import CephadmOrchestrator
+from cephadm.serve import CephadmServe
 from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec
@@ -814,6 +815,96 @@ class TestMgmtGateway:
                     stdin=json.dumps(expected),
                     error_ok=True,
                     use_current_daemon_image=False,
+                )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.oauth2_proxy.OAuth2ProxyService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_mgmt_gateway_and_oauth2_proxy_no_reconfigure_loop(
+        self,
+        get_service_endpoints_mock,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        """
+        Regression test for a bug where generate_config() computed the
+        dependencies to persist via get_dependencies(mgr) -- missing the
+        svc_spec argument -- while the orchestrator's reconcile loop computes
+        the "current" dependencies via get_dependencies(mgr, spec), which
+        includes svc_spec-dependent extras (e.g. certificate_source). That
+        mismatch meant the persisted deps could never equal the freshly
+        computed ones, so cephadm redeployed the daemon on every single serve
+        loop tick forever. Here we run several extra serve loop iterations
+        after the initial deploy and assert no additional '_orch deploy'
+        calls are issued for either mgmt-gateway or oauth2-proxy.
+        """
+        def get_services_endpoints(name):
+            if name == 'prometheus':
+                return ["192.168.100.100:9095", "192.168.100.101:9095"]
+            elif name == 'grafana':
+                return ["ceph-node-2:3000", "ceph-node-2:3000"]
+            elif name == 'alertmanager':
+                return ["192.168.100.100:9093", "192.168.100.102:9093"]
+            elif name == 'oauth2-proxy':
+                return ["192.168.100.101:4180", "192.168.100.102:4180"]
+            return []
+
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        get_service_endpoints_mock.side_effect = get_services_endpoints
+
+        server_port = 5555
+        mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
+                                       ssl_cert=ceph_generated_cert,
+                                       ssl_key=ceph_generated_key,
+                                       enable_auth=True)
+        oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
+                                      client_id='my_client_id',
+                                      client_secret='my_client_secret',
+                                      oidc_issuer_url='http://192.168.10.10:8888/dex',
+                                      cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key)
+
+        def deploy_call_count():
+            return sum(1 for c in _run_cephadm.call_args_list if c.args[2] == ['_orch', 'deploy'])
+
+        with with_host(cephadm_module, 'ceph-node'):
+            with with_service(cephadm_module, mgmt_gw_spec) as _, with_service(cephadm_module, oauth2_spec):
+                # mgmt-gateway is deployed before oauth2-proxy exists, so once
+                # oauth2-proxy comes up, mgmt-gateway legitimately gains a new
+                # dependency (the oauth2-proxy endpoint) and reconfigures
+                # exactly once to pick it up. Let that one-time, legitimate
+                # settle-reconfig happen before establishing our baseline.
+                CephadmServe(cephadm_module)._apply_all_services()
+                CephadmServe(cephadm_module)._check_daemons()
+
+                deploys_after_initial_apply = deploy_call_count()
+                assert deploys_after_initial_apply > 0
+
+                # Simulate several more serve loop ticks. _apply_all_services()
+                # handles scheduling new/changed daemons, while _check_daemons()
+                # is what actually compares curr_deps (computed via
+                # get_dependencies(mgr, spec)) against the persisted last_deps
+                # (computed at deploy time by generate_config()) to decide
+                # whether to reconfig/redeploy an already-running daemon. With
+                # a stable spec and no changes to the environment, neither
+                # should ever trigger a further deploy.
+                for _tick in range(3):
+                    CephadmServe(cephadm_module)._apply_all_services()
+                    CephadmServe(cephadm_module)._check_daemons()
+
+                assert deploy_call_count() == deploys_after_initial_apply, (
+                    "extra '_orch deploy' calls detected after additional serve "
+                    "loop iterations with no spec/environment changes -- this "
+                    "indicates a dependency-mismatch reconfigure loop"
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
