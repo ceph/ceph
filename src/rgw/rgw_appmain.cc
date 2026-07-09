@@ -95,7 +95,7 @@ namespace {
 
 OpsLogFile* rgw::AppMain::ops_log_file;
 
-rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp), context_pool_holder(dpp) {}
+rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp), context_pool(dpp) {}
 rgw::AppMain::~AppMain() = default;
 
 void rgw::AppMain::init_frontends1(bool nfs) 
@@ -239,7 +239,7 @@ int rgw::AppMain::init_storage()
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
-          context_pool_holder.get(),
+          *context_pool,
           site,
           run_gc,
           run_lc,
@@ -463,11 +463,11 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
-      fe = new RGWAsioFrontend(env, config, *sched_ctx, context_pool_holder.get());
+      fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
       if (g_conf()->rgw_crypt_s3_kms_cache_enabled) {
         env.kms_cache->initialize_ttl_reaper(
             g_conf()->rgw_beast_enable_async
-            ? std::optional(context_pool_holder.get().get_executor())
+            ? std::optional(context_pool->get_executor())
                 : nullopt);
       }
     }
@@ -539,7 +539,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       rgw_pauser->add_pauser(dedup_background.get());
     }
       reloader = std::make_unique<RGWRealmReloader>(
-          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
+          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     }
   }
@@ -657,7 +657,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
-  context_pool_holder.get().finish();
+  context_pool->finish();
 
   cfgstore.reset(); // deletes
   DriverManager::close_storage(env.driver);
