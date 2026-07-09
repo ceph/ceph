@@ -13844,6 +13844,11 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     pool_migration_reservations_granted_target = false;
   }
   pending_pool_migration_reservation_ops.clear();
+  pool_migration_reservations_granted_source = false;
+  if (pool_migration_reservation_tid != 0) {
+    osd->objecter->op_cancel(pool_migration_reservation_tid, -ECANCELED);
+    pool_migration_reservation_tid = 0;
+  }
 }
 
 void PrimaryLogPG::plpg_on_role_change()
@@ -15441,6 +15446,7 @@ struct C_PoolMigrationReservationCallback : public Context {
       return;
     }
     std::scoped_lock l(*pg);
+    pg->pool_migration_reservation_tid = 0;
     if (last_peering_reset != pg->get_last_peering_reset()) {
       return;
     }
@@ -16039,7 +16045,11 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     }
 
     if (!pool_migration_reservations_granted_source) {
-      dout(20) << __func__ << " requesting/waiting for reservation for target " << current_target_pg << dendl;
+      if (pool_migration_reservation_tid != 0) {
+        dout(20) << __func__ << " waiting for reservation for target " << current_target_pg << dendl;
+        return ops;
+      }
+      dout(20) << __func__ << " requesting reservation for target " << current_target_pg << dendl;
       pool_migration_target_pg = current_target_pg;
       pool_migration_request_target_reservation();
       return ops;
@@ -16289,6 +16299,8 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
     new C_OnFinisher(fin,
       osd->get_objecter_finisher(get_pg_shard())));
   fin->tid = tid;
+
+  pool_migration_reservation_tid = tid;
 
   dout(20) << __func__ << " Sending reservation request to pg " << pool_migration_target_pg
            << " watermark=" << pool_migration_watermark

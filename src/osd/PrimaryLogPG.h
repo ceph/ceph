@@ -1230,6 +1230,8 @@ protected:
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
+  /// current source PG reservation TID. Not 0 means source PG is waiting for a response
+  ceph_tid_t pool_migration_reservation_tid = 0;
   /// source PG has received reservation granted response from target PG
   bool pool_migration_reservations_granted_source = false;
   /// target PG has taken reservations and replied to the source PG
