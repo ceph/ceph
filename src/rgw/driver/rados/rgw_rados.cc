@@ -4104,6 +4104,10 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			  const DoutPrefixProvider* dpp,
 			  optional_yield y)
 {
+  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+    ": reindex_obj functionality is temporarily unavailable as ordered "
+    "bucket indexes added" << dendl;
+  return -EINVAL; // OBI: need to make sure this works properly with ordered bucket indexes
   // used for trimming pending entries; max value means all versions trimmed
   const uint64_t max_ver = std::numeric_limits<uint64_t>::max();
   // used for linking an olh
@@ -4310,18 +4314,19 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     ldpp_dout(dpp, 10) << "INFO: bucket index shard " << bucket_ref.obj.oid
                        << " missing, creating..." << dendl;
     std::map<std::string, bufferlist> binfo_map_entries;
-#warning "init_index here"
-    int create_ret = svc.bi_rados->init_index(dpp,
-					      y,
-					      bucket_info,
-					      bucket_info.layout.current_index,
-					      &binfo_map_entries,
-					      false);
+#if 0 // OBI init_index now takes a bindexer
+    create_ret = svc.bi_rados->init_index(dpp,
+                                          y,
+                                          bucket_info,
+                                          bucket_info.layout.current_index,
+                                          &binfo_map_entries,
+                                          false);
 
     if (create_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to create bucket index" << dendl;
       return create_ret;
     }
+#endif
   } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to stat bucket index shard: "
                       << cpp_strerror(-ret) << dendl;

@@ -3165,14 +3165,22 @@ int RGWBucketInstanceMetadataHandler::put_post(
     const std::optional<RGWBucketCompleteInfo>& old_bci,
     RGWObjVersionTracker& objv_tracker)
 {
-#warning "init_index here"
-  int ret = svc_bi->init_index(dpp, y,
-			       bci.info,
-			       bci.info.layout.current_index,
-			       nullptr);
+  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+    ": put_post functionality is temporarily unavailable as ordered "
+    "bucket indexes added" << dendl;
+  return -EINVAL;
+
+  int ret;
+#if 0 // OBI now takes a BIndexer
+  ret = svc_bi->init_index(dpp, y,
+                           bci.info,
+                           bci.info.layout.current_index,
+                           nullptr);
+  // OBI: we'll have new omap entries to process
   if (ret < 0) {
     return ret;
   }
+#endif
 
 // OBI: do we need to combine attributes?
 
