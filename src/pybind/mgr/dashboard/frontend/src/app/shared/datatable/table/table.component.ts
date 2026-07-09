@@ -1274,43 +1274,78 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    * or some selected items may have been removed.
    */
   updateSelected() {
-    if (!this.selection?.selected?.length) return;
+    // In server-side mode, if data is empty or not yet loaded, preserve existing selection
+    // This prevents clearing selection during page transitions when data is being fetched
+    if (this.serverSide && (!this.data || this.data.length === 0)) {
+      return;
+    }
 
-    const newSelected = new Set();
+    const itemsFoundOnCurrentPage = new Set();
+    const itemsFromOtherPages = new Set();
+
     this.selection.selected.forEach((selectedItem) => {
+      let foundOnCurrentPage = false;
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
-          newSelected.add(row);
+          itemsFoundOnCurrentPage.add(row);
+          foundOnCurrentPage = true;
+          break;
         }
+      }
+      // For server-side pagination, preserve items not on current page
+      if (!foundOnCurrentPage && this.serverSide) {
+        itemsFromOtherPages.add(selectedItem);
       }
     });
 
-    const newSelectedArray = Array.from(newSelected.values());
+    const selectedItemsOnCurrentPage = Array.from(itemsFoundOnCurrentPage.values());
+    const selectedItemsOnOtherPages = Array.from(itemsFromOtherPages.values());
 
-    if (newSelectedArray.length === 0) {
+    // For server-side pagination, if no items found on current page but we have
+    // items from other pages, preserve them
+    if (
+      selectedItemsOnCurrentPage.length === 0 &&
+      selectedItemsOnOtherPages.length > 0 &&
+      this.serverSide
+    ) {
+      // No items on current page are selected, but we have selections from other pages
+      // Keep the selection with items from other pages
+      this.selection.selected = selectedItemsOnOtherPages;
+      if (this.updateSelectionOnRefresh !== 'never') {
+        this.updateSelection.emit(_.clone(this.selection));
+      }
+      return;
+    }
+
+    if (selectedItemsOnCurrentPage.length === 0) {
       this.selection.selected = [];
       this.updateSelection.emit(_.clone(this.selection));
       return;
     }
 
-    newSelectedArray.forEach((selection: any) => {
+    selectedItemsOnCurrentPage.forEach((selectedItem: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
-          _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
+          _.get(row, [0, 'selected', this.identifier]) === selectedItem[this.identifier]
       );
       if (rowIndex > -1) {
         this.model.selectRow(rowIndex, true);
       }
     });
 
+    // For server-side pagination, combine found items with items from other pages
+    const finalSelection = this.serverSide
+      ? [...selectedItemsOnCurrentPage, ...selectedItemsOnOtherPages]
+      : selectedItemsOnCurrentPage;
+
     if (
       this.updateSelectionOnRefresh === 'onChange' &&
-      _.isEqual(this.selection.selected, newSelectedArray)
+      _.isEqual(this.selection.selected, finalSelection)
     ) {
       return;
     }
 
-    this.selection.selected = newSelectedArray;
+    this.selection.selected = finalSelection;
 
     if (this.updateSelectionOnRefresh !== 'never') {
       this.updateSelection.emit(_.clone(this.selection));
