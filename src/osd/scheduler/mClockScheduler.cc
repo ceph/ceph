@@ -304,12 +304,12 @@ void mClockScheduler::set_config_defaults_from_profile()
    * Background Recovery Allocation:
    *   reservation: 40% | weight: 1 | limit: 0 (max) |
    * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 70% |
+   *   reservation:  5% | weight: 4 | limit: 70% |
    */
   static constexpr profile_t high_client_ops_profile{
-    { .6, 2,  0 },
-    { .4, 1,  0 },
-    {  0, 1, .7 }
+    { .6,  2,  0 },
+    { .4,  1,  0 },
+    { .05, 4, .7 }
   };
 
   /**
@@ -320,12 +320,12 @@ void mClockScheduler::set_config_defaults_from_profile()
    * Background Recovery Allocation:
    *   reservation: 70% | weight: 2 | limit: 0 (max) |
    * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
+   *   reservation:  5% | weight: 2 | limit: 0 (max) |
    */
   static constexpr profile_t high_recovery_ops_profile{
-    { .3, 1, 0 },
-    { .7, 2, 0 },
-    {  0, 1, 0 }
+    { .3,  1, 0 },
+    { .7,  2, 0 },
+    { .05, 2, 0 }
   };
 
   /**
@@ -336,12 +336,12 @@ void mClockScheduler::set_config_defaults_from_profile()
    * Background Recovery Allocation:
    *   reservation: 50% | weight: 1 | limit: 0 (max) |
    * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 90% |
+   *   reservation:  5% | weight: 2 | limit: 90% |
    */
   static constexpr profile_t balanced_profile{
-    { .5, 1, 0 },
-    { .5, 1, 0 },
-    {  0, 1, .9 }
+    { .5,  1,  0 },
+    { .5,  1,  0 },
+    { .05, 2, .9 }
   };
 
   const profile_t *profile = nullptr;
@@ -471,17 +471,26 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
     _get_mclock_counter(id);
   }
 
- dout(20) << __func__ << " client_count: " << scheduler.client_count()
-          << " queue_sizes: [ "
-	  << " high_priority_queue: " << high_priority.size()
-          << " sched: " << scheduler.request_count() << " ]"
-          << dendl;
- dout(30) << __func__ << " mClockClients: "
-          << scheduler
-          << dendl;
- dout(30) << __func__ << " mClockQueues: { "
-          << display_queues() << " }"
-          << dendl;
+  dout(20) << __func__ << ": sched client_count: " << scheduler.client_count()
+           << " sched queue size: " << scheduler.request_count()
+           << dendl;
+
+  auto fmt_prio = [this](priority_t p) -> std::string {
+    return (p == immediate_class_priority) ? "MAX" : std::to_string(p);
+  };
+
+  dout(20) << __func__ << " high_priority queues: " << high_priority.size();
+  for (const auto& [prio, queue] : high_priority) {
+    *_dout << ", priority " << fmt_prio(prio) << ": " << queue.size();
+  }
+  *_dout << dendl;
+
+  dout(30) << __func__ << " mClockClients: "
+           << scheduler
+           << dendl;
+  dout(30) << __func__ << " mClockQueues: { "
+           << display_queues() << " }"
+           << dendl;
 }
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
