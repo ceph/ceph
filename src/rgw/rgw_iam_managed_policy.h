@@ -33,7 +33,22 @@ auto get_managed_policy(CephContext* cct, std::string_view arn)
 struct ManagedPolicies {
   boost::container::flat_set<std::string> arns;
 };
-void encode(const ManagedPolicies&, bufferlist&, uint64_t f=0);
-void decode(ManagedPolicies&, bufferlist::const_iterator&);
+
+inline void encode(const ManagedPolicies&, bufferlist&, uint64_t f=0);
+inline void decode(ManagedPolicies&, bufferlist::const_iterator&);
+
+void encode(const ManagedPolicies& m, bufferlist& bl, uint64_t f)
+{
+  ENCODE_START(1, 1, bl);
+  encode(m.arns, bl);
+  ENCODE_FINISH(bl);
+}
+
+void decode(ManagedPolicies& m, bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(m.arns, bl);
+  DECODE_FINISH(bl);
+}
 
 } // namespace rgw::IAM

@@ -14,6 +14,7 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include <filesystem>
+#include <boost/container/flat_map.hpp>
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
 #include "common/cohort_lru.h"
@@ -29,7 +30,6 @@
 
 #include "fmt/format.h"
 
-#define dout_subsys ceph_subsys_rgw
 namespace file::listing {
 
 namespace bi = boost::intrusive;
@@ -76,12 +76,9 @@ public:
 
   virtual ~BucketCacheEntry()
   {
-    /* XXX depends on safe_link -- but I think on balance, built-in safe_link
-     * is preferable to a custom mechanism with likely the same cost */
     if (name_hook.is_linked()) {
-      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
     }
-    mdb_dbi_close(*env, dbi); // return db handle
   }
 
   inline bool deleted() const {
@@ -152,32 +149,38 @@ public:
     if (factory == nullptr) {
         return false;
     }
-    { /* anon block */
-      /* in this case, we are being called from a context which holds
-       * A partition lock, and this may be still in use */
+
+    /* Two locks are involved: this entry's mtx and the TreeX partition
+     * lock.  get_bucket() acquires them partition→mtx; reclaim must not
+     * do mtx→partition or we deadlock.  So we mark the entry deleted
+     * under mtx (short critical section), release mtx, then do the
+     * cross-partition tree remove outside. */
+    bool need_cross_remove = false;
+    {
       auto lock = lock_guard{mtx};
       if (! deleted()) {
-	flags |= FLAG_DELETED;
-	bc->recycle_count++;
-
-	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
-	bc->un->remove_watch(name);
-
-	// XXX depends on safe_link
 	if (! name_hook.is_linked()) {
-	  // this should not happen!
 	  abort();
 	}
 
-	/* discard lmdb data associated with this bucket */
-	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0);
-	txn->commit();
-	/* LMDB applications don't "normally" close database handles,
-	 * but doing so (atomically) is supported, and we must as
-	 * we continually recycle them */
-	mdb_dbi_close(*env, dbi); // return db handle
-      } /* ! deleted */
+	flags |= FLAG_DELETED;
+	bc->recycle_count++;
+	lsubdout(bc->driver->ctx(), rgw, 21) << "BucketCache: reclaim evicting bucket=" << name << dendl;
+	bc->un->remove_watch(name);
+	env.reset();
+
+	if (bc->cache.is_same_partition(hk, factory->hk)) {
+	  bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+	} else {
+	  need_cross_remove = true;
+	}
+      }
+    } /* mtx released */
+
+    if (need_cross_remove) {
+      bc->cache.unlock_for(factory->hk);
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_LOCK);
+      bc->cache.lock_for(factory->hk);
     }
     return true;
 } /* reclaim */
@@ -219,16 +222,24 @@ struct BucketCache : public Notifiable
   {
     std::string database_root;
     uint8_t lmdb_count;
-    std::vector<std::shared_ptr<LMDBSafe::MDBEnv>> envs;
+    MDB_dbi max_dbs_per_partition;
+
+    struct Partition {
+      std::shared_ptr<LMDBSafe::MDBEnv> env;
+      boost::container::flat_map<std::string, LMDBSafe::MDBDbi> dbi_map;
+      std::vector<LMDBSafe::MDBDbi> free_dbis;
+      std::mutex mtx;
+    };
+    std::vector<Partition> parts;
     sf::path dbp;
 
   public:
-    Lmdbs(std::string& database_root, uint8_t lmdb_count)
+    Lmdbs(std::string& database_root, uint8_t lmdb_count,
+	  uint32_t max_buckets)
       : database_root(database_root), lmdb_count(lmdb_count),
-        dbp(database_root) {
+        max_dbs_per_partition((max_buckets / lmdb_count) * 5 / 4 + 16),
+        parts(lmdb_count), dbp(database_root) {
 
-      /* create a root for lmdb directory partitions (if it doesn't
-       * exist already) */
       sf::path safe_root_path{dbp / fmt::format("rgw_posix_lmdbs")};
       sf::create_directory(safe_root_path);
 
@@ -241,17 +252,65 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
-	auto env = LMDBSafe::getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
-	envs.push_back(env);
+	parts[ix].env = LMDBSafe::getMDBEnv(
+	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
       }
     }
 
+    uint8_t partition_ix(BucketCacheEntry<D, B>* bucket) {
+      return bucket->hk % lmdb_count;
+    }
+
     inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
-      return envs[(bucket->hk % lmdb_count)];
+      return parts[partition_ix(bucket)].env;
     }
 
     inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
       return *(get_sp_env(bucket));
+    }
+
+    /* look up or create a dbi for the given bucket name in its
+     * partition; reuses a recycled handle if available, otherwise
+     * opens a new one; returns nullopt on MDB_DBS_FULL */
+    std::optional<LMDBSafe::MDBDbi> get_dbi(
+      BucketCacheEntry<D, B>* bucket,
+      std::function<LMDBSafe::MDBDbi()> open_fn)
+    {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+
+      auto it = part.dbi_map.find(bucket->name);
+      if (it != part.dbi_map.end()) {
+        return it->second;
+      }
+
+      if (!part.free_dbis.empty()) {
+	auto dbi = part.free_dbis.back();
+	part.free_dbis.pop_back();
+	part.dbi_map.emplace(bucket->name, dbi);
+	return dbi;
+      }
+
+      try {
+        auto dbi = open_fn();
+        part.dbi_map.emplace(bucket->name, dbi);
+        return dbi;
+      } catch (const LMDBSafe::LMDBError&) {
+        return std::nullopt;
+      }
+    }
+
+    /* move a dbi from the active map to the free pool for reuse;
+     * the caller must have already cleared the database with
+     * mdb_drop(dbi, 0) */
+    void recycle_dbi(BucketCacheEntry<D, B>* bucket) {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+      auto it = part.dbi_map.find(bucket->name);
+      if (it != part.dbi_map.end()) {
+	part.free_dbis.push_back(it->second);
+	part.dbi_map.erase(it);
+      }
     }
 
     const std::string& get_root() const { return database_root; }
@@ -262,13 +321,14 @@ struct BucketCache : public Notifiable
 public:
   BucketCache(D* driver, std::string bucket_root, std::string database_root,
 	      uint32_t max_buckets=100, uint8_t max_lanes=3,
-	      uint8_t max_partitions=3, uint8_t lmdb_count=3)
+	      uint8_t max_partitions=3, uint8_t lmdb_count=3,
+	      bool use_inotify=false)
     : driver(driver), bucket_root(bucket_root), max_buckets(max_buckets),
       lru(max_lanes, max_buckets/max_lanes),
       cache(max_lanes, max_buckets/max_partitions),
       rp(bucket_root),
-      lmdbs(database_root, lmdb_count),
-      un(Notify::factory(this, bucket_root))
+      lmdbs(database_root, lmdb_count, max_buckets),
+      un(Notify::factory(this, bucket_root, use_inotify))
     {
       if (! (sf::exists(rp) && sf::is_directory(rp))) {
 	std::cerr << fmt::format("{} bucket root {} invalid", __func__,
@@ -348,20 +408,44 @@ public:
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
+#ifndef NDEBUG
+	  /* total = q + active;
+	   * q holds idle entries eligible for eviction,
+	   * active holds entries with an outstanding ref (in-flight request).
+	   * A stable total with "recycled" entries means the LRU is healthy. */
+	  ldpp_dout(dpp, 21) << "BucketCache: "
+	    << (iflags & cohort::lru::FLAG_RECYCLE ? "recycled" : "allocated new")
+	    << " entry, LRU total=" << lru.get_size()
+	    << " (q=" << lru.get_q_size()
+	    << " active=" << lru.get_active_size() << ")"
+	    << ", bucket=" << name << dendl;
+#endif
 	  b->mtx.lock();
 
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
 	  auto& env = lmdbs.get_sp_env(b);
-	  auto dbi = env->openDB(b->name, MDB_CREATE);
-	  b->set_env(env, dbi);
+	  auto cmp = B::lmdb_cmp();
+	  auto dbi_opt = lmdbs.get_dbi(b, [&]() {
+	    return cmp
+	      ? env->openDB(b->name, MDB_CREATE, cmp)
+	      : env->openDB(b->name, MDB_CREATE);
+	  });
+	  if (!dbi_opt) {
+	    b->mtx.unlock();
+	    lat.lock->unlock();
+	    return result;
+	  }
+	  b->set_env(env, *dbi_opt);
 
 	  if (! (iflags & cohort::lru::FLAG_RECYCLE)) [[likely]] {
 	    /* inserts at cached insert iterator, releasing latch */
 	    cache.insert_latched(b, lat, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_UNLOCK);
 	  } else {
-	    /* recycle step invalidates Latch */
-	    lat.lock->unlock(); /* !LATCHED */
+	    /* recycle invalidated the cached insert position, but the latch's
+	     * partition lock still guards this partition; hold it across the
+	     * insert so we don't race concurrent tree ops, then release it */
 	    cache.insert(fac.hk, b, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_NONE);
+	    lat.lock->unlock(); /* !LATCHED */
 	  }
 	  get<1>(result) |= BucketCache<D, B>::FLAG_CREATE;
 	} else {
@@ -381,8 +465,9 @@ public:
 
   static inline std::string concat_key(const rgw_obj_index_key& k) {
     std::string k_str;
-    k_str.reserve(k.name.size() + k.instance.size());
+    k_str.reserve(k.name.size() + 1 + k.instance.size());
     k_str += k.name;
+    k_str += '\0';
     k_str += k.instance;
     return k_str;
   }
@@ -390,7 +475,11 @@ public:
   int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B>* bucket,
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
+    try {
       auto txn = bucket->env->getRWTransaction();
+
+      /* clear stale data from a prior hiwat eviction before repopulating */
+      mdb_drop(*txn, bucket->dbi, 0);
 
       /* instruct the bucket provider to enumerate all entries,
        * in any order */
@@ -407,14 +496,17 @@ public:
                   bde.meta.owner_display_name, bde.meta.accounted_size,
                   bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
                   bde.flags);
-	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
-	    << std::endl;*/
+#ifndef NDEBUG
+          std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
+          << std::endl;
+#endif
 	  if (errc.code != std::errc{0}) {
-	    abort();
-	    return 0; // XXX non-zero return?
+	    return -EIO;
 	  }
 	  txn->put(bucket->dbi, concat_k, ser_data);
-	  //std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
+#ifndef NDEBUG
+	  std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
+#endif
 	  return 0;
 	});
 
@@ -422,6 +514,11 @@ public:
       bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
       un->add_watch(bucket->name, bucket);
       return rc;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: fill failed for "
+	<< bucket->name << ": " << e.what() << dendl;
+      return -EIO;
+    }
     } /* fill */
 
   int list_bucket(const DoutPrefixProvider* dpp, optional_yield y, B* sal_bucket,
@@ -430,34 +527,48 @@ public:
     using namespace LMDBSafe;
 
     int rc __attribute__((unused)) = 0;
-    GetBucketResult gbr =
-      get_bucket(dpp, sal_bucket->get_name(),
-		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
+    GetBucketResult gbr;
+    try {
+      gbr = get_bucket(dpp, sal_bucket->get_name(),
+		   BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: get_bucket failed for "
+	<< sal_bucket->get_name() << ": " << e.what() << dendl;
+      return -EIO;
+    }
     auto [b /* BucketCacheEntry */, flags] = gbr;
-    if (b /* XXX again, can this fail? */) {
-      if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
-	/* bulk load into lmdb cache */
-	rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
-      }
-      /* display them */
-      b->mtx.unlock();
-      /*! LOCKED */
+    if (!b) {
+      ldpp_dout(dpp, 0) << "BucketCache: get_bucket returned null for "
+	<< sal_bucket->get_name() << dendl;
+      return -EIO;
+    }
+    
+    if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+      /* bulk load into lmdb cache */
+      ldpp_dout(dpp, 21) << "BucketCache: filling bucket=" << sal_bucket->get_name()
+        << (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
+      rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
+    }
+    /* display them */
+    b->mtx.unlock();
+    /*! LOCKED */
 
+    try {
       auto txn = b->env->getROTransaction();
       auto cursor=txn->getCursor(b->dbi);
       MDBOutVal key, data;
       bool again{true};
 
       const auto proc_result = [&]() {
-	zpp::bits::errc errc{};
-	rgw_bucket_dir_entry bde{};
-	/* XXX we may not need to recover the cache key */
-	std::string_view svk __attribute__((unused)) =
-	  key.get<string_view>(); // {name, instance, [ns]}
-	std::string_view svv = data.get<string_view>();
-	std::string ser_v{svv};
-	zpp::bits::in in_v(ser_v);
-	struct timespec ts;
+        zpp::bits::errc errc{};
+        rgw_bucket_dir_entry bde{};
+        /* XXX we may not need to recover the cache key */
+        std::string_view svk __attribute__((unused)) =
+          key.get<string_view>(); // {name, instance, [ns]}
+        std::string_view svv = data.get<string_view>();
+        std::string ser_v{svv};
+        zpp::bits::in in_v(ser_v);
+        struct timespec ts;
         errc = in_v(
             bde.key.name, bde.key.instance, /* bde.key.ns, */
             bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
@@ -465,43 +576,51 @@ public:
             bde.meta.owner_display_name, bde.meta.accounted_size,
             bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
             bde.flags);
-	if (errc.code != std::errc{0}) {
-	  abort();
-	}
-	bde.meta.mtime = ceph::real_clock::from_timespec(ts);
-	again = each_func(bde);
+        if (errc.code != std::errc{0}) {
+	  ldpp_dout(dpp, 0) << "BucketCache: deserialization error listing "
+	    << sal_bucket->get_name()
+	    << " errc=" << static_cast<int>(errc.code) << dendl;
+          return;
+        }
+        bde.meta.mtime = ceph::real_clock::from_timespec(ts);
+        again = each_func(bde);
       };
 
       if (! marker.empty()) {
-	MDBInVal k(marker);
-	auto rc = cursor.lower_bound(k, key, data);
-	if (rc == MDB_NOTFOUND) {
-	  /* no key sorts after k/marker, so there is nothing to do */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	proc_result();
+        MDBInVal k(marker);
+        auto rc = cursor.lower_bound(k, key, data);
+        if (rc == MDB_NOTFOUND) {
+          /* no key sorts after k/marker, so there is nothing to do */
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        proc_result();
       } else {
-	/* position at start of index */
-	auto rc = cursor.get(key, data, MDB_FIRST);
-	if (rc == MDB_NOTFOUND) {
-	  /* no initial key */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	if (rc == MDB_SUCCESS) {
-	  proc_result();
-	}
+        /* position at start of index */
+        auto rc = cursor.get(key, data, MDB_FIRST);
+        if (rc == MDB_NOTFOUND) {
+          /* no initial key */
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        if (rc == MDB_SUCCESS) {
+          proc_result();
+        }
       }
       while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
-	if (!again) {
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	proc_result();
+        if (!again) {
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        proc_result();
       }
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: LMDB error listing "
+        << sal_bucket->get_name() << ": " << e.what() << dendl;
       lru.unref(b, cohort::lru::FLAG_NONE);
-    } /* b */
+      return -EIO;
+    }
+    lru.unref(b, cohort::lru::FLAG_NONE);
 
     return 0;
   } /* list_bucket */
@@ -522,64 +641,76 @@ public:
 	/* do nothing */
 	return 0;
       }
+      /* NB: b->mtx is held (not unlocked here) across the LMDB writes below
+       * so that fill() and notify() remain mutually exclusive on this
+       * bucket -- see b54e38b0d41 (fix notify() race with invalidation) */
+      try {
+        auto txn = b->env->getRWTransaction();
+        for (const auto& ev : evec) {
+          using EventType = Notifiable::EventType;
+#ifndef NDEBUG
+          std::string_view nil{""};
+          std::cout << fmt::format("notify {} {}!",
+                                  ev.name ? *ev.name : nil,
+                                  uint32_t(ev.type))
+                                  << std::endl;
+#endif
+          switch (ev.type)
+          {
+            case EventType::ADD:
+            {
+              rgw_bucket_dir_entry bde{};
+              bde.key.name = *ev.name;
+              /* XXX will need work (if not straight up magic) to have
+              * side loading support instance and ns */
+              auto concat_k = concat_key(bde.key);
+              rc = driver->mint_listing_entry(b->name, bde);
+              std::string ser_data;
+              zpp::bits::out out(ser_data);
+              struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
+              auto errc =
+                  out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                      bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                      bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                      bde.meta.owner_display_name, bde.meta.accounted_size,
+                      bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                      bde.flags);
+              if (errc.code != std::errc{0}) {
+                break;
+              }
+              txn->put(b->dbi, concat_k, ser_data);
+            }
+              break;
+            case EventType::REMOVE:
+            {
+              auto& ev_name = *ev.name;
+              txn->del(b->dbi, ev_name);
+            }
+              break;
+            [[unlikely]] case EventType::INVALIDATE:
+            {
+              /* yikes, cache blown */
+              lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
+                << " bucket=" << b->name << dendl;
+              mdb_drop(*txn, b->dbi, 0);
+              txn->commit();
+              b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+              ulk.unlock();
+              lru.unref(b, cohort::lru::FLAG_NONE);
+              return 0; /* don't process any more events in this batch */
+            }
+              break;
+            default:
+              /* unknown event */
+              break;
+          }
+        } /* all events */
+        txn->commit();
+      } catch (const std::exception& e) {
+	lsubdout(driver->ctx(), rgw, 0) << "BucketCache: notify failed for "
+	  << b->name << ": " << e.what() << dendl;
+      }
       ulk.unlock();
-      auto txn = b->env->getRWTransaction();
-      for (const auto& ev : evec) {
-	using EventType = Notifiable::EventType;
-	/*
-	std::string_view nil{""};
-	std::cout << fmt::format("notify {} {}!",
-				 ev.name ? *ev.name : nil,
-				 uint32_t(ev.type))
-				 << std::endl; */
-	switch (ev.type)
-	{
-	case EventType::ADD:
-	{
-	  rgw_bucket_dir_entry bde{};
-	  bde.key.name = *ev.name;
-	  /* XXX will need work (if not straight up magic) to have
-	   * side loading support instance and ns */
-	  auto concat_k = concat_key(bde.key);
-	  rc = driver->mint_listing_entry(b->name, bde);
-	  std::string ser_data;
-	  zpp::bits::out out(ser_data);
-	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-          auto errc =
-              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                  bde.meta.owner_display_name, bde.meta.accounted_size,
-                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                  bde.flags);
-	  if (errc.code != std::errc{0}) {
-	    abort();
-	  }
-	  txn->put(b->dbi, concat_k, ser_data);
-	}
-	  break;
-	case EventType::REMOVE:
-	{
-	  auto& ev_name = *ev.name;
-	  txn->del(b->dbi, ev_name);
-	}
-	  break;
-	[[unlikely]] case EventType::INVALIDATE:
-	{
-	  /* yikes, cache blown */
-	  ulk.lock();
-	  mdb_drop(*txn, b->dbi, 0);
-	  txn->commit();
-	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
-	  return 0; /* don't process any more events in this batch */
-	}
-	  break;
-	default:
-	  /* unknown event */
-	  break;
-	}
-      } /* all events */
-      txn->commit();
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
     return rc;
@@ -594,26 +725,32 @@ public:
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(bde.key);
-      std::string ser_data;
-      zpp::bits::out out(ser_data);
-      struct timespec ts {
-        ceph::real_clock::to_timespec(bde.meta.mtime)
-      };
-      auto errc =
-          out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-              bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-              bde.flags);
-      if (errc.code != std::errc{0}) {
-        abort();
-      }
-      txn->put(b->dbi, concat_k, ser_data);
+      try {
+        auto txn = b->env->getRWTransaction();
+        auto concat_k = concat_key(bde.key);
+        std::string ser_data;
+        zpp::bits::out out(ser_data);
+        struct timespec ts {
+          ceph::real_clock::to_timespec(bde.meta.mtime)
+        };
+        auto errc =
+            out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                bde.meta.owner_display_name, bde.meta.accounted_size,
+                bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                bde.flags);
+        if (errc.code != std::errc{0}) {
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return -EIO;
+        }
+        txn->put(b->dbi, concat_k, ser_data);
 
-      txn->commit();
+        txn->commit();
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: add_entry failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
@@ -629,18 +766,33 @@ public:
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(key);
-      txn->del(b->dbi, concat_k);
-      txn->commit();
-
+      try {
+        auto txn = b->env->getRWTransaction();
+        auto concat_k = concat_key(key);
+        txn->del(b->dbi, concat_k);
+        txn->commit();
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 21) << "BucketCache: remove_entry failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
   } /* remove_entry */
 
-  int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname) {
+  /* invalidate a bucket's listing cache.
+   *
+   * recycle=false (default): clear the LMDB data but keep the DBI
+   *   handle mapped to this bucket name for future reuse.
+   *
+   * recycle=true: clear the LMDB data and return the DBI handle to
+   *   a free pool so it can be assigned to a different name.  Use
+   *   for multipart upload shadows whose unique names are never
+   *   reused — without recycling, each upload permanently consumes
+   *   a DBI slot. */
+  int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname,
+			bool recycle = false) {
     using namespace LMDBSafe;
 
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
@@ -648,9 +800,20 @@ public:
     if (b) {
       unique_lock ulk{b->mtx, std::adopt_lock};
 
-      auto txn = b->env->getRWTransaction();
-      mdb_drop(*txn, b->dbi, 0);
-      txn->commit();
+      ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname
+	<< (recycle ? " (recycle)" : "") << dendl;
+
+      try {
+        auto txn = b->env->getRWTransaction();
+        mdb_drop(*txn, b->dbi, 0);
+        txn->commit();
+      } catch (const LMDBSafe::LMDBError& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: invalidate mdb_drop failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
+      if (recycle) {
+	lmdbs.recycle_dbi(b);
+      }
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
       ulk.unlock();

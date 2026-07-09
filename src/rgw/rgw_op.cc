@@ -470,6 +470,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   std::unique_ptr<rgw::sal::Object> mpobj;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   rgw_obj obj;
 
   if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
@@ -482,7 +483,6 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   // 'copy_src' is used to make this function backward compatible.
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
-    std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = bucket->get_multipart_upload(object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
     mpobj->set_in_extra_data(true);
@@ -4833,9 +4833,6 @@ void RGWPutObj::execute(optional_yield y)
     if (s->bucket->versioning_enabled()) {
       if (!version_id.empty()) {
         s->object->set_instance(version_id);
-      } else {
-	s->object->gen_rand_obj_instance_name();
-        version_id = s->object->get_instance();
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
@@ -5204,6 +5201,10 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
+  }
+
   auto ret = rgw::bucketlogging::log_record(driver,
       rgw::bucketlogging::LoggingType::Standard,
       s->object.get(),
@@ -5311,9 +5312,6 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
-    if (s->bucket->versioning_enabled()) {
-      obj->gen_rand_obj_instance_name();
-    }
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
@@ -5986,6 +5984,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
       del_op->params.last_mod_time_match = last_mod_time_match;
+      del_op->params.last_mod_time_match_precise = last_mod_time_match_precise;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
@@ -6512,8 +6511,6 @@ void RGWCopyObj::execute(optional_yield y)
 
   if ( ! version_id.empty()) {
     s->object->set_instance(version_id);
-  } else if (s->bucket->versioning_enabled()) {
-    s->object->gen_rand_obj_instance_name();
   }
 
   s->src_object->set_atomic(true);
@@ -6616,7 +6613,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   RGWObjCategory::Main,
 	   olh_epoch,
 	   delete_at,
-	   (version_id.empty() ? NULL : &version_id),
+	   &version_id,
 	   &s->req_id, /* use req_id as tag */
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
@@ -7066,12 +7063,14 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
-                                                  s->bucket_attrs, &new_config);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  op_ret = lc->set_bucket_config(this, y, s->bucket.get(),
+                                 s->bucket_attrs, &new_config);
 }
 
 void RGWDeleteLC::execute(optional_yield y)
@@ -7083,14 +7082,15 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
-  constexpr bool update_attrs = true;
-  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
-                                                     update_attrs);
-  if (op_ret < 0) {
+  /* not all SAL drivers implement lifecycle */
+  auto* lc = driver->get_rgwlc();
+  if (!lc) {
+    op_ret = -ERR_NOT_IMPLEMENTED;
     return;
   }
-  return;
+  constexpr bool update_attrs = true;
+  op_ret = lc->remove_bucket_config(this, y, s->bucket.get(),
+                                    update_attrs);
 }
 
 int RGWGetCORS::verify_permission(optional_yield y)
@@ -7675,9 +7675,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
       s->object->set_instance(version_id);
-    } else {
-      s->object->gen_rand_obj_instance_name();
-      version_id = s->object->get_instance();
     }
   }
 
@@ -7768,6 +7765,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
+  }
+
+  if (s->bucket->versioning_enabled() && version_id.empty()) {
+    version_id = s->object->get_instance();
   }
 
   // size is logged in stadared mode
@@ -8228,6 +8229,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
   del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.last_mod_time_match_precise = object.get_last_mod_time_precise();
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
@@ -8786,10 +8788,6 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     return op_ret;
-  }
-
-  if (bucket->versioning_enabled()) {
-    obj->gen_rand_obj_instance_name();
   }
 
   rgw_placement_rule dest_placement = s->dest_placement;
