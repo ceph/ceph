@@ -6220,6 +6220,7 @@ void PeeringState::MigratingSource::migration_release_reservations()
 {
   DECLARE_LOCALS;
   pl->cancel_local_background_io_reservation();
+  pl->pool_migration_release_target_reservation();
 }
 
 void PeeringState::MigratingSource::suspend_migration()
