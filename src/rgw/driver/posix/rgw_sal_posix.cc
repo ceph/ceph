@@ -5076,6 +5076,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -5269,6 +5270,9 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  // save shadow name before rename changes info.bucket.name
+  std::string shadow_cache_name = shadow->get_name();
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -5285,6 +5289,10 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return ret;
     }
   }
+
+  // remove staging directory listing cache entry (frees LMDB DBI slot)
+  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
+
   return 0;
 }
 
