@@ -977,23 +977,35 @@ void ExtentPlacementManager::BackgroundProcess::abort_cold_usage(
   }
 }
 
+bool ExtentPlacementManager::BackgroundProcess::try_reserve_main(
+  std::size_t usage)
+{
+  return main_cleaner->try_reserve_projected_usage(usage);
+}
+
 reserve_cleaner_result_t
 ExtentPlacementManager::BackgroundProcess::try_reserve_cleaner(
   const cleaner_usage_t &usage)
 {
   return {
-    main_cleaner->try_reserve_projected_usage(usage.main_usage),
+    try_reserve_main(usage.main_usage),
     try_reserve_cold(usage.cold_ool_usage)
   };
+}
+
+void ExtentPlacementManager::BackgroundProcess::abort_main_usage(
+  std::size_t usage, bool success)
+{
+  if (success) {
+    main_cleaner->release_projected_usage(usage);
+  }
 }
 
 void ExtentPlacementManager::BackgroundProcess::abort_cleaner_usage(
   const cleaner_usage_t &usage,
   const reserve_cleaner_result_t &result)
 {
-  if (result.reserve_main_success) {
-    main_cleaner->release_projected_usage(usage.main_usage);
-  }
+  abort_main_usage(usage.main_usage, result.reserve_main_success);
   abort_cold_usage(usage.cold_ool_usage, result.reserve_cold_success);
 }
 
@@ -1180,16 +1192,16 @@ seastar::future<> ExtentPlacementManager::BackgroundProcess::run_promote()
 
     return seastar::futurize_invoke([this] {
       if (pinboard->should_promote()) {
-        auto usage = cleaner_usage_t{pinboard->get_promotion_size(), 0};
-        auto res = try_reserve_cleaner(usage);
-        if (res.is_successful()) {
+        auto usage = pinboard->get_promotion_size();
+        auto reserved = try_reserve_main(usage);
+        if (reserved) {
           return pinboard->promote(
-          ).finally([this, usage, res] {
-            abort_cleaner_usage(usage, res);
+          ).finally([this, usage] {
+            abort_main_usage(usage, true);
           });
         } else {
           // reserve usage failed, block
-          abort_cleaner_usage(usage, res);
+          abort_main_usage(usage, false);
         }
       } // shouldn't promote, block
 

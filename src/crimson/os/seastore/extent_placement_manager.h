@@ -1145,7 +1145,9 @@ private:
   private:
     // reserve helpers
     bool try_reserve_cold(std::size_t usage);
+    bool try_reserve_main(std::size_t usage);
     void abort_cold_usage(std::size_t usage, bool success);
+    void abort_main_usage(std::size_t usage, bool success);
 
     reserve_cleaner_result_t try_reserve_cleaner(const cleaner_usage_t &usage);
     void abort_cleaner_usage(const cleaner_usage_t &usage,
