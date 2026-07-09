@@ -12,6 +12,11 @@
   update and remove existing key-value pairs that are part of a snapshot
   metadata via libcephfs API ceph_do_snap_md_op().
 
+* CephFS: MDS dmclock support for subvolume QoS. With this feature, MDS assigns QoS
+  to throttle client metadata requests (e.g., create, mkdir, lookup, and so on) to
+  subvolumes, where each subvolume QoS is shared among multiple client sessions at
+  that time.
+
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
   legacy string-based parameters with strongly-typed ClsMethod structs. C++
