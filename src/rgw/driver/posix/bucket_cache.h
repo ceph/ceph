@@ -269,8 +269,7 @@ struct BucketCache : public Notifiable
     }
 
     /* look up or create a dbi for the given bucket name in its
-     * partition; if all dbi slots are exhausted, evict the LRU
-     * entry from the dbi map via mdb_drop(del=1) */
+     * partition; if all dbi slots are exhausted, return nullopt */
     std::optional<LMDBSafe::MDBDbi> get_dbi(
       BucketCacheEntry<D, B>* bucket,
       std::function<LMDBSafe::MDBDbi()> open_fn)
@@ -288,35 +287,8 @@ struct BucketCache : public Notifiable
         part.dbi_map.emplace(bucket->name, dbi);
         return dbi;
       } catch (const LMDBSafe::LMDBError&) {
-        /* MDB_DBS_FULL — evict the oldest entry to free a slot */
-        if (part.dbi_map.empty()) {
-          return std::nullopt;
-        }
-        auto victim = part.dbi_map.begin();
-        try {
-          auto txn = part.env->getRWTransaction();
-          txn->drop(victim->second);
-          txn->commit();
-        } catch (const LMDBSafe::LMDBError&) {
-          return std::nullopt;
-        }
-        part.dbi_map.erase(victim);
-
-        try {
-          auto dbi = open_fn();
-          part.dbi_map.emplace(bucket->name, dbi);
-          return dbi;
-        } catch (const LMDBSafe::LMDBError&) {
-          return std::nullopt;
-        }
+        return std::nullopt;
       }
-    }
-
-    /* remove a dbi from the map (called when a bucket is deleted) */
-    void remove_dbi(BucketCacheEntry<D, B>* bucket) {
-      auto& part = parts[partition_ix(bucket)];
-      std::lock_guard lk(part.mtx);
-      part.dbi_map.erase(bucket->name);
     }
 
     const std::string& get_root() const { return database_root; }
@@ -481,6 +453,7 @@ public:
   int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B>* bucket,
 	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
+    try {
       auto txn = bucket->env->getRWTransaction();
 
       /* clear stale data from a prior hiwat eviction before repopulating */
@@ -501,14 +474,17 @@ public:
                   bde.meta.owner_display_name, bde.meta.accounted_size,
                   bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
                   bde.flags);
-	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
-	    << std::endl;*/
+#ifndef NDEBUG
+          std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
+          << std::endl;
+#endif
 	  if (errc.code != std::errc{0}) {
-	    abort();
-	    return 0; // XXX non-zero return?
+	    return -EIO;
 	  }
 	  txn->put(bucket->dbi, concat_k, ser_data);
-	  //std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
+#ifndef NDEBUG
+	  std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
+#endif
 	  return 0;
 	});
 
@@ -516,6 +492,11 @@ public:
       bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
       un->add_watch(bucket->name, bucket);
       return rc;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: fill failed for "
+	<< bucket->name << ": " << e.what() << dendl;
+      return -EIO;
+    }
     } /* fill */
 
   int list_bucket(const DoutPrefixProvider* dpp, optional_yield y, B* sal_bucket,
@@ -524,36 +505,48 @@ public:
     using namespace LMDBSafe;
 
     int rc __attribute__((unused)) = 0;
-    GetBucketResult gbr =
-      get_bucket(dpp, sal_bucket->get_name(),
-		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
+    GetBucketResult gbr;
+    try {
+      gbr = get_bucket(dpp, sal_bucket->get_name(),
+		   BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: get_bucket failed for "
+	<< sal_bucket->get_name() << ": " << e.what() << dendl;
+      return -EIO;
+    }
     auto [b /* BucketCacheEntry */, flags] = gbr;
-    if (b /* XXX again, can this fail? */) {
-      if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
-	/* bulk load into lmdb cache */
-	ldpp_dout(dpp, 21) << "BucketCache: filling bucket=" << sal_bucket->get_name()
-	  << (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
-	rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
-      }
-      /* display them */
-      b->mtx.unlock();
-      /*! LOCKED */
+    if (!b) {
+      ldpp_dout(dpp, 0) << "BucketCache: get_bucket returned null for "
+	<< sal_bucket->get_name() << dendl;
+      return -EIO;
+    }
+    
+    if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+      /* bulk load into lmdb cache */
+      ldpp_dout(dpp, 21) << "BucketCache: filling bucket=" << sal_bucket->get_name()
+        << (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
+      rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
+    }
+    /* display them */
+    b->mtx.unlock();
+    /*! LOCKED */
 
+    try {
       auto txn = b->env->getROTransaction();
       auto cursor=txn->getCursor(b->dbi);
       MDBOutVal key, data;
       bool again{true};
 
       const auto proc_result = [&]() {
-	zpp::bits::errc errc{};
-	rgw_bucket_dir_entry bde{};
-	/* XXX we may not need to recover the cache key */
-	std::string_view svk __attribute__((unused)) =
-	  key.get<string_view>(); // {name, instance, [ns]}
-	std::string_view svv = data.get<string_view>();
-	std::string ser_v{svv};
-	zpp::bits::in in_v(ser_v);
-	struct timespec ts;
+        zpp::bits::errc errc{};
+        rgw_bucket_dir_entry bde{};
+        /* XXX we may not need to recover the cache key */
+        std::string_view svk __attribute__((unused)) =
+          key.get<string_view>(); // {name, instance, [ns]}
+        std::string_view svv = data.get<string_view>();
+        std::string ser_v{svv};
+        zpp::bits::in in_v(ser_v);
+        struct timespec ts;
         errc = in_v(
             bde.key.name, bde.key.instance, /* bde.key.ns, */
             bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
@@ -561,43 +554,51 @@ public:
             bde.meta.owner_display_name, bde.meta.accounted_size,
             bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
             bde.flags);
-	if (errc.code != std::errc{0}) {
-	  abort();
-	}
-	bde.meta.mtime = ceph::real_clock::from_timespec(ts);
-	again = each_func(bde);
+        if (errc.code != std::errc{0}) {
+	  ldpp_dout(dpp, 0) << "BucketCache: deserialization error listing "
+	    << sal_bucket->get_name()
+	    << " errc=" << static_cast<int>(errc.code) << dendl;
+          return;
+        }
+        bde.meta.mtime = ceph::real_clock::from_timespec(ts);
+        again = each_func(bde);
       };
 
       if (! marker.empty()) {
-	MDBInVal k(marker);
-	auto rc = cursor.lower_bound(k, key, data);
-	if (rc == MDB_NOTFOUND) {
-	  /* no key sorts after k/marker, so there is nothing to do */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	proc_result();
+        MDBInVal k(marker);
+        auto rc = cursor.lower_bound(k, key, data);
+        if (rc == MDB_NOTFOUND) {
+          /* no key sorts after k/marker, so there is nothing to do */
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        proc_result();
       } else {
-	/* position at start of index */
-	auto rc = cursor.get(key, data, MDB_FIRST);
-	if (rc == MDB_NOTFOUND) {
-	  /* no initial key */
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	if (rc == MDB_SUCCESS) {
-	  proc_result();
-	}
+        /* position at start of index */
+        auto rc = cursor.get(key, data, MDB_FIRST);
+        if (rc == MDB_NOTFOUND) {
+          /* no initial key */
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        if (rc == MDB_SUCCESS) {
+          proc_result();
+        }
       }
       while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
-	if (!again) {
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0;
-	}
-	proc_result();
+        if (!again) {
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return 0;
+        }
+        proc_result();
       }
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: LMDB error listing "
+        << sal_bucket->get_name() << ": " << e.what() << dendl;
       lru.unref(b, cohort::lru::FLAG_NONE);
-    } /* b */
+      return -EIO;
+    }
+    lru.unref(b, cohort::lru::FLAG_NONE);
 
     return 0;
   } /* list_bucket */
@@ -618,60 +619,75 @@ public:
 	/* do nothing */
 	return 0;
       }
-      auto txn = b->env->getRWTransaction();
-      for (const auto& ev : evec) {
-	using EventType = Notifiable::EventType;
-	switch (ev.type)
-	{
-	case EventType::ADD:
-	{
-	  rgw_bucket_dir_entry bde{};
-	  bde.key.name = *ev.name;
-	  /* XXX will need work (if not straight up magic) to have
-	   * side loading support instance and ns */
-	  auto concat_k = concat_key(bde.key);
-	  rc = driver->mint_listing_entry(b->name, bde);
-	  std::string ser_data;
-	  zpp::bits::out out(ser_data);
-	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-          auto errc =
-              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                  bde.meta.owner_display_name, bde.meta.accounted_size,
-                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                  bde.flags);
-	  if (errc.code != std::errc{0}) {
-	    abort();
-	  }
-	  txn->put(b->dbi, concat_k, ser_data);
-	}
-	  break;
-	case EventType::REMOVE:
-	{
-	  auto& ev_name = *ev.name;
-	  txn->del(b->dbi, ev_name);
-	}
-	  break;
-	[[unlikely]] case EventType::INVALIDATE:
-	{
-	  /* yikes, cache blown */
-	  lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
-	    << " bucket=" << b->name << dendl;
-	  mdb_drop(*txn, b->dbi, 0);
-	  txn->commit();
-	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
-	  ulk.unlock();
-	  lru.unref(b, cohort::lru::FLAG_NONE);
-	  return 0; /* don't process any more events in this batch */
-	}
-	  break;
-	default:
-	  /* unknown event */
-	  break;
-	}
-      } /* all events */
-      txn->commit();
+      /* NB: b->mtx is held (not unlocked here) across the LMDB writes below
+       * so that fill() and notify() remain mutually exclusive on this
+       * bucket -- see b54e38b0d41 (fix notify() race with invalidation) */
+      try {
+        auto txn = b->env->getRWTransaction();
+        for (const auto& ev : evec) {
+          using EventType = Notifiable::EventType;
+#ifndef NDEBUG
+          std::string_view nil{""};
+          std::cout << fmt::format("notify {} {}!",
+                                  ev.name ? *ev.name : nil,
+                                  uint32_t(ev.type))
+                                  << std::endl;
+#endif
+          switch (ev.type)
+          {
+            case EventType::ADD:
+            {
+              rgw_bucket_dir_entry bde{};
+              bde.key.name = *ev.name;
+              /* XXX will need work (if not straight up magic) to have
+              * side loading support instance and ns */
+              auto concat_k = concat_key(bde.key);
+              rc = driver->mint_listing_entry(b->name, bde);
+              std::string ser_data;
+              zpp::bits::out out(ser_data);
+              struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
+              auto errc =
+                  out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                      bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                      bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                      bde.meta.owner_display_name, bde.meta.accounted_size,
+                      bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                      bde.flags);
+              if (errc.code != std::errc{0}) {
+                break;
+              }
+              txn->put(b->dbi, concat_k, ser_data);
+            }
+              break;
+            case EventType::REMOVE:
+            {
+              auto& ev_name = *ev.name;
+              txn->del(b->dbi, ev_name);
+            }
+              break;
+            [[unlikely]] case EventType::INVALIDATE:
+            {
+              /* yikes, cache blown */
+              lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
+                << " bucket=" << b->name << dendl;
+              mdb_drop(*txn, b->dbi, 0);
+              txn->commit();
+              b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+              ulk.unlock();
+              lru.unref(b, cohort::lru::FLAG_NONE);
+              return 0; /* don't process any more events in this batch */
+            }
+              break;
+            default:
+              /* unknown event */
+              break;
+          }
+        } /* all events */
+        txn->commit();
+      } catch (const std::exception& e) {
+	lsubdout(driver->ctx(), rgw, 0) << "BucketCache: notify failed for "
+	  << b->name << ": " << e.what() << dendl;
+      }
       ulk.unlock();
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
@@ -687,26 +703,32 @@ public:
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(bde.key);
-      std::string ser_data;
-      zpp::bits::out out(ser_data);
-      struct timespec ts {
-        ceph::real_clock::to_timespec(bde.meta.mtime)
-      };
-      auto errc =
-          out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-              bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-              bde.flags);
-      if (errc.code != std::errc{0}) {
-        abort();
-      }
-      txn->put(b->dbi, concat_k, ser_data);
+      try {
+        auto txn = b->env->getRWTransaction();
+        auto concat_k = concat_key(bde.key);
+        std::string ser_data;
+        zpp::bits::out out(ser_data);
+        struct timespec ts {
+          ceph::real_clock::to_timespec(bde.meta.mtime)
+        };
+        auto errc =
+            out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                bde.meta.owner_display_name, bde.meta.accounted_size,
+                bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                bde.flags);
+        if (errc.code != std::errc{0}) {
+          lru.unref(b, cohort::lru::FLAG_NONE);
+          return -EIO;
+        }
+        txn->put(b->dbi, concat_k, ser_data);
 
-      txn->commit();
+        txn->commit();
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: add_entry failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
@@ -722,11 +744,15 @@ public:
       unique_lock ulk{b->mtx, std::adopt_lock};
       ulk.unlock();
 
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(key);
-      txn->del(b->dbi, concat_k);
-      txn->commit();
-
+      try {
+        auto txn = b->env->getRWTransaction();
+        auto concat_k = concat_key(key);
+        txn->del(b->dbi, concat_k);
+        txn->commit();
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 21) << "BucketCache: remove_entry failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
@@ -743,9 +769,14 @@ public:
 
       ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname << dendl;
 
-      auto txn = b->env->getRWTransaction();
-      mdb_drop(*txn, b->dbi, 0);
-      txn->commit();
+      try {
+        auto txn = b->env->getRWTransaction();
+        mdb_drop(*txn, b->dbi, 0);
+        txn->commit();
+      } catch (const LMDBSafe::LMDBError& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: invalidate mdb_drop failed for "
+	  << bname << ": " << e.what() << dendl;
+      }
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
       ulk.unlock();
