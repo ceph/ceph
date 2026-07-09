@@ -66,12 +66,29 @@ namespace TOPNSPC::crypto {
 	void SetFlags(int flags);
 	void Update (const unsigned char *input, size_t length);
 	void Final (unsigned char *digest);
+      protected:
+	OpenSSLDigest (const EVP_MD *_type, int ctx_flags);
     };
 
     class MD5 : public OpenSSLDigest {
       public:
 	static constexpr size_t digest_size = CEPH_CRYPTO_MD5_DIGESTSIZE;
 	MD5 () : OpenSSLDigest(EVP_md5()) { }
+    };
+
+    // MD5 for non-cryptographic purposes (S3/Swift ETags, object names,
+    // cache keys).  On OpenSSL 3+ the digest is fetched with a "fips=no"
+    // property query so it stays available when the default property
+    // query is "fips=yes"; this replaces the former
+    // SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW), which has been a no-op
+    // since OpenSSL 3.0.  Below 3.0 it is plain MD5 with that flag set on
+    // the context, which FIPS-patched 1.1.1 builds still honor.
+    class MD5NonCrypto : public OpenSSLDigest {
+	static const EVP_MD *digest_type();  // in ceph_crypto.cc
+	static int ctx_flags();              // in ceph_crypto.cc
+      public:
+	static constexpr size_t digest_size = CEPH_CRYPTO_MD5_DIGESTSIZE;
+	MD5NonCrypto () : OpenSSLDigest(digest_type(), ctx_flags()) { }
     };
 
     class SHA1 : public OpenSSLDigest {
@@ -199,6 +216,7 @@ namespace TOPNSPC::crypto {
 
   using ssl::SHA256;
   using ssl::MD5;
+  using ssl::MD5NonCrypto;
   using ssl::SHA1;
   using ssl::SHA512;
 
