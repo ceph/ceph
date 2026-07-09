@@ -65,7 +65,7 @@ def download(ctx, config):
 
     for (client, cconf) in config.items():
         branch = cconf.get('force-branch', 'master')
-        repo = cconf.get('force-repo', 'https://github.com/OpenKMIP/PyKMIP')
+        repo = cconf.get('force-repo', 'https://github.com/ceph/PyKMIP')
         sha1 = cconf.get('sha1')
         log.info("Using branch '%s' for pykmip", branch)
         log.info('sha1=%s', sha1)
