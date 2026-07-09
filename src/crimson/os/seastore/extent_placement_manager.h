@@ -926,9 +926,11 @@ private:
         ceph_assert(pinboard != nullptr);
         pinboard->set_background_callback(this);
 
+        logical_bucket_demote_size_per_cycle =
+          get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle");
         logical_bucket = create_logical_bucket(
           get_conf<Option::size_t>("seastore_logical_bucket_capacity"),
-          get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle"));
+          logical_bucket_demote_size_per_cycle);
         logical_bucket->set_background_callback(this);
       }
       LOG_PREFIX(BackgroundProcess::init);
@@ -1372,6 +1374,7 @@ private:
     AsyncCleanerRef main_cleaner;
     ExtentPinboard *pinboard = nullptr;
     LogicalBucketRef logical_bucket;
+    std::size_t logical_bucket_demote_size_per_cycle = 0;
 
     /*
      * cold tier (optional, see has_cold_tier())

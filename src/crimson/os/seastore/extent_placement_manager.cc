@@ -1125,8 +1125,17 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       }
     }
 
+    if (proceed_demote &&
+        !try_reserve_cold(logical_bucket_demote_size_per_cycle)) {
+      abort_cold_usage(logical_bucket_demote_size_per_cycle, false);
+      proceed_demote = false;
+    }
+
     if (!proceed_clean_main && !proceed_clean_cold && !proceed_demote) {
-      ceph_abort_msg("no background process will start");
+      // abort when the system is full, following the enospc handling
+      // in ObjectDataHandler
+      ceph_abort_msg("no background process will start, "
+                     "this probably means the underlying disks are full");
     }
     return seastar::when_all(
       [this, FNAME, proceed_clean_main, abort_cold_cleaner_usage,
@@ -1174,7 +1183,10 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
         if (!proceed_demote) {
           return seastar::now();
         }
-        return logical_bucket->demote();
+        return logical_bucket->demote(
+        ).finally([this] {
+          abort_cold_usage(logical_bucket_demote_size_per_cycle, true);
+        });
       }
     ).discard_result();
   }
