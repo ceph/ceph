@@ -1203,171 +1203,146 @@ class CephFsSnapshotClone(RESTController):
 @APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
 class CephFSSnapshotSchedule(RESTController):
 
+    @staticmethod
+    def _call_snap_schedule(method: str, *args, error_msg: str):
+        try:
+            error_code, out, err = mgr.remote('snap_schedule', method, *args)
+        except RuntimeError as e:
+            raise DashboardException(f'{error_msg}: {e}')
+        if error_code != 0:
+            raise DashboardException(f'{error_msg}: {err}')
+        return out
+
+    @staticmethod
+    def _parse_retention(retention_policy: str) -> List[tuple]:
+        result = []
+        for entry in retention_policy.split('|'):
+            parts = entry.split('-')
+            if len(parts) == 2:
+                result.append((parts[0], parts[1]))
+        return result
+
+    def _apply_retention_policies(self, method: str, retention_policy: str,
+                                  path: str, fs: str, subvol=None, group=None):
+        if not retention_policy:
+            return
+        for count, spec in self._parse_retention(retention_policy):
+            self._call_snap_schedule(
+                method, path, spec, count, fs, subvol, group,
+                error_msg=f'Failed to modify retention policy for path {path}'
+            )
+
     def list(self, fs: str, path: str = '/', recursive: bool = True):
-        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                          path, recursive, fs, None, None, 'plain')
-        if len(out) == 0:
+        recursive = str_to_bool(recursive)
+        try:
+            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                              path, recursive, fs, None, None, 'plain')
+        except RuntimeError as e:
+            raise DashboardException(
+                f'Failed to list snapshot schedules for path {path}: {e}'
+            )
+
+        if error_code != 0 or not out:
             return []
 
-        snapshot_schedule_list = out.split('\n')
+        unique_paths = list(dict.fromkeys(
+            line.strip().split(' ')[0]
+            for line in out.split('\n')
+            if line.strip()
+        ))
         output: List[Any] = []
 
-        for snap in snapshot_schedule_list:
-            current_path = snap.strip().split(' ')[0]
-            error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
-                                                     current_path, fs, None, None, 'json')
-            output = output + json.loads(status_out)
+        for current_path in unique_paths:
+            if not current_path:
+                continue
+            try:
+                error_code, status_out, err = mgr.remote('snap_schedule',
+                                                         'snap_schedule_get',
+                                                         current_path, fs,
+                                                         None, None, 'json')
+            except RuntimeError as e:
+                raise DashboardException(
+                    f'Failed to get snapshot schedule for path {current_path}: {e}'
+                )
+            if error_code != 0 or not status_out:
+                continue
+            output += json.loads(status_out)
 
-        output_json = json.dumps(output)
+        return output
 
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to get list of snapshot schedules for path {path}: {err}'
+    def create(self, fs: str, path: str, snap_schedule: str, start: str,
+               retention_policy=None, subvol=None, group=None):
+        try:
+            self._call_snap_schedule(
+                'snap_schedule_add', path, snap_schedule, start, fs, subvol, group,
+                error_msg=f'Failed to create snapshot schedule for path {path}'
             )
-        return json.loads(output_json)
-
-    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
-               subvol=None, group=None):
-        error_code, _, err = mgr.remote('snap_schedule',
-                                        'snap_schedule_add',
-                                        path,
-                                        snap_schedule,
-                                        start,
-                                        fs,
-                                        subvol,
-                                        group)
-
-        if retention_policy:
-            retention_policies = retention_policy.split('|')
-            for retention in retention_policies:
-                retention_count = retention.split('-')[0]
-                retention_spec_or_period = retention.split('-')[1]
-                error_code_retention, _, err_retention = mgr.remote('snap_schedule',
-                                                                    'snap_schedule_retention_add',
-                                                                    path,
-                                                                    retention_spec_or_period,
-                                                                    retention_count,
-                                                                    fs,
-                                                                    subvol,
-                                                                    group)
-                if error_code_retention != 0:
-                    raise DashboardException(
-                        f'Failed to add retention policy for path {path}: {err_retention}'
-                    )
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to create snapshot schedule for path {path}: {err}'
-            )
-
+        except DashboardException as e:
+            detail = str(e)
+            if 'existing schedule' in detail.lower():
+                raise DashboardException(
+                    msg=f'A snapshot schedule already exists for path {path}. '
+                        'Please remove the existing schedule before creating a new one.',
+                    http_status_code=409
+                )
+            raise
+        self._apply_retention_policies(
+            'snap_schedule_retention_add', retention_policy, path, fs, subvol, group
+        )
         return f'Snapshot schedule for path {path} created successfully'
 
     def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None,
             subvol=None, group=None):
-        def editRetentionPolicies(method, retention_policy):
-            if not retention_policy:
-                return
-
-            retention_policies = retention_policy.split('|')
-            for retention in retention_policies:
-                retention_count = retention.split('-')[0]
-                retention_spec_or_period = retention.split('-')[1]
-                error_code_retention, _, err_retention = mgr.remote('snap_schedule',
-                                                                    method,
-                                                                    path,
-                                                                    retention_spec_or_period,
-                                                                    retention_count,
-                                                                    fs,
-                                                                    subvol,
-                                                                    group)
-                if error_code_retention != 0:
-                    raise DashboardException(
-                        f'Failed to add/remove retention policy for path {path}: {err_retention}'
-                    )
-
-        editRetentionPolicies('snap_schedule_retention_rm', retention_to_remove)
-        editRetentionPolicies('snap_schedule_retention_add', retention_to_add)
-
+        self._apply_retention_policies(
+            'snap_schedule_retention_rm', retention_to_remove, path, fs, subvol, group
+        )
+        self._apply_retention_policies(
+            'snap_schedule_retention_add', retention_to_add, path, fs, subvol, group
+        )
         return f'Retention policies for snapshot schedule on path {path} updated successfully'
 
     @RESTController.Resource('DELETE')
     def delete_snapshot(self, fs: str, path: str, schedule: str, start: str,
                         retention_policy=None, subvol=None, group=None):
         if retention_policy:
-            # check if there are other snap schedules for this exact same path
-            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                              path, False, fs, subvol, group, 'plain')
-
+            try:
+                error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                                  path, False, fs, subvol, group, 'plain')
+            except RuntimeError as e:
+                raise DashboardException(
+                    f'Failed to get snapshot schedule list for path {path}: {e}'
+                )
             if error_code != 0:
                 raise DashboardException(
                     f'Failed to get snapshot schedule list for path {path}: {err}'
                 )
-            # only remove the retention policies if there no other snap schedules for this path
-            snapshot_schedule_list = out.split('\n')
-            if len(snapshot_schedule_list) <= 1:
-                retention_policies = retention_policy.split('|')
-                for retention in retention_policies:
-                    retention_count = retention.split('-')[0]
-                    retention_spec_or_period = retention.split('-')[1]
-                    error_code, _, err = mgr.remote('snap_schedule',
-                                                    'snap_schedule_retention_rm',
-                                                    path,
-                                                    retention_spec_or_period,
-                                                    retention_count,
-                                                    fs,
-                                                    subvol,
-                                                    group)
-                    if error_code != 0:
-                        raise DashboardException(
-                            f'Failed to remove retention policy for path {path}: {err}'
-                        )
-        # remove snap schedule
-        error_code, _, err = mgr.remote('snap_schedule',
-                                        'snap_schedule_rm',
-                                        path,
-                                        schedule,
-                                        start,
-                                        fs,
-                                        subvol,
-                                        group)
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to delete snapshot schedule for path {path}: {err}'
-            )
+            if len(out.split('\n')) <= 1:
+                self._apply_retention_policies(
+                    'snap_schedule_retention_rm', retention_policy, path, fs, subvol, group
+                )
 
+        self._call_snap_schedule(
+            'snap_schedule_rm', path, schedule, start, fs, subvol, group,
+            error_msg=f'Failed to delete snapshot schedule for path {path}'
+        )
         return f'Snapshot schedule for path {path} deleted successfully'
 
     @RESTController.Resource('POST')
-    def deactivate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
-        error_code, _, err = mgr.remote('snap_schedule',
-                                        'snap_schedule_deactivate',
-                                        path,
-                                        schedule,
-                                        start,
-                                        fs,
-                                        subvol,
-                                        group)
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to deactivate snapshot schedule for path {path}: {err}'
-            )
-
+    def deactivate(self, fs: str, path: str, schedule: str, start: str,
+                   subvol=None, group=None):
+        self._call_snap_schedule(
+            'snap_schedule_deactivate', path, schedule, start, fs, subvol, group,
+            error_msg=f'Failed to deactivate snapshot schedule for path {path}'
+        )
         return f'Snapshot schedule for path {path} deactivated successfully'
 
     @RESTController.Resource('POST')
-    def activate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
-        error_code, _, err = mgr.remote('snap_schedule',
-                                        'snap_schedule_activate',
-                                        path,
-                                        schedule,
-                                        start,
-                                        fs,
-                                        subvol,
-                                        group)
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to activate snapshot schedule for path {path}: {err}'
-            )
-
+    def activate(self, fs: str, path: str, schedule: str, start: str,
+                 subvol=None, group=None):
+        self._call_snap_schedule(
+            'snap_schedule_activate', path, schedule, start, fs, subvol, group,
+            error_msg=f'Failed to activate snapshot schedule for path {path}'
+        )
         return f'Snapshot schedule for path {path} activated successfully'
 
 

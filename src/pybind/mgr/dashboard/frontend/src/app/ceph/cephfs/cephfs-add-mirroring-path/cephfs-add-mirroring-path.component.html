@@ -10,7 +10,8 @@
   submitButtonLabel="Add mirror path"
   i18n-submitButtonLabel
   (submitRequested)="onSubmit()"
-  (closeRequested)="onCancel()">
+  (closeRequested)="onCancel()"
+  (stepChanged)="onStepChanged($event)">
   <cd-tearsheet-step>
     <cd-mirroring-paths-step
       #pathsStep
@@ -33,6 +34,14 @@
       [fsIdInput]="fsId"
       [schedulePath]="schedulePath">
     </cd-cephfs-snapshotschedule-form>
+
+    <cd-mirroring-schedule-conflict
+      #scheduleConflict
+      [fsName]="fsName"
+      [paths]="selectedPaths"
+      (existingSchedulesChange)="onExistingSchedulesChange($event)"
+      (conflictActionChange)="onConflictActionChange($event)">
+    </cd-mirroring-schedule-conflict>
   </cd-tearsheet-step>
   <cd-tearsheet-step>
     <cd-mirroring-review-step

@@ -1,0 +1,73 @@
+<ng-template #actionTpl let-row="data.row">
+  <select class="cds--select-input"
+          (change)="setRowAction(row.id, $any($event.target).value)">
+    @for (opt of pathActionOptions; track opt.value) {
+      <option [value]="opt.value"
+              [selected]="opt.value === row.action">{{ opt.content }}</option>
+    }
+  </select>
+</ng-template>
+
+@if (loading) {
+  <cds-loading [isActive]="true"
+               size="sm"
+               class="cds-mt-6">
+  </cds-loading>
+}
+
+@if (!loading && existingSchedules.length) {
+  <div class="cds-mt-6">
+    <cd-alert-panel type="warning">
+      <div [cdsStack]="'vertical'"
+           [gap]="2">
+        <div class="cds--type-heading-compact-01"
+             i18n>One or more selected paths already have configured schedules</div>
+      </div>
+    </cd-alert-panel>
+
+    <div class="cds-mt-5 cds-mb-5">
+      <p class="cds--type-body-compact-01 cds-mb-3"
+         i18n>How do you want to handle existing schedules?</p>
+      <cds-radio-group
+        [value]="scheduleConflictAction"
+        (change)="onConflictActionChange($event)"
+        orientation="horizontal">
+        <cds-radio [value]="'keep'"
+                   [checked]="scheduleConflictAction === 'keep'"
+                   i18n>Keep current schedules and add new one (all paths)</cds-radio>
+        <cds-radio [value]="'replace'"
+                   i18n>Replace existing schedules with the new schedule (all paths)</cds-radio>
+        <cds-radio [value]="'individual'"
+                   i18n>Configure each path individually</cds-radio>
+      </cds-radio-group>
+    </div>
+
+    @if (scheduleConflictAction === 'individual') {
+      <cd-table
+        [data]="existingSchedules"
+        [columns]="existingScheduleActionColumns"
+        columnMode="flex"
+        [hasDetails]="false"
+        [toolHeader]="false"
+        [header]="true"
+        [footer]="false"
+        [searchField]="false"
+        [limit]="0"
+        identifier="id">
+      </cd-table>
+    } @else {
+      <cd-table
+        [data]="existingSchedules"
+        [columns]="existingScheduleBaseColumns"
+        columnMode="flex"
+        [hasDetails]="false"
+        [toolHeader]="false"
+        [header]="true"
+        [footer]="false"
+        [searchField]="false"
+        [limit]="0"
+        identifier="id">
+      </cd-table>
+    }
+  </div>
+}

@@ -6,11 +6,11 @@ import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
 import { of } from 'rxjs';
 import {
-  RepeaFrequencyPlural,
-  RepeaFrequencySingular,
-  RepeatFrequency
+  RepeatFrequencyPlural,
+  RepeatFrequencySingular
 } from '../enum/repeat-frequency.enum';
 import { RetentionFrequencyCopy } from '../enum/retention-frequency.enum';
+import { DEFAULT_SUBVOLUME_GROUP } from '../constants/cephfs.constant';
 
 @Injectable({
   providedIn: 'root'
@@ -19,6 +19,68 @@ export class CephfsSnapshotScheduleService {
   baseURL = 'api/cephfs';
 
   constructor(private http: HttpClient) {}
+
+  normalizePath(path?: string): string {
+    if (!path) {
+      return '';
+    }
+    if (path === '/') {
+      return '/';
+    }
+    return path.trim().replace(/\/+$/, '');
+  }
+
+  parseSubvolumePath(path: string): { group: string; subvol: string } | null {
+    const parts = this.normalizePath(path).split('/').filter(Boolean);
+    if (parts.length < 3 || parts[0] !== 'volumes') {
+      return null;
+    }
+    return { group: parts[1], subvol: parts[2] };
+  }
+
+  isSubvolumePath(path: string): boolean {
+    return !!this.parseSubvolumePath(path);
+  }
+
+  scheduleMatchesPath(schedule: SnapshotSchedule, targetPath: string): boolean {
+    const normalized = this.normalizePath(targetPath);
+    if (!normalized) {
+      return false;
+    }
+    if (
+      this.normalizePath(schedule.path) === normalized ||
+      this.normalizePath(schedule.rel_path) === normalized
+    ) {
+      return true;
+    }
+
+    const subvolInfo = this.parseSubvolumePath(normalized);
+    if (!subvolInfo?.subvol || !schedule.subvol) {
+      return false;
+    }
+    if (schedule.subvol !== subvolInfo.subvol) {
+      return false;
+    }
+
+    const scheduleGroup = schedule.group || DEFAULT_SUBVOLUME_GROUP;
+    const targetGroup = subvolInfo.group || DEFAULT_SUBVOLUME_GROUP;
+    return scheduleGroup === targetGroup;
+  }
+
+  appendSubvolumeParams(
+    payload: Record<string, unknown>,
+    path: string
+  ): Record<string, unknown> {
+    const subvolInfo = this.parseSubvolumePath(path);
+    if (!subvolInfo) {
+      return payload;
+    }
+    payload['subvol'] = subvolInfo.subvol;
+    if (subvolInfo.group !== DEFAULT_SUBVOLUME_GROUP) {
+      payload['group'] = subvolInfo.group;
+    }
+    return payload;
+  }
 
   create(data: Record<string, any>): Observable<any> {
     return this.http.post(`${this.baseURL}/snapshot/schedule`, data, { observe: 'response' });
@@ -69,24 +131,21 @@ export class CephfsSnapshotScheduleService {
     return this.http.delete(deleteUrl);
   }
 
-  checkScheduleExists(
-    path: string,
-    fs: string,
-    interval: number,
-    frequency: RepeatFrequency,
-    isSubvolume = false
-  ): Observable<boolean> {
-    return this.getSnapshotScheduleList(path, fs, false).pipe(
-      map((response) => {
-        const index = response
-          .filter((x) => (isSubvolume ? x.path.startsWith(path) : x.path === path))
-          .findIndex((x) => x.schedule === `${interval}${frequency}`);
-        return index > -1;
-      }),
-      catchError(() => {
-        return of(false);
-      })
+  checkScheduleExists(path: string, fs: string, isSubvolume = false): Observable<boolean> {
+    const normalizedPath = this.normalizePath(path);
+    const queryPath =
+      isSubvolume || this.isSubvolumePath(normalizedPath) ? '/' : normalizedPath || '/';
+    return this.getSnapshotScheduleList(queryPath, fs, true).pipe(
+      map((response) =>
+        response.some((schedule) => this.scheduleMatchesPath(schedule, normalizedPath))
+      ),
+      catchError(() => of(false))
     );
+  }
+
+  isScheduleExistsError(error: { status?: number; error?: { detail?: string } }): boolean {
+    const detail = error?.error?.detail ?? '';
+    return error?.status === 409 || /EEXIST|existing schedule/i.test(detail);
   }
 
   checkRetentionPolicyExists(
@@ -96,13 +155,11 @@ export class CephfsSnapshotScheduleService {
     retentionFrequenciesRemoved: string[] = [],
     isSubvolume = false
   ): Observable<{ exists: boolean; errorIndex: number }> {
-    return this.getSnapshotSchedule(path, fs, false).pipe(
+    return this.getSnapshotSchedule(path, fs, this.isSubvolumePath(path) || isSubvolume).pipe(
       map((response) => {
         let errorIndex = -1;
         let exists = false;
-        const index = response.findIndex((x) =>
-          isSubvolume ? x.path.startsWith(path) : x.path === path
-        );
+        const index = response.findIndex((x) => this.scheduleMatchesPath(x, path));
         const result = retentionFrequencies?.length
           ? intersection(
               Object.keys(response?.[index]?.retention).filter(
@@ -125,7 +182,9 @@ export class CephfsSnapshotScheduleService {
   getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
     return this.http
       .get<SnapshotSchedule[]>(
-        `${this.baseURL}/snapshot/schedule/${fs}?path=${path}&recursive=${recursive}`
+        `${this.baseURL}/snapshot/schedule/${fs}?path=${encodeURIComponent(
+          path
+        )}&recursive=${recursive}`
       )
       .pipe(
         catchError(() => {
@@ -161,12 +220,13 @@ export class CephfsSnapshotScheduleService {
   }
 
   parseScheduleCopy(schedule: string): string {
-    const scheduleArr = schedule.split('');
-    const interval = Number(scheduleArr.filter((x) => !isNaN(Number(x))).join(''));
-    const frequencyUnit = scheduleArr[scheduleArr.length - 1];
-    const frequency =
-      interval > 1 ? RepeaFrequencyPlural[frequencyUnit] : RepeaFrequencySingular[frequencyUnit];
-    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${frequency}`;
+    const match = schedule.match(/^(\d+)([a-zA-Z])$/);
+    if (!match) return schedule;
+    const interval = Number(match[1]);
+    const unit = match[2];
+    const label =
+      interval > 1 ? RepeatFrequencyPlural[unit] : RepeatFrequencySingular[unit];
+    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${label}`;
   }
 
   parseRetentionCopy(retention: string | Record<string, number>): string[] {

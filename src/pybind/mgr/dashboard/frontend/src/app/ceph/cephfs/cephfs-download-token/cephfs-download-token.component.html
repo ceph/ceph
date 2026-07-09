@@ -19,20 +19,18 @@
       </div>
     </cd-alert-panel>
 
-    <div cdsRow class="cds-mt-5 cds-mb-5">
-      <div cdsCol [columnNumbers]="{lg: 16, md: 8, sm: 4}">
-        <label class="cds--label"
-               i18n>Secure token</label>
-        <div class="cds--text-area__wrapper">
-          <textarea class="cds--text-area"
-                    id="secureToken"
-                    rows="6"
-                    cols="80"
-                    readonly>{{ token }}</textarea>
-        </div>
-        <span class="cds--form__helper-text cds-mt-2"
-              i18n>Copy or download token to finish setup on the source cluster</span>
+    <div class="cds-mt-5 cds-mb-5">
+      <label class="cds--label"
+             i18n>Secure token</label>
+      <div class="cds--text-area__wrapper">
+        <textarea class="cds--text-area"
+                  id="secureToken"
+                  rows="6"
+                  cols="80"
+                  readonly>{{ token }}</textarea>
       </div>
+      <span class="cds--form__helper-text cds-mt-2"
+            i18n>Copy or download token to finish setup on the source cluster</span>
     </div>
 
     <button cdsButton="tertiary"

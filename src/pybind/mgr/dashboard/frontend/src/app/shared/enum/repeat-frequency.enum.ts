@@ -3,21 +3,21 @@ export enum RepeatFrequency {
   Daily = 'd',
   Weekly = 'w',
   Monthly = 'M',
-  Yearly = 'Y'
+  Yearly = 'y'
 }
 
-export enum RepeaFrequencySingular {
+export enum RepeatFrequencySingular {
   h = 'hour',
   d = 'day',
   w = 'week',
   M = 'month',
-  Y = 'year'
+  y = 'year'
 }
 
-export enum RepeaFrequencyPlural {
+export enum RepeatFrequencyPlural {
   h = 'hours',
   d = 'days',
   w = 'weeks',
   M = 'months',
-  Y = 'years'
+  y = 'years'
 }

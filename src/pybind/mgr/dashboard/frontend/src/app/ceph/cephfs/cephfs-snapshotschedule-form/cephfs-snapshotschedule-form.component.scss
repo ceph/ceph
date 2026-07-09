@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.form-col {
+  flex: 1 1 0;
+  min-width: 200px;
+}
+
+.form-col-auto {
+  flex: 0 0 auto;
+}
