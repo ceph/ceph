@@ -81,6 +81,13 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return txn->commit(); 
 }
 
+[[nodiscard]] inline bool commit(transaction_handle& txn,
+                                 const versionstamp& stamp)
+{
+ txn->mark_version(stamp);
+ return commit(txn);
+}
+
 } // namespace ceph::libfdb
 
 namespace ceph::libfdb::detail {
@@ -209,6 +216,76 @@ inline void set(database_handle dbh,
  return detail::commit_in_new_transaction(dbh,
           [key = detail::as_fdb_span(k), value = std::string_view(v)](const transaction_handle& txn) {
             return txn->set(key, ceph::libfdb::to::convert(value));
+          });
+}
+
+inline void set(transaction_handle txn,
+                const versioned_bytes& k,
+                const auto& v,
+                const commit_after_op commit_after)
+{
+ return detail::commit_noreplay(txn, commit_after,
+          [&k, &v](const transaction_handle& txn) {
+            return txn->set(k, ceph::libfdb::to::convert(v));
+          });
+}
+
+inline void set(transaction_handle txn,
+                const versioned_bytes& k,
+                const auto& v)
+{
+ return set(txn, k, v, commit_after_op::no_commit);
+}
+
+inline void set(database_handle dbh,
+                const versioned_bytes& k,
+                const auto& v)
+{
+ return detail::maybe_commit(make_transaction(dbh), commit_after_op::commit,
+          [&k, &v](const transaction_handle& txn) {
+            return txn->set(k, ceph::libfdb::to::convert(v));
+          });
+}
+
+// Version-stamped keys and values are strictly an either/or choice for a single set():
+inline void set(transaction_handle,
+                const versioned_bytes&,
+                const versioned_bytes&,
+                const commit_after_op) = delete;
+
+inline void set(transaction_handle,
+                const versioned_bytes&,
+                const versioned_bytes&) = delete;
+
+inline void set(database_handle,
+                const versioned_bytes&,
+                const versioned_bytes&) = delete;
+
+inline void set(transaction_handle txn,
+                std::string_view k,
+                const versioned_bytes& v,
+                const commit_after_op commit_after)
+{
+ return detail::commit_noreplay(txn, commit_after,
+          [key = detail::as_fdb_span(k), &v](const transaction_handle& txn) {
+            return txn->set(key, v);
+          });
+}
+
+inline void set(transaction_handle txn,
+                std::string_view k,
+                const versioned_bytes& v)
+{
+ return set(txn, k, v, commit_after_op::no_commit);
+}
+
+inline void set(database_handle dbh,
+                std::string_view k,
+                const versioned_bytes& v)
+{
+ return detail::maybe_commit(make_transaction(dbh), commit_after_op::commit,
+          [key = detail::as_fdb_span(k), &v](const transaction_handle& txn) {
+            return txn->set(key, v);
           });
 }
 
