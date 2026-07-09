@@ -34,6 +34,10 @@ def nfs_json(**kwargs):
             "keyring": "foobar",
             "user": "jsmith",
         }
+    if kwargs.get("enable_cephfs_client_log"):
+        result["enable_cephfs_client_log"] = True
+    if kwargs.get("cephfs_client_log_dir"):
+        result["cephfs_client_log_dir"] = kwargs["cephfs_client_log_dir"]
     return result
 
 
@@ -144,6 +148,80 @@ def test_nfsganesha_container_mounts():
             cmounts["/var/tmp/keyring.rgw"]
             == "/var/lib/ceph/radosgw/ceph-jsmith/keyring:z"
         )
+
+
+def test_nfsganesha_container_mounts_cephfs_client_log():
+    with with_cephadm_ctx([]) as ctx:
+        ctx.log_dir = "/var/log/ceph"
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            nfs_json(pool=True, files=True, enable_cephfs_client_log=True),
+        )
+        cmounts = nfsg._get_container_mounts("/var/tmp")
+        assert len(cmounts) == 4
+
+        mounts = {}
+        nfsg.customize_container_mounts(ctx, mounts)
+        assert mounts[f"/var/log/ceph/{SAMPLE_UUID}"] == "/var/log/ceph:z"
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.log_dir = "/var/log/ceph"
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            nfs_json(
+                pool=True,
+                files=True,
+                enable_cephfs_client_log=True,
+                cephfs_client_log_dir="/custom/log/dir",
+            ),
+        )
+        mounts = {}
+        nfsg.customize_container_mounts(ctx, mounts)
+        assert mounts["/custom/log/dir"] == "/var/log/ceph:z"
+
+
+def test_nfsganesha_cephfs_client_log_dir_symlink_to_root(cephadm_fs):
+    # a lexically fine path can still alias '/' through a symlink on the host
+    cephadm_fs.create_symlink("/var/log/ceph-link", "/")
+    with with_cephadm_ctx([]) as ctx:
+        ctx.log_dir = "/var/log/ceph"
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            nfs_json(
+                pool=True,
+                files=True,
+                enable_cephfs_client_log=True,
+                cephfs_client_log_dir="/var/log/ceph-link",
+            ),
+        )
+        with pytest.raises(_cephadm.Error, match="cephfs_client_log_dir"):
+            nfsg.customize_container_mounts(ctx, {})
+
+
+def test_nfsganesha_cephfs_client_log_dir_not_a_directory(cephadm_fs):
+    log_dir = "/var/log/ceph-file"
+    cephadm_fs.create_file(log_dir, contents="")
+    with with_cephadm_ctx([]) as ctx:
+        ctx.log_dir = "/var/log/ceph"
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            nfs_json(
+                pool=True,
+                files=True,
+                enable_cephfs_client_log=True,
+                cephfs_client_log_dir=log_dir,
+            ),
+        )
+        with pytest.raises(_cephadm.Error, match="not a directory"):
+            nfsg.customize_container_mounts(ctx, {})
 
 
 def test_nfsganesha_container_envs():
