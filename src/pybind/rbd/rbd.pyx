@@ -6143,6 +6143,7 @@ cdef class GroupSnapIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_group_snaps = 0
                 raise make_ex(ret, 'error listing snapshots for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):
