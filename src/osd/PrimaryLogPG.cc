@@ -15665,6 +15665,7 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
     dout(10) << __func__ << " requesting new reservation for retry" << dendl;
     if (pool_migration_target_pg) {
       // Migration will resume when reservation is granted
+      pool_migration_reservations_granted_source = false;
       pool_migration_request_target_reservation();
     }
   } else if (reason == PoolMigrationQuiesceReason::FATAL_ERROR) {
