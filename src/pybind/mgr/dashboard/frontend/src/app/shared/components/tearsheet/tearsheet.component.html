@@ -49,14 +49,12 @@
                   class="tearsheet-footer-cancel"
                   (click)="closeTearsheet()"
                   size="xl"
-                  type="button"
                   i18n>Cancel</button>
           @if (steps.length > 1) {
           <button cdsButton="secondary"
                   size="xl"
                   [disabled]="currentStep === 0"
                   (click)="onPrevious()"
-                  type="button"
                   i18n>Previous</button>
           }
           @if (currentStep === lastStep) {
@@ -69,7 +67,6 @@
           <button cdsButton="primary"
                   size="xl"
                   (click)="onNext()"
-                  type="button"
                   i18n>Next</button>
           }
         </cds-modal-footer>
@@ -149,14 +146,12 @@
         <button cdsButton="ghost"
                 (click)="closeTearsheet()"
                 size="xl"
-                type="button"
                 i18n>Cancel</button>
         @if (steps.length > 1) {
         <button cdsButton="secondary"
                 size="xl"
                 [disabled]="currentStep === 0"
                 (click)="onPrevious()"
-                type="button"
                 i18n>Previous</button>
         }
         @if (currentStep === lastStep) {
@@ -165,7 +160,6 @@
                 class="tearsheet-footer-submit"
                 [disabled]="isSubmitLoading"
                 (click)="handleSubmit()"
-                type="button"
                 i18n>
           @if (isSubmitLoading) {
           <cds-loading
@@ -184,7 +178,6 @@
         <button cdsButton="primary"
                 size="xl"
                 (click)="onNext()"
-                type="button"
                 i18n>Next</button>
         }
       </cds-modal-footer>

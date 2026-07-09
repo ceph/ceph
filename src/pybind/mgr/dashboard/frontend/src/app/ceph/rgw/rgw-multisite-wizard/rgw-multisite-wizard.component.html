@@ -323,19 +323,16 @@
             name="skip-cluster-selection"
             aria-label="Skip"
             (click)="onSkip()"
-            type="button"
             *ngIf="stepTitles[currentStep.stepIndex]['label'] === 'Select Cluster' && multisiteSetupForm.get('configType').value === 'newRealm'"
             i18n>Skip</button>
     <button cdsButton="secondary"
             (click)="onPreviousStep()"
             [attr.aria-label]="showCancelButtonLabel()"
-            type="button"
             i18n>{{ showCancelButtonLabel() }}</button>
     <button cdsButton="primary"
             (click)="onNextStep()"
             aria-label="Next"
             [disabled]="loading"
-            type="button"
             i18n>{{ showSubmitButtonLabel() }}
       <cds-loading [isActive]="loading"
                    [overlay]="false"
@@ -458,8 +455,8 @@
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ multisiteSetupForm.get('zonegroupName').value }}</b></div>
   </div>
   <div class="form-group row">
-    <legend class="cd-col-form-label"
-           i18n>Zonegroup Endpoints:</legend>
+    <label class="cd-col-form-label"
+           i18n>Zonegroup Endpoints:</label>
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ rgwEndpoints.value.join(', ') }}</b></div>
   </div>
   <div class="form-group row">
@@ -468,21 +465,21 @@
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ multisiteSetupForm.get('zoneName').value }}</b></div>
   </div>
   <div class="form-group row">
-    <legend class="cd-col-form-label"
-           i18n>Zone Endpoints:</legend>
+    <label class="cd-col-form-label"
+           i18n>Zone Endpoints:</label>
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ rgwEndpoints.value.join(', ') }}</b></div>
   </div>
   <div class="form-group row">
-    <legend class="cd-col-form-label"
-           i18n>Username:</legend>
+    <label class="cd-col-form-label"
+           i18n>Username:</label>
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ multisiteSetupForm.get('username').value }}</b></div>
   </div>
 </ng-template>
 
 <ng-template #existingRealmInfo>
   <div class="form-group row">
-    <legend class="cd-col-form-label"
-           i18n>Selected Realm:</legend>
+    <label class="cd-col-form-label"
+           i18n>Selected Realm:</label>
     <div class="cd-col-form-input mt-2 text-muted"><b>{{ multisiteSetupForm.get('selectedRealm').value }}</b></div>
   </div>
 </ng-template>
@@ -490,13 +487,13 @@
 <ng-template #replicationInfo>
   <div *ngIf="isMultiClusterConfigured && !stepsToSkip['Select Cluster']">
     <div class="form-group row">
-      <legend class="cd-col-form-label"
-             i18n>Selected Replication Cluster:</legend>
+      <label class="cd-col-form-label"
+             i18n>Selected Replication Cluster:</label>
       <div class="cd-col-form-input mt-2 text-muted"><b>{{ selectedCluster }}</b></div>
     </div>
     <div class="form-group row">
-      <legend class="cd-col-form-label"
-             i18n>Replication Zone Name:</legend>
+      <label class="cd-col-form-label"
+             i18n>Replication Zone Name:</label>
       <div class="cd-col-form-input mt-2 text-muted"><b>{{ multisiteSetupForm.get('replicationZoneName').value }}</b></div>
     </div>
   </div>

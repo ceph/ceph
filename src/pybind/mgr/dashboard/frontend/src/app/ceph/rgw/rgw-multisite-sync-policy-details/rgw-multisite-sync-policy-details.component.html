@@ -3,11 +3,14 @@
     ngbNav
     #nav="ngbNav"
     class="nav-tabs"
-    cdStatefulTab="sync-policy-details">
+    cdStatefulTab="sync-policy-details"
+  >
     <ng-container ngbNavItem="flow">
       <a
         ngbNavLink
-      i18n>Flow</a>
+        i18n
+        >Flow</a
+      >
       <ng-template ngbNavContent>
         <legend>
           Symmetrical
@@ -29,20 +32,23 @@
           [maxLimit]="25"
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.symmetrical)"
-          (fetchData)="loadData($event)">
+          (fetchData)="loadData($event)"
+        >
           <div class="table-actions">
             <cd-table-actions
               [permission]="permission"
               [selection]="symFlowSelection"
               class="btn-group"
-              [tableActions]="symFlowTableActions" >
+              [tableActions]="symFlowTableActions"
+            >
             </cd-table-actions>
           </div>
         </cd-table>
         <legend>
           Directional
           <cd-help-text>
-            It can define directional data flow, in which the data moves in one way, from one zone to another.
+            It can define directional data flow, in which the data moves in one way, from one zone
+            to another.
           </cd-help-text>
         </legend>
         <cd-table
@@ -59,26 +65,32 @@
           [maxLimit]="25"
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.directional)"
-          (fetchData)="loadData($event)">
+          (fetchData)="loadData($event)"
+        >
           <div class="table-actions">
             <cd-table-actions
               [permission]="permission"
               [selection]="dirFlowSelection"
               class="btn-group"
-              [tableActions]="dirFlowTableActions">
+              [tableActions]="dirFlowTableActions"
+            >
             </cd-table-actions>
           </div>
         </cd-table>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="pipe">
-      <a ngbNavLink
-         i18n>Pipe</a>
+      <a
+        ngbNavLink
+        i18n
+        >Pipe</a
+      >
       <ng-template ngbNavContent>
         <legend i18n>
           Pipe
           <cd-help-text>
-            A pipe defines the actual buckets that can use these data flows, and the properties that are associated with it.
+            A pipe defines the actual buckets that can use these data flows, and the properties that
+            are associated with it.
           </cd-help-text>
         </legend>
         <cd-table
@@ -91,13 +103,15 @@
           [serverSide]="false"
           [toolHeader]="true"
           (updateSelection)="pipeSelection = $event"
-          (fetchData)="loadData($event)">
+          (fetchData)="loadData($event)"
+        >
           <div class="table-actions">
             <cd-table-actions
               [permission]="permission"
               [selection]="pipeSelection"
               class="btn-group"
-              [tableActions]="pipeTableActions">
+              [tableActions]="pipeTableActions"
+            >
             </cd-table-actions>
           </div>
         </cd-table>
@@ -108,8 +122,10 @@
 }
 
 <ng-template #deleteTpl>
-  <cd-alert-panel type="danger"
-                  i18n>
+  <cd-alert-panel
+    type="danger"
+    i18n
+  >
     Deleting {{ resourceType | upperFirst }} may disrupt data synchronization
   </cd-alert-panel>
 </ng-template>

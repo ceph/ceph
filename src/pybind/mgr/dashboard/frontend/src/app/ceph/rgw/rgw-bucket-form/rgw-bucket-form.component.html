@@ -415,8 +415,7 @@
             <button cdsButton="tertiary"
                     id="add-tag"
                     [disabled]="tags.length > 19"
-                    (click)="showTagModal()"
-                    type="button">
+                    (click)="showTagModal()">
               <ng-container i18n>Add tag</ng-container>
               <svg cdsIcon="add"
                    size="32"
@@ -460,7 +459,6 @@
               <button cdsButton="tertiary"
                       id="example-generator-button"
                       (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
-                      type="button"
                       i18n>Policy examples
                 <svg cdsIcon="launch"
                      size="16"
@@ -469,7 +467,6 @@
               <button cdsButton="tertiary"
                       id="example-generator-button"
                       (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
-                      type="button"
                       i18n>Policy generator
                 <svg cdsIcon="launch"
                      size="16"
@@ -482,7 +479,6 @@
               <button cdsButton="tertiary"
                       id="clear-bucket-policy"
                       (click)="clearTextArea('bucket_policy', '{}')"
-                      type="button"
                       i18n>Clear
                 <svg cdsIcon="close"
                      size="32"
@@ -523,7 +519,6 @@
               <button cdsButton="tertiary"
                       id="lifecycle-examples-button"
                       (click)="openUrl('https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples')"
-                      type="button"
                       i18n>Policy examples
                 <svg cdsIcon="launch"
                      size="16"
@@ -536,7 +531,6 @@
               <button cdsButton="tertiary"
                       id="clear-lifecycle"
                       (click)="clearTextArea('lifecycle', '{}')"
-                      type="button"
                       i18n>Clear
                 <svg cdsIcon="close"
                      size="32"
@@ -668,4 +662,3 @@
 <ng-template #loadingTpl>
   <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
 </ng-template>
-
