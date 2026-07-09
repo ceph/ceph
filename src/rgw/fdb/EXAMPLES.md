@@ -59,6 +59,41 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+## Version Stamps
+
+```cpp
+// Store a value with a versioned key:
+lfdb::versionstamp stamp;
+
+lfdb::set(dbh,
+          lfdb::versioned("person/konrad-zuse/event/", "/created", stamp),
+          "created");
+```
+
+```cpp
+// Store a transaction-versioned value:
+lfdb::versionstamp stamp;
+
+lfdb::set(dbh,
+          "person/barbara-liskov/version",
+          lfdb::versioned("", stamp));
+```
+
+```cpp
+// Get a version stamp from a committed transaction:
+auto txn = lfdb::make_transaction(dbh);
+lfdb::versionstamp stamp;
+
+lfdb::set(txn, "person/alonzo-church/name", "Alonzo Church");
+
+if (lfdb::commit(txn, stamp)) {
+  const auto& version_stamp_bytes = stamp.resolved_bytes();
+}
+```
+
+Note that version stamping a key or a value is strictly an either/or proposition: there is no call
+to set a stamped key and value all at once.
+
 ## Setup
 
 ```cpp
