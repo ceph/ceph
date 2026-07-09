@@ -92,6 +92,7 @@ using namespace std::literals::string_view_literals;
 
 #include "common/Cond.h"
 #include "common/perf_counters.h"
+#include "common/JSONFormatter.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "include/str_list.h"
@@ -986,7 +987,8 @@ void Client::trim_cache(bool trim_kernel_dcache)
   if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
   
-  logger->set(l_c_dentry_count, lru.lru_get_size());//set the counter after every trim pass NEW!!
+  if (logger)
+    logger->set(l_c_dentry_count, lru.lru_get_size());
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->get_nref() == 1 && inode_map.size() == 1 + root_parents.size()) {
@@ -19215,6 +19217,33 @@ int Client::get_perf_counters(bufferlist *outbl) {
 
   ldout(cct, 10) << __func__ << ": perf cmd=" << cmd << dendl;
   return cct->get_admin_socket()->execute_command(cmd, inbl, err, outbl);
+}
+
+
+
+int64_t Client::get_perf_counter_value(int idx, bool *is_time)
+{
+  RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
+  if (!iref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+  // Valid counter indices are (l_c_first, l_c_last) exclusive — l_c_first and
+  // l_c_last are sentinels only; PerfCounters asserts idx > lower_bound.
+  if (idx <= l_c_first || idx >= l_c_last) {
+    return -ERANGE;
+  }
+
+  // Ask the PerfCounters object directly for the type flag
+  // Adding or removing a counter in Client.h and _finish_init()
+  // automatically propagates here.
+  bool t = (logger->get_type(idx) & PERFCOUNTER_TIME) != 0;
+  if (is_time) {
+    *is_time = t;
+  }
+  if (t) {
+    return (int64_t)logger->tget(idx).to_nsec();
+  }
+  return (int64_t)logger->get(idx);
 }
 
 std::vector<std::string> Client::get_tracked_keys() const noexcept

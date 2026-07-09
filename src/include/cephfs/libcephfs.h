@@ -2416,6 +2416,58 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 
+
+
+/** Counter kind tags stored in ceph_perf_counters_t::entries[i].type. */
+#define CEPH_PERF_KIND_U64  0  /**< integer counter/gauge                    */
+#define CEPH_PERF_KIND_TIME 1  /**< time average; value stored in nanoseconds */
+
+/** Maximum length of a counter name, including the NUL terminator. */
+#define CEPH_PERF_NAME_LEN 32
+
+/**
+ * One entry in the perf counters array.
+ *
+ * Plain-old-data: value, type, and inline name string.
+ */
+struct ceph_perf_counter_entry_t {
+  int64_t value;                   /**< counter value; ns for TIME counters  */
+  uint8_t type;                    /**< CEPH_PERF_KIND_U64 or _TIME          */
+  char    name[CEPH_PERF_NAME_LEN];/**< NUL-terminated counter name          */
+};
+
+/**
+ * Structured snapshot of all client perf counters.
+ *
+ * Allocated dynamically by ceph_get_perf_counters_struct() with size
+ * based on the actual number of counters in the running client instance.
+ * The caller must free the returned pointer using free().
+ *
+ * The struct is laid out contiguously: header followed by entries array.
+ * This allows the whole allocation to be sent to Samba as a single blob.
+ *
+ * Iterate all counters:
+ *
+ *   struct ceph_perf_counters_t *s = NULL;
+ *   ceph_get_perf_counters_struct(cmount, &s);
+ *   for (int i = 0; i < s->num_counters; i++) {
+ *       // s->entries[i].name, s->entries[i].value, s->entries[i].type
+ *   }
+ *   free(s);
+ *
+ * Find a specific counter by name:
+ *
+ *   for (int i = 0; i < s->num_counters; i++) {
+ *       if (strcmp(s->entries[i].name, "rdops") == 0) { ... }
+ *   }
+ *
+ * Time counters (CEPH_PERF_KIND_TIME) store the value in nanoseconds.
+ */
+struct ceph_perf_counters_t {
+  int num_counters;  /**< number of entries in the following array; set by caller */
+  struct ceph_perf_counter_entry_t entries[];  /**< variable-length array (C99) */
+};
+
 /**
  * perf counters via libcephfs API.
  */
@@ -2431,6 +2483,9 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
  * @perf_dump buffer using free().
  */
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
+
+int ceph_get_perf_counters_struct(struct ceph_mount_info *cmount,
+                                  struct ceph_perf_counters_t **out);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
 #ifdef __cplusplus
