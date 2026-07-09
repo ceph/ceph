@@ -2888,14 +2888,13 @@ int RGWUserCtl::get_info_by_uid(const DoutPrefixProvider *dpp,
                                 const GetParams& params)
 
 {
-  return svc.user->read_user_info(uid,
-                                  info,
-                                  params.objv_tracker,
-                                  params.mtime,
-                                  params.cache_info,
-                                  params.attrs,
-                                  y,
-                                  dpp);
+  return svc.user->get_user_info_by_uid(uid,
+                                        info,
+                                        params.objv_tracker,
+                                        params.attrs,
+                                        params.mtime,
+                                        y,
+                                        dpp);
 }
 
 int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp, 

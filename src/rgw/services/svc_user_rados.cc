@@ -698,6 +698,48 @@ int RGWSI_User_RADOS::get_user_info_from_index(const string& key,
   return 0;
 }
 
+int RGWSI_User_RADOS::get_user_info_by_uid(const rgw_user& uid, RGWUserInfo *info,
+                                       RGWObjVersionTracker* objv_tracker,
+                                       std::map<std::string, bufferlist>* pattrs,
+                                       real_time* pmtime, optional_yield y,
+                                       const DoutPrefixProvider* dpp)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+  const string cache_key = pool.to_str() + "/" + uid.to_str();
+
+  if (auto e = uinfo_cache->find(cache_key)) {
+    *info = e->info;
+    if (objv_tracker)
+      *objv_tracker = e->objv_tracker;
+    if (pattrs)
+      *pattrs = e->attrs;
+    if (pmtime)
+      *pmtime = e->mtime;
+    return 0;
+  }
+
+  RGWUserInfo new_info(info ? *info : RGWUserInfo{});
+  user_info_cache_entry e;
+  rgw_cache_entry_info cache_info;
+  int ret = read_user_info(ctx, uid, &new_info, &e.objv_tracker,
+                           &e.mtime, &cache_info, &e.attrs, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  e.info = std::move(new_info);
+
+  uinfo_cache->put(dpp, svc.cache, cache_key, &e, { &cache_info });
+
+  *info = e.info;
+  if (objv_tracker)
+    *objv_tracker = e.objv_tracker;
+  if (pmtime)
+    *pmtime = e.mtime;
+  if (pattrs)
+    *pattrs = std::move(e.attrs);
+  return 0;
+}
+
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
