@@ -15,21 +15,25 @@
       <button class="btn btn-light"
               aria-label="Go back"
               routerLink="/upgrade"
+              type="button"
               i18n>Back</button>
       <button *ngIf="upgradeStatus.in_progress && !upgradeStatus.is_paused"
               (click)="pauseUpgrade()"
               class="btn btn-light m-2"
               aria-label="Pause Upgrade"
+              type="button"
               i18n>Pause</button>
       <button *ngIf="upgradeStatus.in_progress && upgradeStatus.is_paused"
               (click)="resumeUpgrade()"
               class="btn btn-light m-2"
               aria-label="Resume Upgrade"
+              type="button"
               i18n>Resume</button>
       <button *ngIf="upgradeStatus.in_progress"
               (click)="stopUpgradeModal()"
               class="btn btn-danger"
               aria-label="Stop Upgrade"
+              type="button"
               i18n>Stop</button>
     </div>
   </ng-container>

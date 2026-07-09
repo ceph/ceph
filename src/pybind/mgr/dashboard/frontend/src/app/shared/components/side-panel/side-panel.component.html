@@ -1,5 +1,7 @@
 <div class="overlay"
      (click)="close()"
+     tabindex="0"
+     (keydown.enter)="close()"
      *ngIf="expanded && overlay"></div>
 
 <cds-panel [expanded]="expanded"

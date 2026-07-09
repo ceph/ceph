@@ -130,6 +130,8 @@
                 <span class="float-end clickable"
                       name="remove_placement_target"
                       (click)="removePlacementTarget(index)"
+                      tabindex="0"
+                      (keydown.enter)="removePlacementTarget(index)"
                       ngbTooltip="Remove">&times;</span>
               </div>
 
