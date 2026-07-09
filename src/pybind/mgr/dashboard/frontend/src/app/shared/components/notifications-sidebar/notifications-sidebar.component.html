@@ -65,6 +65,7 @@
             <div class="card-body p-1">
               <button class="btn btn-link float-end mt-0 pt-0"
                       title="Remove notification"
+                      type="button"
                       i18n-title
                       (click)="remove(i); $event.stopPropagation()">
                 <svg [cdsIcon]="icons.trash"
@@ -74,6 +75,7 @@
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && !notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Silence Alert"
+                      type="button"
                       i18n-title
                       (click)="silence(notification)">
                 <svg [cdsIcon]="icons.mute"
@@ -83,6 +85,7 @@
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Expire Silence"
+                      type="button"
                       i18n-title
                       (click)="expire(notification)">
                 <svg [cdsIcon]="icons.bell"

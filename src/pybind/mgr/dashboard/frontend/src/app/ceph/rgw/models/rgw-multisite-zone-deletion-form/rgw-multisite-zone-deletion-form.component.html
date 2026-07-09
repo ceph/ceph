@@ -10,20 +10,20 @@
     <section cdsModalContent>
       <form [formGroup]="zoneForm"
             novalidate>
-        <label class="cds--label-description"
+        <legend class="cds--label-description"
                i18n>
           This will delete your <strong>{{ zone?.name }}</strong> Zone.
-        </label>
+        </legend>
         @if (includedPools.size) {
-        <label class="cds--label-description"
+        <legend class="cds--label-description"
                i18n>
           Do you want to delete the associated pools with the
           <strong>{{ zone?.name }}</strong> Zone?
-        </label>
-        <label class="cds--label-description"
+        </legend>
+        <legend class="cds--label-description"
                i18n>
           This will delete the following pools and any data stored in these pools:
-        </label>
+        </legend>
 
         <div class="scroll-list">
           @for (pool of includedPools; track pool) {

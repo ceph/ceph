@@ -4,12 +4,14 @@
   <li class="cds--overflow-menu-options__option mb-2">
     <button routerLink="/user-management"
             class="cds--overflow-menu-options__btn"
+            type="button"
             i18n>User management</button>
   </li>
   <li class="cds--overflow-menu-options__option mb-2"
       *ngIf="configOptPermission.read">
     <button routerLink="/telemetry"
             class="cds--overflow-menu-options__btn"
+            type="button"
             i18n>Telemetry configuration</button>
   </li>
 </cds-overflow-menu>

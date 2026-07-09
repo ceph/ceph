@@ -37,11 +37,13 @@
     </span>
     <span *ngIf="dropdownData && dropdownData.total.total.total > 0"
           class="position-absolute end-0 me-2">
-      <a (click)="toggleDropdown()"
-         class="dropdown-toggle"
-         [attr.aria-expanded]="dropdownToggled"
-         aria-controls="row-dropdwon"
-         role="button"></a>
+      <button type="button"
+          (click)="toggleDropdown()"
+          class="dropdown-toggle border-0 bg-transparent p-0"
+          [attr.aria-expanded]="dropdownToggled"
+          aria-controls="row-dropdown">
+        <span class="visually-hidden" i18n>Toggle dropdown</span>
+      </button>
     </span>
   </div>
 </li>

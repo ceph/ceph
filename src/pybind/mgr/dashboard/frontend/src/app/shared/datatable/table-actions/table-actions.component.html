@@ -19,7 +19,8 @@
             [attr.aria-label]="dropDownOnly"
             [offset]="{ x: -210, y: 65 }"
             [cdsOverflowMenu]="overflowMenuTpl"
-            data-testid="table-action-btn">
+            data-testid="table-action-btn"
+            type="button">
       <svg
            [cdsIcon]="icons.chevronDown"></svg>
     </button>
@@ -44,7 +45,8 @@
 
 <ng-template #caret>
   <button [cdsButton]="currentAction.buttonKind"
-          class="caret-btn">
+          class="caret-btn"
+          type="button">
     <svg class="cds--btn__icon"
          [cdsIcon]="icons.chevronDown"></svg>
   </button>
@@ -74,7 +76,8 @@
 </ng-template>
 
 <ng-template #customTrigger>
-  <button [cdsButton]="dropDownOnlyBtnColor">
+  <button [cdsButton]="dropDownOnlyBtnColor"
+          type="button">
     <span i18n>{{ dropDownOnly }}</span>
     <svg class="override-position-static cds--btn__icon"
          [cdsIcon]="icons.chevronDown"></svg>

@@ -16,6 +16,8 @@
                       spacingClass="mb-3"
                       i18n>
         <a class="text-decoration-underline"
+           tabindex="0"
+           (keydown.enter)="createMultisiteSetup()"
            (click)="createMultisiteSetup()">
           Click here</a> to create a new Realm/Zonegroup/Zone
       </cd-alert-panel>
@@ -1423,6 +1425,7 @@
       <div class="form-item">
         <fieldset class="cds--fieldset">
           <label class="cds--label"
+                 for="enable_mtls"
                  i18n>Encryption</label>
           <cds-checkbox i18n-label
                         id="enable_mtls"

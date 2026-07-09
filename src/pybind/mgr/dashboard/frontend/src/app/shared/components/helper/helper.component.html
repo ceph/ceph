@@ -30,7 +30,9 @@
       </div>
       <cds-popover-content>
         <div class="cds--popover-scroll-container"
-             (click)="$event.stopPropagation()">
+             (click)="$event.stopPropagation()"
+             tabindex="0"
+             (keydown.enter)="$event.stopPropagation()">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </cds-popover-content>

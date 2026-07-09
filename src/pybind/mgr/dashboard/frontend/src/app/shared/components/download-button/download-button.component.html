@@ -11,6 +11,7 @@
   <div ngbDropdownMenu>
     <button ngbDropdownItem
             (click)="download('json')"
+            type="button"
             *ngIf="objectItem">
       <svg [cdsIcon]="icons.code"
            size="16"
@@ -19,7 +20,8 @@
     </button>
     <button ngbDropdownItem
             (click)="download()"
-            *ngIf="textItem">
+            *ngIf="textItem"
+            type="button">
       <svg [cdsIcon]="icons.document"
            size="16"
            ></svg>

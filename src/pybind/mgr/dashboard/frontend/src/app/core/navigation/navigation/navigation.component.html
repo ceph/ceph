@@ -36,7 +36,9 @@
       </cds-header-navigation>
       <div class="cds--btn cds--btn--icon-only cds--header__action"
            data-testid="header-notification-icon"
-           (click)="onNotificationSelected($event)">
+           (click)="onNotificationSelected($event)"
+           tabindex="0"
+           (keydown.enter)="onNotificationSelected($event)">
         <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">

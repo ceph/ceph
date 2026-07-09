@@ -26,7 +26,8 @@
              *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
           <div class="text-center">
             <button class="btn btn-primary"
-                    (click)="openConnectClusterForm()">
+                    (click)="openConnectClusterForm()"
+                    type="button">
               <i class="mx-auto"
                  [ngClass]="icons.add">
               </i> Connect Cluster

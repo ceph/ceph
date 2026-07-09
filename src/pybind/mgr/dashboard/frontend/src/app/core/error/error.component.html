@@ -25,10 +25,12 @@
           <button class="btn btn-primary ms-1"
                   [routerLink]="buttonRoute"
                   *ngIf="!uiConfig; else configureButtonTpl"
+                  type="button"
                   i18n>{{ buttonName }}</button>
           <button class="btn btn-light ms-1"
                   [routerLink]="secondaryButtonRoute"
                   *ngIf="secondaryButtonName && secondaryButtonRoute"
+                  type="button"
                   i18n>{{ secondaryButtonName }}</button>
         </div>
       </div>
@@ -40,6 +42,7 @@
   <button class="btn btn-primary"
           (click)="doConfigure()"
           [attr.title]="buttonTitle"
+          type="button"
           *ngIf="uiConfig"
           i18n>{{ buttonName }}</button>
 </ng-template>
@@ -64,6 +67,7 @@
        *ngIf="!module_name; else enableButton">
     <button class="btn btn-primary"
             [routerLink]="'/overview'"
+            type="button"
             i18n>Go To Overview</button>
   </div>
 </ng-template>
@@ -73,6 +77,7 @@
        *ngIf="module_name && !(buttonName && buttonRoute)">
     <button class="btn btn-primary"
             (click)="enableModule()"
+            type="button"
             i18n>Enable {{ module_name | upperFirst }} module</button>
   </div>
 </ng-template>

@@ -72,5 +72,7 @@
              let-row="data.row"
              let-value="data.value">
   <span class="quota-origin"
+        tabindex="0"
+        (keydown.enter)="selectOrigin(value)"
         (click)="selectOrigin(value)">{{value}}</span>
 </ng-template>
