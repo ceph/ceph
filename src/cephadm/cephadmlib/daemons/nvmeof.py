@@ -16,6 +16,10 @@ from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
 from ..file_utils import makedirs, populate_files
 from ..call_wrappers import call
+from ceph.cephadm.constants import (
+    NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH,
+    NVMEOF_ENCRYPTION_KEY_PATH_FILE,
+)
 
 
 logger = logging.getLogger()
@@ -135,6 +139,7 @@ class CephNvmeof(ContainerDaemonForm):
         mounts.update(self._get_huge_pages_mounts(self.files))
         mounts.update(self._get_dsa_mounts(self.files))
         mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
+        mounts.update(self._get_external_encryption_key_mounts(self.files))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]
@@ -294,3 +299,17 @@ class CephNvmeof(ContainerDaemonForm):
                     pass
                 except ValueError:
                     pass
+
+    def _get_external_encryption_key_mounts(
+        self, files: Dict[str, str]
+    ) -> Dict[str, str]:
+        host_path = files.get(NVMEOF_ENCRYPTION_KEY_PATH_FILE)
+        if not host_path:
+            return {}
+
+        if not os.path.isfile(host_path):
+            raise Error(
+                f'NVMe-oF encryption key file does not exist on host: {host_path}'
+            )
+
+        return {host_path: f'{NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH}:ro'}
