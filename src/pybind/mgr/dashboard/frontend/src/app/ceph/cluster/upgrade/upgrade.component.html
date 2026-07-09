@@ -142,10 +142,13 @@
                     aria-label="Upgrade now"
                     (click)="upgradeNow(info.versions[info.versions.length - 1])"
                     [disabled]="(healthData.mgr_map | mgrSummary)?.total <= 1"
+                    type="button"
                     i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
           </div>
           <a class="mt-2 link-primary mb-2"
              (click)="startUpgradeModal()"
+             tabindex="0"
+             (keydown.enter)="startUpgradeModal()"
              i18n>Select another version...</a>
         </ng-container>
       </div>
@@ -163,6 +166,8 @@
   </span>
   <a class="link-primary mb-2"
      (click)="startUpgradeModal()"
+     tabindex="0"
+     (keydown.enter)="startUpgradeModal()"
      i18n>Upgrade using custom image...</a>
 </ng-template>
 
@@ -180,6 +185,7 @@
             id="upgrade"
             aria-label="Upgrade now"
             [disabled]="true"
+            type="button"
             i18n>Checking for upgrades
       <i [ngClass]="[icons.spin, icons.spinner]"></i>
     </button>
@@ -206,6 +212,8 @@
     </span>
     <a class="link-primary mb-2"
        (click)="startUpgradeModal()"
+       tabindex="0"
+       (keydown.enter)="startUpgradeModal()"
        i18n>Upgrade using custom image...</a>
   </div>
 </ng-template>

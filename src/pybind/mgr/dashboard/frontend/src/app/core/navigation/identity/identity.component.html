@@ -11,6 +11,7 @@
     <button *ngIf="!sso"
             routerLink="/user-profile/edit"
             class="cds--overflow-menu-options__btn"
+            type="button"
             i18n>
     <svg cdsIcon="locked"
          class="me-2"
@@ -21,6 +22,7 @@
     <button (click)="logout()"
             data-testid="logout"
             class="cds--overflow-menu-options__btn"
+            type="button"
             i18n><svg cdsIcon="logout"
                       class="me-2"
                       size="16"></svg>Log out

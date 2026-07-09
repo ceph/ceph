@@ -11,24 +11,24 @@
       <form name="zonegroupForm"
             [formGroup]="zonegroupForm"
             novalidate>
-        <label class="cds--label-description"
+        <legend class="cds--label-description"
                i18n>
           This will delete your <strong>{{ zonegroup?.name }}</strong> Zonegroup.
-        </label>
+        </legend>
 
       @if (zonesList.length > 0) {
         <ng-container>
-          <label class="cds--label-description"
+          <legend class="cds--label-description"
                  i18n>
             Do you want to delete the associated zones and pools with the <strong>{{zonegroup?.name}}</strong> Zonegroup?
-          </label>
+          </legend>
 
           @if (includedPools.size > 0) {
             <ng-container>
-              <label class="cds--label-description"
+              <legend class="cds--label-description"
                      i18n>
                 This will delete the following:
-              </label>
+              </legend>
             </ng-container>
           }
 

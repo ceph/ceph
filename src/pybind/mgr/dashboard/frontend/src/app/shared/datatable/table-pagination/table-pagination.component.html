@@ -7,6 +7,7 @@
     i18n-aria-label
     [disabled]="!canPrevious()"
     (click)="selectPage(1)"
+    type="button"
   >
     <i class="fa fa-angle-double-left"
        aria-hidden="true"></i>
@@ -16,6 +17,7 @@
     aria-label="Go to previous page"
     i18n-aria-label
     [disabled]="!canPrevious()"
+    type="button"
     (click)="prevPage()"
   >
     <i class="fa fa-angle-left"
@@ -41,6 +43,7 @@
     i18n-aria-label
     (click)="nextPage()"
     [disabled]="!canNext()"
+    type="button"
   >
     <i class="fa fa-angle-right"
        aria-hidden="true"></i>
@@ -51,6 +54,7 @@
     i18n-aria-label
     [disabled]="!canNext()"
     (click)="selectPage(totalPages)"
+    type="button"
   >
     <i class="fa fa-angle-double-right"
        aria-hidden="true"></i>

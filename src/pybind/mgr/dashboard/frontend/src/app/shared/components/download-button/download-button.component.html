@@ -9,13 +9,15 @@
   <div ngbDropdownMenu>
     <button ngbDropdownItem
             (click)="download('json')"
+            type="button"
             *ngIf="objectItem">
       <i [ngClass]="[icons.json]"></i>
       <span>JSON</span>
     </button>
     <button ngbDropdownItem
             (click)="download()"
-            *ngIf="textItem">
+            *ngIf="textItem"
+            type="button">
       <i [ngClass]="[icons.text]"></i>
       <span>Text</span>
     </button>
