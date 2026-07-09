@@ -19,8 +19,10 @@
           <div class="col-sm-12">
             <a class="pull-right margin-right-md"
                (click)="advancedEnabled = true"
+               (keydown.enter)="advancedEnabled = true"
                *ngIf="!advancedEnabled"
-               i18n>Advanced...</a>
+               i18n
+               tabindex="0">Advanced...</a>
           </div>
         </div>
         <div *ngIf="advancedEnabled">

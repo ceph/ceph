@@ -20,7 +20,9 @@
       @for (sub of connectedSubsystems; track sub.nqn) {
       <div class="cds--mb-04">
         <a class="cds--link cds--type-body-01"
-           (click)="navigateToSubsystem(sub.nqn)">
+           tabindex="0"
+           (click)="navigateToSubsystem(sub.nqn)"
+           (keydown.enter)="navigateToSubsystem(sub.nqn)">
           <span class="cds--mr-03">{{ sub.nqn }}</span>
           <cd-icon type="launch"></cd-icon>
         </a>

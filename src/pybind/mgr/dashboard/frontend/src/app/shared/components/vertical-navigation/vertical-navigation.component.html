@@ -13,10 +13,14 @@
         <a class="nav-link"
            [class.active]="!activeItem"
            (click)="selectItem()"
+           tabindex="0"
+           (keydown.enter)="selectItem()"
            *ngIf="item === ''">_nogroup</a>
         <a class="nav-link text-decoration-none text-break"
            [class.active]="item === activeItem"
            (click)="selectItem(item)"
+           tabindex="0"
+           (keydown.enter)="selectItem(item)"
            *ngIf="item !== ''">{{item}}</a>
       </li>
     </ul>

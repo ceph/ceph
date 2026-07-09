@@ -18,7 +18,9 @@
   <div *ngIf="upgradeInfo$ | async as info"
        i18n>
     <h5 *ngIf="info.versions.length > 0"
-        (click)="upgradeModal()">
+        (click)="upgradeModal()"
+        tabindex="0"
+        (keydown.enter)="upgradeModal()">
       <i [ngClass]="icons.up"></i>
       Upgrade available
     </h5>

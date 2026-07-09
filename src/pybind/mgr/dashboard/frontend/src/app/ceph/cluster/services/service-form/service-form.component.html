@@ -16,6 +16,8 @@
                       spacingClass="mb-3"
                       i18n>
         <a class="text-decoration-underline"
+           tabindex="0"
+           (keydown.enter)="createMultisiteSetup()"
            (click)="createMultisiteSetup()">
           Click here</a> to create a new Realm/Zonegroup/Zone
       </cd-alert-panel>
@@ -1276,6 +1278,7 @@
       <div class="form-item">
         <fieldset class="cds--fieldset">
           <label class="cds--label"
+                 for="enable_mtls"
                  i18n>Encryption</label>
           <cds-checkbox i18n-label
                         id="enable_mtls"
@@ -1368,24 +1371,24 @@
   <!-- Current Certificate Section - Only shown in Edit mode when certificate exists -->
   @if (editing && currentCertificate?.has_certificate) {
   <div class="form-item">
-    <label class="cds--label cds--type-heading-compact-01"
-           i18n>Current Certificate</label>
+    <legend class="cds--label cds--type-heading-compact-01"
+           i18n>Current Certificate</legend>
     <div class="row">
       <div class="col-6">
-        <label class="cds--label"
-               i18n>Certificate</label>
+        <legend class="cds--label"
+               i18n>Certificate</legend>
         <div>{{ currentCertificate.cert_name }}</div>
       </div>
       <div class="col-6">
-        <label class="cds--label"
-               i18n>Valid Until</label>
+        <legend class="cds--label"
+               i18n>Valid Until</legend>
         <div>{{ currentCertificate.expiry_date | cdDate }} • {{ currentCertificate.days_to_expiration }} <span i18n>days left</span></div>
       </div>
     </div>
     <div class="row mt-3">
       <div class="col-6">
-        <label class="cds--label"
-               i18n>Status</label>
+        <legend class="cds--label"
+               i18n>Status</legend>
         <div class="align-items-center">
           <cd-icon [type]="statusIconMap[currentCertificate.status] || statusIconMap['default']"></cd-icon>
           @switch (currentCertificate.status) {
@@ -1399,8 +1402,8 @@
         </div>
       </div>
       <div class="col-6">
-        <label class="cds--label"
-               i18n>Issuer</label>
+        <legend class="cds--label"
+               i18n>Issuer</legend>
         <div>
           @if (currentCertificate.signed_by === 'cephadm') {
           <span i18n>Internal (Cephadm CA)</span>
@@ -1416,6 +1419,7 @@
   <!-- Certificate Authority Selection -->
   <div class="form-item">
     <label class="cds--label cds--type-heading-compact-01"
+           for="certificateType"
            i18n>Choose Certificate Authority</label>
     <cds-radio-group formControlName="certificateType"
                      orientation="horizontal"

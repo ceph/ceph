@@ -16,7 +16,9 @@
   <cds-tag class="tag-dark me-2">
     <span class="me-2">{{ dataItem }}</span>
       <a  class="tags-remove"
-          (click)="cdSelect.removeItem(dataItem)">
+          (click)="cdSelect.removeItem(dataItem)"
+          tabindex="0"
+          (keydown.enter)="cdSelect.removeItem(dataItem)">
       <svg [cdsIcon]="icons.destroy"
            [size]="icons.size20"
            class="cds-white"></svg>

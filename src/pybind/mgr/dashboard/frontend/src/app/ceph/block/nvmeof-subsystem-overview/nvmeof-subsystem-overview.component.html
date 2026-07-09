@@ -33,7 +33,9 @@
               <a cdsLink
                  class="cds-ml-2"
                  (click)="openEditAuthModal()"
+                 (keydown.enter)="openEditAuthModal()"
                  [cdsStack]="'horizontal'"
+                 tabindex="0"
                  [gap]="1">
                 <span i18n>Edit</span>
                 <cd-icon type="edit"></cd-icon>
@@ -69,8 +71,10 @@
               <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
               <a cdsLink
                  (click)="openEditHostAccessModal()"
+                 (keydown.enter)="openEditHostAccessModal()"
                  [cdsStack]="'horizontal'"
                  class="cds-ml-2"
+                 tabindex="0"
                  [gap]="1">
                 <span i18n>Edit</span>
                 <cd-icon type="edit"></cd-icon>

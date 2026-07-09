@@ -5,7 +5,9 @@
   <div *ngFor="let section of rbdConfigurationService.sections">
     <h5 class="cd-header">
       <legend (click)="toggleSectionVisibility(section.class)"
-              class="collapsible">
+              class="collapsible"
+              tabindex="0"
+              (keydown.enter)="toggleSectionVisibility(section.class)">
         {{ section.heading }}&nbsp;
         <svg [cdsIcon]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
              [size]="icons.size20"

@@ -79,6 +79,7 @@
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal">
                   <label class="cds--type-label-01"
+                         for="enableEncryption"
                          i18n>Enable encryption</label>
                   <cds-tag type="green"
                            size="sm"
@@ -138,7 +139,7 @@
             <div cdsRow class="form-item">
               <div cdsCol>
                 <div class="cds--stack cds--stack-horizontal cds-mb-3">
-                  <label class="cds--type-label-01" i18n>Enable Mutual TLS (mTLS)</label>
+                  <label class="cds--type-label-01" for="enableMtls" i18n>Enable Mutual TLS (mTLS)</label>
                 </div>
                 <cds-checkbox id="enableMtls" formControlName="enableMtls">
                   <span
@@ -164,7 +165,7 @@
             @if (groupForm.controls.enableMtls.value) {
             <div cdsRow class="form-item">
               <div cdsCol>
-                <label class="cds--label fw-bold"
+                <label class="cds--label fw-bold" for="certificateType"
                 i18n>Choose Certificate Authority</label>
                 <cds-radio-group
                   formControlName="certificateType"
