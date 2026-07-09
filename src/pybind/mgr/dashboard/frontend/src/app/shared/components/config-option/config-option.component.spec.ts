@@ -51,8 +51,7 @@ describe('ConfigOptionComponent', () => {
         name: 'osd_debug_deep_scrub_sleep',
         type: 'float',
         level: 'dev',
-        desc:
-          'Inject an expensive sleep during deep scrub IO to make it easier to induce preemption',
+        desc: 'Inject an expensive sleep during deep scrub IO to make it easier to induce preemption',
         long_desc: '',
         default: 0,
         daemon_default: '',

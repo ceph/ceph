@@ -29,22 +29,20 @@ describe('NvmeofEditHostKeyModalComponent', () => {
     wrapTaskAroundCall: jasmine.createSpy('wrapTaskAroundCall').and.callFake(({ call }) => call)
   };
 
-  beforeEach(
-    waitForAsync(() => {
-      TestBed.configureTestingModule({
-        declarations: [NvmeofEditHostKeyModalComponent],
-        imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
-        providers: [
-          { provide: NvmeofService, useValue: nvmeofServiceSpy },
-          { provide: TaskWrapperService, useValue: taskWrapperServiceSpy },
-          { provide: 'subsystemNQN', useValue: mockSubsystemNQN },
-          { provide: 'hostNQN', useValue: mockHostNQN },
-          { provide: 'group', useValue: mockGroup },
-          { provide: 'dhchapKey', useValue: '' }
-        ]
-      }).compileComponents();
-    })
-  );
+  beforeEach(waitForAsync(() => {
+    TestBed.configureTestingModule({
+      declarations: [NvmeofEditHostKeyModalComponent],
+      imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
+      providers: [
+        { provide: NvmeofService, useValue: nvmeofServiceSpy },
+        { provide: TaskWrapperService, useValue: taskWrapperServiceSpy },
+        { provide: 'subsystemNQN', useValue: mockSubsystemNQN },
+        { provide: 'hostNQN', useValue: mockHostNQN },
+        { provide: 'group', useValue: mockGroup },
+        { provide: 'dhchapKey', useValue: '' }
+      ]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofEditHostKeyModalComponent);

@@ -62,7 +62,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
   readonly SMB_CONFIG_URI_PATTERN = /^(http:|https:|rados:|rados:mon-config-key:)/;
-  readonly OAUTH2_ISSUER_URL_PATTERN = /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
+  readonly OAUTH2_ISSUER_URL_PATTERN =
+    /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
   readonly SSL_CIPHERS_PATTERN = /^[a-zA-Z0-9\-:]+$/;
   readonly DEFAULT_SSL_PROTOCOL_ITEM = [{ content: 'TLSv1.3', selected: true }];
   @ViewChild(NgbTypeahead, { static: false })

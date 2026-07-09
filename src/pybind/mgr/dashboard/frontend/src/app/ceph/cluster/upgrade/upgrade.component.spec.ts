@@ -116,9 +116,8 @@ describe('UpgradeComponent', () => {
     upgradeInfoSpy.and.returnValue(of(upgradeInfoPayload));
     component.ngOnInit();
     fixture.detectChanges();
-    const noUpgradesSpan = fixture.debugElement.nativeElement.querySelector(
-      '#no-upgrades-available'
-    );
+    const noUpgradesSpan =
+      fixture.debugElement.nativeElement.querySelector('#no-upgrades-available');
     expect(noUpgradesSpan.textContent).toBe(' Cluster is up-to-date ');
   });
 

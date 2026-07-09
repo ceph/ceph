@@ -20,16 +20,14 @@ describe('NvmeSubsystemViewComponent', () => {
     queryParams: of(mockQueryParams)
   };
 
-  beforeEach(
-    waitForAsync(() => {
-      TestBed.configureTestingModule({
-        declarations: [NvmeSubsystemViewComponent],
-        imports: [RouterTestingModule, HttpClientTestingModule],
-        providers: [{ provide: ActivatedRoute, useValue: mockActivatedRoute }],
-        schemas: [CUSTOM_ELEMENTS_SCHEMA]
-      }).compileComponents();
-    })
-  );
+  beforeEach(waitForAsync(() => {
+    TestBed.configureTestingModule({
+      declarations: [NvmeSubsystemViewComponent],
+      imports: [RouterTestingModule, HttpClientTestingModule],
+      providers: [{ provide: ActivatedRoute, useValue: mockActivatedRoute }],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeSubsystemViewComponent);

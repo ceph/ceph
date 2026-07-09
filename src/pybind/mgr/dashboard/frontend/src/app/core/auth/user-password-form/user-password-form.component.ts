@@ -88,9 +88,8 @@ export class UserPasswordFormComponent {
                  * These values are not needed in this component after carbonization.
                  * @TODO: Need to remove once the LoginPasswordFormComponent is carbonized.
                  */
-                this.passwordStrengthLevelClass = this.passwordPolicyService.mapCreditsToCssClass(
-                  credits
-                );
+                this.passwordStrengthLevelClass =
+                  this.passwordPolicyService.mapCreditsToCssClass(credits);
                 this.passwordValuation = _.defaultTo(valuation, '');
 
                 this.INVALID_TEXTS['passwordPolicy'] = _.defaultTo(valuation, '');
