@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 from threading import Lock
-from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
+from typing import Dict, Tuple, Any, List, Set, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
 from cephadm import utils
@@ -267,7 +267,7 @@ class NFSService(CephService):
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
-                if spec.virtual_ip:
+                if spec.virtual_ip and spec.virtual_ip not in context["haproxy_hosts"]:
                     context["haproxy_hosts"].append(spec.virtual_ip)
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
@@ -527,10 +527,10 @@ class NFSService(CephService):
         # good enough to prevent acceping haproxy protocol messages
         # from "rouge" systems that are not under our control. At
         # least until we learn otherwise.
-        cluster_ips: List[str] = []
+        cluster_ips: Set[str] = set()
         for host in self.mgr.inventory.keys():
             default_addr = self.mgr.inventory.get_addr(host)
-            cluster_ips.append(default_addr)
+            cluster_ips.add(default_addr)
             nets = self.mgr.cache.networks.get(host)
             if not nets:
                 continue
@@ -543,8 +543,8 @@ class NFSService(CephService):
                 addrs: List[str] = sum((addr_list for addr_list in iface.values()), [])
                 if addrs:
                     # one address per interface/subnet is enough
-                    cluster_ips.append(addrs[0])
-        return cluster_ips
+                    cluster_ips.add(addrs[0])
+        return list(cluster_ips)
 
     def get_monitoring_details(
         self,

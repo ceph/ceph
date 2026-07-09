@@ -1196,7 +1196,6 @@ class TestIngressService:
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
             '        allow_set_io_flusher_fail = true;\n'
-            '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
             '        Monitoring_Port = 9587;\n'
             '}\n'
             '\n'
@@ -1332,6 +1331,29 @@ class TestIngressService:
                 service_name=nfs_service.service_name(),
                 rank=0,
             ),
+        )
+        ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+        haproxy_hosts = {
+            ip.strip()
+            for line in ganesha_conf.splitlines()
+            if 'HAProxy_Hosts' in line
+            for ip in line.split('=', 1)[1].strip().rstrip(';').split(',')
+        }
+        assert haproxy_hosts == {
+            '192.168.122.111',
+            '10.10.2.20',
+            '192.168.122.222',
+        }
+
+        def without_haproxy_hosts(conf: str) -> str:
+            return '\n'.join(
+                line for line in conf.splitlines()
+                if 'HAProxy_Hosts' not in line
+            )
+
+        nfs_generated_conf['files']['ganesha.conf'] = without_haproxy_hosts(ganesha_conf)
+        nfs_expected_conf['files']['ganesha.conf'] = without_haproxy_hosts(
+            nfs_ganesha_txt
         )
         assert nfs_generated_conf == nfs_expected_conf
 
