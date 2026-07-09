@@ -1675,6 +1675,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         dout(20) << __func__ << " target CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE" << dendl;
 
         hobject_t start_obj;
+        epoch_t source_last_peering_reset;
         int64_t source_num_bytes = p->op.pool_migration_reserve.num_bytes;
         int64_t source_num_objects = p->op.pool_migration_reserve.num_objects;
 
@@ -1684,16 +1685,33 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         catch (const ceph::buffer::error& e) {
           ceph_abort_msg("unable to decode PG_POOL_MIGRATION_RESERVE start_obj");
         }
+        try {
+          decode(source_last_peering_reset, bp);
+        }
+        catch (const ceph::buffer::error& e) {
+          ceph_abort_msg("unable to decode PG_POOL_MIGRATION_RESERVE source_last_peering_reset");
+        }
 
         if (!pool.info.is_migration_target()) {
           dout(20) << __func__ << " pool is not a migration target, migration may have completed, ignoring request" << dendl;
           return;
         }
 
+        // Epoch for the current retry, not necessarily the source PG epoch at time of initial request
         if (m->get_map_epoch() < get_osdmap_epoch()) {
           dout(20) << __func__ << " ignoring stale reservation request from epoch "
                    << m->get_map_epoch() << " (current epoch is "
                    << get_osdmap_epoch() << ")" << dendl;
+          return;
+        }
+
+        // Now check last_peering_reset epoch from the message payload,
+        // which is the source PG epoch at time of initial request
+        if (source_last_peering_reset < get_last_peering_reset()) {
+          dout(20) << __func__ << " ignoring stale reservation request: "
+                   << "source_last_peering_reset=" << source_last_peering_reset
+                   << " < our last_peering_reset=" << get_last_peering_reset()
+                   << dendl;
           return;
         }
 
@@ -16286,7 +16304,8 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
   op.pg_pool_migration_reserve(
     pool_migration_watermark,
     num_bytes,
-    num_objects);
+    num_objects,
+    get_last_peering_reset());
 
   C_PoolMigrationReservationCallback *fin = new C_PoolMigrationReservationCallback(this, get_last_peering_reset());
   SnapContext snapc;
