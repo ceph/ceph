@@ -1,7 +1,18 @@
-<div cdsCol [columnNumbers]="{ md: 4 }">
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
   <ng-container *cdFormLoading="loading">
-    <form #frm="ngForm" #formDir="ngForm" [formGroup]="userForm" novalidate>
-      <div i18n="form title" class="form-header">
+    <form
+      #frm="ngForm"
+      #formDir="ngForm"
+      [formGroup]="userForm"
+      novalidate
+    >
+      <div
+        i18n="form title"
+        class="form-header"
+      >
         {{ action | titlecase }} {{ resource | upperFirst }}
       </div>
       <!-- UserName -->
@@ -119,10 +130,16 @@
         </ng-template>
       </div>
       <!-- Password expiration date -->
-      <div class="form-item" *ngIf="!isSSO">
+      <div
+        class="form-item"
+        *ngIf="!isSSO"
+      >
         <cds-text-label [ngClass]="{ required: pwdExpirationSettings.pwdExpirationSpan > 0 }"
           >{{ 'Password Expiration Date' }}
-          <cd-helper class="text-pre-wrap" *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
+          <cd-helper
+            class="text-pre-wrap"
+            *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0"
+          >
             <span>
               The Dashboard setting defining the expiration interval of passwords is currently set
               to <strong>0</strong>. This means if a date is set, the user password will only expire
@@ -130,7 +147,9 @@
             </span>
             <span
               >Consider configuring the Dashboard setting
-              <a routerLink="/mgr-modules/edit/dashboard" class="alert-link"
+              <a
+                routerLink="/mgr-modules/edit/dashboard"
+                class="alert-link"
                 >USER_PWD_EXPIRATION_SPAN</a
               >
               in order to let passwords expire periodically.
@@ -154,9 +173,18 @@
       </div>
       <!--Full Name-->
       <div class="form-item">
-        <cds-text-label for="name" i18n>
+        <cds-text-label
+          for="name"
+          i18n
+        >
           Full Name
-          <input cdsText type="text" placeholder="Full Name..." id="name" formControlName="name" />
+          <input
+            cdsText
+            type="text"
+            placeholder="Full Name..."
+            id="name"
+            formControlName="name"
+          />
         </cds-text-label>
       </div>
       <!-- Email -->
@@ -168,16 +196,28 @@
           i18n
         >
           Email
-          <input cdsText type="email" placeholder="Email..." id="email" formControlName="email" />
+          <input
+            cdsText
+            type="email"
+            placeholder="Email..."
+            id="email"
+            formControlName="email"
+          />
         </cds-text-label>
         <ng-template #emailError>
-          <span class="invalid-feedback" *ngIf="userForm.showError('email', formDir, 'email')" i18n
+          <span
+            class="invalid-feedback"
+            *ngIf="userForm.showError('email', formDir, 'email')"
+            i18n
             >Invalid email.
           </span>
         </ng-template>
       </div>
       <!-- Roles -->
-      <div class="form-item" *ngIf="allRoles">
+      <div
+        class="form-item"
+        *ngIf="allRoles"
+      >
         <cds-combo-box
           label="Roles"
           type="multi"
@@ -207,13 +247,23 @@
         </ng-template>
       </div>
       <!-- Enabled -->
-      <div class="form-item" *ngIf="!isCurrentUser()">
-        <cds-checkbox id="enabled" formControlName="enabled" name="enabled" i18n
+      <div
+        class="form-item"
+        *ngIf="!isCurrentUser()"
+      >
+        <cds-checkbox
+          id="enabled"
+          formControlName="enabled"
+          name="enabled"
+          i18n
           >Enabled
         </cds-checkbox>
       </div>
       <!-- Force change password -->
-      <div class="form-item" *ngIf="!isCurrentUser() && !isSSO">
+      <div
+        class="form-item"
+        *ngIf="!isCurrentUser() && !isSSO"
+      >
         <cds-checkbox
           id="pwdUpdateRequired"
           formControlName="pwdUpdateRequired"
@@ -236,9 +286,7 @@
 
 <ng-template #removeSelfUserReadUpdatePermissionTpl>
   <p>
-    <strong i18n
-      >You are about to remove "user read / update" permissions from your own user.</strong
-    >
+    <strong i18n>You are about to remove "user read / update" permissions from your own user.</strong>
   </p>
   <br />
   <p i18n>If you continue, you will no longer be able to add or remove roles from any user.</p>
