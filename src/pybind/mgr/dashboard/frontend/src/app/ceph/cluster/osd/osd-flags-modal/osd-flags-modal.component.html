@@ -1,37 +1,45 @@
-<cds-modal size="sm"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        modal-primary-focus
-        i18n>Cluster-wide OSD Flags</h3>
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+      i18n
+    >
+      Cluster-wide OSD Flags
+    </h3>
   </cds-modal-header>
 
   <div cdsModalContent>
-    <form name="osdFlagsForm"
-          [formGroup]="osdFlagsForm"
-          novalidate>
+    <form
+      name="osdFlagsForm"
+      [formGroup]="osdFlagsForm"
+      novalidate
+    >
       <div>
         @for (flag of flags; track flag.code; let last = $last) {
-        <div>
-          <cds-checkbox
-            [checked]="flag.value"
-            (checkedChange)="flag.value = !flag.value"
-            [name]="flag.code"
-            [id]="flag.code"
-            [disabled]="flag.disabled"
-          >
-            <strong>{{ flag.name }}</strong>
+          <div>
+            <cds-checkbox
+              [checked]="flag.value"
+              (checkedChange)="flag.value = !flag.value"
+              [name]="flag.code"
+              [id]="flag.code"
+              [disabled]="flag.disabled"
+            >
+              <strong>{{ flag.name }}</strong>
 
-            <div class="cds-mt-4">
-              <cd-help-text>{{ flag.description }}</cd-help-text>
-            </div>
-          </cds-checkbox>
-          @if (!last) {
-          <hr class="cds-m-2" />
-          }
-        </div>
+              <div class="cds-mt-4">
+                <cd-help-text>{{ flag.description }}</cd-help-text>
+              </div>
+            </cds-checkbox>
+            @if (!last) {
+              <hr class="cds-m-2" />
+            }
+          </div>
         }
       </div>
     </form>
@@ -39,18 +47,22 @@
 
   <cds-modal-footer>
     <cds-button-set>
-      <button cdsButton="secondary"
-              (click)="closeModal()"
-              type="button"
-              i18n>
+      <button
+        cdsButton="secondary"
+        (click)="closeModal()"
+        type="button"
+        i18n
+      >
         Cancel
       </button>
       @if (permissions.osd.update) {
-      <cd-submit-button
-        (submitAction)="submitAction()"
-        [form]="osdFlagsForm"
-        [submitText]="actionLabels.UPDATE">
-        {{ actionLabels.UPDATE }}</cd-submit-button>
+        <cd-submit-button
+          (submitAction)="submitAction()"
+          [form]="osdFlagsForm"
+          [submitText]="actionLabels.UPDATE"
+        >
+          {{ actionLabels.UPDATE }}</cd-submit-button
+        >
       }
     </cds-button-set>
   </cds-modal-footer>

@@ -18,15 +18,19 @@
   </cd-table>
 </div>
 
-<ng-template #authTpl
-             let-row="data.row">
-  <div cdsStack="horizontal"
-       gap="4">
-  @if (row.auth === authType.NO_AUTH) {
-    <cd-icon type="warning"></cd-icon>
-  } @else {
-    <cd-icon type="success"></cd-icon>
-  }
-  <span class="cds-ml-3">{{ row.auth }}</span>
+<ng-template
+  #authTpl
+  let-row="data.row"
+>
+  <div
+    cdsStack="horizontal"
+    gap="4"
+  >
+    @if (row.auth === authType.NO_AUTH) {
+      <cd-icon type="warning"></cd-icon>
+    } @else {
+      <cd-icon type="success"></cd-icon>
+    }
+    <span class="cds-ml-3">{{ row.auth }}</span>
   </div>
 </ng-template>

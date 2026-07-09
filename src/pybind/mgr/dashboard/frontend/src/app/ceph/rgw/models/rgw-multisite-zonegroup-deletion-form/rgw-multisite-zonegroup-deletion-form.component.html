@@ -1,74 +1,97 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Delete zonegroup</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Delete zonegroup
+    </h3>
   </cds-modal-header>
 
   <ng-container>
     <section cdsModalContent>
-      <form name="zonegroupForm"
-            [formGroup]="zonegroupForm"
-            novalidate>
-        <legend class="cds--label-description"
-               i18n>
+      <form
+        name="zonegroupForm"
+        [formGroup]="zonegroupForm"
+        novalidate
+      >
+        <legend
+          class="cds--label-description"
+          i18n
+        >
           This will delete your <strong>{{ zonegroup?.name }}</strong> Zonegroup.
         </legend>
 
-      @if (zonesList.length > 0) {
-        <ng-container>
-          <legend class="cds--label-description"
-                 i18n>
-            Do you want to delete the associated zones and pools with the <strong>{{zonegroup?.name}}</strong> Zonegroup?
-          </legend>
+        @if (zonesList.length > 0) {
+          <ng-container>
+            <legend
+              class="cds--label-description"
+              i18n
+            >
+              Do you want to delete the associated zones and pools with the
+              <strong>{{ zonegroup?.name }}</strong> Zonegroup?
+            </legend>
 
-          @if (includedPools.size > 0) {
-            <ng-container>
-              <legend class="cds--label-description"
-                     i18n>
-                This will delete the following:
-              </legend>
-            </ng-container>
-          }
-
-          <div><strong>Zones:</strong></div>
-          <div class="scroll-list">
-          @for (zone of zonesList; track zone) {
-            <div><strong>{{zone}}</strong></div>
-          }
-          </div>
-          @if (includedPools.size > 0) {
-            <ng-container>
-              <div><strong>Pools:</strong></div>
-              <div class="scroll-list">
-              @for (pool of includedPools; track pool) {
-                <div><strong>{{ pool }}</strong></div>
-              }
-              </div>
-            </ng-container>
-          }
-
-          <div class="form-item">
-            <cds-checkbox id="deletePools"
-                          formControlName="deletePools"
-                          (checkedChange)="showDangerText()">
             @if (includedPools.size > 0) {
-              <span i18n>Yes, I want to delete the zones and their pools.</span>
-            } @else {
-              <span i18n>Yes, I want to delete the zones.</span>
+              <ng-container>
+                <legend
+                  class="cds--label-description"
+                  i18n
+                >
+                  This will delete the following:
+                </legend>
+              </ng-container>
             }
-            </cds-checkbox>
-          </div>
 
-        @if (displayText) {
-          <cd-alert-panel type="danger"
-                          i18n>
-            This will delete all the data in the pools!
-          </cd-alert-panel>
+            <div><strong>Zones:</strong></div>
+            <div class="scroll-list">
+              @for (zone of zonesList; track zone) {
+                <div>
+                  <strong>{{ zone }}</strong>
+                </div>
+              }
+            </div>
+            @if (includedPools.size > 0) {
+              <ng-container>
+                <div><strong>Pools:</strong></div>
+                <div class="scroll-list">
+                  @for (pool of includedPools; track pool) {
+                    <div>
+                      <strong>{{ pool }}</strong>
+                    </div>
+                  }
+                </div>
+              </ng-container>
+            }
+
+            <div class="form-item">
+              <cds-checkbox
+                id="deletePools"
+                formControlName="deletePools"
+                (checkedChange)="showDangerText()"
+              >
+                @if (includedPools.size > 0) {
+                  <span i18n>Yes, I want to delete the zones and their pools.</span>
+                } @else {
+                  <span i18n>Yes, I want to delete the zones.</span>
+                }
+              </cds-checkbox>
+            </div>
+
+            @if (displayText) {
+              <cd-alert-panel
+                type="danger"
+                i18n
+              >
+                This will delete all the data in the pools!
+              </cd-alert-panel>
+            }
+          </ng-container>
         }
-        </ng-container>
-      }
       </form>
     </section>
   </ng-container>

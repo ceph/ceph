@@ -1,27 +1,35 @@
-<cd-select #cdSelect
-           [data]="data"
-           [options]="options"
-           [messages]="messages"
-           [selectionLimit]="selectionLimit"
-           [customBadges]="customBadges"
-           [customBadgeValidators]="customBadgeValidators"
-           elemClass="me-2 select-menu-edit"
-           (selection)="selection.emit($event)">
-  <svg [cdsIcon]="icons.edit"
-       [size]="icons.size20"
-       class="cds-info-color"></svg>
+<cd-select
+  #cdSelect
+  [data]="data"
+  [options]="options"
+  [messages]="messages"
+  [selectionLimit]="selectionLimit"
+  [customBadges]="customBadges"
+  [customBadgeValidators]="customBadgeValidators"
+  elemClass="me-2 select-menu-edit"
+  (selection)="selection.emit($event)"
+>
+  <svg
+    [cdsIcon]="icons.edit"
+    [size]="icons.size20"
+    class="cds-info-color"
+  ></svg>
 </cd-select>
 
 <span *ngFor="let dataItem of data">
   <cds-tag class="tag-dark me-2">
     <span class="me-2">{{ dataItem }}</span>
-      <a  class="tags-remove"
-          (click)="cdSelect.removeItem(dataItem)"
-          tabindex="0"
-          (keydown.enter)="cdSelect.removeItem(dataItem)">
-      <svg [cdsIcon]="icons.destroy"
-           [size]="icons.size20"
-           class="cds-white"></svg>
+    <a
+      class="tags-remove"
+      (click)="cdSelect.removeItem(dataItem)"
+      tabindex="0"
+      (keydown.enter)="cdSelect.removeItem(dataItem)"
+    >
+      <svg
+        [cdsIcon]="icons.destroy"
+        [size]="icons.size20"
+        class="cds-white"
+      ></svg>
     </a>
   </cds-tag>
 </span>

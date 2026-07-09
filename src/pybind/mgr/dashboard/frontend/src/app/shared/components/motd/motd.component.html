@@ -1,8 +1,10 @@
-<cd-alert-panel *ngIf="motd"
-                size="slim"
-                [showTitle]="false"
-                [type]="motd.severity"
-                [dismissible]="motd.severity !== 'danger'"
-                (dismissed)="onDismissed()">
+<cd-alert-panel
+  *ngIf="motd"
+  size="slim"
+  [showTitle]="false"
+  [type]="motd.severity"
+  [dismissible]="motd.severity !== 'danger'"
+  (dismissed)="onDismissed()"
+>
   <span [innerHTML]="motd.message | sanitizeHtml"></span>
 </cd-alert-panel>

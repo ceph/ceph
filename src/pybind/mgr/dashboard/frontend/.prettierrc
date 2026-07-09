@@ -6,6 +6,6 @@
   "tabWidth": 2,
   "useTabs": false,
   "endOfLine": "lf",
-  "singleAttributePerLine": true, 
+  "singleAttributePerLine": true,
   "htmlWhitespaceSensitivity": "css"
 }

@@ -1,67 +1,121 @@
-<main cdsGrid
-      [fullWidth]="true"
-      [narrow]="true"
-      class="rgw-overview cds-mt-5">
-  <div cdsRow
-       class="cds-mb-5">
-    <div cdsCol
-         [columnNumbers]="{lg: 16}">
-      <cd-productive-card
-        [applyShadow]="false">
+<main
+  cdsGrid
+  [fullWidth]="true"
+  [narrow]="true"
+  class="rgw-overview cds-mt-5"
+>
+  <div
+    cdsRow
+    class="cds-mb-5"
+  >
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-productive-card [applyShadow]="false">
         <ng-template #header>
-          <h2 class="cds--type-heading-compact-02"
-              i18n>Overview</h2>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            Overview
+          </h2>
         </ng-template>
         <div class="rgw-overview-grid">
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Gateway</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/daemon">{{ rgwDaemonCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Gateway</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/daemon"
+              >{{ rgwDaemonCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Realm</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/multisite">{{ rgwRealmCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Realm</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/multisite"
+              >{{ rgwRealmCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Zonegroup</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/multisite">{{ rgwZonegroupCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Zonegroup</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/multisite"
+              >{{ rgwZonegroupCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Zone</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/multisite">{{ rgwZoneCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Zone</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/multisite"
+              >{{ rgwZoneCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Bucket</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/bucket">{{ rgwBucketCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Bucket</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/bucket"
+              >{{ rgwBucketCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>User</span>
-            <a class="cds--link cds--type-body-compact-01"
-               routerLink="/rgw/user">{{ UserCount }}</a>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >User</span
+            >
+            <a
+              class="cds--link cds--type-body-compact-01"
+              routerLink="/rgw/user"
+              >{{ UserCount }}</a
+            >
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Object</span>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Object</span
+            >
             <span class="cds--type-body-compact-01">{{ objectCount }}</span>
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Used Capacity</span>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Used Capacity</span
+            >
             <span class="cds--type-body-compact-01">{{ totalPoolUsedBytes | dimlessBinary }}</span>
           </div>
           <div class="rgw-overview-grid__item">
-            <span class="cds--type-label-01"
-                  i18n>Average Object Size</span>
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Average Object Size</span
+            >
             <span class="cds--type-body-compact-01">{{ averageObjectSize | dimlessBinary }}</span>
           </div>
         </div>
@@ -69,56 +123,76 @@
     </div>
   </div>
 
-  <div cdsRow
-       class="cds-mb-5">
-    <div cdsCol
-         [columnNumbers]="{lg: 16}">
-      <cd-productive-card
-        [applyShadow]="false">
+  <div
+    cdsRow
+    class="cds-mb-5"
+  >
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-productive-card [applyShadow]="false">
         <ng-template #header>
-          <h2 class="cds--type-heading-compact-02"
-              i18n>Performance Statistics</h2>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            Performance Statistics
+          </h2>
           <cd-time-picker
             [dropdownSize]="'sm'"
             [label]="'Time Span'"
             (selectedTime)="getPrometheusData($event)"
           ></cd-time-picker>
         </ng-template>
-        <div cdsGrid
-             [narrow]="true"
-             [condensed]="false"
-             [fullWidth]="true">
-          <div cdsRow
-               [narrow]="true">
-            <div cdsCol
-                 class="cds-mb-5"
-                 [columnNumbers]="{lg: 5, md: 8, sm: 12}">
+        <div
+          cdsGrid
+          [narrow]="true"
+          [condensed]="false"
+          [fullWidth]="true"
+        >
+          <div
+            cdsRow
+            [narrow]="true"
+          >
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 5, md: 8, sm: 12 }"
+            >
               <cd-area-chart
                 chartTitle="Requests/sec"
                 i18n-chartTitle
                 [dataUnit]="''"
-                [rawData]="requestsChartData">
+                [rawData]="requestsChartData"
+              >
               </cd-area-chart>
             </div>
-            <div cdsCol
-                 class="cds-mb-5"
-                 [columnNumbers]="{lg: 5, md: 8, sm: 12}">
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 5, md: 8, sm: 12 }"
+            >
               <cd-area-chart
                 chartTitle="Latency"
                 i18n-chartTitle
                 [dataUnit]="'ms'"
                 [decimals]="2"
-                [rawData]="latencyChartData">
+                [rawData]="latencyChartData"
+              >
               </cd-area-chart>
             </div>
-            <div cdsCol
-                 class="cds-mb-5"
-                 [columnNumbers]="{lg: 5, md: 8, sm: 12}">
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 5, md: 8, sm: 12 }"
+            >
               <cd-area-chart
                 chartTitle="Bandwidth"
                 i18n-chartTitle
                 [dataUnit]="'B'"
-                [rawData]="bandwidthChartData">
+                [rawData]="bandwidthChartData"
+              >
               </cd-area-chart>
             </div>
           </div>
@@ -128,76 +202,105 @@
   </div>
 
   <div cdsRow>
-    <div cdsCol
-         [columnNumbers]="{lg: 16}">
-      <cd-productive-card
-        [applyShadow]="false">
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-productive-card [applyShadow]="false">
         <ng-template #header>
-          <h2 class="cds--type-heading-compact-02"
-              i18n>Multi-Site Sync Status</h2>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            Multi-Site Sync Status
+          </h2>
         </ng-template>
         <ng-template #notConfigured>
-          <cd-alert-panel type="info"
-                          i18n>
-            Multi-site needs to be configured in order to see the multi-site sync status.
-            Please consult the&nbsp;<cd-doc section="multisite"></cd-doc>&nbsp;on how to configure and enable the multi-site functionality.
+          <cd-alert-panel
+            type="info"
+            i18n
+          >
+            Multi-site needs to be configured in order to see the multi-site sync status. Please
+            consult the&nbsp;<cd-doc section="multisite"></cd-doc>&nbsp;on how to configure and
+            enable the multi-site functionality.
           </cd-alert-panel>
         </ng-template>
         @if (loading) {
           <div class="multisite-sync__loading">
-            <cds-loading [isActive]="true"
-                         size="sm"></cds-loading>
+            <cds-loading
+              [isActive]="true"
+              size="sm"
+            ></cds-loading>
           </div>
         }
         @if (multisiteSyncStatus$ | async) {
           @if (showMultisiteCard) {
             <div class="multisite-sync__layout">
               <div class="multisite-sync__primary">
-                <h4 class="cds--type-heading-compact-01 multisite-sync__section-title"
-                    i18n>Primary Source Zone</h4>
+                <h4
+                  class="cds--type-heading-compact-01 multisite-sync__section-title"
+                  i18n
+                >
+                  Primary Source Zone
+                </h4>
                 <div class="multisite-sync__primary-content">
                   @if (loading) {
                     <div class="multisite-sync__loading">
-                      <cds-loading [isActive]="true"
-                                   size="sm"></cds-loading>
+                      <cds-loading
+                        [isActive]="true"
+                        size="sm"
+                      ></cds-loading>
                     </div>
                   } @else {
-                    <cd-rgw-sync-primary-zone [realm]="realm"
-                                              [zonegroup]="zonegroup"
-                                              [zone]="zone">
+                    <cd-rgw-sync-primary-zone
+                      [realm]="realm"
+                      [zonegroup]="zonegroup"
+                      [zone]="zone"
+                    >
                     </cd-rgw-sync-primary-zone>
                   }
                 </div>
               </div>
               <div class="multisite-sync__source-zones">
-                <h4 class="cds--type-heading-compact-01 multisite-sync__section-title multisite-sync__section-title--centered"
-                    i18n>Source Zones</h4>
+                <h4
+                  class="cds--type-heading-compact-01 multisite-sync__section-title multisite-sync__section-title--centered"
+                  i18n
+                >
+                  Source Zones
+                </h4>
                 @if (loading) {
                   <div class="multisite-sync__loading">
-                    <cds-loading [isActive]="true"
-                                 size="sm"></cds-loading>
+                    <cds-loading
+                      [isActive]="true"
+                      size="sm"
+                    ></cds-loading>
                   </div>
                 } @else {
                   <div class="multisite-sync__zones-grid">
                     @for (zone of replicaZonesInfo; track zone) {
                       <cds-tile class="multisite-sync__zone-tile">
                         <h5 class="multisite-sync__zone-header">
-                          <svg [cdsIcon]="icons.deploy"
-                               [size]="icons.size20"></svg>
+                          <svg
+                            [cdsIcon]="icons.deploy"
+                            [size]="icons.size20"
+                          ></svg>
                           <cds-tag class="tag-info">{{ zone.name }}</cds-tag>
                         </h5>
                         <div class="multisite-sync__sync-columns">
                           @for (title of chartTitles; track title) {
-                            <div class="multisite-sync__sync-item"
-                                 [class.multisite-sync__sync-item--bordered]="title === 'Data Sync'">
-                              <span class="cds--type-body-compact-01 multisite-sync__sync-title">{{ title }}</span>
+                            <div
+                              class="multisite-sync__sync-item"
+                              [class.multisite-sync__sync-item--bordered]="title === 'Data Sync'"
+                            >
+                              <span class="cds--type-body-compact-01 multisite-sync__sync-title">{{
+                                title
+                              }}</span>
                               @if (title === 'Metadata Sync') {
                                 <cd-rgw-sync-metadata-info [metadataSyncInfo]="metadataSyncInfo">
                                 </cd-rgw-sync-metadata-info>
                               }
                               @if (title === 'Data Sync') {
-                                <cd-rgw-sync-data-info [zone]="zone">
-                                </cd-rgw-sync-data-info>
+                                <cd-rgw-sync-data-info [zone]="zone"> </cd-rgw-sync-data-info>
                               }
                             </div>
                           }
@@ -216,4 +319,3 @@
     </div>
   </div>
 </main>
-
