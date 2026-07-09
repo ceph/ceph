@@ -227,6 +227,7 @@ struct BucketCache : public Notifiable
     struct Partition {
       std::shared_ptr<LMDBSafe::MDBEnv> env;
       boost::container::flat_map<std::string, LMDBSafe::MDBDbi> dbi_map;
+      std::vector<LMDBSafe::MDBDbi> free_dbis;
       std::mutex mtx;
     };
     std::vector<Partition> parts;
@@ -269,7 +270,8 @@ struct BucketCache : public Notifiable
     }
 
     /* look up or create a dbi for the given bucket name in its
-     * partition; if all dbi slots are exhausted, return nullopt */
+     * partition; reuses a recycled handle if available, otherwise
+     * opens a new one; returns nullopt on MDB_DBS_FULL */
     std::optional<LMDBSafe::MDBDbi> get_dbi(
       BucketCacheEntry<D, B>* bucket,
       std::function<LMDBSafe::MDBDbi()> open_fn)
@@ -282,12 +284,32 @@ struct BucketCache : public Notifiable
         return it->second;
       }
 
+      if (!part.free_dbis.empty()) {
+	auto dbi = part.free_dbis.back();
+	part.free_dbis.pop_back();
+	part.dbi_map.emplace(bucket->name, dbi);
+	return dbi;
+      }
+
       try {
         auto dbi = open_fn();
         part.dbi_map.emplace(bucket->name, dbi);
         return dbi;
       } catch (const LMDBSafe::LMDBError&) {
         return std::nullopt;
+      }
+    }
+
+    /* move a dbi from the active map to the free pool for reuse;
+     * the caller must have already cleared the database with
+     * mdb_drop(dbi, 0) */
+    void recycle_dbi(BucketCacheEntry<D, B>* bucket) {
+      auto& part = parts[partition_ix(bucket)];
+      std::lock_guard lk(part.mtx);
+      auto it = part.dbi_map.find(bucket->name);
+      if (it != part.dbi_map.end()) {
+	part.free_dbis.push_back(it->second);
+	part.dbi_map.erase(it);
       }
     }
 
@@ -759,7 +781,18 @@ public:
     return 0;
   } /* remove_entry */
 
-  int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname) {
+  /* invalidate a bucket's listing cache.
+   *
+   * recycle=false (default): clear the LMDB data but keep the DBI
+   *   handle mapped to this bucket name for future reuse.
+   *
+   * recycle=true: clear the LMDB data and return the DBI handle to
+   *   a free pool so it can be assigned to a different name.  Use
+   *   for multipart upload shadows whose unique names are never
+   *   reused — without recycling, each upload permanently consumes
+   *   a DBI slot. */
+  int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname,
+			bool recycle = false) {
     using namespace LMDBSafe;
 
     GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
@@ -767,7 +800,8 @@ public:
     if (b) {
       unique_lock ulk{b->mtx, std::adopt_lock};
 
-      ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname << dendl;
+      ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname
+	<< (recycle ? " (recycle)" : "") << dendl;
 
       try {
         auto txn = b->env->getRWTransaction();
@@ -776,6 +810,9 @@ public:
       } catch (const LMDBSafe::LMDBError& e) {
 	ldpp_dout(dpp, 0) << "BucketCache: invalidate mdb_drop failed for "
 	  << bname << ": " << e.what() << dendl;
+      }
+      if (recycle) {
+	lmdbs.recycle_dbi(b);
       }
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
