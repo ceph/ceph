@@ -1,32 +1,50 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h2 cdsModalHeaderLabel
-        modal-primary-focus
-        i18n>Manage {{ gatewayName }}</h2>
-    <span class="cds--type-heading-03"
-        cdsModalHeaderHeading
-        i18n>Can't delete {{ gatewayName }}</span>
+    <h2
+      cdsModalHeaderLabel
+      modal-primary-focus
+      i18n
+    >
+      Manage {{ gatewayName }}
+    </h2>
+    <span
+      class="cds--type-heading-03"
+      cdsModalHeaderHeading
+      i18n
+      >Can't delete {{ gatewayName }}</span
+    >
   </cds-modal-header>
   <section cdsModalContent>
-    <p class="cds--type-body-01 cds--mb-05"
-       i18n>
-      This resource has connected items that must be deleted first. Delete the connected items, and try again.
+    <p
+      class="cds--type-body-01 cds--mb-05"
+      i18n
+    >
+      This resource has connected items that must be deleted first. Delete the connected items, and
+      try again.
     </p>
-    <p class="cds--type-label-01 cds--mb-04"
-       i18n>View connected items:</p>
+    <p
+      class="cds--type-label-01 cds--mb-04"
+      i18n
+    >
+      View connected items:
+    </p>
     <div>
       @for (sub of connectedSubsystems; track sub.nqn) {
-      <div class="cds--mb-04">
-        <a class="cds--link cds--type-body-01"
-           tabindex="0"
-           (click)="navigateToSubsystem(sub.nqn)"
-           (keydown.enter)="navigateToSubsystem(sub.nqn)">
-          <span class="cds--mr-03">{{ sub.nqn }}</span>
-          <cd-icon type="launch"></cd-icon>
-        </a>
-      </div>
+        <div class="cds--mb-04">
+          <a
+            class="cds--link cds--type-body-01"
+            tabindex="0"
+            (click)="navigateToSubsystem(sub.nqn)"
+            (keydown.enter)="navigateToSubsystem(sub.nqn)"
+          >
+            <span class="cds--mr-03">{{ sub.nqn }}</span>
+            <cd-icon type="launch"></cd-icon>
+          </a>
+        </div>
       }
     </div>
   </section>

@@ -1,4 +1,7 @@
-<div class="setup-step-card" [class.setup-step-card--loading]="isLoading">
+<div
+  class="setup-step-card"
+  [class.setup-step-card--loading]="isLoading"
+>
   <div class="setup-step-card__step-row">
     <span class="cds--type-heading-compact-01">{{ stepNumber }}.</span>
     <span class="cds--type-heading-compact-01">{{ title }}</span>
@@ -8,13 +11,13 @@
   </p>
   <div class="setup-step-card__info">
     @if (isLoading) {
-    <cd-loading-panel></cd-loading-panel>
+      <cd-loading-panel></cd-loading-panel>
     } @else if (isConfigured) {
-    <cd-icon type="success"></cd-icon>
-    <span class="cds--type-label-01">{{ statusMessage }}</span>
+      <cd-icon type="success"></cd-icon>
+      <span class="cds--type-label-01">{{ statusMessage }}</span>
     } @else {
-    <cd-icon type="infoCircle"></cd-icon>
-    <span class="cds--type-label-01">{{ statusMessage }}</span>
+      <cd-icon type="infoCircle"></cd-icon>
+      <span class="cds--type-label-01">{{ statusMessage }}</span>
     }
   </div>
 </div>

@@ -3,16 +3,18 @@
   [followFocus]="true"
   [isNavigation]="false"
   [cacheActive]="true"
-  >
+>
   <cds-tab
     heading="File systems"
     i18n-heading
-    [tabContent]="fileSystemListContent">
+    [tabContent]="fileSystemListContent"
+  >
   </cds-tab>
   <cds-tab
     heading="Overview"
     i18n-heading
-    [tabContent]="grafanaContent">
+    [tabContent]="grafanaContent"
+  >
   </cds-tab>
 </cds-tabs>
 
@@ -31,7 +33,8 @@
   >
     <cd-cephfs-tabs
       *cdTableDetail
-      [selection]="expandedRow">
+      [selection]="expandedRow"
+    >
     </cd-cephfs-tabs>
     <div class="table-actions">
       <cd-table-actions
@@ -47,9 +50,12 @@
 </ng-template>
 
 <ng-template #deleteTpl>
-  <cd-alert-panel type="danger"
-                  i18n>
-    This will remove its data and metadata pools. It'll also remove the MDS daemon associated with the volume.
+  <cd-alert-panel
+    type="danger"
+    i18n
+  >
+    This will remove its data and metadata pools. It'll also remove the MDS daemon associated with
+    the volume.
   </cd-alert-panel>
 </ng-template>
 
