@@ -419,6 +419,48 @@ class TestCephadm(object):
             dds = wait(cephadm_module, cephadm_module.list_daemons())
             assert {d.name() for d in dds} == {'rgw.myrgw.foobar', 'haproxy.test.bar'}
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='rgw.myrgw.running',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                state='running',
+            ),
+            dict(
+                name='rgw.myrgw.unknown',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                state='unknown',
+            ),
+            dict(
+                name='rgw.myrgw.error',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                state='error',
+            ),
+        ])
+    ))
+    def test_unknown_state_not_error(self, cephadm_module: CephadmOrchestrator):
+        # Verify that daemons with state='unknown' from cephadm ls are not
+        # treated as errors and do not trigger CEPHADM_FAILED_DAEMON.
+        # See https://tracker.ceph.com/issues/65728
+        cephadm_module.service_cache_timeout = 10
+        with with_host(cephadm_module, 'myhost'):
+            CephadmServe(cephadm_module)._refresh_host_daemons('myhost')
+            dds = {d.name(): d for d in wait(cephadm_module, cephadm_module.list_daemons())}
+            # unknown should map to DaemonDescriptionStatus.unknown, not error
+            assert dds['rgw.myrgw.unknown'].status == DaemonDescriptionStatus.unknown
+            assert dds['rgw.myrgw.error'].status == DaemonDescriptionStatus.error
+            assert dds['rgw.myrgw.running'].status == DaemonDescriptionStatus.running
+            # only the error daemon should appear in get_error_daemons
+            error_names = {d.name() for d in cephadm_module.cache.get_error_daemons()}
+            assert 'rgw.myrgw.error' in error_names
+            assert 'rgw.myrgw.unknown' not in error_names
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_daemon_action(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
