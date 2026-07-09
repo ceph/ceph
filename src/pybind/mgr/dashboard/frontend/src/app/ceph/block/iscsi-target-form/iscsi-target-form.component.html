@@ -338,6 +338,8 @@
                   type="button"
                   class="btn btn-light"
                   cdPasswordButton="target_password"
+                  aria-label="Toggle visibility"
+                  i18n-aria-label
                 ></button>
                 <cd-copy-2-clipboard-button source="target_password"> </cd-copy-2-clipboard-button>
               </div>
@@ -417,6 +419,8 @@
                   type="button"
                   class="btn btn-light"
                   cdPasswordButton="target_mutual_password"
+                  aria-label="Toggle visibility"
+                  i18n-aria-label
                 ></button>
                 <cd-copy-2-clipboard-button source="target_mutual_password">
                 </cd-copy-2-clipboard-button>
@@ -466,6 +470,8 @@
                   type="button"
                   class="btn-close float-end"
                   (click)="removeInitiator(ii)"
+                  aria-label="Remove initiator"
+                  i18n-aria-label
                 ></button>
               </div>
               <div class="card-body">
@@ -565,6 +571,8 @@
                           type="button"
                           class="btn btn-light"
                           [cdPasswordButton]="'password' + ii"
+                          aria-label="Toggle visibility"
+                          i18n-aria-label
                         ></button>
                         <cd-copy-2-clipboard-button [source]="'password' + ii">
                         </cd-copy-2-clipboard-button>
@@ -642,6 +650,8 @@
                           type="button"
                           class="btn btn-light"
                           [cdPasswordButton]="'mutual_password' + ii"
+                          aria-label="Toggle visibility"
+                          i18n-aria-label
                         ></button>
                         <cd-copy-2-clipboard-button [source]="'mutual_password' + ii">
                         </cd-copy-2-clipboard-button>
@@ -769,6 +779,8 @@
                   type="button"
                   class="btn-close float-end"
                   (click)="removeGroup(gi)"
+                  aria-label="Remove group"
+                  i18n-aria-label
                 ></button>
               </div>
               <div class="card-body">

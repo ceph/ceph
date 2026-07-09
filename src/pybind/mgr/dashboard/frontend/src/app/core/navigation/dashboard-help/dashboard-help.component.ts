@@ -17,7 +17,10 @@ export class DashboardHelpComponent implements OnInit {
   docsUrl: string;
   icons = Icons;
 
-  constructor(private docService: DocService, private modalCdsService: ModalCdsService) {}
+  constructor(
+    private docService: DocService,
+    private modalCdsService: ModalCdsService
+  ) {}
 
   ngOnInit() {
     this.docService.subscribeOnce('dashboard', (url: string) => {

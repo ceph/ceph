@@ -23,7 +23,10 @@ export class OsdDetailsComponent implements OnChanges {
   };
   grafanaPermission: Permission;
 
-  constructor(private osdService: OsdService, private authStorageService: AuthStorageService) {
+  constructor(
+    private osdService: OsdService,
+    private authStorageService: AuthStorageService
+  ) {
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
   }
 

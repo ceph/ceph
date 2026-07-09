@@ -43,7 +43,10 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   icons = Icons;
 
-  constructor(private rgwUserService: RgwUserService, private cdsModalService: ModalCdsService) {}
+  constructor(
+    private rgwUserService: RgwUserService,
+    private cdsModalService: ModalCdsService
+  ) {}
 
   ngOnInit() {
     this.keysColumns = [
