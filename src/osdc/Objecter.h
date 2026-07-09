@@ -315,11 +315,12 @@ struct ObjectOperation {
     osd_op.op.alloc_hint.flags = flags;
   }
   void add_pg_pool_migration_reserve(int op, const hobject_t& start_obj,
-                                     int64_t num_bytes,
-                                     int64_t num_objects) {
+                                     int64_t num_bytes, int64_t num_objects,
+                                     epoch_t last_peering_reset) {
     using ceph::encode;
     OSDOp& osd_op = add_op(op);
     encode(start_obj, osd_op.indata);
+    encode(last_peering_reset, osd_op.indata);
     osd_op.op.pool_migration_reserve.num_bytes = num_bytes;
     osd_op.op.pool_migration_reserve.num_objects = num_objects;
   }
@@ -353,9 +354,11 @@ struct ObjectOperation {
 
   void pg_pool_migration_reserve(const hobject_t& start_obj,
                                  int64_t num_bytes,
-                                 int64_t num_objects) {
+                                 int64_t num_objects,
+                                 epoch_t last_peering_reset) {
     add_pg_pool_migration_reserve(CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE,
-                                  start_obj, num_bytes, num_objects);
+                                  start_obj, num_bytes, num_objects,
+                                  last_peering_reset);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
