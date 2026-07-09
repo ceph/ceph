@@ -58,6 +58,7 @@ export class CephfsSnapshotscheduleFormComponent
   implements OnInit, OnChanges, TearsheetStep {
   @Input() embedded = false;
   @Input() hideDirectory = false;
+  @Input() onSuccess?: () => void;
 
   @Input()
   set fsIdInput(value: number) {
@@ -136,6 +137,10 @@ export class CephfsSnapshotscheduleFormComponent
   ngOnChanges(changes: SimpleChanges): void {
     if (changes.schedulePath && this.snapScheduleForm && this.hideDirectory && this.path) {
       this.applyDirectoryPath(this.path);
+      if (this.embedded) {
+        this.clearScheduleExistsFormError();
+        this.clearRetentionPolicyErrors();
+      }
     }
   }
 
@@ -147,6 +152,10 @@ export class CephfsSnapshotscheduleFormComponent
     this.createForm();
     if (this.hideDirectory && this.path) {
       this.applyDirectoryPath(this.path);
+    }
+    if (this.embedded) {
+      this.clearScheduleExistsFormError();
+      this.clearRetentionPolicyErrors();
     }
     this.isEdit ? this.populateForm() : this.loadingReady();
 
@@ -261,6 +270,10 @@ export class CephfsSnapshotscheduleFormComponent
   }
 
   createForm() {
+    const asyncValidators = this.embedded
+      ? []
+      : [this.validateSchedule(), this.validateRetention()];
+
     this.snapScheduleForm = new CdFormGroup(
       {
         directory: new FormControl(undefined, {
@@ -279,7 +292,7 @@ export class CephfsSnapshotscheduleFormComponent
         retentionPolicies: new FormArray([])
       },
       {
-        asyncValidators: [this.validateSchedule(), this.validateRetention()]
+        asyncValidators
       }
     );
   }
@@ -363,19 +376,15 @@ export class CephfsSnapshotscheduleFormComponent
       snapScheduleObj['retention_policy'] = retentionPoliciesValues;
     }
 
-    if (this.isSubvolume) {
-      snapScheduleObj['subvol'] = this.subvolume;
-    }
-
-    if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
-      snapScheduleObj['group'] = this.subvolumeGroup;
-    }
-
-    return snapScheduleObj;
+    return this.snapScheduleService.appendSubvolumeParams(snapScheduleObj, path);
   }
 
   submit() {
-    this.validateSchedule()(this.snapScheduleForm).subscribe({
+    const scheduleValidation$ = this.embedded
+      ? of(null)
+      : this.validateSchedule()(this.snapScheduleForm);
+
+    scheduleValidation$.subscribe({
       next: () => {
         if (this.snapScheduleForm.invalid) {
           this.snapScheduleForm.setErrors({ cdSubmitButton: true });
@@ -416,6 +425,7 @@ export class CephfsSnapshotscheduleFormComponent
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
+                this.onSuccess?.();
                 this.closeModal();
               }
             });
@@ -429,10 +439,15 @@ export class CephfsSnapshotscheduleFormComponent
               call: this.snapScheduleService.create(snapScheduleObj)
             })
             .subscribe({
-              error: () => {
+              error: (error) => {
+                if (this.snapScheduleService.isScheduleExistsError(error)) {
+                  error?.preventDefault?.();
+                  this.setScheduleExistsFormError();
+                }
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
+                this.onSuccess?.();
                 this.closeModal();
               }
             });
@@ -443,9 +458,11 @@ export class CephfsSnapshotscheduleFormComponent
 
   validateSchedule() {
     return (frm: AbstractControl) => {
+      if (this.embedded) {
+        return of(null);
+      }
+
       const directory = frm.get('directory');
-      const repeatFrequency = frm.get('repeatFrequency');
-      const repeatInterval = frm.get('repeatInterval');
       const directoryPath = this.hideDirectory
         ? directory?.getRawValue?.() ?? directory?.value
         : directory?.value;
@@ -457,20 +474,13 @@ export class CephfsSnapshotscheduleFormComponent
       return timer(VALIDATON_TIMER).pipe(
         switchMap(() =>
           this.snapScheduleService
-            .checkScheduleExists(
-              directoryPath,
-              this.fsName,
-              repeatInterval?.value,
-              repeatFrequency?.value,
-              this.isSubvolume
-            )
+            .checkScheduleExists(directoryPath, this.fsName, this.isSubvolume)
             .pipe(
               map((exists: boolean) => {
                 if (exists) {
-                  repeatFrequency?.markAsDirty();
-                  repeatFrequency?.setErrors({ notUnique: true }, { emitEvent: true });
+                  this.setScheduleExistsFormError();
                 } else {
-                  repeatFrequency?.setErrors(null);
+                  this.clearScheduleExistsFormError();
                 }
                 return null;
               })
@@ -484,16 +494,40 @@ export class CephfsSnapshotscheduleFormComponent
     return (frm.get(frmArrayName) as FormArray)?.controls?.[idx]?.get?.(ctrl);
   }
 
+  private setScheduleExistsFormError(): void {
+    const target = this.hideDirectory
+      ? this.snapScheduleForm.get('repeatFrequency')
+      : this.snapScheduleForm.get('directory');
+    target?.markAsDirty();
+    target?.setErrors({ notUnique: true }, { emitEvent: true });
+  }
+
+  private clearScheduleExistsFormError(): void {
+    const directory = this.snapScheduleForm.get('directory');
+    const repeatFrequency = this.snapScheduleForm.get('repeatFrequency');
+    if (directory?.hasError('notUnique')) {
+      directory.setErrors(null);
+    }
+    if (repeatFrequency?.hasError('notUnique')) {
+      repeatFrequency.setErrors(null);
+    }
+  }
+
   private applyDirectoryPath(path: string): void {
     const directoryControl = this.snapScheduleForm.get('directory');
     directoryControl.setValue(path);
     directoryControl.disable();
-    this.subvolumeGroup = path?.split?.('/')?.[2];
-    this.subvolume = path?.split?.('/')?.[3];
 
-    if (!this.subvolume || !this.subvolumeGroup || !this.fsName) {
+    const subvolInfo = this.snapScheduleService.parseSubvolumePath(path);
+    if (!subvolInfo || !this.fsName) {
+      this.isSubvolume = false;
       return;
     }
+
+    this.isSubvolume = true;
+    this.subvolumeGroup = subvolInfo.group;
+    this.subvolume = subvolInfo.subvol;
+    this.isDefaultSubvolumeGroup = subvolInfo.group === DEFAULT_SUBVOLUME_GROUP;
 
     this.subvolumeService
       .exists(
@@ -507,8 +541,23 @@ export class CephfsSnapshotscheduleFormComponent
       });
   }
 
+  private clearRetentionPolicyErrors(): void {
+    this.retentionPolicies?.controls?.forEach((_, i) => {
+      this.getFormArrayItem(
+        this.snapScheduleForm,
+        'retentionPolicies',
+        'retentionFrequency',
+        i
+      )?.setErrors?.(null);
+    });
+  }
+
   validateRetention() {
     return (frm: FormGroup) => {
+      if (this.embedded) {
+        return of(null);
+      }
+
       return timer(VALIDATON_TIMER).pipe(
         switchMap(() => {
           const retentionList = (frm.get('retentionPolicies') as FormArray).controls?.map(

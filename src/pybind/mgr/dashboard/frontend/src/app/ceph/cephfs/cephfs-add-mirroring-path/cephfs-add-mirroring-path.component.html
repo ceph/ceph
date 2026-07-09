@@ -35,42 +35,13 @@
       [schedulePath]="schedulePath">
     </cd-cephfs-snapshotschedule-form>
 
-    @if (existingSchedules.length) {
-      <div class="cds-mt-6">
-        <cd-alert-panel type="warning">
-          <div [cdsStack]="'vertical'"
-               [gap]="2">
-            <div class="cds--type-heading-compact-01"
-                 i18n>One or more selected paths already have configured schedules</div>
-          </div>
-        </cd-alert-panel>
-
-        <div class="cds-mt-5 cds-mb-5">
-          <p class="cds--type-body-compact-01 cds-mb-3"
-             i18n>How do you want to handle existing schedules?</p>
-          <cds-radio-group
-            [value]="scheduleConflictAction"
-            (change)="scheduleConflictAction = $event.value"
-            orientation="horizontal">
-            <cds-radio [value]="'keep'"
-                       [checked]="scheduleConflictAction === 'keep'"
-                       i18n>Keep current schedules and add new one (all paths)</cds-radio>
-            <cds-radio [value]="'replace'"
-                       i18n>Replace existing schedules with the new schedule (all paths)</cds-radio>
-            <cds-radio [value]="'individual'"
-                       i18n>Configure each path individually</cds-radio>
-          </cds-radio-group>
-        </div>
-
-        <cd-table [data]="existingSchedules"
-                  [columns]="existingScheduleColumns"
-                  columnMode="flex"
-                  [hasDetails]="false"
-                  [toolHeader]="false"
-                  selectionType="none">
-        </cd-table>
-      </div>
-    }
+    <cd-mirroring-schedule-conflict
+      #scheduleConflict
+      [fsName]="fsName"
+      [paths]="selectedPaths"
+      (existingSchedulesChange)="onExistingSchedulesChange($event)"
+      (conflictActionChange)="onConflictActionChange($event)">
+    </cd-mirroring-schedule-conflict>
   </cd-tearsheet-step>
   <cd-tearsheet-step>
     <cd-mirroring-review-step

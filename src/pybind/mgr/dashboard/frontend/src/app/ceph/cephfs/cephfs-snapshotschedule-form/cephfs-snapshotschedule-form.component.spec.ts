@@ -85,4 +85,27 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     expect(createSpy).toHaveBeenCalled();
     discardPeriodicTasks();
   }));
+
+  it('should skip schedule existence validation in embedded mode', fakeAsync(() => {
+    component.embedded = true;
+    component.hideDirectory = true;
+    component.path = '/volumes/g1/sv1';
+    component.ngOnInit();
+    fixture.detectChanges();
+
+    const checkScheduleExistsSpy = spyOn(
+      TestBed.inject(CephfsSnapshotScheduleService),
+      'checkScheduleExists'
+    ).and.returnValue(of(true));
+
+    component.snapScheduleForm.get('repeatInterval').setValue(2);
+    component.snapScheduleForm.get('repeatFrequency').setValue('w');
+    tick(400);
+    component.snapScheduleForm.get('repeatFrequency').setValue('d');
+    tick(400);
+
+    expect(checkScheduleExistsSpy).not.toHaveBeenCalled();
+    expect(component.snapScheduleForm.get('repeatFrequency').hasError('notUnique')).toBe(false);
+    discardPeriodicTasks();
+  }));
 });

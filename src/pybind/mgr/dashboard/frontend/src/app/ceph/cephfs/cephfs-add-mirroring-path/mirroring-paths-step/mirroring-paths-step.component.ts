@@ -92,10 +92,12 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
     if (!selected) {
       this.syncFormValue();
+      this.refreshOtherPathOptions(pathIndex);
       return;
     }
 
     this.loadLevelOptions(pathIndex, levelIndex + 1, updated.fullPath);
+    this.refreshOtherPathOptions(pathIndex);
   }
 
   getSubmitPaths(): { toAdd: string[]; alreadyMirrored: string[] } {
@@ -210,7 +212,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
         const options = dirs
           .map((dir) => dir.name)
           .filter((name) =>
-            this.isPathSelectable(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
+            this.isOptionVisible(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
           )
           .sort();
 
@@ -224,6 +226,70 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
         this.paths[pathIndex] = { ...entry, levels };
         this.syncFormValue();
       });
+  }
+
+  private isOptionVisible(path: string, pathIndex: number): boolean {
+    const normalized = MirroringPathUtils.normalizePath(path);
+    if (!normalized) {
+      return false;
+    }
+
+    return !this.paths.some((entry, index) => {
+      if (index === pathIndex) {
+        return false;
+      }
+      const selected = MirroringPathUtils.normalizePath(entry.fullPath);
+      if (!selected || !this.isPathFinalized(entry)) {
+        return false;
+      }
+
+      if (normalized === selected) {
+        return true;
+      }
+
+      return normalized.startsWith(`${selected}/`);
+    });
+  }
+
+  private isPathFinalized(entry: PathEntry): boolean {
+    if (!MirroringPathUtils.getSelectedSegments(entry).length) {
+      return false;
+    }
+
+    return !entry.levels.some(
+      (level, index) =>
+        !level.selected &&
+        level.options.length > 0 &&
+        entry.levels.slice(0, index).every((priorLevel) => priorLevel.selected)
+    );
+  }
+
+  private refreshOtherPathOptions(changedPathIndex: number): void {
+    this.paths.forEach((entry, pathIndex) => {
+      if (pathIndex === changedPathIndex) {
+        return;
+      }
+
+      entry.levels.forEach((level, levelIndex) => {
+        const parentPath =
+          levelIndex === 0
+            ? VOLUMES_ROOT
+            : MirroringPathUtils.buildPathFromSegments(
+                entry.levels
+                  .slice(0, levelIndex)
+                  .map((pathLevel) => pathLevel.selected)
+                  .filter(Boolean)
+              );
+
+        const hasParentContext =
+          levelIndex === 0 ||
+          entry.levels.slice(0, levelIndex).every((pathLevel) => pathLevel.selected);
+
+        if (hasParentContext && (level.options.length || level.selected)) {
+          this.loadLevelOptions(pathIndex, levelIndex, parentPath);
+        }
+      });
+    });
   }
 
   private isPathSelectable(path: string, pathIndex: number): boolean {

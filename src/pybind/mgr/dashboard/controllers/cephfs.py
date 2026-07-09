@@ -1272,10 +1272,20 @@ class CephFSSnapshotSchedule(RESTController):
 
     def create(self, fs: str, path: str, snap_schedule: str, start: str,
                retention_policy=None, subvol=None, group=None):
-        self._call_snap_schedule(
-            'snap_schedule_add', path, snap_schedule, start, fs, subvol, group,
-            error_msg=f'Failed to create snapshot schedule for path {path}'
-        )
+        try:
+            self._call_snap_schedule(
+                'snap_schedule_add', path, snap_schedule, start, fs, subvol, group,
+                error_msg=f'Failed to create snapshot schedule for path {path}'
+            )
+        except DashboardException as e:
+            detail = str(e)
+            if 'existing schedule' in detail.lower():
+                raise DashboardException(
+                    msg=f'A snapshot schedule already exists for path {path}. '
+                        'Please remove the existing schedule before creating a new one.',
+                    http_status_code=409
+                )
+            raise
         self._apply_retention_policies(
             'snap_schedule_retention_add', retention_policy, path, fs, subvol, group
         )

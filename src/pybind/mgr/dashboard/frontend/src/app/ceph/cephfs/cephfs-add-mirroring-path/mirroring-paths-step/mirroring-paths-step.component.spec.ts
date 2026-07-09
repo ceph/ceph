@@ -225,4 +225,27 @@ describe('MirroringPathsStepComponent', () => {
       alreadyMirrored: ['/volumes/g1/sv2']
     });
   }));
+
+  it('should allow selecting sibling subvolumes on separate path rows', fakeAsync(() => {
+    mockLsDirTree();
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'g1');
+    tick();
+    component.onLevelChange(0, 1, 'sv1');
+
+    component.addPath();
+    tick();
+    component.onLevelChange(1, 0, 'g1');
+    tick();
+
+    expect(component.paths[1].levels[1].options).toEqual(['sv2']);
+    component.onLevelChange(1, 1, 'sv2');
+
+    expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1', '/volumes/g1/sv2']);
+  }));
 });

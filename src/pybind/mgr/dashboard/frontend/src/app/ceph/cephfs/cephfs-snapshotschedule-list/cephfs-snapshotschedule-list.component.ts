@@ -188,7 +188,8 @@ export class CephfsSnapshotscheduleListComponent
       retention: this.selection?.first()?.retention,
       start: this.selection?.first()?.start,
       status: this.selection?.first()?.status,
-      isEdit: edit
+      isEdit: edit,
+      onSuccess: () => this.fetchData()
     });
   }
 
