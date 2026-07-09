@@ -32,6 +32,10 @@
 #include <sys/resource.h>
 #endif
 
+
+#include "common/ceph_json.h"
+#include "include/utime.h"
+
 #include "common/Clock.h"
 
 #ifdef __linux__
@@ -45,7 +49,7 @@
 #include <thread>
 #include <random>
 #include <regex>
-
+#include <cstring>
 // Darwin or windows fails to define this
 #ifndef O_RSYNC
 #define O_RSYNC 0x0
@@ -4737,4 +4741,74 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_release(cmount);
   ceph_userperm_destroy(perms);
+}
+
+TEST(LibCephFS, PerfCountersStruct) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  struct ceph_perf_counters_t *s = NULL;
+  ASSERT_EQ(0, ceph_get_perf_counters_struct(cmount, &s));
+  ASSERT_NE(nullptr, s);
+  ASSERT_GT(s->num_counters, 0);
+
+  // NULL pointer must be rejected.
+  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
+
+  // Every entry must have a non-empty name and a non-negative value.
+  for (int i = 0; i < s->num_counters; i++) {
+    EXPECT_NE('\0', s->entries[i].name[0])
+        << "slot " << i << " has empty name";
+    EXPECT_GE(s->entries[i].value, 0)
+        << "negative value at slot " << i
+        << " (name=" << s->entries[i].name << ")";
+    EXPECT_TRUE(s->entries[i].type == CEPH_PERF_KIND_U64 ||
+                s->entries[i].type == CEPH_PERF_KIND_TIME)
+        << "unknown type at slot " << i;
+  }
+
+ 
+  struct { const char *name; int kind; bool check_zero; } expected[] = {
+    { "mdops",    CEPH_PERF_KIND_U64,  false },
+    { "rdops",    CEPH_PERF_KIND_U64,  true  },
+    { "wrops",    CEPH_PERF_KIND_U64,  true  },
+    { "mdavg",    CEPH_PERF_KIND_TIME, false },
+    { "readavg",  CEPH_PERF_KIND_TIME, false },
+    { "writeavg", CEPH_PERF_KIND_TIME, false },
+  };
+  for (auto &e : expected) {
+    bool found = false;
+    for (int i = 0; i < s->num_counters; i++) {
+      if (strcmp(s->entries[i].name, e.name) == 0) {
+        found = true;
+        EXPECT_EQ(e.kind, (int)s->entries[i].type)
+            << "wrong kind for counter '" << e.name << "'";
+        if (e.check_zero) {
+          EXPECT_EQ(0, s->entries[i].value)
+              << "'" << e.name << "' must be 0 on fresh mount";
+        }
+        break;
+      }
+    }
+    EXPECT_TRUE(found) << "counter '" << e.name << "' not found in struct";
+  }
+
+  printf("ceph_perf_counters_t  num_counters=%d\n", s->num_counters);
+  printf("  %-4s  %-5s  %-32s  %s\n", "idx", "type", "name", "value");
+  printf("  %-4s  %-5s  %-32s  %s\n", "---", "----", "----", "-----");
+  for (int i = 0; i < s->num_counters; i++) {
+    const auto &e = s->entries[i];
+    printf("  %-4d  %-5s  %-32s  %lld%s\n",
+           i,
+           e.type == CEPH_PERF_KIND_TIME ? "TIME" : "U64",
+           e.name,
+           (long long)e.value,
+           e.type == CEPH_PERF_KIND_TIME ? " ns" : "");
+  }
+
+  free(s);
+  ceph_shutdown(cmount);
 }
