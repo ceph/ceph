@@ -132,6 +132,72 @@ class TestNFS:
                 assert "Bind_addr = 1.2.3.100" in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_cephfs_client_log(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                enable_cephfs_client_log=True,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, deps = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )
+                )
+                ceph_conf = nfs_generated_conf['config']
+                assert '[client]' in ceph_conf
+                assert 'debug client = 10' in ceph_conf
+                assert 'log file = /var/log/ceph/$name.$pid.log' in ceph_conf
+                assert nfs_generated_conf['enable_cephfs_client_log'] is True
+                assert nfs_generated_conf['cephfs_client_log_dir'] == (
+                    f'/var/log/ceph/{cephadm_module._cluster_fsid}'
+                )
+
+            nfs_spec = NFSServiceSpec(
+                service_id="bar",
+                placement=PlacementSpec(hosts=['test']),
+                enable_cephfs_client_log=True,
+                cephfs_client_log_level=20,
+                cephfs_client_log_dir='/var/log/ceph/custom',
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='bar.test.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )
+                )
+                ceph_conf = nfs_generated_conf['config']
+                assert 'debug client = 20' in ceph_conf
+                assert 'log file = /var/log/ceph/$name.$pid.log' in ceph_conf
+                assert nfs_generated_conf['cephfs_client_log_dir'] == '/var/log/ceph/custom'
+
+            nfs_spec = NFSServiceSpec(
+                service_id="baz",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='baz.test.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )
+                )
+                assert '[client]' not in nfs_generated_conf['config']
+                assert 'enable_cephfs_client_log' not in nfs_generated_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_without_haproxy_stats(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 

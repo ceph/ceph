@@ -1076,6 +1076,12 @@ There are two methds for examining NFS-Ganesha logs:
 The NFS log level can be adjusted using the ``nfs cluster config set`` command
 (see :ref:`nfs-cluster-set`).
 
+To enable libcephfs client debug logging for CephFS-backed exports, set
+``enable_cephfs_client_log: true`` in the NFS service spec. See
+:ref:`deploy-cephadm-nfs-ganesha` for details. Client logs are written to the
+host directory ``/var/log/ceph/<cluster-fsid>`` (or a custom path set via
+``cephfs_client_log_dir``).
+
 
 .. _nfs-ganesha-config:
 

@@ -1,6 +1,13 @@
 import pytest
 
-from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6, valid_addr
+from ceph.deployment.hostspec import SpecValidationError
+from ceph.deployment.utils import (
+    is_ipv6,
+    unwrap_ipv6,
+    wrap_ipv6,
+    valid_addr,
+    verify_path,
+)
 from typing import NamedTuple
 
 
@@ -73,3 +80,18 @@ def test_valid_addr(addr_object: Address):
     valid, description = valid_addr(addr_object.addr)
     assert valid == addr_object.status
     assert description == addr_object.description
+
+
+def test_verify_path():
+    verify_path(None, 'path')
+    verify_path('/var/log/ceph', 'path')
+    verify_path('/var/log/ceph/custom', 'path')
+
+    with pytest.raises(SpecValidationError, match='non-empty string'):
+        verify_path('', 'path')
+    with pytest.raises(SpecValidationError, match='non-empty string'):
+        verify_path('   ', 'path')
+    with pytest.raises(SpecValidationError, match='absolute path'):
+        verify_path('relative/path', 'path')
+    with pytest.raises(SpecValidationError, match='filesystem root'):
+        verify_path('/', 'path')
