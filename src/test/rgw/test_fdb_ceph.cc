@@ -661,7 +661,7 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
 }
 
 // Note that these are disabled for regular test runs. Use
-//      unittest_fdb_ceph "simple benchmarks"
+//      unittest_fdb_ceph "[benchmark]"
 // ...to run:
 TEST_CASE("simple benchmarks", "[.benchmark][benchmark]") {
 
