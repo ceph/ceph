@@ -1190,6 +1190,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
       co_return co_await get_shard_services().osdmap_subscribe(
         m->cluster_osdmap_trim_lower_bound - 1, true);
     }
+    start = first;
   }
 
   ceph::os::Transaction t;
