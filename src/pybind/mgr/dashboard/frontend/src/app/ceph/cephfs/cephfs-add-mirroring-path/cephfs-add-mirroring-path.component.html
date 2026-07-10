@@ -10,7 +10,8 @@
   submitButtonLabel="Add mirror path"
   i18n-submitButtonLabel
   (submitRequested)="onSubmit()"
-  (closeRequested)="onCancel()">
+  (closeRequested)="onCancel()"
+  (stepChanged)="onStepChanged($event)">
   <cd-tearsheet-step>
     <cd-mirroring-paths-step
       #pathsStep
@@ -38,8 +39,10 @@
     <cd-mirroring-review-step
       #tearsheetStep
       [fsName]="fsName"
-      [pathsStep]="pathsStep"
-      [scheduleStep]="scheduleStep">
+      [totalPaths]="reviewTotalPaths"
+      [selectedPaths]="reviewSelectedPaths"
+      [snapshotInterval]="reviewSnapshotInterval"
+      [retention]="reviewRetention">
     </cd-mirroring-review-step>
   </cd-tearsheet-step>
 </cd-tearsheet>
