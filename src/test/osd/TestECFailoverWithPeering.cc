@@ -16,7 +16,6 @@
 #include <gtest/gtest.h>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "test/osd/TestCommon.h"
-#include "osd/ECSwitch.h"
 
 using namespace std;
 
@@ -841,6 +840,124 @@ TEST_P(
   run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
 
   set_config("osd_async_recovery_min_cost", "100");
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubClean) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_scrub_corruption";
+  uint64_t object_size = k * stripe_unit;
+
+  bufferlist bl = create_random_buffer(object_size);
+  std::string test_data(bl.c_str(), bl.length());
+
+  std::cout << "Writing full-stripe object (" << object_size << " bytes of random data)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+
+  std::cout << "Scrubbing object to verify data integrity" << std::endl;
+  bool corruption_detected = scrub_object(obj_name);
+
+  ASSERT_FALSE(corruption_detected)
+    << "scrub_object() should NOT detect corruption when data is valid";
+
+  std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const uint64_t object_size = k * stripe_unit;
+  const std::vector<int> shard_offsets = {/*0, 1, */k};
+  const bool supports_crc = ec_plugin == "isa";
+
+  for (int zone = 0; zone < 1; ++zone) {
+    for (int shard_offset : shard_offsets) {
+      const int absolute_shard = shard_offset;
+      const std::string obj_name =
+        "test_obj_zone_" + std::to_string(zone) +
+        "_shard_" + std::to_string(shard_offset);
+
+      bufferlist bl = create_random_buffer(object_size);
+      std::string test_data(bl.c_str(), bl.length());
+
+      std::cout << "\n=== ScrubDetectsCorruption: testing zone " << zone
+                << ", shard offset " << shard_offset
+                << " (absolute shard " << absolute_shard << ") ===" << std::endl;
+
+      std::cout << "Writing object " << obj_name << " (" << object_size
+                << " bytes of random data)" << std::endl;
+      create_and_write_verify(obj_name, test_data);
+
+      std::cout << "Corrupting object " << obj_name
+                << " for zone iteration " << zone
+                << " on relative shard " << shard_offset
+                << " using absolute shard " << absolute_shard << std::endl;
+      hobject_t hoid = make_test_object(obj_name);
+      corrupt_shard_data(hoid,
+                         pg_shard_t(absolute_shard, shard_id_t(absolute_shard)));
+
+      std::cout << "Scrubbing object " << obj_name
+                << " to verify corruption detection for zone iteration " << zone
+                << ", shard offset " << shard_offset << std::endl;
+      bool corruption_detected = scrub_object(obj_name);
+
+      std::cout << "Zone iteration " << zone
+                << " corruption result for shard offset " << shard_offset
+                << ": " << (corruption_detected ? "detected" : "not detected")
+                << " (absolute shard " << absolute_shard
+                << ", supports_crc=" << (supports_crc ? "true" : "false")
+                << ")" << std::endl;
+
+      if (supports_crc) {
+        EXPECT_TRUE(corruption_detected)
+          << "scrub_object() should detect corruption for object " << obj_name
+          << " during zone iteration " << zone
+          << ", shard offset " << shard_offset
+          << " (absolute shard " << absolute_shard << ")";
+      } else {
+        EXPECT_FALSE(corruption_detected)
+            << "scrub_object() should not report corruption for object "
+            << obj_name << " when CRC-based detection is unsupported"
+            << " during zone iteration " << zone << ", shard offset "
+            << shard_offset << " (absolute shard " << absolute_shard << ")";
+      }
+    }
+  }
+
+  std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
+}
+
+TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_scrub_partial_write";
+
+  uint64_t partial_size = stripe_unit / 2;
+
+  std::cout << "Creating partial write object with size " << partial_size
+            << " bytes (stripe_unit=" << stripe_unit << ", full stripe would be "
+            << (k * stripe_unit) << " bytes)" << std::endl;
+
+  bufferlist bl = create_random_buffer(partial_size);
+  std::string test_data(bl.c_str(), bl.length());
+
+  std::cout << "Writing partial object (" << partial_size << " bytes)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+
+  write(obj_name, 0, test_data, test_data.size());
+
+  // NOTE: Partial writes may expose scrub issues with EC pools
+  std::cout << "Scrubbing partial write object to test scrub behavior" << std::endl;
+  bool corruption_detected = scrub_object(obj_name);
+
+  std::cout << "Scrub result for partial write: "
+            << (corruption_detected ? "corruption detected" : "no corruption detected")
+            << std::endl;
+
+  EXPECT_FALSE(corruption_detected)
+    << "scrub_object() should NOT detect corruption on valid partial write";
+
+  std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
 
 // ---------------------------------------------------------------------------

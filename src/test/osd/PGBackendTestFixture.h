@@ -40,6 +40,9 @@
 #include "os/ObjectStore.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "test/osd/OSDMapTestHelpers.h"
+#include "test/osd/ScrubTestFixture.h"
+#include "osd/scrubber/scrub_backend.h"
+#include "osd/scrubber/pg_scrubber.h"
 
 // Unified test fixture for EC and Replicated backend tests with ObjectStore.
 // Uses PoolType to branch between EC (ECSwitch) and Replicated (ReplicatedBackend).
@@ -86,7 +89,9 @@ protected:
   
   // OpTracker for wrapping messages in OpRequestRef
   std::shared_ptr<OpTracker> op_tracker;
-  
+  // Scrub infrastructure - initialized once and reused across scrub operations
+  std::unique_ptr<MockScrubBeListener> scrub_listener;
+  std::unique_ptr<MockSnapMapReader> snap_reader;
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::map<int, std::unique_ptr<ECExtentCache::LRU>> lrus;
   int k = 4;  // data chunks
@@ -213,6 +218,9 @@ private:
   void setup_ec_pool();
   void setup_replicated_pool();
   void cleanup_data_dir();
+
+protected:
+  void initialize_scrub_infra();
 
 public:
   const pg_pool_t& get_pool() const {
@@ -504,6 +512,47 @@ public:
   object_info_t read_shard_object_info(
     const std::string& obj_name,
     int shard);
+
+  /**
+   * Scrub an object and verify it has no corruption.
+   *
+   * This utility method:
+   * 1. Builds scrub maps for all shards using be_scan_list()
+   * 2. Creates a ScrubBackend with mock listeners
+   * 3. Calls scrub_compare_maps() to check for inconsistencies
+   * 4. Returns true if corruption was detected, false otherwise
+   *
+   * The scrub infrastructure (mock listeners) is initialized once in SetUp()
+   * and reused across all scrub operations for efficiency.
+   *
+   * @param obj_name Name of the object to scrub
+   * @return true if corruption detected, false if object is consistent
+   */
+  bool scrub_object(const std::string& obj_name);
+
+  /**
+   * Corrupt the data for a specific shard of an object.
+   *
+   * This utility method directly writes zeros to the stored data for a given
+   * shard, simulating data corruption at the storage level. This is useful
+   * for testing scrub detection of corrupted data.
+   *
+   * @param obj The hobject_t identifying the object to corrupt
+   * @param shard The pg_shard_t identifying which shard to corrupt
+   */
+  void corrupt_shard_data(const hobject_t& obj, pg_shard_t shard);
+
+  /**
+   * Create a bufferlist filled with random data.
+   *
+   * This utility method generates a buffer of the specified size filled with
+   * random bytes. Useful for testing scenarios where random data is needed
+   * to avoid patterns that might mask bugs (e.g., XOR patterns in EC).
+   *
+   * @param size Size of the buffer to create in bytes
+   * @return A bufferlist containing random data
+   */
+  bufferlist create_random_buffer(size_t size);
 
 };
 
