@@ -317,7 +317,11 @@ public:
            args.get_optional("ssl-key-password"),
            args.get_optional("sasl-kerberos-service-name"),
            args.get_optional("sasl-kerberos-principal"),
-           args.get_optional("sasl-kerberos-keytab"))) {
+           args.get_optional("sasl-kerberos-keytab"),
+           args.get_optional("sasl.oauthbearer.token.endpoint.url"),
+           args.get_optional("sasl.oauthbearer.client.id"),
+           args.get_optional("sasl.oauthbearer.client.secret"),
+           args.get_optional("sasl.oauthbearer.scope"))) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }

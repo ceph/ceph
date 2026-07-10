@@ -250,6 +250,10 @@ and must be between 1 and 256 characters long. To relax these requirements, use:
    [&Attributes.entry.22.key=sasl-kerberos-service-name&Attributes.entry.22.value=<kerberos-service-name>]
    [&Attributes.entry.23.key=sasl-kerberos-principal&Attributes.entry.23.value=<kerberos-principal>]
    [&Attributes.entry.24.key=sasl-kerberos-keytab&Attributes.entry.24.value=<kerberos-keytab-path>]
+   [&Attributes.entry.25.key=sasl.oauthbearer.token.endpoint.url&Attributes.entry.25.value=<token-endpoint-url>]
+   [&Attributes.entry.26.key=sasl.oauthbearer.client.id&Attributes.entry.26.value=<client-id>]
+   [&Attributes.entry.27.key=sasl.oauthbearer.client.secret&Attributes.entry.27.value=<client-secret>]
+   [&Attributes.entry.28.key=sasl.oauthbearer.scope&Attributes.entry.28.value=<scope>]
 
 Request parameters:
 
@@ -392,6 +396,12 @@ Request parameters:
    The same security considerations in place for this parameter as
    for ``user``/``password``: it should be provided over HTTPS or
    ``rgw_allow_notification_secrets_in_cleartext`` must be set to "true".
+  - ``sasl.oauthbearer.token.endpoint.url``: The token endpoint URL of the
+    identity provider.
+  - ``sasl.oauthbearer.client.id``: The OAuth client identifier.
+  - ``sasl.oauthbearer.client.secret``: The OAuth client secret (sensitive,
+    provide over HTTPS or enable ``rgw_allow_notification_secrets_in_cleartext``).
+  - ``sasl.oauthbearer.scope``: Optional. The OAuth scopes to request.
 
  - ``sasl-kerberos-service-name``: Kerberos service name used with
    ``GSSAPI`` (per-topic override). If not provided, the global
@@ -688,6 +698,14 @@ Valid ``AttributeName`` that can be passed:
 - ``sasl-kerberos-service-name``: Kerberos service name for Kafka SASL/GSSAPI.
 - ``sasl-kerberos-principal``: Kerberos principal for the RGW client when using ``GSSAPI``.
 - ``sasl-kerberos-keytab``: Path to the keytab to use with ``GSSAPI``.
+- ``sasl.oauthbearer.token.endpoint.url``: Token endpoint URL of the
+  identity provider.
+- ``sasl.oauthbearer.client.id``: OAuth client identifier (required for
+  client credential flows).
+- ``sasl.oauthbearer.client.secret``: OAuth client secret (sensitive; provide
+  over HTTPS or enable ``rgw_allow_notification_secrets_in_cleartext``).
+- ``sasl.oauthbearer.scope``: Optional. Space-separated OAuth scopes to
+  request.
 
 Notifications
 ~~~~~~~~~~~~~

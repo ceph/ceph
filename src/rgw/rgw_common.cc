@@ -892,7 +892,7 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
       }
       string& val = nv.get_val();
       static constexpr std::initializer_list<const char*>
-          sensitive_keyword_list = {"password"};
+          sensitive_keyword_list = {"password", "secret"};
       bool is_sensitive = false;
       for (const auto& key : sensitive_keyword_list) {
         if (name.find(key) != std::string::npos) {
