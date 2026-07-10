@@ -34,6 +34,10 @@ struct connection_id_t {
   std::string kerberos_service_name;
   std::string kerberos_principal;
   std::string kerberos_keytab;
+  std::string oauthbearer_token_endpoint_url;
+  std::string oauthbearer_client_id;
+  std::string oauthbearer_client_secret;
+  std::string oauthbearer_scope;
   bool ssl = false;
   bool verify_ssl = true;
   connection_id_t() = default;
@@ -49,7 +53,11 @@ struct connection_id_t {
                   const boost::optional<const std::string&>& _ssl_key_password,
                   const boost::optional<const std::string&>& _kerberos_service_name,
                   const boost::optional<const std::string&>& _kerberos_principal,
-                  const boost::optional<const std::string&>& _kerberos_keytab);
+                  const boost::optional<const std::string&>& _kerberos_keytab,
+                  const boost::optional<const std::string&>& _oauthbearer_token_endpoint_url,
+                  const boost::optional<const std::string&>& _oauthbearer_client_id,
+                  const boost::optional<const std::string&>& _oauthbearer_client_secret,
+                  const boost::optional<const std::string&>& _oauthbearer_scope);
 };
 
 std::string to_string(const connection_id_t& id);
@@ -69,7 +77,11 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ssl_key_password,
              boost::optional<const std::string&> kerberos_service_name,
              boost::optional<const std::string&> kerberos_principal,
-             boost::optional<const std::string&> kerberos_keytab);
+             boost::optional<const std::string&> kerberos_keytab,
+             boost::optional<const std::string&> oauthbearer_token_endpoint_url,
+             boost::optional<const std::string&> oauthbearer_client_id,
+             boost::optional<const std::string&> oauthbearer_client_secret,
+             boost::optional<const std::string&> oauthbearer_scope);
 
 // publish a message over a connection that was already created
 int publish(const connection_id_t& conn_id,
@@ -83,6 +95,27 @@ int publish_with_confirm(const connection_id_t& conn_id,
                          const std::string& topic,
                          const std::string& message,
                          reply_callback_t cb);
+
+// returns an empty string if all of oauth parameters are present and
+// non-empty, otherwise a human-readable error string naming the first
+// one that is missing.
+// defined inline, so that callers validating topic attributes do not need
+// rgw_kafka.cc, which is only built when WITH_RADOSGW_KAFKA_ENDPOINT is set
+inline std::string validate_oauthbearer_params(
+    const boost::optional<const std::string&>& token_endpoint_url,
+    const boost::optional<const std::string&>& client_id,
+    const boost::optional<const std::string&>& client_secret) {
+  if (!token_endpoint_url || token_endpoint_url->empty()) {
+    return "OAUTHBEARER requires sasl-oauthbearer-token-endpoint-url";
+  }
+  if (!client_id || client_id->empty()) {
+    return "OAUTHBEARER requires sasl-oauthbearer-client-id";
+  }
+  if (!client_secret || client_secret->empty()) {
+    return "OAUTHBEARER requires sasl-oauthbearer-client-secret";
+  }
+  return {};
+}
 
 // convert the integer status returned from the "publish" function to a string
 std::string status_to_string(int s);
