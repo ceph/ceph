@@ -52,7 +52,7 @@ do
 done
 
 for f in \
-    cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
+    cls cmd completions handler_error io ec_io list ec_list misc pool read_operations snapshots \
     watch_notify write_operations
 do
     if [ $parallel -eq 1 ]; then
