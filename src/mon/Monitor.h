@@ -191,6 +191,9 @@ public:
 
 private:
   void new_tick();
+  std::atomic<int> fast_auth_in_progress{0};
+  std::mutex shutdown_mutex;
+  std::condition_variable shutdown_cv;
 
   // -- local storage --
 public:
