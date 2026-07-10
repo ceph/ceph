@@ -212,7 +212,11 @@ jobs:
 
                   if (!isAuthorized) {
                     core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
-                    await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
+                    try {
+                      await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
+                    } catch (e) {
+                      core.info(`[Router] Label removal skipped or already deleted: ${e.message}`);
+                    }
                     core.setFailed(`User @${actor} is not authorized to override audits.`);
                   } else {
                     core.info(`[Router] User @${actor} is authorized. Stripping fail/pass labels to visually unblock PR.`);
