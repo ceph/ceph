@@ -33,6 +33,7 @@ export class TaskWrapperService {
             task.success = true;
             this.notificationService.notifyTask(task);
           }
+          observer.next(resp);
         },
         (resp) => {
           task.success = false;

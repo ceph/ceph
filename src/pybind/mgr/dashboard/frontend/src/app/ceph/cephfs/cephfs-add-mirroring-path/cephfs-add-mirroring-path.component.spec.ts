@@ -115,6 +115,7 @@ describe('CephfsAddMirroringPathComponent', () => {
       },
       refreshTrackedPaths: () => of(undefined),
       getSubmitPaths: () => ({ toAdd: [], alreadyMirrored: [] }),
+      getSelectedPaths: () => [],
       addTrackedPath: jest.fn(),
       ...overrides
     } as any;
@@ -127,7 +128,8 @@ describe('CephfsAddMirroringPathComponent', () => {
   it('should add mirror directories and close modal on success', fakeAsync(() => {
     component.ngOnInit();
     mockValidPathsStep({
-      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'], alreadyMirrored: [] })
+      getSubmitPaths: () => ({ toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'], alreadyMirrored: [] }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -141,6 +143,10 @@ describe('CephfsAddMirroringPathComponent', () => {
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledTimes(2);
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv1');
     expect(cephfsServiceMock.addMirrorDirectory).toHaveBeenCalledWith('testfs', '/volumes/g1/sv2');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledTimes(2);
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv1');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv2');
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(2);
     expect(
       notificationServiceMock.show.mock.calls.filter(([type]) => type === NotificationType.success)
         .length
@@ -162,7 +168,8 @@ describe('CephfsAddMirroringPathComponent', () => {
       getSubmitPaths: () => ({
         toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
         alreadyMirrored: []
-      })
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -194,7 +201,8 @@ describe('CephfsAddMirroringPathComponent', () => {
       getSubmitPaths: () => ({
         toAdd: ['/volumes/g1/sv1', '/volumes/g1/sv2'],
         alreadyMirrored: []
-      })
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
     });
 
     cephfsServiceMock.addMirrorDirectory.mockImplementation((_fs: string, path: string) =>
@@ -219,6 +227,51 @@ describe('CephfsAddMirroringPathComponent', () => {
       ['/cephfs/mirroring', { outlets: { modal: null } }],
       { state: { reload: true } }
     );
+  }));
+
+  it('should create snapshot schedules for already mirrored paths without adding mirror paths', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: [],
+        alreadyMirrored: ['/volumes/g1/sv1']
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1']
+    });
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(cephfsServiceMock.addMirrorDirectory).not.toHaveBeenCalled();
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(1);
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledWith({
+      path: '/volumes/g1/sv1',
+      fs: 'testfs'
+    });
+    expect(routerNavigateSpy).toHaveBeenCalledWith(
+      ['/cephfs/mirroring', { outlets: { modal: null } }],
+      { state: { reload: true } }
+    );
+  }));
+
+  it('should create snapshot schedules for multiple already mirrored paths', fakeAsync(() => {
+    component.ngOnInit();
+    mockValidPathsStep({
+      getSubmitPaths: () => ({
+        toAdd: [],
+        alreadyMirrored: ['/volumes/g1/sv1', '/volumes/g1/sv2']
+      }),
+      getSelectedPaths: () => ['/volumes/g1/sv1', '/volumes/g1/sv2']
+    });
+
+    component.onSubmit();
+    tick();
+    flush();
+
+    expect(snapshotScheduleServiceMock.create).toHaveBeenCalledTimes(2);
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv1');
+    expect(component.scheduleStep.buildCreatePayload).toHaveBeenCalledWith('/volumes/g1/sv2');
   }));
 
   it('should close modal outlet on cancel without reload', () => {

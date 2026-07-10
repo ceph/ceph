@@ -1,18 +1,21 @@
 import {
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   Inject,
   Input,
   OnChanges,
   OnInit,
   Optional,
-  SimpleChanges
+  SimpleChanges,
+  inject
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { padStart, uniq } from 'lodash';
 import moment from 'moment';
-import { Observable, OperatorFunction, of, timer } from 'rxjs';
+import { Observable, OperatorFunction, Subject, of, timer } from 'rxjs';
 import {
   catchError,
   debounceTime,
@@ -99,6 +102,10 @@ export class CephfsSnapshotscheduleFormComponent
 
   snapScheduleForm!: CdFormGroup;
 
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly scheduleUniquenessCheck$ = new Subject<void>();
+  private readonly retentionUniquenessCheck$ = new Subject<void>();
+
   get formGroup(): CdFormGroup {
     return this.snapScheduleForm;
   }
@@ -149,6 +156,8 @@ export class CephfsSnapshotscheduleFormComponent
     if (this.hideDirectory && this.path) {
       this.applyDirectoryPath(this.path);
     }
+    this.setupScheduleUniquenessValidation();
+    this.setupRetentionUniquenessValidation();
     this.isEdit ? this.populateForm() : this.loadingReady();
 
     this.snapScheduleForm
@@ -278,9 +287,44 @@ export class CephfsSnapshotscheduleFormComponent
         retentionPolicies: new FormArray([])
       },
       {
-        asyncValidators: [this.validateSchedule(), this.validateRetention()]
+        asyncValidators: [this.validateRetention()]
       }
     );
+  }
+
+  onScheduleIntervalChange(value: number | string): void {
+    const control = this.snapScheduleForm.get('repeatInterval');
+    const interval = Number(value);
+    if (!control || !Number.isFinite(interval)) {
+      return;
+    }
+    if (control.value !== interval) {
+      control.setValue(interval, { emitEvent: false });
+    }
+    control.markAsDirty();
+    control.markAsTouched();
+    this.queueScheduleUniquenessCheck();
+  }
+
+  onScheduleFrequencyChange(value: RepeatFrequency): void {
+    const control = this.snapScheduleForm.get('repeatFrequency');
+    if (!control || !value) {
+      return;
+    }
+    if (control.value !== value) {
+      control.setValue(value, { emitEvent: false });
+    }
+    control.markAsDirty();
+    control.markAsTouched();
+    this.queueScheduleUniquenessCheck();
+  }
+
+  queueScheduleUniquenessCheck(): void {
+    this.scheduleUniquenessCheck$.next();
+  }
+
+  queueRetentionUniquenessCheck(): void {
+    this.retentionUniquenessCheck$.next();
   }
 
   addRetentionPolicy() {
@@ -290,6 +334,7 @@ export class CephfsSnapshotscheduleFormComponent
         retentionFrequency: new FormControl(RetentionFrequency.Daily)
       })
     );
+    this.queueRetentionUniquenessCheck();
     this.cd.detectChanges();
   }
 
@@ -302,6 +347,7 @@ export class CephfsSnapshotscheduleFormComponent
     this.retentionPolicies.controls.forEach((x) =>
       x.get('retentionFrequency').updateValueAndValidity()
     );
+    this.queueRetentionUniquenessCheck();
     this.cd.detectChanges();
   }
 
@@ -348,6 +394,17 @@ export class CephfsSnapshotscheduleFormComponent
   buildCreatePayload(targetPath?: string): Record<string, unknown> {
     const values = this.snapScheduleForm.getRawValue() as SnapshotScheduleFormValue;
     const path = targetPath ?? values.directory;
+    const subvolInfo = this.parseSubvolumePath(path);
+    const useSubvolume = this.hideDirectory ? subvolInfo.isSubvolumePath : this.isSubvolume;
+    const subvolume = subvolInfo.isSubvolumePath ? subvolInfo.subvolume : this.subvolume;
+    const subvolumeGroup = subvolInfo.isSubvolumePath
+      ? subvolInfo.subvolumeGroup
+      : this.subvolumeGroup;
+    const isDefaultSubvolumeGroup =
+      subvolInfo.isSubvolumePath && subvolumeGroup === DEFAULT_SUBVOLUME_GROUP
+        ? true
+        : this.isDefaultSubvolumeGroup;
+
     const snapScheduleObj: Record<string, unknown> = {
       fs: this.fsName,
       path,
@@ -362,19 +419,43 @@ export class CephfsSnapshotscheduleFormComponent
       snapScheduleObj['retention_policy'] = retentionPoliciesValues;
     }
 
-    if (this.isSubvolume) {
-      snapScheduleObj['subvol'] = this.subvolume;
+    if (useSubvolume && subvolume) {
+      snapScheduleObj['subvol'] = subvolume;
     }
 
-    if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
-      snapScheduleObj['group'] = this.subvolumeGroup;
+    if (useSubvolume && subvolume && !isDefaultSubvolumeGroup && subvolumeGroup) {
+      snapScheduleObj['group'] = subvolumeGroup;
     }
 
     return snapScheduleObj;
   }
 
+  private parseSubvolumePath(path: string): {
+    subvolumeGroup: string;
+    subvolume: string;
+    isSubvolumePath: boolean;
+  } {
+    const parts = (path ?? '')
+      .trim()
+      .replace(/\/+$/, '')
+      .split('/')
+      .filter(Boolean);
+
+    if (parts[0] !== 'volumes' || parts.length < 3) {
+      return { subvolumeGroup: '', subvolume: '', isSubvolumePath: false };
+    }
+
+    return {
+      subvolumeGroup: parts[1],
+      subvolume: parts[2],
+      isSubvolumePath: true
+    };
+  }
+
   submit() {
-    this.validateSchedule()(this.snapScheduleForm).subscribe({
+    this.evaluateScheduleUniqueness()
+      .pipe(switchMap(() => this.evaluateRetentionUniqueness()))
+      .subscribe({
       next: () => {
         if (this.snapScheduleForm.invalid) {
           this.snapScheduleForm.setErrors({ cdSubmitButton: true });
@@ -411,7 +492,8 @@ export class CephfsSnapshotscheduleFormComponent
               call: this.snapScheduleService.update(updateObj)
             })
             .subscribe({
-              error: () => {
+              error: (resp) => {
+                this.applyRetentionConflictError(resp);
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
@@ -428,7 +510,8 @@ export class CephfsSnapshotscheduleFormComponent
               call: this.snapScheduleService.create(snapScheduleObj)
             })
             .subscribe({
-              error: () => {
+              error: (resp) => {
+                this.applyRetentionConflictError(resp);
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
@@ -440,43 +523,225 @@ export class CephfsSnapshotscheduleFormComponent
     });
   }
 
-  validateSchedule() {
-    return (frm: AbstractControl) => {
-      const directory = frm.get('directory');
-      const repeatFrequency = frm.get('repeatFrequency');
-      const repeatInterval = frm.get('repeatInterval');
-      const directoryPath = this.hideDirectory
-        ? directory?.getRawValue?.() ?? directory?.value
-        : directory?.value;
+  private setupScheduleUniquenessValidation(): void {
+    this.scheduleUniquenessCheck$
+      .pipe(
+        debounceTime(DEBOUNCE_TIMER),
+        switchMap(() => this.evaluateScheduleUniqueness()),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe();
 
-      if (this.isEdit) {
-        return of(null);
-      }
-
-      return timer(VALIDATON_TIMER).pipe(
-        switchMap(() =>
-          this.snapScheduleService
-            .checkScheduleExists(
-              directoryPath,
-              this.fsName,
-              repeatInterval?.value,
-              repeatFrequency?.value,
-              this.isSubvolume
-            )
-            .pipe(
-              map((exists: boolean) => {
-                if (exists) {
-                  repeatFrequency?.markAsDirty();
-                  repeatFrequency?.setErrors({ notUnique: true }, { emitEvent: true });
-                } else {
-                  repeatFrequency?.setErrors(null);
-                }
-                return null;
-              })
-            )
+    ['repeatInterval', 'repeatFrequency'].forEach((fieldName) => {
+      this.snapScheduleForm
+        .get(fieldName)
+        ?.valueChanges.pipe(
+          distinctUntilChanged(),
+          takeUntilDestroyed(this.destroyRef)
         )
+        .subscribe(() => this.queueScheduleUniquenessCheck());
+    });
+  }
+
+  private setupRetentionUniquenessValidation(): void {
+    this.retentionUniquenessCheck$
+      .pipe(
+        debounceTime(DEBOUNCE_TIMER),
+        switchMap(() => this.evaluateRetentionUniqueness()),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe();
+
+    this.snapScheduleForm
+      .get('directory')
+      ?.valueChanges.pipe(
+        debounceTime(DEBOUNCE_TIMER),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => this.queueRetentionUniquenessCheck());
+
+    this.retentionPolicies.valueChanges
+      .pipe(
+        debounceTime(DEBOUNCE_TIMER),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => this.queueRetentionUniquenessCheck());
+  }
+
+  private evaluateRetentionUniqueness(): Observable<void> {
+    const frm = this.snapScheduleForm;
+    const directoryPath = this.getScheduleDirectoryPath(frm);
+    const retentionList = (frm.get('retentionPolicies') as FormArray).controls?.map((ctrl) =>
+      ctrl.get('retentionFrequency').value
+    );
+
+    if (!directoryPath || !retentionList?.length) {
+      return of(undefined);
+    }
+
+    return this.snapScheduleService
+      .checkRetentionPolicyExists(
+        directoryPath,
+        this.fsName,
+        retentionList,
+        this.retentionPoliciesToRemove?.map?.((rp) => rp.retentionFrequency) || [],
+        this.resolveIsSubvolumeForPath(directoryPath)
+      )
+      .pipe(
+        tap(({ exists, errorIndex }) => this.applyRetentionUniquenessResult(frm, exists, errorIndex)),
+        map(() => undefined),
+        catchError(() => of(undefined))
       );
-    };
+  }
+
+  private applyRetentionUniquenessResult(
+    frm: CdFormGroup,
+    exists: boolean,
+    errorIndex: number
+  ): void {
+    if (exists && errorIndex >= 0) {
+      const frequencyControl = this.getFormArrayItem(
+        frm,
+        'retentionPolicies',
+        'retentionFrequency',
+        errorIndex
+      );
+      const intervalControl = this.getFormArrayItem(
+        frm,
+        'retentionPolicies',
+        'retentionInterval',
+        errorIndex
+      );
+      const retentionPolicyControl = (frm.get('retentionPolicies') as FormArray).at(errorIndex);
+      frequencyControl?.setErrors?.({ notUnique: true });
+      frequencyControl?.markAsDirty();
+      intervalControl?.markAsDirty();
+      retentionPolicyControl?.setErrors?.({ notUnique: true });
+      retentionPolicyControl?.markAsDirty();
+    } else {
+      (frm.get('retentionPolicies') as FormArray).controls?.forEach?.((ctrl, i) => {
+        const frequencyControl = this.getFormArrayItem(
+          frm,
+          'retentionPolicies',
+          'retentionFrequency',
+          i
+        );
+        if (frequencyControl?.hasError('notUnique')) {
+          this.setControlError(frequencyControl, 'notUnique', false);
+        }
+        if (ctrl.hasError('notUnique')) {
+          this.setControlError(ctrl, 'notUnique', false);
+        }
+      });
+    }
+
+    frm.updateValueAndValidity({ emitEvent: false });
+    this.cd.markForCheck();
+  }
+
+  private applyRetentionConflictError(resp: { error?: { detail?: string } }): void {
+    this.applyRetentionConflictFromDetail(resp?.error?.detail || '');
+  }
+
+  applyRetentionConflictFromDetail(detail: string): void {
+    const conflictFrequency = this.snapScheduleService.parseRetentionConflictFrequency(detail);
+    if (!conflictFrequency) {
+      return;
+    }
+
+    this.retentionPolicies.controls.forEach((ctrl, idx) => {
+      if (ctrl.get('retentionFrequency')?.value === conflictFrequency) {
+        this.applyRetentionUniquenessResult(this.snapScheduleForm, true, idx);
+      }
+    });
+  }
+
+  private evaluateScheduleUniqueness(): Observable<void> {
+    const frm = this.snapScheduleForm;
+
+    if (this.isEdit) {
+      return of(undefined);
+    }
+
+    const directoryPath = this.getScheduleDirectoryPath(frm);
+    const interval = Number(frm.get('repeatInterval')?.value);
+    const frequency = frm.get('repeatFrequency')?.value as RepeatFrequency;
+
+    if (!directoryPath || !interval || !frequency) {
+      this.clearScheduleUniquenessErrors(frm);
+      this.cd.markForCheck();
+      return of(undefined);
+    }
+
+    return this.snapScheduleService
+      .checkScheduleExists(
+        directoryPath,
+        this.fsName,
+        interval,
+        frequency,
+        this.resolveIsSubvolumeForPath(directoryPath)
+      )
+      .pipe(
+        tap((exists) => this.applyScheduleUniquenessResult(frm, exists)),
+        map(() => undefined),
+        catchError(() => {
+          this.clearScheduleUniquenessErrors(frm);
+          this.cd.markForCheck();
+          return of(undefined);
+        })
+      );
+  }
+
+  private applyScheduleUniquenessResult(frm: CdFormGroup, exists: boolean): void {
+    const repeatFrequency = frm.get('repeatFrequency');
+    const repeatInterval = frm.get('repeatInterval');
+
+    if (exists) {
+      repeatFrequency?.markAsDirty();
+      repeatInterval?.markAsDirty();
+      this.setControlError(repeatFrequency, 'notUnique', true);
+      this.setControlError(repeatInterval, 'notUnique', true);
+    } else {
+      this.clearScheduleUniquenessErrors(frm);
+    }
+
+    frm.updateValueAndValidity({ emitEvent: false });
+    this.cd.markForCheck();
+  }
+
+  private getScheduleDirectoryPath(frm: CdFormGroup): string {
+    const directory = frm.get('directory');
+    return this.hideDirectory
+      ? directory?.getRawValue?.() ?? directory?.value
+      : directory?.value;
+  }
+
+  private resolveIsSubvolumeForPath(path: string): boolean {
+    const subvolInfo = this.parseSubvolumePath(path);
+    return this.hideDirectory ? subvolInfo.isSubvolumePath : this.isSubvolume;
+  }
+
+  private setControlError(
+    control: AbstractControl | null,
+    errorKey: string,
+    present: boolean
+  ): void {
+    if (!control) {
+      return;
+    }
+    const errors = { ...(control.errors ?? {}) };
+    if (present) {
+      errors[errorKey] = true;
+      control.setErrors(errors);
+      return;
+    }
+    delete errors[errorKey];
+    control.setErrors(Object.keys(errors).length ? errors : null);
+  }
+
+  private clearScheduleUniquenessErrors(frm: AbstractControl): void {
+    this.setControlError(frm.get('repeatFrequency'), 'notUnique', false);
+    this.setControlError(frm.get('repeatInterval'), 'notUnique', false);
   }
 
   getFormArrayItem(frm: FormGroup, frmArrayName: string, ctrl: string, idx: number) {
@@ -487,8 +752,16 @@ export class CephfsSnapshotscheduleFormComponent
     const directoryControl = this.snapScheduleForm.get('directory');
     directoryControl.setValue(path);
     directoryControl.disable();
-    this.subvolumeGroup = path?.split?.('/')?.[2];
-    this.subvolume = path?.split?.('/')?.[3];
+    const subvolInfo = this.parseSubvolumePath(path);
+    this.subvolumeGroup = subvolInfo.subvolumeGroup || path?.split?.('/')?.[2];
+    this.subvolume = subvolInfo.subvolume || path?.split?.('/')?.[3];
+
+    if (this.hideDirectory && subvolInfo.isSubvolumePath) {
+      this.isSubvolume = true;
+      this.isDefaultSubvolumeGroup = subvolInfo.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP;
+      this.queueScheduleUniquenessCheck();
+      return;
+    }
 
     if (!this.subvolume || !this.subvolumeGroup || !this.fsName) {
       return;
@@ -503,6 +776,7 @@ export class CephfsSnapshotscheduleFormComponent
       .subscribe((exists: boolean) => {
         this.isSubvolume = exists;
         this.isDefaultSubvolumeGroup = exists && this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP;
+        this.queueScheduleUniquenessCheck();
       });
   }
 
@@ -526,33 +800,18 @@ export class CephfsSnapshotscheduleFormComponent
             });
             return null;
           }
+          const directoryPath = frm.get('directory').getRawValue?.() ?? frm.get('directory').value;
           return this.snapScheduleService
             .checkRetentionPolicyExists(
-              frm.get('directory').getRawValue?.() ?? frm.get('directory').value,
+              directoryPath,
               this.fsName,
               retentionList,
               this.retentionPoliciesToRemove?.map?.((rp) => rp.retentionFrequency) || [],
-              !!this.subvolume
+              this.resolveIsSubvolumeForPath(directoryPath)
             )
             .pipe(
               map(({ exists, errorIndex }) => {
-                if (exists) {
-                  this.getFormArrayItem(
-                    frm,
-                    'retentionPolicies',
-                    'retentionFrequency',
-                    errorIndex
-                  )?.setErrors?.({ notUnique: true });
-                } else {
-                  (frm.get('retentionPolicies') as FormArray).controls?.forEach?.((_, i) => {
-                    this.getFormArrayItem(
-                      frm,
-                      'retentionPolicies',
-                      'retentionFrequency',
-                      i
-                    )?.setErrors?.(null);
-                  });
-                }
+                this.applyRetentionUniquenessResult(frm as CdFormGroup, exists, errorIndex);
                 return null;
               })
             );

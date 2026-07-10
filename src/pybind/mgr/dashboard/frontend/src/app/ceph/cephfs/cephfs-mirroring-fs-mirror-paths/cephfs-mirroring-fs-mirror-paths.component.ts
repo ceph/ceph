@@ -68,6 +68,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   currentSyncSnapshotTpl!: TemplateRef<unknown>;
 
   private cephfsService = inject(CephfsService);
+  private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
   private route = inject(ActivatedRoute);
   private formatterService = inject(FormatterService);
   private authStorageService = inject(AuthStorageService);
