@@ -135,7 +135,7 @@ Kafka Security Tests
         listener.name.mtls.ssl.truststore.password=mypassword
 
         # SASL mechanisms
-        sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,GSSAPI
+        sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,GSSAPI,OAUTHBEARER
         sasl.kerberos.service.name=kafka
         sasl.mechanism.inter.broker.protocol=PLAIN
         inter.broker.listener.name=PLAINTEXT
@@ -163,6 +163,14 @@ Kafka Security Tests
         keyTab="/etc/krb5-keytabs/kafka.service.keytab" \
         principal="kafka/192.168.1.100@REALM";
 
+        # SASL over SSL with OAUTHBEARER mechanism
+        listener.name.sasl_ssl.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;
+        listener.name.sasl_ssl.oauthbearer.sasl.server.callback.handler.class=org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerValidatorCallbackHandler
+        listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.jwks.endpoint.url=http://127.0.0.1:5556/dex/keys
+        listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.expected.audience=rgw-notifications
+        listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.expected.issuer=http://127.0.0.1:5556/dex
+
+
         # PLAINTEXT SASL with PLAIN mechanism
         listener.name.sasl_plaintext.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
         username="admin" \
@@ -186,12 +194,19 @@ Kafka Security Tests
         keyTab="/etc/krb5-keytabs/kafka.service.keytab" \
         principal="kafka/192.168.1.100@REALM";
 
+        # PLAINTEXT SASL with OAUTHBEARER mechanism
+        listener.name.sasl_plaintext.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;
+        listener.name.sasl_plaintext.oauthbearer.sasl.server.callback.handler.class=org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerValidatorCallbackHandler
+        listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.jwks.endpoint.url=http://127.0.0.1:5556/dex/keys
+        listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.expected.audience=rgw-notifications
+        listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.expected.issuer=http://127.0.0.1:5556/dex
+
 3. Kerberos setup::
 
-   librdkafka (inside RGW) builds the broker SPN (Service Principal Name, basically the 
-   principal that represents the Kafka broker) as ``kafka/<broker-host>@REALM``, 
+   librdkafka (inside RGW) builds the broker SPN (Service Principal Name, basically the
+   principal that represents the Kafka broker) as ``kafka/<broker-host>@REALM``,
    where ``<broker-host>`` is whatever appears in ``advertised.listeners``.
-   Since step 2 uses the broker's IP in ``advertised.listeners``, the 
+   Since step 2 uses the broker's IP in ``advertised.listeners``, the
    broker principal must be tied to that same IP (or hostname — they must match).
 
    The examples below use realm ``REALM.COM`` and broker IP ``192.168.1.100``.
@@ -255,7 +270,7 @@ Kafka Security Tests
               sudo kadmin.local -q "ktadd -k /etc/krb5-keytabs/rgw.service.keytab rgw/192.168.1.100"
 
               sudo chmod 640 /etc/krb5-keytabs/*.keytab
-              sudo chown root:$USER /etc/krb5-keytabs/*.keytab                     # Make keytabs readable by the user that runs the Kafka broker 
+              sudo chown root:$USER /etc/krb5-keytabs/*.keytab                     # Make keytabs readable by the user that runs the Kafka broker
                                                                                    # AND the user that runs vstart (often the same user)
 
    e. Verify the keytabs and get a TGT for the RGW principal::
@@ -266,6 +281,52 @@ Kafka Security Tests
               klist                                                                # should show a valid TGT
 
    f. Make sure to add the Kafka principal, RGW principal, and keytab to your ``bntests.conf``.
+
+4. Install and configure Dex OIDC provider (for OAUTHBEARER tests)::
+
+   Go 1.21 or later is required to build Dex.
+
+   Clone, build, and install Dex::
+
+        git clone https://github.com/dexidp/dex.git
+        cd dex
+        make build
+        sudo install ./bin/dex /usr/local/bin/
+
+   Create ``/etc/dex/config.yaml``.
+   The ``issuer`` value must exactly match the value set in ``server.properties``::
+
+        sudo mkdir -p /etc/dex
+
+   Write the following content to ``/etc/dex/config.yaml``::
+
+        issuer: http://127.0.0.1:5556/dex
+        storage:
+          type: memory
+        web:
+          http: 0.0.0.0:5556
+        oauth2:
+          grantTypes:
+            - client_credentials
+          responseTypes:
+            - code
+          skipApprovalScreen: true
+        staticClients:
+          - id: rgw-notifications
+            secret: client-secret
+            name: RGW Notifications
+            grantTypes:
+              - client_credentials
+        enablePasswordDB: false
+        connectors:
+          - type: mockCallback
+            id: mock
+            name: Mock
+
+   Start Dex and verify the OIDC discovery endpoint is reachable::
+
+        dex serve /etc/dex/config.yaml &
+        curl http://127.0.0.1:5556/dex/.well-known/openid-configuration
 
 4. Start Zookeeper and Kafka.
 
