@@ -16,3 +16,10 @@ email = tester@ceph.com
 service_name = kafka
 principal = rgw/<broker-fqdn/ip>@REALM.COM
 keytab = /etc/krb5-keytabs/rgw.service.keytab
+
+[oauthbearer]
+token_endpoint_url = http://127.0.0.1:5556/dex/token
+client_id = rgw-notifications
+client_secret = client-secret
+access_token = <access_token>
+scope = openid
