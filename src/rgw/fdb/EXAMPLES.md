@@ -1102,6 +1102,139 @@ The query expression says exactly what should be touched: cache records, minus
 reserved subspaces, further trimmed by a cursor. The scan loop does work; it
 does not reimplement filtering.
 
+## Transaction Watches (Triggers)
+
+Transaction watches (watches, triggers) ask FoundationDB to report a change
+to a key (relative to the transaction that created the watch). If watches are
+unsupported by the local FoundationDB configuration, or the transaction cannot
+create watches, waiting on the watch throws `lfdb::libfdb_exception`.
+
+Note that watches do not report the triggering value. If you need the value,
+read it in a separate transaction. For the underlying semantics, see the
+FoundationDB Developer Guide and the C API entry for ``fdb_transaction_watch()``.
+
+See also:
+- https://apple.github.io/foundationdb/developer-guide.html#watches
+- https://apple.github.io/foundationdb/api-c.html#c.fdb_transaction_watch
+
+Here are some illustrative examples using transaction watches:
+
+```cpp
+// Create a one-shot watch that becomes ready when the key changes:
+auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+lfdb::set(dbh, "person/jose-capablanca/title", "World Chess Champion");
+
+if (lfdb::watch_event::changed == watch.wait_for_event()) {
+  handle_title_change();
+}
+```
+
+```cpp
+// Create a watch inside a transaction when it must share that transaction's
+// read version. Commit the transaction before waiting on the watch:
+auto txn = lfdb::make_transaction(dbh);
+auto watch = lfdb::make_watch(txn, "person/jose-capablanca/title");
+
+if (lfdb::commit(txn)) {
+  watch.wait();
+}
+```
+
+```cpp
+// Cancel a watch that is no longer needed:
+auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+watch.cancel();
+
+if (lfdb::watch_event::cancelled == watch.wait_for_event()) {
+  handle_watch_cancelled();
+}
+```
+
+libfdb exposes watch readiness (`ready()`), explicit cancellation (`cancel()`),
+blocking waits (`wait_for_event()`), and cooperative cancellation
+(`wait_for_event(stop_token)`) so applications can choose the timeout strategy
+that fits their scheduler. The same primitives can support polling, event-loop
+integration, stop-token cancellation, or a dedicated watch thread. You do not
+need to create an extra thread to put a timeout around a watch wait:
+
+```cpp
+bool wait_until_ready(lfdb::watch_handle& watch, auto timeout)
+{
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+  while (not watch.ready() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  return watch.ready();
+}
+
+auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+if (not wait_until_ready(watch, std::chrono::seconds(5))) {
+  watch.cancel();
+  handle_watch_timeout();
+  return;
+}
+
+if (lfdb::watch_event::changed == watch.wait_for_event()) {
+  handle_title_change();
+}
+```
+
+```cpp
+// Let a jthread stop_token cancel a blocked transaction watch wait:
+std::jthread watch_thread {
+  [dbh](std::stop_token stop_token) {
+    auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+    if (lfdb::watch_event::cancelled == watch.wait_for_event(stop_token)) {
+      return;
+    }
+
+    handle_title_change();
+  }
+};
+
+watch_thread.request_stop();
+```
+
+`watched_loop()` is a gadget for repeated watch handling. Its callback takes
+the watched key as a `std::string_view`. The helper blocks; applications should
+own any thread, executor, shutdown, or callback error policy around it:
+
+```cpp
+std::jthread watch_thread {
+  [dbh](std::stop_token stop_token) {
+    lfdb::watched_loop(dbh, "person/jose-capablanca/title", stop_token,
+      [](std::string_view key) {
+        handle_title_change(key);
+      });
+  }
+};
+```
+
+Use a manual approach when you need direct control over each one-shot watch:
+
+```cpp
+// Reset (re-arm) the transaction watch manually after each event:
+std::jthread watch_thread {
+  [dbh](std::stop_token stop_token) {
+    while (not stop_token.stop_requested()) {
+      auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+      if (lfdb::watch_event::cancelled == watch.wait_for_event(stop_token)) {
+        break;
+      }
+
+      handle_title_change();
+    }
+  }
+};
+```
+
 ## Appendix: Exception Summary
 
 libfdb tries to keep its exception surface small. Ordinary library operation
