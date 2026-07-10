@@ -308,7 +308,9 @@ RecordSubmitter::submit(
   auto eval = p_current_batch->evaluate_submit(
       record.size, journal_allocator.get_block_size());
   bool needs_flush = (
-      state == state_t::IDLE ||
+      // dispatch greedily while the device has free io slots; batching
+      // kicks in only once io_depth_limit is reached
+      state != state_t::FULL ||
       eval.submit_size.get_fullness() > preferred_fullness ||
       // RecordBatch::needs_flush()
       eval.is_full ||
@@ -507,12 +509,11 @@ void RecordSubmitter::decrement_io_with_flush()
     ceph_assert(!wait_unfull_flush_promise.has_value());
   }
 
+  // dispatch the pending batch into the freed io slot instead of
+  // waiting for the journal to fully drain (state == IDLE)
   auto needs_flush = (
-      !p_current_batch->is_empty() && (
-        state == state_t::IDLE ||
-        p_current_batch->get_submit_size().get_fullness() > preferred_fullness ||
-        p_current_batch->needs_flush()
-      ));
+      !p_current_batch->is_empty() &&
+      state != state_t::FULL);
   if (needs_flush) {
     DEBUG("{} flush", get_name());
     flush_current_batch();
