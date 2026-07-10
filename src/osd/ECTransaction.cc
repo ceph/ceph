@@ -832,9 +832,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     all_shards_written();
     first_write_in_interval = false;
   } else {
-    // All primary shards must always be written, regardless of the write plan.
-    shards_written(sinfo.get_parity_shards());
-    shard_written(sinfo.get_shard(raw_shard_id_t(0)));
+    // Data shards always receive attr updates, so must always be marked
+    // written. Parity shards are only marked when they have data writes
+    // (tracked via plan.will_write in encode_and_write).
+    shards_written(sinfo.get_data_shards());
   }
 
   written_shards();
