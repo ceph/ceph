@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include <optional>
 #include <regex>
 #include "include/function2.hpp"
 #include "rgw_account.h"
 #include "rgw_iam_policy.h"
+#include "rgw_kafka.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub.h"
 #include "rgw_op.h"
@@ -32,6 +34,16 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
   return is_secure;
 }
 
+static bool mark_secret_and_check_transport(rgw_pubsub_dest& dest, CephContext* cct,
+                                             const RGWEnv& env, std::string& message) {
+  dest.stored_secret = true;
+  if (!verify_transport_security(cct, env)) {
+    message = "Topic contains secrets that must be transmitted over a secure transport";
+    return false;
+  }
+  return true;
+}
+
 // make sure that endpoint is a valid URL
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
@@ -49,8 +61,35 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
   }
 
   const auto& args=ri.args;
+  auto mechanism = args.get_optional("mechanism");
   auto topic_user_name=args.get_optional("user-name");
   auto topic_password=args.get_optional("password");
+  const bool is_oauthbearer = mechanism && boost::iequals(*mechanism, "OAUTHBEARER");
+
+  if (is_oauthbearer && (topic_user_name.has_value() || topic_password.has_value() || !user.empty() || !password.empty())) {
+    message = "OAUTHBEARER does not accept user-name or password";
+    return false;
+  }
+
+  if (is_oauthbearer) {
+    auto oauthbearer_token_endpoint_url = args.get_optional("sasl.oauthbearer.token.endpoint.url");
+    auto oauthbearer_client_id = args.get_optional("sasl.oauthbearer.client.id");
+    auto oauthbearer_client_secret = args.get_optional("sasl.oauthbearer.client.secret");
+    if (!rgw::kafka::validate_oauthbearer_params(
+        oauthbearer_token_endpoint_url ? &*oauthbearer_token_endpoint_url : nullptr,
+        oauthbearer_client_id ? &*oauthbearer_client_id : nullptr,
+        oauthbearer_client_secret ? &*oauthbearer_client_secret : nullptr,
+        message)) {
+      return false;
+    }
+  }
+
+  auto oauthbearer_client_secret = args.get_optional("sasl.oauthbearer.client.secret");
+  if (oauthbearer_client_secret.has_value() && !oauthbearer_client_secret->empty()) {
+    if (!mark_secret_and_check_transport(dest, cct, *ri.env, message)) {
+      return false;
+    }
+  }
 
   // check if username/password was already supplied via topic attributes
   // and if also provided as part of the endpoint URL issue a warning
@@ -70,9 +109,7 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
-    dest.stored_secret = true;
-    if (!verify_transport_security(cct, *ri.env)) {
-      message = "Topic contains secrets that must be transmitted over a secure transport";
+    if (!mark_secret_and_check_transport(dest, cct, *ri.env, message)) {
       return false;
     }
   }
@@ -80,9 +117,7 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
   // check for mTLS key password - also a secret that requires secure transport
   auto ssl_key_password = args.get_optional("ssl-key-password");
   if (ssl_key_password.has_value() && !ssl_key_password->empty()) {
-    dest.stored_secret = true;
-    if (!verify_transport_security(cct, *ri.env)) {
-      message = "Topic contains secrets that must be transmitted over a secure transport";
+    if (!mark_secret_and_check_transport(dest, cct, *ri.env, message)) {
       return false;
     }
   }
@@ -826,9 +861,19 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
           "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
-          "sasl-kerberos-service-name", "sasl-kerberos-principal", "sasl-kerberos-keytab"};
+          "sasl-kerberos-service-name", "sasl-kerberos-principal", "sasl-kerberos-keytab",
+          "sasl.oauthbearer.token.endpoint.url",
+          "sasl.oauthbearer.client.id",
+          "sasl.oauthbearer.client.secret",
+          "sasl.oauthbearer.scope"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
-        replace_str(attribute_name, s->info.args.get("AttributeValue"));
+        const auto& attr_value = s->info.args.get("AttributeValue");
+        replace_str(attribute_name, attr_value);
+        if (attribute_name == "sasl.oauthbearer.client.secret" && !attr_value.empty()) {
+          if (!mark_secret_and_check_transport(dest, s->cct, *s->info.env, s->err.message)) {
+            return -EINVAL;
+          }
+        }
         return 0;
       }
       s->err.message = fmt::format("Invalid value for AttributeName '{}'",
@@ -1702,4 +1747,3 @@ RGWOp* RGWHandler_REST_PSNotifs_S3::create_put_op() {
 RGWOp* RGWHandler_REST_PSNotifs_S3::create_delete_op() {
   return new RGWPSDeleteNotifOp();
 }
-
