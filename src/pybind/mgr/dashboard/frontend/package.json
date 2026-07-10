@@ -90,7 +90,7 @@
     "@angular-devkit/schematics": "19.2.27",
     "@angular-eslint/builder": "19.8.1",
     "@angular-eslint/schematics": "19.8.1",
-    "@angular/cli": "19.2.27",
+    "@angular/cli": "22.0.6",
     "@angular/compiler-cli": "19.2.25",
     "@angular/language-service": "19.2.25",
     "@applitools/eyes-cypress": "3.52.0",
