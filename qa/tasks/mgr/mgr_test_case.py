@@ -2,6 +2,7 @@ import json
 import logging
 import socket
 
+from typing import List, Tuple
 from unittest import SkipTest
 
 from teuthology import misc
@@ -95,8 +96,20 @@ MgrCluster = MgrClusterBase
 class MgrTestCase(CephTestCase):
     MGRS_REQUIRED = 1
 
+    # (module_name, config_name, min_port) tuples whose per-mgr port
+    # options are assigned inside setup_mgrs(), while the daemons are
+    # stopped anyway. A subclass that needs a module port should prefer
+    # this over calling _assign_ports() after setup_mgrs(): the latter
+    # stops, fails and restarts every mgr a second time.
+    MODULE_PORTS: List[Tuple[str, str, int]] = []
+
     @classmethod
     def setup_mgrs(cls):
+        # for the port-in-use probes below; the map keeps the address
+        # usable even with no active mgr
+        mgr_map = cls.mgr_cluster.get_mgr_map()
+        ip_addr = mgr_map.get('active_addr', '').split(':')[0]
+
         # Stop all the daemons
         for daemon in cls.mgr_cluster.mgr_daemons.values():
             daemon.stop()
@@ -114,6 +127,12 @@ class MgrTestCase(CephTestCase):
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                 "mgr", "module", "disable", m)
+
+        # Assign module ports while the daemons are down, so the single
+        # restart below picks them up
+        for module_name, config_name, min_port in cls.MODULE_PORTS:
+            cls._assign_module_ports(ip_addr, module_name, config_name,
+                                     min_port)
 
         # Start all the daemons
         for daemon in cls.mgr_cluster.mgr_daemons.values():
@@ -219,29 +238,20 @@ class MgrTestCase(CephTestCase):
         return uri
 
     @classmethod
-    def _assign_ports(cls, module_name, config_name, min_port=7789):
+    def _assign_module_ports(cls, ip_addr, module_name, config_name,
+                             min_port=7789):
         """
-        To avoid the need to run lots of hosts in teuthology tests to
-        get different URLs per mgr, we will hand out different ports
-        to each mgr here.
-
-        This is already taken care of for us when running in a vstart
-        environment.
+        Hand out a distinct port per mgr for the given module option.
+        Call with the mgr daemons stopped, so the probes below don't
+        mistake a previous instance of the module for a foreign user
+        of the port.
         """
         # Start handing out ports well above Ceph's range.
         assign_port = min_port
-        ip_addr = cls.mgr_cluster.get_mgr_map()['active_addr'].split(':')[0]
-
-        for mgr_id in cls.mgr_cluster.mgr_ids:
-            cls.mgr_cluster.mgr_stop(mgr_id)
-            cls.mgr_cluster.mgr_fail(mgr_id)
-
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
             # Find a port that isn't in use
-            while True:
-                if not cls.is_port_in_use(ip_addr, assign_port):
-                    break
+            while ip_addr and cls.is_port_in_use(ip_addr, assign_port):
                 log.debug(f"Port {assign_port} in use, trying next")
                 assign_port += 1
 
@@ -251,6 +261,24 @@ class MgrTestCase(CephTestCase):
                                                       str(assign_port),
                                                       force=True)
             assign_port += 1
+
+    @classmethod
+    def _assign_ports(cls, module_name, config_name, min_port=7789):
+        """
+        To avoid the need to run lots of hosts in teuthology tests to
+        get different URLs per mgr, we will hand out different ports
+        to each mgr here.
+
+        This is already taken care of for us when running in a vstart
+        environment.
+        """
+        ip_addr = cls.mgr_cluster.get_mgr_map()['active_addr'].split(':')[0]
+
+        for mgr_id in cls.mgr_cluster.mgr_ids:
+            cls.mgr_cluster.mgr_stop(mgr_id)
+            cls.mgr_cluster.mgr_fail(mgr_id)
+
+        cls._assign_module_ports(ip_addr, module_name, config_name, min_port)
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
             cls.mgr_cluster.mgr_restart(mgr_id)
