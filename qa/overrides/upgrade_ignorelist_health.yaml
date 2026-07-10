@@ -7,7 +7,7 @@ overrides:
       - reached quota
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
-      - \(POOL_FULL\)
+      - POOL_FULL
       - \(SMALLER_PGP_NUM\)
       - \(SLOW_OPS\)
       - \(CACHE_POOL_NEAR_FULL\)
