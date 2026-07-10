@@ -19,6 +19,9 @@ ceph_generated_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaL
 
 ceph_generated_key = """-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\n39gnaegswnz9KMQAvzKFdg==\n-----END PRIVATE KEY-----\n"""
 
+EXTERNAL_ENCRYPTION_KEY_HOST_PATH = '/tmp/nvmeof-test-key/encryption.key'
+EXTERNAL_ENCRYPTION_KEY_CONTAINER_PATH = '/encryption.key'
+
 
 class FakeInventory:
     def get_addr(self, name: str) -> str:
@@ -106,7 +109,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -357,7 +359,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -550,7 +551,6 @@ state_update_notify = True
 state_update_interval_sec = 5
 break_update_interval_sec = 25
 enable_spdk_discovery_controller = False
-encryption_key = /encryption.key
 rebalance_period_sec = 7
 max_gws_in_grp = 16
 max_ns_to_change_lb_grp = 8
@@ -697,6 +697,94 @@ timeout = 1.0
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    def test_nvmeof_encryption_key_path_legacy_inline(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            encryption_key='inline-key',
+        )
+
+        assert service._get_encryption_key_path(spec) == '/encryption.key'
+
+    def test_nvmeof_encryption_key_path_external_file(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+            enable_encryption=True,
+            encryption_key_path=EXTERNAL_ENCRYPTION_KEY_HOST_PATH,
+        )
+
+        assert service._get_encryption_key_path(spec) == EXTERNAL_ENCRYPTION_KEY_CONTAINER_PATH
+
+    def test_nvmeof_encryption_key_path_not_set(
+        self,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        service = NvmeofService(cephadm_module)
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.group1',
+            pool='testpool',
+            group='group1',
+        )
+
+        assert service._get_encryption_key_path(spec) is None
+
+    @pytest.mark.parametrize(
+        'spec_kwargs, expected_error',
+        [
+            (
+                {
+                    'enable_encryption': True,
+                    'encryption_key': 'inline-key',
+                    'encryption_key_path': '/tmp/encryption.key',
+                },
+                'encryption_key and encryption_key_path cannot both be set',
+            ),
+            (
+                {
+                    'enable_encryption': True,
+                },
+                'enable_encryption=true requires either encryption_key_path or encryption_key',
+            ),
+            (
+                {
+                    'enable_encryption': True,
+                    'encryption_key_path': 'relative/path/encryption.key',
+                },
+                'encryption_key_path must be an absolute path',
+            ),
+        ],
+    )
+    def test_nvmeof_encryption_validation(
+        self,
+        spec_kwargs,
+        expected_error,
+    ):
+        spec = NvmeofServiceSpec(
+            service_id='nvmeof_pool01.group1',
+            pool='nvmeof_pool01',
+            group='group1',
+            **spec_kwargs,
+        )
+
+        with pytest.raises(Exception) as e:
+            spec.validate()
+
+        assert expected_error in str(e.value)
 
 
 class TestNvmeofTLSBundle:

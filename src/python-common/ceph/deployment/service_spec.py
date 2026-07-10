@@ -1989,7 +1989,11 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
 
+        #: ``enable_encryption`` enables encryption for the NVMe-oF gateway
         self.enable_encryption = enable_encryption
+
+        #: ``encryption_key_path`` is the absolute host-side path to an externally
+        #: managed encryption key file used when ``enable_encryption`` is enabled
         self.encryption_key_path = encryption_key_path
         self.ssl = ssl or enable_auth  # to force enabling ssl field when auth is enabled
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
