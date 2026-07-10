@@ -20852,6 +20852,8 @@ paths:
                   type: string
                 system:
                   type: string
+                tenant:
+                  type: string
                 uid:
                   type: string
               required:
@@ -21064,6 +21066,8 @@ paths:
                 suspended:
                   type: string
                 system:
+                  type: string
+                tenant:
                   type: string
               type: object
       responses:
