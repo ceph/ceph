@@ -19,6 +19,7 @@ RADOS_TESTS=(
     api_c_write_operations
     api_c_read_operations
     api_omap_pp
+    api_split_op_pp
     list_parallel
     open_pools_parallel
     delete_pools_parallel
@@ -68,6 +69,7 @@ gtest_inject_filter=""
 if [ "$1" = "--external-error-inject" ]; then
     external_error_inject=1
     gtest_inject_filter="--gtest_filter=-*DoesErrorInject*"
+    export CEPH_TEST_EXTERNAL_ERROR_INJECT=1
     shift
 fi
 
