@@ -4685,6 +4685,9 @@ Then run the following:
         if spec.service_type != 'rgw':
             return
 
+        from ceph.deployment.service_spec import RGWSpec
+        spec = cast(RGWSpec, spec)
+
         if not spec.ssl:
             return
 
