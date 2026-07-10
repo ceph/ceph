@@ -67,6 +67,7 @@ import { HostsComponent } from './hosts/hosts.component';
 import { InventoryDevicesComponent } from './inventory/inventory-devices/inventory-devices.component';
 import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
+import { LokiLogsComponent } from './loki-logs/loki-logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
 import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-modal/osd-creation-preview-modal.component';
@@ -164,6 +165,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdReweightModalComponent,
     CrushmapComponent,
     LogsComponent,
+    LokiLogsComponent,
     OsdRecvSpeedModalComponent,
     OsdPgScrubModalComponent,
     OsdRecvSpeedModalComponent,

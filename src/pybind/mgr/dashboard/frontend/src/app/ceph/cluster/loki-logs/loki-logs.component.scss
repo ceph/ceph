@@ -1,0 +1,11 @@
+.loki-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.loki-filename-select {
+  min-width: 22rem;
+}

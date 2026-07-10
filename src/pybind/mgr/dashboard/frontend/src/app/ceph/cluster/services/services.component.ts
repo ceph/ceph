@@ -84,7 +84,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   isLoadingServices = false;
   selection: CdTableSelection = new CdTableSelection();
   icons = Icons;
-  serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
+  serviceUrls = { grafana: '', prometheus: '', alertmanager: '', loki: '' };
   isMgmtGateway: boolean = false;
   statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
@@ -224,6 +224,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       this.configureServiceUrl('api/grafana/url', 'grafana');
       this.configureServiceUrl('ui-api/prometheus/prometheus-api-host', 'prometheus');
       this.configureServiceUrl('ui-api/prometheus/alertmanager-api-host', 'alertmanager');
+      this.configureServiceUrl('api/settings/loki-api-host', 'loki');
     }
   }
 

@@ -307,6 +307,12 @@
                             i18n-title
                             *ngIf="permissions.log.read"
                             class="tc_submenuitem tc_submenuitem_observe_log"><span i18n>Logs</span></cds-sidenav-item>
+          <cds-sidenav-item route="/loki-logs"
+                            [useRouter]="true"
+                            title="Centralized Logs"
+                            i18n-title
+                            *ngIf="permissions.log.read"
+                            class="tc_submenuitem tc_submenuitem_observe_loki_logs"><span i18n>Centralized Logs</span></cds-sidenav-item>
           <cds-sidenav-item route="/monitoring"
                             [useRouter]="true"
                             title="Alerts"
