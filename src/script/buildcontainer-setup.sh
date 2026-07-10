@@ -43,7 +43,17 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     ;;
     *~*ubuntu*|*~*debian*)
         apt-get update
-        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
+        pkgs=(wget reprepro curl lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev)
+        # software-properties-common provides add-apt-repository, which
+        # llvm.sh needs to install clang from apt.llvm.org. Debian removed
+        # the package in trixie, which ships clang-19 natively instead, so
+        # install that directly and run-make.sh will skip llvm.sh.
+        if apt-cache show software-properties-common >/dev/null 2>&1; then
+            pkgs+=(software-properties-common)
+        else
+            pkgs+=(clang-19)
+        fi
+        apt-get install -y "${pkgs[@]}"
         install_container_deps
     ;;
     *)
