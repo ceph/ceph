@@ -1629,7 +1629,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                     log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
     elif args.create_qa:
-        now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d-%H:%M")
+        now_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d-%H:%M")
         default_subject = f"{base} integration testing by {USER} started {now_str}"
         issue_kwargs['subject'] = args.qa_subject if args.qa_subject else default_subject
 
@@ -1741,7 +1741,7 @@ def build_branch(args):
             raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
 
     # Compute branch names now that integration flags and auto-detect have settled
-    branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
+    branch = datetime.datetime.now(datetime.UTC).strftime(args.branch).format(user=USER)
     if args.branch_release:
         branch = branch + "-" + args.branch_release
     if args.branch_append:
