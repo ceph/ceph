@@ -4267,7 +4267,26 @@ void RGWCreateBucket::execute(optional_yield y)
     createparams.creation_time = master_info.creation_time;
   }
 
-  createparams.index_type = rgw::BucketIndexType::Hashed;
+  {
+    constexpr char* index_config = "rgw_bucket_default_index";
+
+    const std::string& default_bucket_index =
+      s->cct->_conf.get_val<std::string>(index_config);
+
+    createparams.index_type = rgw::BucketIndexType::Hashed; // default
+    if (default_bucket_index == "ordered") {
+      createparams.index_type = rgw::BucketIndexType::Ordered;
+    } else if (default_bucket_index != "hashed") {
+      ldpp_dout(this, 0) << "ERROR: configuration option " <<
+        index_config << " is set to an unknown value \"" <<
+        default_bucket_index << "\"; using the default of \"hashed\"" <<
+        dendl;
+    }
+
+    ldpp_dout(this, 20) << "INFO: configuration option " <<
+      index_config << " set to " << createparams.index_type <<
+      dendl;
+  }
 
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << s->bucket << dendl;
   op_ret = s->bucket->create(this, createparams, y);
