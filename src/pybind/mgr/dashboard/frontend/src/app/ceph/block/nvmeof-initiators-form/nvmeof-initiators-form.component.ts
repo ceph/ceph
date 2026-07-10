@@ -133,8 +133,8 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
         this.tearsheet?.getStepIndexByLabel(STEP_LABELS.HOSTS) ?? 0,
         0
       );
-      const hostStepForm = this.tearsheet?.stepContents?.toArray()?.[hostStepIndex]?.stepComponent
-        ?.formGroup;
+      const hostStepForm =
+        this.tearsheet?.stepContents?.toArray()?.[hostStepIndex]?.stepComponent?.formGroup;
 
       hostStepForm?.markAllAsTouched();
       hostStepForm?.get('hostname')?.markAsTouched();

@@ -39,14 +39,14 @@ describe('RgwUserDetailsComponent', () => {
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
       '.cds--data-table--sort.cds--data-table--no-border tr td'
     );
-    expect(detailsTab[10].textContent).toEqual('System user');
-    expect(detailsTab[11].textContent).toEqual('Yes');
+    expect(detailsTab[10].textContent.trim()).toEqual('System user');
+    expect(detailsTab[11].textContent.trim()).toEqual('Yes');
 
     component.selection.system = false;
     component.ngOnChanges();
     fixture.detectChanges();
 
-    expect(detailsTab[11].textContent).toEqual('No');
+    expect(detailsTab[11].textContent.trim()).toEqual('No');
   });
 
   it('should show mfa ids only if length > 0', () => {
@@ -67,8 +67,8 @@ describe('RgwUserDetailsComponent', () => {
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
       '.cds--data-table--sort.cds--data-table--no-border tr td'
     );
-    expect(detailsTab[16].textContent).toEqual('MFAs(Id)');
-    expect(detailsTab[17].textContent).toEqual('testMFA1, testMFA2');
+    expect(detailsTab[16].textContent.trim()).toEqual('MFAs(Id)');
+    expect(detailsTab[17].textContent.trim()).toEqual('testMFA1, testMFA2');
   });
   it('should test updateKeysSelection', () => {
     component.selection = {

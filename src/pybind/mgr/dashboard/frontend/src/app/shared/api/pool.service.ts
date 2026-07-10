@@ -29,7 +29,10 @@ export class PoolService {
     }
   };
 
-  constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}
+  constructor(
+    private http: HttpClient,
+    private rbdConfigurationService: RbdConfigurationService
+  ) {}
 
   create(pool: any) {
     return this.http.post(this.apiPath, pool, { observe: 'response' });

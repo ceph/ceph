@@ -7,18 +7,22 @@
       <cd-inventory [hostname]="hostname"></cd-inventory>
     }
     @case ('daemons') {
-      <cd-service-daemon-list [hostname]="hostname"
-                              flag="hostDetails"
-                              [hiddenColumns]="['hostname']">
+      <cd-service-daemon-list
+        [hostname]="hostname"
+        flag="hostDetails"
+        [hiddenColumns]="['hostname']"
+      >
       </cd-service-daemon-list>
     }
     @case ('performance-details') {
-      <cd-grafana i18n-title
-                  title="Host details"
-                  [grafanaPath]="'ceph-host-details?var-ceph_hosts=' + hostname"
-                  [type]="'metrics'"
-                  uid="rtOg0AiWz"
-                  grafanaStyle="five">
+      <cd-grafana
+        i18n-title
+        title="Host details"
+        [grafanaPath]="'ceph-host-details?var-ceph_hosts=' + hostname"
+        [type]="'metrics'"
+        uid="rtOg0AiWz"
+        grafanaStyle="five"
+      >
       </cd-grafana>
     }
     @case ('device-health') {
@@ -26,6 +30,9 @@
     }
   }
 } @else {
-  <cd-alert-panel type="error"
-                  i18n>No hostname found.</cd-alert-panel>
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No hostname found.</cd-alert-panel
+  >
 }

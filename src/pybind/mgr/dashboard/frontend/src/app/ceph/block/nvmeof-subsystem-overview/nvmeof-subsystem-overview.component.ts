@@ -87,8 +87,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
     }).subscribe(({ subsystem, initiators }) => {
       this.subsystem = subsystem as NvmeofSubsystem;
       const initiatorList = initiators as
-        | NvmeofSubsystemInitiator[]
-        | { hosts?: NvmeofSubsystemInitiator[] };
+        NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] };
       this.buildDetails(getSubsystemAuthStatus(this.subsystem, initiatorList));
     });
   }

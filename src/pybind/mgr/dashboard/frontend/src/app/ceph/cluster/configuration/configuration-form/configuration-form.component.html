@@ -42,91 +42,95 @@
 
         <!-- Long description -->
         @if (response?.long_desc) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <label
-            class="cds--label"
-            i18n
-          >Description</label>
-          <p class="cds--type-body-01 mb-0">{{ response.long_desc }}</p>
-        </div>
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <legend
+              class="cds--label"
+              i18n
+            >
+              Description
+            </legend>
+            <p class="cds--type-body-01 mb-0">{{ response.long_desc }}</p>
+          </div>
         }
 
         <!-- Default -->
         @if (configForm.getValue('default') !== '') {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            labelInputID="default"
-            i18n
+          <div
+            cdsRow
+            class="form-item"
           >
-            Default
-            <input
-              cdsText
-              type="text"
-              id="default"
-              formControlName="default"
-              readonly
-            />
-          </cds-text-label>
-        </div>
+            <cds-text-label
+              labelInputID="default"
+              i18n
+            >
+              Default
+              <input
+                cdsText
+                type="text"
+                id="default"
+                formControlName="default"
+                readonly
+              />
+            </cds-text-label>
+          </div>
         }
 
         <!-- Daemon default -->
         @if (configForm.getValue('daemon_default') !== '') {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            labelInputID="daemon_default"
-            i18n
+          <div
+            cdsRow
+            class="form-item"
           >
-            Daemon default
-            <input
-              cdsText
-              type="text"
-              id="daemon_default"
-              formControlName="daemon_default"
-              readonly
-            />
-          </cds-text-label>
-        </div>
+            <cds-text-label
+              labelInputID="daemon_default"
+              i18n
+            >
+              Daemon default
+              <input
+                cdsText
+                type="text"
+                id="daemon_default"
+                formControlName="daemon_default"
+                readonly
+              />
+            </cds-text-label>
+          </div>
         }
 
         <!-- Services -->
         @if (configForm.getValue('services')?.length > 0) {
-        <div
-          cdsRow
-          class="form-item form-item-append align-items-center"
-        >
           <div
-            cdsCol
-            [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
+            cdsRow
+            class="form-item form-item-append align-items-center"
           >
-            <label
-              class="cds--label mb-0"
-              i18n
-            >Services</label>
-          </div>
-          <div
-            cdsCol
-            [columnNumbers]="{ sm: 6, md: 6, lg: 6 }"
-          >
-            @for (service of configForm.getValue('services'); track service) {
-            <cds-tag
-              [size]="'md'"
-              class="tag-dark me-2"
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
             >
-              {{ service }}
-            </cds-tag>
-            }
+              <legend
+                class="cds--label mb-0"
+                i18n
+              >
+                Services
+              </legend>
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 6, md: 6, lg: 6 }"
+            >
+              @for (service of configForm.getValue('services'); track service) {
+                <cds-tag
+                  [size]="'md'"
+                  class="tag-dark me-2"
+                >
+                  {{ service }}
+                </cds-tag>
+              }
+            </div>
           </div>
-        </div>
         }
 
         <!-- Values -->
@@ -140,94 +144,109 @@
 
           @for (section of availSections; track section) {
             @if (type === 'bool') {
-            <div
-              cdsRow
-              class="form-item"
-            >
-              <cds-select
-                [formControlName]="section"
-                [label]="section"
-                [id]="section"
-                [labelInputID]="section"
-                cdValidate
-                #sectionValidate="cdValidate"
-                [invalid]="sectionValidate.isInvalid"
-                [invalidText]="sectionErrors"
+              <div
+                cdsRow
+                class="form-item"
               >
-                <option
-                  [ngValue]="null"
-                  i18n
-                >-- Default --</option>
-                <option
-                  [ngValue]="true"
-                  i18n
-                >true</option>
-                <option
-                  [ngValue]="false"
-                  i18n
-                >false</option>
-              </cds-select>
-              <ng-template #sectionErrors>
-                <ng-container
-                  *ngTemplateOutlet="validationErrors; context: { control: configForm.get(section) }"
-                ></ng-container>
-              </ng-template>
-            </div>
+                <cds-select
+                  [formControlName]="section"
+                  [label]="section"
+                  [id]="section"
+                  [labelInputID]="section"
+                  cdValidate
+                  #sectionValidate="cdValidate"
+                  [invalid]="sectionValidate.isInvalid"
+                  [invalidText]="sectionErrors"
+                >
+                  <option
+                    [ngValue]="null"
+                    i18n
+                  >
+                    -- Default --
+                  </option>
+                  <option
+                    [ngValue]="true"
+                    i18n
+                  >
+                    true
+                  </option>
+                  <option
+                    [ngValue]="false"
+                    i18n
+                  >
+                    false
+                  </option>
+                </cds-select>
+                <ng-template #sectionErrors>
+                  <ng-container
+                    *ngTemplateOutlet="
+                      validationErrors;
+                      context: { control: configForm.get(section) }
+                    "
+                  ></ng-container>
+                </ng-template>
+              </div>
             }
 
             @if (type !== 'bool' && inputType === 'number') {
-            <div
-              cdsRow
-              class="form-item"
-            >
-              <cds-number
-                [formControlName]="section"
-                [label]="section"
-                [id]="section"
-                [step]="getStep(type, configForm.getValue(section))"
-                [min]="minValue"
-                [max]="maxValue"
-                cdValidate
-                #sectionValidate="cdValidate"
-                [invalid]="sectionValidate.isInvalid"
-                [invalidText]="sectionErrors"
+              <div
+                cdsRow
+                class="form-item"
               >
-              </cds-number>
-              <ng-template #sectionErrors>
-                <ng-container
-                  *ngTemplateOutlet="validationErrors; context: { control: configForm.get(section) }"
-                ></ng-container>
-              </ng-template>
-            </div>
+                <cds-number
+                  [formControlName]="section"
+                  [label]="section"
+                  [id]="section"
+                  [step]="getStep(type, configForm.getValue(section))"
+                  [min]="minValue"
+                  [max]="maxValue"
+                  cdValidate
+                  #sectionValidate="cdValidate"
+                  [invalid]="sectionValidate.isInvalid"
+                  [invalidText]="sectionErrors"
+                >
+                </cds-number>
+                <ng-template #sectionErrors>
+                  <ng-container
+                    *ngTemplateOutlet="
+                      validationErrors;
+                      context: { control: configForm.get(section) }
+                    "
+                  ></ng-container>
+                </ng-template>
+              </div>
             }
 
             @if (type !== 'bool' && inputType !== 'number') {
-            <div
-              cdsRow
-              class="form-item"
-            >
-              <cds-text-label
-                [labelInputID]="section"
-                [invalid]="sectionValidate.isInvalid"
-                [invalidText]="sectionErrors"
+              <div
+                cdsRow
+                class="form-item"
               >
-                {{ section }}
-                <input
-                  cdsText
-                  cdValidate
-                  #sectionValidate="cdValidate"
-                  [type]="inputType"
-                  [id]="section"
-                  [formControlName]="section"
+                <cds-text-label
+                  [labelInputID]="section"
                   [invalid]="sectionValidate.isInvalid"
-                />
-              </cds-text-label>
-              <ng-template #sectionErrors>
-                <ng-container
-                  *ngTemplateOutlet="validationErrors; context: { control: configForm.get(section) }"
-                ></ng-container>
-              </ng-template>
-            </div>
+                  [invalidText]="sectionErrors"
+                >
+                  {{ section }}
+                  <input
+                    cdsText
+                    cdValidate
+                    #sectionValidate="cdValidate"
+                    [type]="inputType"
+                    [id]="section"
+                    [formControlName]="section"
+                    [invalid]="sectionValidate.isInvalid"
+                  />
+                </cds-text-label>
+                <ng-template #sectionErrors>
+                  <ng-container
+                    *ngTemplateOutlet="
+                      validationErrors;
+                      context: { control: configForm.get(section) }
+                    "
+                  ></ng-container>
+                </ng-template>
+              </div>
             }
           }
         </div>
@@ -251,19 +270,21 @@
 >
   @if (control?.invalid && (control.dirty || control.touched)) {
     @if (control.hasError('min')) {
-    <span
-      class="invalid-feedback"
-      i18n
-    >The entered value is too low! It must not be lower than {{ minValue }}.</span>
+      <span
+        class="invalid-feedback"
+        i18n
+        >The entered value is too low! It must not be lower than {{ minValue }}.</span
+      >
     }
     @if (control.hasError('max')) {
-    <span
-      class="invalid-feedback"
-      i18n
-    >The entered value is too high! It must not be greater than {{ maxValue }}.</span>
+      <span
+        class="invalid-feedback"
+        i18n
+        >The entered value is too high! It must not be greater than {{ maxValue }}.</span
+      >
     }
     @if (control.hasError('pattern') || control.hasError('invalidUuid')) {
-    <span class="invalid-feedback">{{ patternHelpText }}</span>
+      <span class="invalid-feedback">{{ patternHelpText }}</span>
     }
   }
 </ng-template>

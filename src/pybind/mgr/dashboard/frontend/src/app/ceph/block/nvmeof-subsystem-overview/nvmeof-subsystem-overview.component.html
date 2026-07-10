@@ -1,104 +1,135 @@
 <cds-tile *ngIf="subsystem">
-  <div [cdsStack]="'vertical'"
-       [gap]="6">
-    <div cdsGrid
-         [useCssGrid]="true"
-         [condensed]="true"
-         [fullWidth]="true">
-      <div cdsCol
-           [columnNumbers]="{ sm: 4, md: 8, lg: 12 }">
-        <h3 class="cds--type-heading-03"
-            i18n>Subsystem details</h3>
+  <div
+    [cdsStack]="'vertical'"
+    [gap]="6"
+  >
+    <div
+      cdsGrid
+      [useCssGrid]="true"
+      [condensed]="true"
+      [fullWidth]="true"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
+      >
+        <h3
+          class="cds--type-heading-03"
+          i18n
+        >
+          Subsystem details
+        </h3>
       </div>
     </div>
 
     @for (row of getRows(); track row) {
-    <div cdsGrid
-         [useCssGrid]="true"
-         [condensed]="true"
-         [fullWidth]="true">
-
-      @for (detail of getDetailsForRow(row); track detail.label) {
-        @if (detail.type === 'auth') {
-          <div cdsCol
-               [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
-               [cdsStack]="'vertical'"
-               [gap]="2">
-            <span class="cds--type-label-01"
-                  i18n>Authentication</span>
-            <div>
-              <cd-icon [type]="getAuthStatusIcon(detail.value.toString())"
-                       class="cds-mr-3"></cd-icon>
+      <div
+        cdsGrid
+        [useCssGrid]="true"
+        [condensed]="true"
+        [fullWidth]="true"
+      >
+        @for (detail of getDetailsForRow(row); track detail.label) {
+          @if (detail.type === 'auth') {
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+              [cdsStack]="'vertical'"
+              [gap]="2"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Authentication</span
+              >
+              <div>
+                <cd-icon
+                  [type]="getAuthStatusIcon(detail.value.toString())"
+                  class="cds-mr-3"
+                ></cd-icon>
+                <span class="cds--type-label-02">{{ detail.value }}</span>
+                <a
+                  cdsLink
+                  class="cds-ml-2"
+                  (click)="openEditAuthModal()"
+                  (keydown.enter)="openEditAuthModal()"
+                  [cdsStack]="'horizontal'"
+                  tabindex="0"
+                  [gap]="1"
+                >
+                  <span i18n>Edit</span>
+                  <cd-icon type="edit"></cd-icon>
+                </a>
+              </div>
+            </div>
+          } @else if (detail.type === 'listeners') {
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+              [cdsStack]="'vertical'"
+              [gap]="2"
+            >
+              <div>
+                <span class="cds--type-label-01">{{ detail.label }}</span>
+                @if (detail.tooltip) {
+                  <cd-icon
+                    type="infoCircle"
+                    class="cds-ml-2"
+                    [ngbTooltip]="detail.tooltip"
+                  ></cd-icon>
+                }
+              </div>
               <span class="cds--type-label-02">{{ detail.value }}</span>
-              <a cdsLink
-                 class="cds-ml-2"
-                 (click)="openEditAuthModal()"
-                 [cdsStack]="'horizontal'"
-                 [gap]="1">
-                <span i18n>Edit</span>
-                <cd-icon type="edit"></cd-icon>
-              </a>
             </div>
-          </div>
-        }
-
-        @else if (detail.type === 'listeners') {
-          <div cdsCol
-               [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
-               [cdsStack]="'vertical'"
-               [gap]="2">
-            <div>
+          } @else if (detail.type === 'host-access') {
+            <div
+              cdsCol
+              [columnNumbers]="getColNumbers(detail)"
+              [cdsStack]="'vertical'"
+              [gap]="2"
+            >
               <span class="cds--type-label-01">{{ detail.label }}</span>
-              @if (detail.tooltip) {
-                <cd-icon type="infoCircle"
-                         class="cds-ml-2"
-                         [ngbTooltip]="detail.tooltip"></cd-icon>
-              }
+              <div class="cds--type-label-02">
+                <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
+                <a
+                  cdsLink
+                  (click)="openEditHostAccessModal()"
+                  (keydown.enter)="openEditHostAccessModal()"
+                  [cdsStack]="'horizontal'"
+                  class="cds-ml-2"
+                  tabindex="0"
+                  [gap]="1"
+                >
+                  <span i18n>Edit</span>
+                  <cd-icon type="edit"></cd-icon>
+                </a>
+              </div>
             </div>
-            <span class="cds--type-label-02">{{ detail.value }}</span>
-          </div>
-        }
+          }
 
-        @else if (detail.type === 'host-access') {
-          <div cdsCol
-               [columnNumbers]="getColNumbers(detail)"
-               [cdsStack]="'vertical'"
-               [gap]="2">
-            <span class="cds--type-label-01">{{ detail.label }}</span>
-            <div class="cds--type-label-02">
-              <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
-              <a cdsLink
-                 (click)="openEditHostAccessModal()"
-                 [cdsStack]="'horizontal'"
-                 class="cds-ml-2"
-                 [gap]="1">
-                <span i18n>Edit</span>
-                <cd-icon type="edit"></cd-icon>
-              </a>
+          <!-- Default: plain text row -->
+          @else {
+            <div
+              cdsCol
+              [columnNumbers]="getColNumbers(detail)"
+              [cdsStack]="'vertical'"
+              [gap]="2"
+            >
+              <span class="cds--type-label-01">{{ detail.label }}</span>
+              <span class="cds--type-label-02">{{ getDisplayValue(detail.value) }}</span>
             </div>
-          </div>
+          }
         }
 
-        <!-- Default: plain text row -->
-        @else {
-          <div cdsCol
-               [columnNumbers]="getColNumbers(detail)"
-               [cdsStack]="'vertical'"
-               [gap]="2">
-            <span class="cds--type-label-01">{{ detail.label }}</span>
-            <span class="cds--type-label-02">{{ getDisplayValue(detail.value) }}</span>
-          </div>
+        @if (getDetailsForRow(row).length < 3 && !isFullWidthRow(row)) {
+          @for (filler of getFillerCount(row); track filler) {
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+            ></div>
+          }
         }
-
-      }
-
-      @if (getDetailsForRow(row).length < 3 && !isFullWidthRow(row)) {
-        @for (filler of getFillerCount(row); track filler) {
-          <div cdsCol
-               [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"></div>
-        }
-      }
-    </div>
+      </div>
     }
   </div>
 </cds-tile>

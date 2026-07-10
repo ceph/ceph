@@ -1,25 +1,54 @@
-<ng-container *ngIf="{ ftMap: featureToggleMap$ | async, daemons: rgwDaemonService.daemons$ | async, selectedDaemon: rgwDaemonService.selectedDaemon$ | async } as data">
-  <ng-container *ngIf="data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1">
+<ng-container
+  *ngIf="{
+    ftMap: featureToggleMap$ | async,
+    daemons: rgwDaemonService.daemons$ | async,
+    selectedDaemon: rgwDaemonService.selectedDaemon$ | async
+  } as data"
+>
+  <ng-container
+    *ngIf="
+      data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
+    "
+  >
     <div class="cd-context-bar pt-3 pb-3">
-      <span class="me-1"
-            i18n>Object gateway:</span>
-      <div ngbDropdown
-           placement="bottom-left"
-           class="d-inline-block ms-2">
-        <button ngbDropdownToggle
-                class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
-                i18n-title
-                title="Object gateway">
+      <span
+        class="me-1"
+        i18n
+        >Object gateway:</span
+      >
+      <div
+        ngbDropdown
+        placement="bottom-left"
+        class="d-inline-block ms-2"
+      >
+        <button
+          ngbDropdownToggle
+          class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
+          i18n-title
+          title="Object gateway"
+          type="button"
+        >
           {{ data.selectedDaemon.id }}
-          <cds-tag type="blue" size="sm">{{ data.selectedDaemon.zonegroup_name }}</cds-tag>
+          <cds-tag
+            type="blue"
+            size="sm"
+            >{{ data.selectedDaemon.zonegroup_name }}</cds-tag
+          >
         </button>
         <div ngbDropdownMenu>
           <ng-container *ngFor="let daemon of data.daemons">
-            <button ngbDropdownItem
-                    class="ctx-bar-available-rgw-daemon"
-                    (click)="onDaemonSelection(daemon)">
+            <button
+              ngbDropdownItem
+              class="ctx-bar-available-rgw-daemon"
+              (click)="onDaemonSelection(daemon)"
+              type="button"
+            >
               {{ daemon.id }}
-              <cds-tag type="blue" size="sm">{{ daemon.zonegroup_name }}</cds-tag>
+              <cds-tag
+                type="blue"
+                size="sm"
+                >{{ daemon.zonegroup_name }}</cds-tag
+              >
             </button>
           </ng-container>
         </div>

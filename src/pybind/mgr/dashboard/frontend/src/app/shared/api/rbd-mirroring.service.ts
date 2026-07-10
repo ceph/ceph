@@ -19,7 +19,10 @@ export class RbdMirroringService {
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();
 
-  constructor(private http: HttpClient, private timerService: TimerService) {}
+  constructor(
+    private http: HttpClient,
+    private timerService: TimerService
+  ) {}
 
   startPolling(): Subscription {
     return this.timerService
