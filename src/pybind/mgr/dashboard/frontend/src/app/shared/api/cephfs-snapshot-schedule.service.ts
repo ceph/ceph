@@ -4,13 +4,24 @@ import { Observable } from 'rxjs/internal/Observable';
 import { catchError, map } from 'rxjs/operators';
 import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
-import { of } from 'rxjs';
+import { of, forkJoin } from 'rxjs';
 import {
   RepeaFrequencyPlural,
   RepeaFrequencySingular,
   RepeatFrequency
 } from '../enum/repeat-frequency.enum';
 import { RetentionFrequencyCopy } from '../enum/retention-frequency.enum';
+
+export interface RetentionPolicyConflict {
+  exists: boolean;
+  errorIndex: number;
+  existingValue?: number;
+}
+
+export interface RetentionConflictDetail {
+  frequency: string;
+  existingValue?: number;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -76,17 +87,34 @@ export class CephfsSnapshotScheduleService {
     frequency: RepeatFrequency,
     isSubvolume = false
   ): Observable<boolean> {
+    const schedule = `${interval}${frequency}`;
     return this.getSnapshotScheduleList(path, fs, false).pipe(
-      map((response) => {
-        const index = response
-          .filter((x) => (isSubvolume ? x.path.startsWith(path) : x.path === path))
-          .findIndex((x) => x.schedule === `${interval}${frequency}`);
-        return index > -1;
-      }),
+      map((response) =>
+        response.some(
+          (item) =>
+            this.schedulePathsMatch(item.path, path, isSubvolume) && item.schedule === schedule
+        )
+      ),
       catchError(() => {
         return of(false);
       })
     );
+  }
+
+  private normalizeSchedulePath(path: string): string {
+    return (path ?? '').replace(/\/\.\.$/, '').replace(/\/+$/, '');
+  }
+
+  private schedulePathsMatch(schedulePath: string, targetPath: string, isSubvolume: boolean): boolean {
+    const left = this.normalizeSchedulePath(schedulePath);
+    const right = this.normalizeSchedulePath(targetPath);
+    if (!left || !right) {
+      return false;
+    }
+    if (isSubvolume) {
+      return left.startsWith(right) || right.startsWith(left);
+    }
+    return left === right;
   }
 
   checkRetentionPolicyExists(
@@ -95,26 +123,37 @@ export class CephfsSnapshotScheduleService {
     retentionFrequencies: string[],
     retentionFrequenciesRemoved: string[] = [],
     isSubvolume = false
-  ): Observable<{ exists: boolean; errorIndex: number }> {
-    return this.getSnapshotSchedule(path, fs, false).pipe(
+  ): Observable<RetentionPolicyConflict> {
+    return this.getSnapshotSchedule(path, fs, true).pipe(
       map((response) => {
         let errorIndex = -1;
-        let exists = false;
-        const index = response.findIndex((x) =>
-          isSubvolume ? x.path.startsWith(path) : x.path === path
+        let existingValue: number | undefined;
+        const matchingSchedules = response.filter((schedule) =>
+          this.schedulePathsMatch(schedule.path, path, isSubvolume)
         );
+        const existingRetention = new Map<string, number>();
+        matchingSchedules.forEach((schedule) => {
+          if (schedule.retention && typeof schedule.retention === 'object') {
+            Object.entries(schedule.retention).forEach(([frequency, interval]) => {
+              existingRetention.set(frequency, Number(interval));
+            });
+          }
+        });
         const result = retentionFrequencies?.length
           ? intersection(
-              Object.keys(response?.[index]?.retention).filter(
-                (v) => !retentionFrequenciesRemoved.includes(v)
+              [...existingRetention.keys()].filter(
+                (frequency) => !retentionFrequenciesRemoved.includes(frequency)
               ),
               retentionFrequencies
             )
           : [];
-        exists = !!result?.length;
-        result?.forEach((r) => (errorIndex = retentionFrequencies.indexOf(r)));
+        const exists = !!result?.length;
+        result?.forEach((frequency) => {
+          errorIndex = retentionFrequencies.indexOf(frequency);
+          existingValue = existingRetention.get(frequency);
+        });
 
-        return { exists, errorIndex };
+        return { exists, errorIndex, existingValue };
       }),
       catchError(() => {
         return of({ exists: false, errorIndex: -1 });
@@ -122,10 +161,52 @@ export class CephfsSnapshotScheduleService {
     );
   }
 
+  checkRetentionPolicyExistsForPaths(
+    paths: string[],
+    fs: string,
+    retentionFrequencies: string[],
+    retentionFrequenciesRemoved: string[] = [],
+    isSubvolume = false
+  ): Observable<RetentionPolicyConflict & { path?: string }> {
+    const uniquePaths = [...new Set(paths.filter(Boolean))];
+    if (!uniquePaths.length || !retentionFrequencies?.length) {
+      return of({ exists: false, errorIndex: -1 });
+    }
+
+    return forkJoin(
+      uniquePaths.map((path) =>
+        this.checkRetentionPolicyExists(
+          path,
+          fs,
+          retentionFrequencies,
+          retentionFrequenciesRemoved,
+          isSubvolume
+        ).pipe(map((result) => ({ ...result, path })))
+      )
+    ).pipe(
+      map((results) => results.find((result) => result.exists) ?? { exists: false, errorIndex: -1 })
+    );
+  }
+
+  parseRetentionConflictFrequency(detail: string): string | null {
+    return this.parseRetentionConflict(detail)?.frequency ?? null;
+  }
+
+  parseRetentionConflict(detail: string): RetentionConflictDetail | null {
+    const match = detail?.match(/Retention for (\S) is already present with value (\d+)/i);
+    if (!match) {
+      return null;
+    }
+    return {
+      frequency: match[1],
+      existingValue: Number(match[2])
+    };
+  }
+
   getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
     return this.http
       .get<SnapshotSchedule[]>(
-        `${this.baseURL}/snapshot/schedule/${fs}?path=${path}&recursive=${recursive}`
+        `${this.baseURL}/snapshot/schedule/${fs}?path=${encodeURIComponent(path)}&recursive=${recursive}`
       )
       .pipe(
         catchError(() => {

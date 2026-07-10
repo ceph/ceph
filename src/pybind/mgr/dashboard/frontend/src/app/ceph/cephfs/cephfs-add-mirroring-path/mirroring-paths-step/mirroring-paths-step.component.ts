@@ -49,9 +49,6 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     if (!control.invalid || !(control.touched || control.dirty)) {
       return '';
     }
-    if (control.hasError('alreadyMirrored')) {
-      return $localize`Selected path(s) are already mirrored. Select a path that is not already mirrored.`;
-    }
     return $localize`Select at least one path to continue.`;
   }
 
@@ -106,7 +103,7 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     const alreadyMirrored: string[] = [];
 
     this.paths.forEach((entry, pathIndex) => {
-      if (!entry.fullPath) {
+      if (!entry.fullPath || !MirroringPathUtils.isEntrySelectionComplete(entry)) {
         return;
       }
       const path = MirroringPathUtils.normalizePath(entry.fullPath);
@@ -121,6 +118,11 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     });
 
     return { toAdd, alreadyMirrored };
+  }
+
+  getSelectedPaths(): string[] {
+    const { toAdd, alreadyMirrored } = this.getSubmitPaths();
+    return [...toAdd, ...alreadyMirrored];
   }
 
   addTrackedPath(path: string): void {
@@ -212,7 +214,11 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
         const options = dirs
           .map((dir) => dir.name)
           .filter((name) =>
-            this.isPathSelectable(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
+            this.isPathSelectable(
+              MirroringPathUtils.joinPath(parentPath, name),
+              pathIndex,
+              true
+            )
           )
           .sort();
 
@@ -228,30 +234,33 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       });
   }
 
-  private isPathSelectable(path: string, pathIndex: number): boolean {
+  private isPathSelectable(path: string, pathIndex: number, forNavigation = false): boolean {
     const normalized = MirroringPathUtils.normalizePath(path);
-    if (!normalized || MirroringPathUtils.isPathTracked(normalized, this.trackedPaths)) {
+    if (!normalized) {
       return false;
     }
 
     return !this.paths.some((entry, index) => {
-      if (index === pathIndex) {
+      if (index === pathIndex || !MirroringPathUtils.isEntrySelectionComplete(entry)) {
         return false;
       }
       const selected = MirroringPathUtils.normalizePath(entry.fullPath);
-      return selected && MirroringPathUtils.pathsOverlap(normalized, selected);
+      if (!selected) {
+        return false;
+      }
+      return forNavigation
+        ? MirroringPathUtils.pathsConflictForNavigation(normalized, selected)
+        : MirroringPathUtils.pathsOverlap(normalized, selected);
     });
   }
 
   private syncFormValue(): void {
-    const { toAdd, alreadyMirrored } = this.getSubmitPaths();
+    const selectedPaths = this.getSelectedPaths();
     const control = this.pathsControl;
-    control.setValue(toAdd, { emitEvent: false });
+    control.setValue(selectedPaths, { emitEvent: false });
 
-    if (toAdd.length) {
+    if (selectedPaths.length) {
       control.setErrors(null);
-    } else if (alreadyMirrored.length) {
-      control.setErrors({ alreadyMirrored: true });
     } else {
       control.setErrors({ required: true });
     }
