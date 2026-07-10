@@ -244,7 +244,7 @@ def broker_conf(ctx, client, kafka_dir, kerberos, kraft):
         "listener.name.mtls.ssl.truststore.location={tdir}/server.truststore.jks\n"
         "listener.name.mtls.ssl.truststore.password=mypassword\n"
         # SASL mechanisms
-        "sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,GSSAPI\n"
+        "sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,GSSAPI,OAUTHBEARER\n"
         "sasl.mechanism.inter.broker.protocol=PLAIN\n"
         "sasl.kerberos.service.name={service_name}\n"
         'listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \\\n'
@@ -262,6 +262,11 @@ def broker_conf(ctx, client, kafka_dir, kerberos, kraft):
         '  storeKey=true \\\n'
         '  keyTab="{keytab}" \\\n'
         '  principal="{principal}";\n'
+        'listener.name.sasl_ssl.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;\n'
+        'listener.name.sasl_ssl.oauthbearer.sasl.server.callback.handler.class=org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerValidatorCallbackHandler\n'
+        'listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.jwks.endpoint.url={jwks}\n'
+        'listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.expected.audience={oauth_client}\n'
+        'listener.name.sasl_ssl.oauthbearer.sasl.oauthbearer.expected.issuer={issuer}\n'
         'listener.name.sasl_plaintext.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret" \\\n'
@@ -277,6 +282,11 @@ def broker_conf(ctx, client, kafka_dir, kerberos, kraft):
         '  storeKey=true \\\n'
         '  keyTab="{keytab}" \\\n'
         '  principal="{principal}";\n'
+        'listener.name.sasl_plaintext.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;\n'
+        'listener.name.sasl_plaintext.oauthbearer.sasl.server.callback.handler.class=org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerValidatorCallbackHandler\n'
+        'listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.jwks.endpoint.url={jwks}\n'
+        'listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.expected.audience={oauth_client}\n'
+        'listener.name.sasl_plaintext.oauthbearer.sasl.oauthbearer.expected.issuer={issuer}\n'
     ).format(
         tdir=kafka_dir,
         ip=ip,
@@ -288,6 +298,9 @@ def broker_conf(ctx, client, kafka_dir, kerberos, kraft):
         service_name=kerberos['service_name'] if kerberos else '',
         keytab=kerberos['kafka_keytab'] if kerberos else '',
         principal=kerberos['kafka_principal'] if kerberos else '',
+        jwks=getattr(ctx, 'dex_issuer', None),
+        oauth_client=getattr(ctx, 'dex_client_id', None),
+        issuer=getattr(ctx, 'dex_jwks_url', None)
     )
     file_name = 'server.properties'
     log.info("kafka conf file: %s", file_name)
