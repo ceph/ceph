@@ -342,7 +342,7 @@ export class CdValidators {
    *   on the `path2` control.
    */
   static match(path1: string, path2: string): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: any } => {
+    return (control: AbstractControl): { [key: string]: any } | null => {
       const ctrl1 = control.get(path1);
       const ctrl2 = control.get(path2);
       if (!ctrl1 || !ctrl2) {
@@ -362,6 +362,69 @@ export class CdValidators {
           ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
         }
       }
+      return null;
+    };
+  }
+
+  /**
+   * Validator factory that requires both specified controls to have different values.
+   * Errors will be added directly to the `path2` control instead of the parent group.
+   * @param {string} path1 A dot-delimited string that defines the path to the first control.
+   * @param {string} path2 A dot-delimited string that defines the path to the second control.
+   * @param {string} [serviceTypePath] Optional dot-delimited string that defines the path to the service type control.
+   * @param {string} [sslPath] Optional dot-delimited string that defines the path to the SSL control.
+   * @return {ValidatorFn} Returns an Angular ValidatorFn. The function itself evaluates to `null`
+   * for the target control group, while setting or clearing the `donotmatch` error map on `path2`.
+   */
+  static donotmatch(
+    path1: string,
+    path2: string,
+    serviceTypePath?: string,
+    sslPath?: string
+  ): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } | null => {
+      const ctrl1 = control.get(path1);
+      const ctrl2 = control.get(path2);
+
+      if (!ctrl1 || !ctrl2) {
+        return null;
+      }
+
+      const clearDoNotMatchError = () => {
+         const hasError = ctrl2.hasError('donotmatch');
+         if (hasError) {
+            // Remove the 'donotmatch' error. If no more errors exist, then set
+            // the error value to 'null', otherwise the field is still marked
+            // as invalid.
+            const errors = ctrl2.errors;
+            _.unset(errors, 'donotmatch');
+            ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
+          }
+        };
+
+      // Copilot Condition: Only evaluate if serviceTypePath and sslPath are provided.
+      // If the service is not RGW, or SSL is disabled, skip validation and clear stale errors.
+      if (serviceTypePath && sslPath) {
+        const serviceType = control.get(serviceTypePath)?.value;
+        const ssl = control.get(sslPath)?.value;
+
+        if (serviceType !== 'rgw' || !ssl) {
+          clearDoNotMatchError();
+          return null;
+        }
+      }
+
+      if (isEmptyInputValue(ctrl1.value) || isEmptyInputValue(ctrl2.value)) {
+         clearDoNotMatchError();
+         return null;
+       }
+
+      if (ctrl1.value === ctrl2.value) {
+        ctrl2.setErrors({ donotmatch: true });
+      } else {
+        clearDoNotMatchError();
+      }
+
       return null;
     };
   }
