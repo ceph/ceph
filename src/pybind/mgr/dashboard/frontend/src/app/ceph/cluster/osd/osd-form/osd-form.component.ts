@@ -29,10 +29,10 @@ import {
 } from '~/app/shared/models/osd-deployment-options';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+// import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
-import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
+// import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
@@ -94,6 +94,8 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   @Output() osdCreated: EventEmitter<void> = new EventEmitter();
 
+  @Output() cancelled: EventEmitter<void> = new EventEmitter();
+
   icons = Icons;
 
   form!: CdFormGroup;
@@ -141,7 +143,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private hostService: HostService,
     private router: Router,
     private formatterService: FormatterService,
-    private modalService: ModalService,
+    // private modalService: ModalService,
     private osdService: OsdService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -158,20 +160,54 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     this.createForm();
   }
 
+  get hasEligibleDevices(): boolean {
+    return this.allDevices.length > 0;
+  }
+
   private getStepsForMode(mode: string): Array<Step> {
+    const firstStepInvalid = !this.hasEligibleDevices;
+    const subsequentStepDisabled = !this.hasEligibleDevices;
     return mode !== 'manual'
       ? [
-          { label: STEP_LABELS.DEPLOYMENT, invalid: false },
-          { label: STEP_LABELS.FEATURES, invalid: false },
-          { label: STEP_LABELS.REVIEW, invalid: false }
+          { label: STEP_LABELS.DEPLOYMENT, invalid: firstStepInvalid },
+          { label: STEP_LABELS.REVIEW, invalid: false, disabled: subsequentStepDisabled }
         ]
       : [
-          { label: STEP_LABELS.DEPLOYMENT, invalid: false },
-          { label: STEP_LABELS.DATA, invalid: false },
-          { label: STEP_LABELS.DB_WAL, invalid: false },
-          { label: STEP_LABELS.FEATURES, invalid: false },
-          { label: STEP_LABELS.REVIEW, invalid: false }
+          { label: STEP_LABELS.DEPLOYMENT, invalid: firstStepInvalid },
+          { label: STEP_LABELS.DATA, invalid: false, disabled: subsequentStepDisabled },
+          { label: STEP_LABELS.DB_WAL, invalid: false, disabled: subsequentStepDisabled },
+          { label: STEP_LABELS.REVIEW, invalid: false, disabled: subsequentStepDisabled }
         ];
+  }
+
+  private updateFirstStepInvalid() {
+    const invalid = !this.hasEligibleDevices;
+    const subsequentStepDisabled = !this.hasEligibleDevices;
+    const unchanged =
+      this.steps[0]?.invalid === invalid &&
+      this.steps.slice(1).every((step) => step.disabled === subsequentStepDisabled);
+    if (unchanged) {
+      return;
+    }
+    this.steps = this.steps.map((step, i) => {
+      if (i === 0) {
+        return { ...step, invalid };
+      }
+      return { ...step, disabled: subsequentStepDisabled };
+    });
+  }
+
+  private updateDeploymentControlsAvailability() {
+    const deploymentMode = this.form.get('deploymentMode');
+    const deploymentOption = this.form.get('deploymentOption');
+    if (!this.hasEligibleDevices) {
+      deploymentMode?.disable({ emitEvent: false });
+      deploymentOption?.disable({ emitEvent: false });
+    } else {
+      deploymentMode?.enable({ emitEvent: false });
+      deploymentOption?.enable({ emitEvent: false });
+    }
+    this.updateFirstStepInvalid();
   }
 
   private createEmptyReviewDeviceSelection(): ReviewDeviceSelection {
@@ -186,6 +222,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   private formatHostPattern(pattern?: string): string {
     if (!pattern || pattern === '*') {
+      // this.driveGroup.setHostPattern('*');
       return $localize`All hosts`;
     }
 
@@ -232,6 +269,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   private updateSteps() {
     const mode = this.form?.get('deploymentMode')?.value ?? 'automatic';
     this.steps = this.getStepsForMode(mode);
+    this.updateFirstStepInvalid();
   }
 
   ngOnInit() {
@@ -311,11 +349,13 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
         this.availDevices = [...this.allDevices];
+        this.updateDeploymentControlsAvailability();
         this.loadingReady();
       },
       () => {
         this.allDevices = [];
         this.availDevices = [];
+        this.updateDeploymentControlsAvailability();
         this.loadingError();
       }
     );
@@ -424,6 +464,9 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   populateReviewData() {
+    const user = this.authStorageService.getUsername();
+    this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+
     this.reviewDeploymentModeLabel = this.simpleDeployment
       ? $localize`Automatic`
       : $localize`Manual selection`;
@@ -456,31 +499,20 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     );
   }
 
-  private navigateAfterCreate() {
-    const returnUrl = window.history.state?.returnUrl;
+  onCancel() {
+    if (this.hideTitle) {
+      this.cancelled.emit();
+      return;
+    }
+    this.router.navigate(['osd', { outlets: { modal: null } }]);
+  }
 
+  private navigateAfterCreate() {
     if (this.osdCreated.observers.length > 0) {
       this.osdCreated.emit();
       return;
     }
-
-    if (returnUrl === '/add-storage') {
-      this.router.navigate(['/add-storage']);
-      return;
-    }
-
-    const hasSafeReturnUrl =
-      typeof returnUrl === 'string' &&
-      returnUrl.startsWith('/') &&
-      !returnUrl.startsWith('//') &&
-      returnUrl !== '/osd/create';
-
-    if (hasSafeReturnUrl) {
-      this.router.navigateByUrl(returnUrl);
-      return;
-    }
-
-    this.router.navigate(['/osd']);
+    this.router.navigate(['osd', { outlets: { modal: null } }]);
   }
 
   submit() {
@@ -509,16 +541,38 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
         });
     } else {
       // use user name and timestamp for drive group name
-      const user = this.authStorageService.getUsername();
-      this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-      const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
-        driveGroups: [this.driveGroup.spec]
-      });
-      modalRef.componentInstance.submitAction.subscribe(() => {
-        this.navigateAfterCreate();
-      });
-      this.isSubmitLoading = false;
-      this.previewButtonPanel.submitButton.loading = false;
+
+      // const user = this.authStorageService.getUsername();
+      // this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+      // const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
+      //   driveGroups: [this.driveGroup.spec]
+      // });
+      // modalRef.componentInstance.submitAction.subscribe(() => {
+      //   this.navigateAfterCreate();
+      // });
+      // this.isSubmitLoading = false;
+      // this.previewButtonPanel.submitButton.loading = false;
+
+      // let driveGroups = [this.driveGroup.spec];
+
+      const trackingId = _.join(_.map([this.driveGroup.spec], 'service_id'), ', ');
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+            tracking_id: trackingId
+          }),
+          call: this.osdService.create([this.driveGroup.spec], trackingId)
+        })
+        .subscribe({
+          error: () => {
+            this.isSubmitLoading = false;
+          },
+          complete: () => {
+            this.isSubmitLoading = false;
+            this.navigateAfterCreate();
+            this.previewButtonPanel.submitButton.loading = false;
+          }
+        });
     }
   }
 
