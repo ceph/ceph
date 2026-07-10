@@ -19,9 +19,10 @@
       <div class="breadcrumbs--padding">
         <cd-breadcrumbs></cd-breadcrumbs>
       </div>
-      @if(pageHeaderTitle) {
+      @if(pageHeaderTitle && !pageHeaderHidden) {
       <cd-page-header
                       [title]="pageHeaderTitle"
+                      [subtitle]="pageHeaderSubtitle"
                       [description]="pageHeaderDescription">
       </cd-page-header>
       }

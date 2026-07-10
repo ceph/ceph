@@ -321,6 +321,19 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    // CephFS mirroring tasks
+    'cephfs/mirroring/setup': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Setting up`,
+        $localize`set up`,
+        $localize`Successfully set up`
+      ),
+      (metadata) => $localize`filesystem mirroring for '${metadata.fsName}'`
+    ),
+    'cephfs/mirroring/path/remove': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`mirror path '${metadata.path}' from '${metadata.fsName}'`
+    ),
     // RGW operations
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;
@@ -569,6 +582,9 @@ export class TaskMessageService {
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
+    ),
+    'mirroring/token/create': this.newTaskMessage(this.commonOperations.create, () =>
+      this.bootstrap()
     )
   };
 
@@ -751,5 +767,9 @@ export class TaskMessageService {
 
   cephUser(metadata: { userEntity: string }) {
     return $localize`Ceph user  '${metadata.userEntity}'`;
+  }
+
+  bootstrap() {
+    return $localize`bootstrap token`;
   }
 }

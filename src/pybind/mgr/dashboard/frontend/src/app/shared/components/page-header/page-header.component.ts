@@ -5,7 +5,7 @@ import { Component, Input, ViewEncapsulation } from '@angular/core';
  * @see https://ibm-products.carbondesignsystem.com/?path=/docs/components-pageheader--overview
  *
  * Usage:
- * <cd-page-header title="Page title" description="Optional description">
+ * <cd-page-header title="Page title" subtitle="Optional subtitle" description="Optional description">
  * </cd-page-header>
  */
 @Component({
@@ -17,5 +17,7 @@ import { Component, Input, ViewEncapsulation } from '@angular/core';
 })
 export class PageHeaderComponent {
   @Input({ required: true }) title: string;
+  @Input() subtitle: string = '';
   @Input() description: string = '';
+  @Input() tabsLayout = false;
 }

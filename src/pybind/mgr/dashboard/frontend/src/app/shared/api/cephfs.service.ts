@@ -4,10 +4,10 @@ import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { Observable } from 'rxjs';
 
-import { cdEncode } from '../decorators/cd-encode';
+import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
-import { Daemon } from '../models/cephfs.model';
+import { Daemon, MirrorPeerList, MirrorStatusResponse } from '../models/cephfs.model';
 
 @cdEncode
 @Injectable({
@@ -130,5 +130,64 @@ export class CephfsService {
 
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
+  }
+
+  enableMirror(@cdEncodeNot fsName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/enable`, {
+      fs_name: fsName
+    });
+  }
+
+  createBootstrapToken(fsName: string, clientName: string, siteName: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/token`, {
+      fs_name: fsName,
+      client_name: clientName,
+      site_name: siteName
+    });
+  }
+
+  createBootstrapPeer(@cdEncodeNot fsName: string, @cdEncodeNot token: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror`, {
+      fs_name: fsName,
+      token: token
+    });
+  }
+
+  listMirrorPeers(fsName: string): Observable<MirrorPeerList> {
+    return this.http.get<MirrorPeerList>(`${this.baseURL}/mirror/${fsName}`);
+  }
+
+  getMirrorStatus(
+    fsName: string,
+    path?: string,
+    peerId?: string
+  ): Observable<MirrorStatusResponse> {
+    let params = new HttpParams();
+    if (path) {
+      params = params.set('path', path);
+    }
+    if (peerId) {
+      params = params.set('peer_id', peerId);
+    }
+    return this.http.get<MirrorStatusResponse>(`${this.baseURL}/mirror/${fsName}/status`, {
+      params
+    });
+  }
+
+  addMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+    return this.http.post(`${this.baseURL}/mirror/directory`, {
+      fs_name: fsName,
+      path: path
+    });
+  }
+
+  listMirrorDirectories(@cdEncodeNot fsName: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseURL}/mirror/directory/${fsName}`);
+  }
+
+  removeMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+    return this.http.delete(`${this.baseURL}/mirror/directory`, {
+      params: { fs_name: fsName, path }
+    });
   }
 }

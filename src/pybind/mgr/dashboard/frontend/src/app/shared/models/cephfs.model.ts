@@ -16,6 +16,8 @@ export interface RemoteInfo {
   client_name: string;
   cluster_name: string;
   fs_name: string;
+  fsid?: string;
+  mon_host?: string;
 }
 
 export interface PeerStats {
@@ -48,6 +50,7 @@ export interface MirroringRow {
   local_fs_name?: string;
   client_name: string;
   directory_count: number;
+  filesystem_id?: number;
   peerId?: string;
   id?: string;
 }
@@ -131,9 +134,163 @@ export function mdsStateToStatus(state: string | undefined): MdsStatus {
 
 export type DaemonResponse = Daemon[];
 
+export interface MirrorPeerListEntry {
+  client_name: string;
+  site_name: string;
+  fs_name: string;
+}
+
+export type MirrorPeerList = Record<string, MirrorPeerListEntry>;
+
+export interface MirrorSyncCrawl {
+  state?: string;
+  duration?: string;
+}
+
+export interface MirrorSyncBytes {
+  sync_bytes?: string;
+  total_bytes?: string;
+  sync_percent?: string;
+}
+
+export interface MirrorSyncFiles {
+  sync_files?: number;
+  total_files?: number;
+  sync_percent?: string;
+}
+
+export interface MirrorSyncedSnap {
+  id?: number;
+  name?: string;
+  'sync-mode'?: string;
+  sync_bytes?: number | string;
+  sync_duration?: number | string;
+  sync_time_stamp?: number | string;
+  avg_read_throughput_bytes?: string;
+  avg_write_throughput_bytes?: string;
+  crawl?: MirrorSyncCrawl;
+  datasync_queue_wait?: MirrorSyncCrawl;
+  bytes?: MirrorSyncBytes;
+  files?: MirrorSyncFiles;
+  eta?: string;
+}
+
+export interface MirrorSyncProgress {
+  state?: string;
+  duration?: string;
+}
+
+export interface MirrorSyncSnapBytes {
+  sync_bytes?: string;
+  total_bytes?: string;
+  sync_percent?: string;
+}
+
+export interface MirrorSyncSnapFiles {
+  sync_files?: number;
+  total_files?: number;
+  sync_percent?: string;
+}
+
+export interface MirrorCurrentSyncingSnap {
+  id?: number;
+  name: string;
+  'sync-mode'?: string;
+  avg_read_throughput_bytes?: string;
+  avg_write_throughput_bytes?: string;
+  crawl?: MirrorSyncProgress;
+  datasync_queue_wait?: MirrorSyncProgress;
+  bytes?: MirrorSyncSnapBytes;
+  files?: MirrorSyncSnapFiles;
+  eta?: string;
+}
+
+export interface MirrorLastSyncedSnap {
+  id?: number;
+  name?: string;
+  crawl_duration?: string;
+  datasync_queue_wait_duration?: string;
+  sync_duration?: string;
+  sync_time_stamp?: number | string;
+  sync_bytes?: number | string;
+  sync_files?: number;
+}
+
+export interface MirrorDirStatus {
+  state?: string;
+  last_synced_snap?: MirrorLastSyncedSnap;
+  current_syncing_snap?: MirrorCurrentSyncingSnap;
+  current_sync_snap?: MirrorCurrentSyncingSnap;
+  snaps_synced?: number;
+  snaps_deleted?: number;
+  snaps_renamed?: number;
+  metrics_updated_at?: number | string;
+}
+
+export interface MirrorDirMetrics {
+  peer?: Record<string, MirrorDirStatus>;
+}
+
+export type MirrorStatusMetrics = Record<string, MirrorDirMetrics>;
+
+export interface MirrorStatusResponse {
+  metrics?: MirrorStatusMetrics;
+}
+
+export interface DaemonOverviewInfo {
+  mirrorPaths: number;
+  failures: number;
+  clusterName: string;
+  destinationFsName: string;
+  fsid: string;
+  monitorEndpoint: string;
+  peerUuid?: string;
+}
+
+export interface MirroringFsOverviewStats {
+  mirrorPaths: number;
+  syncingPaths: number;
+  failures: number;
+}
+
+export interface MirroringFsDestinationCluster {
+  clusterName: string;
+  siteName: string;
+  destinationFsName: string;
+  fsid: string;
+  monitorEndpoint: string;
+}
+
+export interface MirroringFsSyncInfo {
+  bytesSynced: string;
+  path: string;
+  snapName: string;
+  syncedAt: number | null;
+}
+
+export interface MirroringFsOverviewData {
+  fsName: string;
+  stats: MirroringFsOverviewStats;
+  destination: MirroringFsDestinationCluster;
+  sync: MirroringFsSyncInfo;
+}
+
 export type MirroringEntityRow = {
   entity: string;
   mdsCaps: string;
   monCaps: string;
   osdCaps: string;
+};
+
+export interface BootstrapTokenResponse {
+  token?: string;
+  data?: string;
+}
+
+export const CLIENT_PREFIX = 'client.';
+export const MAX_TYPEAHEAD_SUGGESTIONS = 10;
+export const VALID_USERNAME_PATTERN = /[^a-zA-Z0-9_-]/;
+
+export type CephfsMirroringSetupEvent = {
+  filesystem: string;
 };

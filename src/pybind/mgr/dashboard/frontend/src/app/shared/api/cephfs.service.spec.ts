@@ -111,4 +111,41 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne(`api/cephfs/remove/${volName}`);
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should create bootstrap peer without encoding body fields', () => {
+    service.createBootstrapPeer('my fs', 'token/with/special=chars').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      fs_name: 'my fs',
+      token: 'token/with/special=chars'
+    });
+  });
+
+  it('should add mirror directory without encoding path in request body', () => {
+    const path = '/volumes/Group1/A1/64446b51-d39b-436b-991f-0f8e713067ff';
+    service.addMirrorDirectory('testfs', path).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/directory');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ fs_name: 'testfs', path });
+  });
+
+  it('should list mirror directories for a filesystem', () => {
+    service.listMirrorDirectories('testfs').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/mirror/directory/testfs');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should remove mirror directory using query parameters', () => {
+    const path = '/volumes/Group1/A1/64446b51-d39b-436b-991f-0f8e713067ff';
+    service.removeMirrorDirectory('testfs', path).subscribe();
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/cephfs/mirror/directory' &&
+        request.params.get('fs_name') === 'testfs' &&
+        request.params.get('path') === path
+    );
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.body).toBeNull();
+  });
 });

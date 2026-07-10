@@ -66,8 +66,12 @@ import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
+import { CephfsAddMirroringPathComponent } from './ceph/cephfs/cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
+import { CephfsMirroringFsTabsComponent } from './ceph/cephfs/cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
+import { CephfsMirroringFsOverviewComponent } from './ceph/cephfs/cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
+import { CephfsMirroringFsMirrorPathsComponent } from './ceph/cephfs/cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
+import { CephfsMirroringFsBreadcrumbResolver } from './ceph/cephfs/cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-breadcrumb.resolver';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
-import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { OverviewComponent } from './ceph/overview/overview.component';
 
@@ -477,22 +481,51 @@ const routes: Routes = [
           {
             path: 'mirroring',
             canActivate: [ModuleStatusGuardService],
-            component: CephfsMirroringListComponent,
             data: {
               moduleStatusGuardConfig: {
                 uiApiPath: 'cephfs/mirror',
                 redirectTo: 'cephfs/mirroring/error',
                 module_name: 'mirroring',
                 navigate_to: 'File/Mirroring'
+              }
+            },
+            children: [
+              {
+                path: '',
+                component: CephfsMirroringListComponent,
+                data: {
+                  breadcrumbs: 'File/Mirroring',
+                  pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+                },
+                children: [
+                  {
+                    path: 'add-path/:fsId/:fsName',
+                    component: CephfsAddMirroringPathComponent,
+                    outlet: 'modal'
+                  }
+                ]
               },
-              breadcrumbs: 'File/Mirroring',
-              pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
-            }
-          },
-          {
-            path: `mirroring/${URLVerbs.CREATE}`,
-            component: CephfsMirroringWizardComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+              {
+                path: ':fsName',
+                component: CephfsMirroringFsTabsComponent,
+                data: {
+                  breadcrumbs: CephfsMirroringFsBreadcrumbResolver,
+                  // PageHeader included within the CephfsMirroringFsTabsComponent
+                  pageHeaderHidden: true
+                },
+                children: [
+                  { path: '', redirectTo: 'overview', pathMatch: 'full' },
+                  {
+                    path: 'overview',
+                    component: CephfsMirroringFsOverviewComponent
+                  },
+                  {
+                    path: 'mirror-paths',
+                    component: CephfsMirroringFsMirrorPathsComponent
+                  }
+                ]
+              }
+            ]
           },
           {
             path: 'nfs',

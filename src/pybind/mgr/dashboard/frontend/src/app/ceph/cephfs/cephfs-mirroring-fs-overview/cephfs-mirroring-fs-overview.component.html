@@ -1,0 +1,144 @@
+@let fsData = (fsData$ | async);
+<cds-tile class="cds-mb-5">
+  <div cdsGrid
+       [fullWidth]="true"
+       [narrow]="true">
+    <div cdsRow>
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="3"
+           class="border-subtle-right"
+           [columnNumbers]="{lg: 3, md: 3, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Mirror paths</span>
+        <span class="cds--type-heading-06">{{ fsData?.stats?.mirrorPaths }}</span>
+      </div>
+      <div cdsCol
+           class="cds-pl-6 border-subtle-right cds-center-inline-content"
+           [columnNumbers]="{lg: 3, md: 3, sm: 4}">
+        <div cdsStack="vertical"
+             [gap]="3"
+             class="cds-text-start">
+          <span class="cds--type-label-01"
+                i18n>Syncing paths</span>
+          <span class="cds--type-heading-06">{{ fsData?.stats?.syncingPaths }}</span>
+        </div>
+      </div>
+      <div cdsCol
+           class="cds-pl-7 border-subtle-right"
+           [columnNumbers]="{lg: 3, md: 3, sm: 4}">
+        <div cdsStack="vertical"
+             [gap]="3"
+             class="cds-text-start">
+          <span class="cds--type-label-01"
+                i18n>Last successful sync</span>
+          <span class="cds--type-heading-03">
+            @if (fsData?.sync?.syncedAt) {
+              {{ fsData.sync.path }} {{ fsData.sync.snapName }}: {{ fsData.sync.syncedAt | relativeDate }}
+            } @else if (fsData?.sync?.path || fsData?.sync?.snapName) {
+              {{ fsData.sync.path }} {{ fsData.sync.snapName }}
+            } @else {
+              -
+            }
+          </span>
+        </div>
+      </div>
+      <div cdsCol
+           class="cds-pl-6 cds-center-inline-content"
+           [columnNumbers]="{lg: 3, md: 3, sm: 4}">
+        <div cdsStack="vertical"
+             [gap]="3"
+             class="cds-text-start">
+          <span class="cds--type-label-01"
+                i18n>Failures</span>
+          <span cdsStack="horizontal"
+                [gap]="2"
+                class="vertical-align">
+            @if ((fsData?.stats?.failures ?? 0) > 0) {
+              <cd-icon type="error"
+                       [size]="iconSize.size20"></cd-icon>
+            }
+            <span class="cds--type-heading-06">{{ fsData?.stats?.failures }}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</cds-tile>
+
+<cds-tile class="cds-mb-5">
+  <div cdsGrid
+       [fullWidth]="true"
+       [narrow]="true">
+    <div cdsRow
+         class="cds-mb-5">
+      <div cdsCol
+           [columnNumbers]="{lg: 16, md: 8, sm: 4}">
+        <h4 class="cds--type-heading-03 cds-m-0"
+            i18n>Destination cluster</h4>
+      </div>
+    </div>
+    <div cdsRow
+         class="cds-mb-5">
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Cluster name</span>
+        <span class="cds--type-body-compact-01">{{ fsData?.destination?.clusterName }}</span>
+      </div>
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Filesystem name</span>
+        <span class="cds--type-body-compact-01">{{ fsData?.destination?.destinationFsName }}</span>
+      </div>
+    </div>
+    <div cdsRow
+         class="cds-mb-5">
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>FSID</span>
+        <span class="cds--type-body-compact-01">{{ fsData?.destination?.fsid }}</span>
+      </div>
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Monitor endpoint</span>
+        <span class="cds--type-body-compact-01">{{ fsData?.destination?.monitorEndpoint }}</span>
+      </div>
+    </div>
+    <div cdsRow>
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Bytes synced</span>
+        <span class="cds--type-body-compact-01">{{ fsData?.sync?.bytesSynced }}</span>
+      </div>
+      <div cdsCol
+           cdsStack="vertical"
+           [gap]="1"
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <span class="cds--type-label-01"
+              i18n>Last synced</span>
+        <span class="cds--type-body-compact-01">
+          @if (fsData?.sync?.syncedAt) {
+            {{ fsData.sync.syncedAt | relativeDate }}
+          } @else {
+            -
+          }
+        </span>
+      </div>
+    </div>
+  </div>
+</cds-tile>

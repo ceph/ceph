@@ -90,6 +90,11 @@
   background-color: var(--cds-background);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
+  &-label {
+    color: var(--cds-text-secondary);
+    margin-bottom: var(--cds-spacing-02);
+  }
+
   &-title {
     color: var(--cds-text-primary);
   }
@@ -103,6 +108,11 @@
     position: sticky;
     padding: 0 0 var(--cds-spacing-05) var(--cds-spacing-07);
   }
+}
+
+.tearsheet-top-progress {
+  padding: var(--cds-spacing-05) var(--cds-spacing-07);
+  flex-shrink: 0;
 }
 
 // BODY

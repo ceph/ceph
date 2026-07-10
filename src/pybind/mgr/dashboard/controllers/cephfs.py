@@ -63,6 +63,74 @@ DAEMON_STATUS_SCHEMA = [{
     }], 'List of filesystems on daemon'),
 }]
 
+MIRROR_SYNC_PHASE_SCHEMA = {
+    'state': (str, 'Phase state, e.g. completed, in-progress, or waiting'),
+    'duration': (str, 'Phase duration'),
+}
+
+MIRROR_SYNC_BYTES_PROGRESS_SCHEMA = {
+    'sync_bytes': (str, 'Bytes synced so far'),
+    'total_bytes': (str, 'Total bytes to sync'),
+    'sync_percent': (str, 'Sync completion percentage'),
+}
+
+MIRROR_SYNC_FILES_PROGRESS_SCHEMA = {
+    'sync_files': (str, 'Files synced so far'),
+    'total_files': (str, 'Total files to sync'),
+    'sync_percent': (str, 'Sync completion percentage'),
+}
+
+MIRROR_LAST_SYNCED_SNAP_SCHEMA = {
+    'id': (int, 'Snapshot ID'),
+    'name': (str, 'Snapshot name'),
+    'crawl_duration': (str, 'Time taken to scan directory'),
+    'datasync_queue_wait_duration': (str, 'Time in data sync queue'),
+    'sync_duration': (str, 'Snapshot sync duration'),
+    'sync_time_stamp': (str, 'Time of the last sync'),
+    'sync_bytes': (str, 'Bytes synced for the snapshot'),
+    'sync_files': (int, 'Number of files synced for the snapshot'),
+}
+
+MIRROR_CURRENT_SYNCING_SNAP_SCHEMA = {
+    'id': (int, 'Snapshot ID'),
+    'name': (str, 'Snapshot name'),
+    'sync-mode': (str, 'Snapshot sync mode: full or delta'),
+    'avg_read_throughput_bytes': (str, 'Average read throughput'),
+    'avg_write_throughput_bytes': (str, 'Average write throughput'),
+    'crawl': (MIRROR_SYNC_PHASE_SCHEMA, 'Directory crawl progress'),
+    'datasync_queue_wait': (MIRROR_SYNC_PHASE_SCHEMA, 'Data sync queue wait progress'),
+    'bytes': (MIRROR_SYNC_BYTES_PROGRESS_SCHEMA, 'Byte sync progress'),
+    'files': (MIRROR_SYNC_FILES_PROGRESS_SCHEMA, 'File sync progress'),
+    'eta': (str, 'Estimated time remaining for the current sync'),
+}
+
+MIRROR_PEER_SYNC_STAT_SCHEMA = {
+    'state': (str, 'Mirror sync state: idle, syncing, stale, or failed'),
+    'failure_reason': (str, 'Last sync failure reason when state is failed'),
+    'current_syncing_snap': (MIRROR_CURRENT_SYNCING_SNAP_SCHEMA,
+                             'Snapshot currently being synchronized'),
+    'last_synced_snap': (MIRROR_LAST_SYNCED_SNAP_SCHEMA,
+                         'Last successfully synchronized snapshot'),
+    'snaps_synced': (int, 'Total number of snapshots synchronized'),
+    'snaps_deleted': (int, 'Total number of snapshots deleted on the peer'),
+    'snaps_renamed': (int, 'Total number of snapshots renamed on the peer'),
+    'metrics_updated_at': (float, 'Wall-clock time when metrics were last updated'),
+}
+
+MIRROR_DIR_METRICS_SCHEMA = {
+    'peer': ({
+        'peer_uuid': (MIRROR_PEER_SYNC_STAT_SCHEMA,
+                      'Sync statistics keyed by peer UUID'),
+    }, 'Peer sync statistics for the mirrored directory'),
+}
+
+MIRROR_STATUS_SCHEMA = {
+    'metrics': ({
+        '/dir_path': (MIRROR_DIR_METRICS_SCHEMA,
+                      'Mirror directory metrics keyed by absolute path'),
+    }, 'Snapshot mirror sync metrics grouped by mirrored directory path'),
+}
+
 
 # pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -1322,6 +1390,23 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out)
 
+    @EndpointDoc("Enable mirroring for a filesystem",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={201: {}})
+    @RESTController.Collection('POST', path='/enable', status=201)
+    @CreatePermission
+    def enable(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_enable', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to enable Cephfs mirroring: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
     @EndpointDoc("Create bootstrap token",
                  parameters={
                      'fs_name': (str, 'File system name'),
@@ -1350,8 +1435,10 @@ class CephFSMirror(RESTController):
                  responses={200: {}})
     @CreatePermission
     def create(self, fs_name: str, token: str):
+        import urllib.parse
+        decoded_token = urllib.parse.unquote(token)
         error_code, out, err = mgr.remote(
-            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, token)
+            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, decoded_token)
         if error_code != 0:
             raise DashboardException(
                 msg=f'Failed to import the token to create bootstrap peer: {err}',
@@ -1376,6 +1463,59 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
 
+    @EndpointDoc("Add a directory path for snapshot mirroring",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Directory path to mirror'),
+                 })
+    @Endpoint('POST', path='/directory')
+    @CreatePermission
+    def add_directory(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_add_dir', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to add mirroring path {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("Remove a directory path from snapshot mirroring",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Directory path to remove from mirroring'),
+                 })
+    @Endpoint('DELETE', path='/directory', query_params=['fs_name', 'path'])
+    @DeletePermission
+    def remove_directory(self, fs_name: str, path: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to remove mirroring path {path}: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else {}
+
+    @EndpointDoc("List snapshot mirrored directories",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 })
+    @Endpoint('GET', path='/directory')
+    @ReadPermission
+    def list_directories(self, fs_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_ls', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to list mirroring directories: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out) if out else []
+
     @EndpointDoc("Get mirror daemon and peers information",
                  responses={200: DAEMON_STATUS_SCHEMA})
     @Endpoint('GET', path='/daemon-status')
@@ -1385,6 +1525,27 @@ class CephFSMirror(RESTController):
         if error_code != 0:
             raise DashboardException(
                 msg=f'Failed to get Cephfs mirror daemon status: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Get snapshot mirror sync metrics",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                     'peer_id': (str, 'Peer UUID'),
+                 },
+                 responses={200: MIRROR_STATUS_SCHEMA})
+    @Endpoint('GET', path='/{fs_name}/status')
+    @ReadPermission
+    def mirror_fs_status(self, fs_name: str, path: str = '', peer_id: str = ''):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_status', fs_name,
+            path or None, peer_id or None)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs mirror status: {err}',
                 code=error_code,
                 component='cephfs.mirror'
             )

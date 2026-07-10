@@ -1,16 +1,67 @@
-@if (daemonStatus$ | async; as daemonStatus) {
+<div cdsStack="vertical"
+     gap="5"
+     class="cds-mt-6">
+  <span class="cds--type-heading-03"
+        i18n>Jump in</span>
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 4, lg: 8}">
+    <div
+      cdsStack="horizontal"
+      [gap]="4">
+      @for (tile of jumpInTiles; track tile.title) {
+          <cd-clickable-tile
+            [title]="tile.title"
+            [description]="tile.description"
+            [icon]="tile.icon"
+            (tileClick)="tile.action()">
+          </cd-clickable-tile>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Mirrored filesystems table -->
+<section class="cds-mt-6">
+  <p class="cds--type-heading-03 cds-mb-3"
+     i18n>Mirrored filesystems</p>
   <cd-table
     #table
-    [data]="daemonStatus"
+    [data]="daemonStatus$ | async"
     [columns]="columns"
     columnMode="flex"
     selectionType="single"
+    emptyStateTitle="No mirrored filesystems"
+    i18n-emptyStateTitle
+    emptyStateMessage="Set up mirroring to protect critical workloads by replicating data to a secondary cluster."
+    i18n-emptyStateMessage
     (updateSelection)="updateSelection($event)"
     (fetchData)="loadDaemonStatus()">
-    <cd-table-actions class="table-actions"
-                      [permission]="permission"
-                      [selection]="selection"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
+    <div class="table-actions">
+      <cd-table-actions
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </cd-table>
+</section>
+
+<!-- Prepare to receive modal -->
+@if (isPrepareModalOpen) {
+  <cd-cephfs-generate-token
+    [open]="true"
+    (tokenGenerated)="onTokenGenerated()"
+    (cancelled)="closePrepareModal()">
+  </cd-cephfs-generate-token>
 }
+
+<!-- Setup mirroring modal -->
+@if (isSetupModalOpen) {
+  <cd-cephfs-setup-mirroring
+    [open]="true"
+    (close)="closeSetupModal()"
+    (mirroringSetup)="closeSetupModal()">
+  </cd-cephfs-setup-mirroring>
+}
+
+<router-outlet name="modal"></router-outlet>
