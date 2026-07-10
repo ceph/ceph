@@ -8,6 +8,7 @@ import { MirroringPathsStepComponent } from '../mirroring-paths-step/mirroring-p
 @Component({
   selector: 'cd-mirroring-review-step',
   templateUrl: './mirroring-review-step.component.html',
+  styleUrls: ['./mirroring-review-step.component.scss'],
   standalone: false
 })
 export class MirroringReviewStepComponent implements OnInit, TearsheetStep {

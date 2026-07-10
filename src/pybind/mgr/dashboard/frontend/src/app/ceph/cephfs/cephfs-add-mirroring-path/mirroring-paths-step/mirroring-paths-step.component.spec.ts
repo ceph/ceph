@@ -25,7 +25,8 @@ describe('MirroringPathsStepComponent', () => {
       if (path === '/volumes/g1') {
         return of([
           { name: 'sv1', parent: '/volumes/g1' },
-          { name: 'sv2', parent: '/volumes/g1' }
+          { name: 'sv2', parent: '/volumes/g1' },
+          { name: 'sv3', parent: '/volumes/g1' }
         ]);
       }
       return of([]);
@@ -69,7 +70,7 @@ describe('MirroringPathsStepComponent', () => {
     expect(component.pathsError).toContain('Select at least one path');
   });
 
-  it('should hide already mirrored paths from dropdown options', fakeAsync(() => {
+  it('should show already mirrored paths in dropdown options', fakeAsync(() => {
     mockLsDirTree();
     cephfsServiceMock.listMirrorDirectories.mockReturnValue(of(['/volumes/g1/sv1']));
 
@@ -81,10 +82,31 @@ describe('MirroringPathsStepComponent', () => {
     component.onLevelChange(0, 0, 'g1');
     tick();
 
-    expect(component.paths[0].levels[1].options).toEqual(['sv2']);
+    expect(component.paths[0].levels[1].options).toEqual(['sv1', 'sv2', 'sv3']);
   }));
 
-  it('should expose inline validation when only already mirrored paths are selected', fakeAsync(() => {
+  it('should allow selecting only a subvolume group without a subvolume', fakeAsync(() => {
+    mockLsDirTree();
+    cephfsServiceMock.listMirrorDirectories.mockReturnValue(of([]));
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'g1');
+    tick();
+    component.pathsControl.markAsTouched();
+
+    expect(component.pathsControl.valid).toBe(true);
+    expect(component.getSelectedPaths()).toEqual(['/volumes/g1']);
+    expect(component.getSubmitPaths()).toEqual({
+      toAdd: ['/volumes/g1'],
+      alreadyMirrored: []
+    });
+  }));
+
+  it('should allow selecting already mirrored paths to add a schedule', fakeAsync(() => {
     mockLsDirTree();
     cephfsServiceMock.listMirrorDirectories.mockReturnValue(of(['/volumes/g1/sv1']));
 
@@ -95,12 +117,15 @@ describe('MirroringPathsStepComponent', () => {
 
     component.onLevelChange(0, 0, 'g1');
     tick();
-    component.paths[0].levels[1].options = ['sv1'];
     component.onLevelChange(0, 1, 'sv1');
     component.pathsControl.markAsTouched();
 
-    expect(component.pathsControl.hasError('alreadyMirrored')).toBe(true);
-    expect(component.pathsError).toContain('already mirrored');
+    expect(component.pathsControl.valid).toBe(true);
+    expect(component.getSelectedPaths()).toEqual(['/volumes/g1/sv1']);
+    expect(component.getSubmitPaths()).toEqual({
+      toAdd: [],
+      alreadyMirrored: ['/volumes/g1/sv1']
+    });
   }));
 
   it('should not load initial data when fsName is missing', () => {
@@ -159,6 +184,29 @@ describe('MirroringPathsStepComponent', () => {
     component.toggleExpand(0);
     expect(component.paths[0].expanded).toBe(false);
   });
+
+  it('should allow selecting sibling subvolumes in another path entry', fakeAsync(() => {
+    mockLsDirTree();
+
+    component.fsName = 'testfs';
+    component.fsId = 1;
+    component.ngOnInit();
+    tick();
+
+    component.onLevelChange(0, 0, 'g1');
+    tick();
+    component.onLevelChange(0, 1, 'sv1');
+    tick();
+
+    component.addPath();
+    tick();
+
+    component.onLevelChange(1, 0, 'g1');
+    tick();
+
+    expect(component.paths[1].levels[1].options).toEqual(['sv2', 'sv3']);
+    expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1']);
+  }));
 
   it('should classify submit paths as toAdd or alreadyMirrored', fakeAsync(() => {
     mockLsDirTree();
