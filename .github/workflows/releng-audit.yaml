@@ -228,7 +228,11 @@ jobs:
                 }
               }
               
-              core.info(`[Router] Labeled event handled without triggering audit.`);
+              if (hasFailLabel && labelName !== 'releng-audit-override') {
+                core.setFailed("PR is currently in a failed audit state. Remove the releng-audit-fail label to re-run.");
+              } else {
+                core.info(`[Router] Labeled event handled without triggering audit.`);
+              }
               core.setOutput('run_audit', 'false');
               return;
             }
@@ -254,7 +258,11 @@ jobs:
               return;
             }
 
-            core.info('[Router] Event did not match any trigger criteria. Skipping audit.');
+            if (hasFailLabel && eventName === 'pull_request_target') {
+              core.setFailed("PR is currently in a failed audit state. Remove the releng-audit-fail label to re-run.");
+            } else {
+              core.info('[Router] Event did not match any trigger criteria. Skipping audit.');
+            }
             core.setOutput('run_audit', 'false');
 
       - name: Checkout Trusted Base Repository
