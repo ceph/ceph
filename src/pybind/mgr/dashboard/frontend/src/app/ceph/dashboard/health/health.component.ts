@@ -21,10 +21,10 @@ import {
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 
 @Component({
-    selector: 'cd-health',
-    templateUrl: './health.component.html',
-    styleUrls: ['./health.component.scss'],
-    standalone: false
+  selector: 'cd-health',
+  templateUrl: './health.component.html',
+  styleUrls: ['./health.component.scss'],
+  standalone: false
 })
 export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;

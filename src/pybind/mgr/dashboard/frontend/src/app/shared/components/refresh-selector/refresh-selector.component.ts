@@ -3,10 +3,10 @@ import { Component, OnInit } from '@angular/core';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 
 @Component({
-    selector: 'cd-refresh-selector',
-    templateUrl: './refresh-selector.component.html',
-    styleUrls: ['./refresh-selector.component.scss'],
-    standalone: false
+  selector: 'cd-refresh-selector',
+  templateUrl: './refresh-selector.component.html',
+  styleUrls: ['./refresh-selector.component.scss'],
+  standalone: false
 })
 export class RefreshSelectorComponent implements OnInit {
   selectedInterval: number;
