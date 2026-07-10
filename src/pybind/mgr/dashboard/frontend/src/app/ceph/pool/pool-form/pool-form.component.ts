@@ -41,6 +41,7 @@ import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { MonitorService } from '~/app/shared/api/monitor.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Permissions } from '~/app/shared/models/permissions';
+import { Location } from '@angular/common';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -128,7 +129,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private monitorService: MonitorService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private location: Location
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
@@ -1090,7 +1092,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        complete: () => this.router.navigate(['/pool'])
+        complete: () => this.location.back()
       });
   }
 
