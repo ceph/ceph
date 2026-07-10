@@ -1,7 +1,7 @@
 pytest
 boto3 >=1.0.0
 configparser >=5.0.0
-kafka-python >=2.0.0
+kafka-python >=2.0.2
 pika
 cloudevents>=1.12.1,<2
 xmltodict
