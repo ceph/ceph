@@ -32,6 +32,33 @@ export class MirroringPathUtils {
     return entry.levels.map((level) => level.selected).filter(Boolean);
   }
 
+  static isEntrySelectionValid(entry: PathEntry): boolean {
+    return !!entry.fullPath && MirroringPathUtils.getSelectedSegments(entry).length > 0;
+  }
+
+  static isEntrySelectionComplete(entry: PathEntry): boolean {
+    if (!entry.fullPath) {
+      return false;
+    }
+
+    const lastSelectedIndex = entry.levels.reduce(
+      (lastIndex, level, index) => (level.selected ? index : lastIndex),
+      -1
+    );
+    if (lastSelectedIndex < 0) {
+      return false;
+    }
+
+    for (let i = lastSelectedIndex + 1; i < entry.levels.length; i++) {
+      const level = entry.levels[i];
+      if (!level.selected && level.options.length) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   static pathsOverlap(a: string, b: string): boolean {
     const left = MirroringPathUtils.normalizePath(a);
     const right = MirroringPathUtils.normalizePath(b);
@@ -41,13 +68,29 @@ export class MirroringPathUtils {
     return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
   }
 
-  static isPathTracked(path: string, trackedPaths: Set<string>): boolean {
+  static pathsConflictForNavigation(a: string, b: string): boolean {
+    const left = MirroringPathUtils.normalizePath(a);
+    const right = MirroringPathUtils.normalizePath(b);
+    if (!left || !right) {
+      return false;
+    }
+    return left === right || left.startsWith(`${right}/`);
+  }
+
+  static isPathTracked(
+    path: string,
+    trackedPaths: Set<string>,
+    forNavigation = false
+  ): boolean {
     const normalized = MirroringPathUtils.normalizePath(path);
     if (!normalized || !trackedPaths.size) {
       return false;
     }
     for (const tracked of trackedPaths) {
-      if (MirroringPathUtils.pathsOverlap(normalized, tracked)) {
+      const conflicts = forNavigation
+        ? MirroringPathUtils.pathsConflictForNavigation(normalized, tracked)
+        : MirroringPathUtils.pathsOverlap(normalized, tracked);
+      if (conflicts) {
         return true;
       }
     }

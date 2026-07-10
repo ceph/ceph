@@ -76,17 +76,39 @@ export class CephfsSnapshotScheduleService {
     frequency: RepeatFrequency,
     isSubvolume = false
   ): Observable<boolean> {
+    const schedule = `${interval}${frequency}`;
     return this.getSnapshotScheduleList(path, fs, false).pipe(
-      map((response) => {
-        const index = response
-          .filter((x) => (isSubvolume ? x.path.startsWith(path) : x.path === path))
-          .findIndex((x) => x.schedule === `${interval}${frequency}`);
-        return index > -1;
-      }),
+      map((response) =>
+        response.some(
+          (item) =>
+            this.schedulePathsMatch(item.path, path, isSubvolume) &&
+            this.normalizeScheduleUnit(item.schedule) === this.normalizeScheduleUnit(schedule)
+        )
+      ),
       catchError(() => {
         return of(false);
       })
     );
+  }
+
+  private normalizeSchedulePath(path: string): string {
+    return (path ?? '').replace(/\/+$/, '').replace(/\/\.\.$/, '');
+  }
+
+  private normalizeScheduleUnit(schedule: string): string {
+    return schedule?.replace(/Y$/, 'y') ?? schedule;
+  }
+
+  private schedulePathsMatch(schedulePath: string, targetPath: string, isSubvolume: boolean): boolean {
+    const left = this.normalizeSchedulePath(schedulePath);
+    const right = this.normalizeSchedulePath(targetPath);
+    if (!left || !right) {
+      return false;
+    }
+    if (isSubvolume) {
+      return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+    }
+    return left === right;
   }
 
   checkRetentionPolicyExists(
@@ -99,20 +121,27 @@ export class CephfsSnapshotScheduleService {
     return this.getSnapshotSchedule(path, fs, false).pipe(
       map((response) => {
         let errorIndex = -1;
-        let exists = false;
-        const index = response.findIndex((x) =>
-          isSubvolume ? x.path.startsWith(path) : x.path === path
+        const matchingSchedules = response.filter((schedule) =>
+          this.schedulePathsMatch(schedule.path, path, isSubvolume)
         );
+        const existingFrequencies = new Set<string>();
+        matchingSchedules.forEach((schedule) => {
+          if (schedule.retention && typeof schedule.retention === 'object') {
+            Object.keys(schedule.retention).forEach((frequency) =>
+              existingFrequencies.add(frequency)
+            );
+          }
+        });
         const result = retentionFrequencies?.length
           ? intersection(
-              Object.keys(response?.[index]?.retention).filter(
-                (v) => !retentionFrequenciesRemoved.includes(v)
+              [...existingFrequencies].filter(
+                (frequency) => !retentionFrequenciesRemoved.includes(frequency)
               ),
               retentionFrequencies
             )
           : [];
-        exists = !!result?.length;
-        result?.forEach((r) => (errorIndex = retentionFrequencies.indexOf(r)));
+        const exists = !!result?.length;
+        result?.forEach((frequency) => (errorIndex = retentionFrequencies.indexOf(frequency)));
 
         return { exists, errorIndex };
       }),
@@ -120,6 +149,11 @@ export class CephfsSnapshotScheduleService {
         return of({ exists: false, errorIndex: -1 });
       })
     );
+  }
+
+  parseRetentionConflictFrequency(detail: string): string | null {
+    const match = detail?.match(/Retention for (\S+) is already present/i);
+    return match ? match[1] : null;
   }
 
   getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
