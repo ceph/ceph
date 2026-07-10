@@ -1,6 +1,10 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { CephfsSubvolume, SubvolumeSnapshot } from '../models/cephfs-subvolume.model';
+import {
+  CephfsSubvolume,
+  SubvolumeSnapshot,
+  UpdateSubvolume
+} from '../models/cephfs-subvolume.model';
 import { Observable, of } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 import _ from 'lodash';
@@ -31,23 +35,24 @@ export class CephfsSubvolumeService {
     uid: number,
     gid: number,
     mode: string,
-    namespace: boolean
+    namespace: boolean,
+    snapshotVisibility?: boolean
   ) {
-    return this.http.post(
-      this.baseURL,
-      {
-        vol_name: fsName,
-        subvol_name: subVolumeName,
-        group_name: subVolumeGroupName,
-        pool_layout: poolName,
-        size: size,
-        uid: uid,
-        gid: gid,
-        mode: mode,
-        namespace_isolated: namespace
-      },
-      { observe: 'response' }
-    );
+    const body: Record<string, any> = {
+      vol_name: fsName,
+      subvol_name: subVolumeName,
+      group_name: subVolumeGroupName,
+      pool_layout: poolName,
+      size: size,
+      uid: uid,
+      gid: gid,
+      mode: mode,
+      namespace_isolated: namespace
+    };
+    if (snapshotVisibility !== null) {
+      body['snapshot_visibility'] = snapshotVisibility.toString();
+    }
+    return this.http.post(this.baseURL, body, { observe: 'response' });
   }
 
   info(fsName: string, subVolumeName: string, subVolumeGroupName: string = '') {
@@ -95,12 +100,22 @@ export class CephfsSubvolumeService {
     });
   }
 
-  update(fsName: string, subVolumeName: string, size: string, subVolumeGroupName: string = '') {
-    return this.http.put(`${this.baseURL}/${fsName}`, {
+  update(
+    fsName: string,
+    subVolumeName: string,
+    size: string,
+    subVolumeGroupName: string = '',
+    snapshotVisibility?: boolean
+  ) {
+    const body: UpdateSubvolume = {
       subvol_name: subVolumeName,
       size: size,
       group_name: subVolumeGroupName
-    });
+    };
+    if (snapshotVisibility !== null) {
+      body.snapshot_visibility = snapshotVisibility.toString();
+    }
+    return this.http.put(`${this.baseURL}/${fsName}`, body);
   }
 
   getSnapshotVisibility(fsName: string, subVolumeName: string, groupName: string = '') {
@@ -109,19 +124,6 @@ export class CephfsSubvolumeService {
         subvol_name: subVolumeName,
         group_name: groupName
       }
-    });
-  }
-
-  setSnapshotVisibility(
-    fsName: string,
-    subVolumeName: string,
-    visible: boolean,
-    groupName: string = ''
-  ) {
-    return this.http.put(`${this.baseURL}/${fsName}/snapshot-visibility`, {
-      subvol_name: subVolumeName,
-      group_name: groupName,
-      value: visible.toString()
     });
   }
 
