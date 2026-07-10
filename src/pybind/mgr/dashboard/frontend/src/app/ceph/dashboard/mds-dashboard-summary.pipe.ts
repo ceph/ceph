@@ -3,8 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-    name: 'mdsDashboardSummary',
-    standalone: false
+  name: 'mdsDashboardSummary',
+  standalone: false
 })
 export class MdsDashboardSummaryPipe implements PipeTransform {
   transform(value: any): any {
