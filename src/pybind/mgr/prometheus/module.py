@@ -140,6 +140,44 @@ NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 SMB_METADATA = ('smb_version', 'volume',
                 'subvolume_group', 'subvolume', 'netbiosname', 'share')
 
+HW_STORAGE_LABELS = ('hostname', 'device', 'model', 'protocol', 'firmware_version', 'slot', 'serial_number')
+
+HW_CPU_LABELS = ('hostname', 'cpu', 'manufacturer', 'model', 'total_threads')
+
+HW_MEMORY_LABELS = ('hostname', 'dimm', 'type')
+MIB_TO_BYTES = 1048576
+
+HW_HEALTH_LABELS = ('hostname', 'component', 'category')
+
+HW_TEMP_LABELS = ('hostname', 'sensor_name')
+
+HW_FAN_LABELS = ('hostname', 'fan_name')
+
+HW_FIRMWARE_LABELS = ('hostname', 'component', 'version')
+
+HEALTH_STATUS_MAP = {
+    'OK': 0,
+    'Warning': 1,
+    'Degraded': 1,
+    'Error': 2,
+    'Critical': 2,
+}
+
+sensor_metric = namedtuple('sensor_metric', 'metric description labels')
+
+SENSOR_METRICS: Dict[str, sensor_metric] = {
+    'fans': sensor_metric(
+        'hardware_fan_rpm',
+        'Hardware fan speed in RPM',
+        HW_FAN_LABELS,
+    ),
+    'temperatures': sensor_metric(
+        'hardware_temperature_celsius',
+        'Hardware temperature sensor reading in Celsius',
+        HW_TEMP_LABELS,
+    )
+}
+
 CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
 
 alert_metric = namedtuple('alert_metric', 'name description')
@@ -997,6 +1035,49 @@ class Module(MgrModule, OrchestratorClientMixin):
                 path,
                 check.description,
             )
+
+        metrics['hardware_storage_capacity_bytes'] = Metric(
+            'gauge',
+            'hardware_storage_capacity_bytes',
+            'Storage device capacity in bytes',
+            HW_STORAGE_LABELS
+        )
+
+        metrics['hardware_cpu_cores'] = Metric(
+            'gauge',
+            'hardware_cpu_cores',
+            'Total CPU cores',
+            HW_CPU_LABELS
+        )
+
+        metrics['hardware_memory_capacity_bytes'] = Metric(
+            'gauge',
+            'hardware_memory_capacity_bytes',
+            'Memory capacity in bytes',
+            HW_MEMORY_LABELS
+        )
+
+        metrics['hardware_health'] = Metric(
+            'gauge',
+            'hardware_health',
+            'Hardware component health status (0=OK, 1=Warning, 2=Error)',
+            HW_HEALTH_LABELS
+        )
+
+        for sensor in SENSOR_METRICS.values():
+            metrics[sensor.metric] = Metric(
+                'gauge',
+                sensor.metric,
+                sensor.description,
+                sensor.labels
+            )
+
+        metrics['hardware_firmware_info'] = Metric(
+            'gauge',
+            'hardware_firmware_info',
+            'Firmware version information (value is always 1, version in label)',
+            HW_FIRMWARE_LABELS
+        )
 
         return metrics
 
@@ -1957,6 +2038,151 @@ class Module(MgrModule, OrchestratorClientMixin):
         except Exception as e:
             self.log.error(f"Failed to get SMB metadata: {str(e)}")
 
+    def _hw_get_health_value(
+            self, status_val: Any, hostname: str = '',
+            comp_id: str = '', category: str = ''
+    ) -> Optional[int]:
+        """Map a Redfish health status to a numeric value (0=OK, 1=Warning, 2=Error)."""
+        if isinstance(status_val, dict):
+            health_str = status_val.get('health', 'Unknown')
+        elif isinstance(status_val, str):
+            health_str = status_val
+        else:
+            health_str = 'Unknown'
+
+        value = HEALTH_STATUS_MAP.get(health_str)
+        if value is None:
+            self.log.warning(
+                f"node-proxy: unexpected health status "
+                f"'{health_str}' for {category}/{comp_id} "
+                f"on {hostname}, skipping"
+            )
+        return value
+
+    def _hw_set_health_metric(
+            self, status_val: Any, hostname: str,
+            comp_id: str, category: str
+    ) -> None:
+        """Set hardware_health gauge for a single component."""
+        health_value = self._hw_get_health_value(
+            status_val, hostname, comp_id, category
+        )
+        if health_value is not None:
+            self.metrics['hardware_health'].set(
+                health_value, (hostname, comp_id, category)
+            )
+
+    def _hw_iter_components(
+            self, status: Dict[str, Any], category: str
+    ) -> Iterator[Tuple[str, Dict[str, Any]]]:
+        """Yield (comp_id, comp_dict) pairs from nested status[category] dicts."""
+        for components in status.get(category, {}).values():
+            for comp_id, comp in components.items():
+                if isinstance(comp, dict):
+                    yield comp_id, comp
+
+    def _hw_set_sensor_metric(
+            self, comp: Dict[str, Any], comp_id: str,
+            hostname: str, category: str, metric_key: str
+    ) -> None:
+        """Set sensor value (temperature/fan) and health gauges using the sensor name."""
+        name = comp.get('name', comp_id)
+        reading = comp.get('reading')
+        if reading is not None and reading != 'unknown':
+            try:
+                self.metrics[metric_key].set(float(reading), (hostname, name))
+            except (ValueError, TypeError):
+                pass
+        self._hw_set_health_metric(comp.get('status', {}), hostname, name, category)
+
+    def _process_storage(self, status: Dict[str, Any], hostname: str) -> None:
+        """Set storage capacity and health metrics per drive."""
+        for device_id, device in self._hw_iter_components(status, 'storage'):
+            capacity = device.get('capacity_bytes', 0)
+            labels = (
+                hostname,
+                device_id,
+                device.get('model', 'unknown'),
+                device.get('protocol', 'unknown'),
+                device.get('firmware_version', 'unknown'),
+                device.get('slot', 'unknown'),
+                device.get('serial_number', 'unknown')
+            )
+            self.metrics['hardware_storage_capacity_bytes'].set(capacity, labels)
+            self._hw_set_health_metric(device.get('status', {}), hostname, device_id, 'storage')
+
+    def _process_processors(self, status: Dict[str, Any], hostname: str) -> None:
+        """Set CPU cores count and health metrics per processor."""
+        for cpu_id, cpu in self._hw_iter_components(status, 'processors'):
+            cores = cpu.get('total_cores', 0)
+            labels = (
+                hostname,
+                cpu_id,
+                cpu.get('manufacturer', 'unknown'),
+                cpu.get('model', 'unknown'),
+                cpu.get('total_threads', 'unknown')
+            )
+            self.metrics['hardware_cpu_cores'].set(cores, labels)
+            self._hw_set_health_metric(cpu.get('status', {}), hostname, cpu_id, 'processors')
+
+    def _process_memory(self, status: Dict[str, Any], hostname: str) -> None:
+        """Set memory capacity (in bytes) and health metrics per DIMM."""
+        for dimm_id, dimm in self._hw_iter_components(status, 'memory'):
+            capacity_mib = dimm.get('capacity_mi_b', 0)
+            capacity_bytes = capacity_mib * MIB_TO_BYTES
+            labels = (
+                hostname,
+                dimm_id,
+                dimm.get('memory_device_type', 'unknown'),
+            )
+            self.metrics['hardware_memory_capacity_bytes'].set(capacity_bytes, labels)
+            self._hw_set_health_metric(dimm.get('status', {}), hostname, dimm_id, 'memory')
+
+    def _process_power_network(self, status: Dict[str, Any], hostname: str) -> None:
+        """Set health metrics for power and network"""
+        for comp_id, comp in self._hw_iter_components(status, 'power'):
+            name = comp.get('name', comp_id)
+            self._hw_set_health_metric(comp.get('status', {}), hostname, name, 'power')
+        for comp_id, comp in self._hw_iter_components(status, 'network'):
+            self._hw_set_health_metric(comp.get('status', {}), hostname, comp_id, 'network')
+
+    def _process_sensors(self, status: Dict[str, Any], hostname: str) -> None:
+        """Set fan and temperature readings and health metrics"""
+        for category, sensor in SENSOR_METRICS.items():
+            for comp_id, comp in self._hw_iter_components(status, category):
+                self._hw_set_sensor_metric(comp, comp_id, hostname, category, sensor.metric)
+
+    def _process_firmware(self, hostname: str, data: Dict[str, Any]) -> None:
+        """Set firmware info metrics (value=1) with version as label, skip unknown."""
+        fw_data = data.get('firmware', data.get('firmwares', {}))
+        for fw_id, fw_info in fw_data.items():
+            component = fw_info.get('name', fw_id)
+            version = fw_info.get('version', 'unknown')
+            if version and version != 'unknown':
+                labels = (hostname, component, str(version))
+                self.metrics['hardware_firmware_info'].set(1, labels)
+
+    @profile_method(True)
+    def get_hardware_metrics(self) -> None:
+        """Fetch node-proxy fullreport and export all hardware metrics."""
+        if not self.orch_is_available():
+            return
+
+        try:
+            report = raise_if_exception(self.node_proxy_fullreport())
+        except Exception as e:
+            self.log.debug(f"node-proxy data not available: {e}")
+            return
+
+        for hostname, data in report.items():
+            status = data.get('status', {})
+            self._process_firmware(hostname, data)
+            self._process_storage(status, hostname)
+            self._process_processors(status, hostname)
+            self._process_memory(status, hostname)
+            self._process_power_network(status, hostname)
+            self._process_sensors(status, hostname)
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1977,6 +2203,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
         self.get_smb_metadata()
+        self.get_hardware_metrics()
         self.set_cephadm_daemon_status_metrics()
 
         if not self.get_module_option('exclude_perf_counters'):
