@@ -7,7 +7,7 @@ import functools
 import object_format
 from mgr_module import CLICommandBase
 
-from . import resourcelib
+from . import resourcelib, sqlite_store
 from .proto import Self
 
 
@@ -81,6 +81,11 @@ class NoMatchingValue(object_format.ErrorResponseBase):
         return -errno.ENOENT, "", str(self)
 
 
+class SMBDBUnavailable(object_format.ErrorResponseBase):
+    def format_response(self) -> Tuple[int, str, str]:
+        return -errno.EAGAIN, "", str(self)
+
+
 @contextlib.contextmanager
 def error_wrapper() -> Iterator[None]:
     """Context-decorator that converts between certain common exception types."""
@@ -89,3 +94,6 @@ def error_wrapper() -> Iterator[None]:
     except resourcelib.ResourceTypeError as err:
         msg = f'failed to parse input: {err}'
         raise InvalidInputValue(msg) from err
+    except sqlite_store.StoreUnavailable as err:
+        msg = f'smb database temporarily unavailable: {err}'
+        raise SMBDBUnavailable(msg) from err
