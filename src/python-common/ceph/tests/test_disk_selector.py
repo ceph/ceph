@@ -597,3 +597,61 @@ class TestDeviceSelectionLimit:
         # DriveSelection does device assignment on initialization. Let's check
         # it picked up the expected devices
         assert ds._data == [dev_a, dev_b]
+
+    def test_assign_devices_keeps_existing_osd_past_limit(self):
+        # When _limit_reached() fires part-way through the disk iteration,
+        # assign_devices() used to break unconditionally, which dropped any
+        # subsequent device that is already an OSD for the current spec.
+        # ceph-volume's `lvm batch` then doesn't see those devices and the
+        # drive group goes out of sync.
+        #
+        # Shape: limit=2, three candidate disks. /dev/sda and /dev/sdb are
+        # fresh (not yet OSDs); they fill the limit. /dev/sdc is already an
+        # OSD for this spec — it must still be included in the selection.
+        existing_lv = {'osd_id': '0', 'osdspec_affinity': 'my_osd_spec'}
+        dev_a = Device('/dev/sda', ceph_device_lvm=False, available=True)
+        dev_b = Device('/dev/sdb', ceph_device_lvm=False, available=True)
+        dev_c = Device('/dev/sdc', ceph_device_lvm=True, available=False,
+                       lvs=[existing_lv])
+        all_devices: List[Device] = [dev_a, dev_b, dev_c]
+        filter = DeviceSelection(all=True, limit=2)
+        dgs = DriveGroupSpec(service_id='my_osd_spec', data_devices=filter)
+        ds = drive_selection.DriveSelection(dgs, all_devices)
+
+        # /dev/sdc must survive the limit because it is already an OSD for
+        # this spec; existing_daemons accounts for it.
+        assert dev_c in ds._data
+
+    def test_assign_devices_continues_past_non_osd_at_limit(self):
+        # Iteration-order regression: when a non-this-spec device is the
+        # one that trips _limit_reached(), assign_devices() must not stop
+        # the disk loop entirely — later disks may be existing-OSD-for-this-
+        # spec and must still be included.
+        #
+        # Shape: limit=2, existing_daemons=1. Three candidate disks in
+        # this order:
+        #   /dev/sda — fresh, fills the new-device budget (limit - existing
+        #              = 1 new disk allowed). After adding it, the limit is
+        #              reached for any subsequent non-this-spec disk.
+        #   /dev/sdb — fresh, hits _limit_reached and is *not* an existing
+        #              OSD for the spec. Must be skipped without terminating
+        #              the loop.
+        #   /dev/sdc — existing OSD for this spec. Must be included because
+        #              existing-OSD-for-spec devices bypass the limit cap.
+        existing_lv = {'osd_id': '0', 'osdspec_affinity': 'my_osd_spec'}
+        dev_a = Device('/dev/sda', ceph_device_lvm=False, available=True)
+        dev_b = Device('/dev/sdb', ceph_device_lvm=False, available=True)
+        dev_c = Device('/dev/sdc', ceph_device_lvm=True, available=False,
+                       lvs=[existing_lv])
+        all_devices: List[Device] = [dev_a, dev_b, dev_c]
+        filter = DeviceSelection(all=True, limit=2)
+        dgs = DriveGroupSpec(service_id='my_osd_spec', data_devices=filter)
+        ds = drive_selection.DriveSelection(dgs, all_devices,
+                                            existing_daemons=1)
+
+        # dev_a fits in the new-device budget; dev_b is over the limit and
+        # not for this spec; dev_c is for this spec and must not be lost
+        # to an over-aggressive break.
+        assert dev_a in ds._data
+        assert dev_b not in ds._data
+        assert dev_c in ds._data
