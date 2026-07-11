@@ -1604,29 +1604,32 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                 log.error(f"failed to update {issue}")
                 sys.exit(1)
 
-        for pr in added_prs:
-            body = f"This PR has been added to [{issue.subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted added comment to PR #{pr}")
+        if getattr(issue, 'is_private', False):
+            log.info(f"QA ticket {issue.url} is private. Skipping GitHub PR updates for added/removed PRs.")
+        else:
+            for pr in added_prs:
+                body = f"This PR has been added to [{issue.subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted added comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
-        for pr in removed_prs:
-            body = f"This PR has been removed from [{issue.subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted removed comment to PR #{pr}")
+            for pr in removed_prs:
+                body = f"This PR has been removed from [{issue.subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted removed comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
     elif args.create_qa:
         now_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d-%H:%M")
@@ -1642,19 +1645,22 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             log.info("created redmine qa issue: %s", issue.url)
             issue_url = issue.url
 
-        for pr in prs:
-            log.debug(f"Posting QA Run in comment for ={pr}")
-            subject = issue_kwargs['subject']
-            body = f"This PR has been added to [{subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted comment to PR #{pr}")
+        if args.qa_private:
+            log.info("QA ticket is private. Skipping GitHub PR updates.")
+        else:
+            for pr in prs:
+                log.debug(f"Posting QA Run in comment for ={pr}")
+                subject = issue_kwargs['subject']
+                body = f"This PR has been added to [{subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
 def build_branch(args):
     base = args.base
