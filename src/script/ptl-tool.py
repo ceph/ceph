@@ -233,7 +233,61 @@ class AuditReport:
             To override the audit failure, apply `releng-audit-override` label or comment `/audit override`.
             """))
             
-        return "\n\n---\n\n".join(blocks)
+        return "# Ceph Release Engineering Audit Report\n\n" + "\n\n---\n\n".join(blocks)
+
+    def _hide_previous_bot_reviews(self, session: requests.Session, pr: int, dry_run: bool = False):
+        """
+        Fetches previous reviews on the PR and hides older audit reports by dismissing
+        REQUEST_CHANGES reviews and minimizing comment threads as OUTDATED via GraphQL.
+        """
+        endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
+        try:
+            for page in get(session, endpoint):
+                for review in page:
+                    user_login = review.get('user', {}).get('login', '')
+                    user_type = review.get('user', {}).get('type', '')
+                    is_bot_user = (user_type == 'Bot' or 'github-actions' in user_login or user_login.endswith('[bot]'))
+
+                    if not is_bot_user:
+                        continue
+
+                    body = review.get('body', '')
+                    if '# Ceph Release Engineering Audit Report' not in body:
+                        continue
+
+                    review_id = review.get('id')
+                    node_id = review.get('node_id')
+                    state = review.get('state')
+
+                    # 1. Dismiss REQUEST_CHANGES or APPROVED reviews via REST API
+                    if state in ('REQUEST_CHANGES', 'APPROVED'):
+                        if dry_run:
+                            log.info(f"[DRY RUN] Would dismiss older review ID {review_id} on PR #{pr}")
+                        else:
+                            dismiss_url = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews/{review_id}/dismissal"
+                            session.put(dismiss_url, auth=GithubBearerAuth(), json={'message': 'Superseded by new automated audit run.'})
+                            log.info(f"Dismissed older review ID {review_id} on PR #{pr}")
+
+                    # 2. Minimize any review or comment via GraphQL as OUTDATED
+                    if node_id:
+                        if dry_run:
+                            log.info(f"[DRY RUN] Would minimize review node {node_id} as OUTDATED")
+                        else:
+                            graphql_url = "https://api.github.com/graphql"
+                            query = """
+                            mutation($id: ID!) {
+                              minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                                minimizedComment { isMinimized }
+                              }
+                            }
+                            """
+                            try:
+                                session.post(graphql_url, auth=GithubBearerAuth(), json={'query': query, 'variables': {'id': node_id}})
+                                log.info(f"Minimized older bot review node {node_id} as OUTDATED")
+                            except Exception as e:
+                                log.debug(f"Could not minimize comment {node_id}: {e}")
+        except Exception as e:
+            log.debug(f"Failed to fetch or clean up previous bot reviews on PR #{pr}: {e}")
 
     def post_consolidated_review(self, session: requests.Session, pr: int, dry_run: bool = False, ci_mode: bool = False):
         """
@@ -253,6 +307,7 @@ class AuditReport:
 
                 consolidated_text += footer
 
+                self._hide_previous_bot_reviews(session, pr, dry_run=dry_run)
 
             if dry_run:
                 log.info(f"[DRY RUN] Would post consolidated review to PR #{pr}:\n{consolidated_text}")
