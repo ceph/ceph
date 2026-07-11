@@ -154,9 +154,31 @@ void renew(LockClient& lock,
            boost::asio::yield_context yield,
            boost::intrusive_ptr<lease_completion_state<T>>& state);
 
+// cancel the spawned coroutine and wait for its completion handler. the
+// join must suspend, so keep a pending cancellation from throwing until
+// it finishes
+template <typename T>
+void join(boost::intrusive_ptr<lease_completion_state<T>>& state,
+          boost::asio::yield_context yield)
+{
+  state->cancel();
+  const bool throw_on_cancel = yield.throw_if_cancelled();
+  yield.throw_if_cancelled(false);
+  auto& timer = state->get_timer();
+  boost::system::error_code ec;
+  while (!state->completed()) {
+    timer.expires_at(lease_clock::time_point::max());
+    timer.async_wait(yield[ec]);
+  }
+  yield.throw_if_cancelled(throw_on_cancel);
+}
+
 } // namespace detail
 
 /// \overload
+///
+/// On renewal failure or cancellation, waits for the spawned coroutine's
+/// completion before unwinding.
 ///
 /// \param lock A client that can send lock requests
 /// \param duration Duration of the lock
@@ -190,7 +212,18 @@ auto with_lease(LockClient& lock,
   // spawn the coroutine with a waitable/cancelable completion handler
   boost::asio::spawn(ex, std::forward<Func>(cr), state->completion_handler());
 
-  detail::renew(lock, expires_at, duration, yield, state);
+  // on failure, join the coroutine outside of the handler so the fiber's
+  // forced unwind on execution context shutdown passes through untouched
+  std::exception_ptr eptr;
+  try {
+    detail::renew(lock, expires_at, duration, yield, state);
+  } catch (const std::exception&) {
+    eptr = std::current_exception();
+  }
+  if (eptr) {
+    detail::join(state, yield);
+    std::rethrow_exception(eptr);
+  }
 
   // release the lock, ignoring errors
   boost::system::error_code ec;
