@@ -1832,7 +1832,7 @@ def build_branch(args):
     G = git.Repo(args.git)
 
     R = None
-    if args.create_qa or args.update_qa or args.audit or args.final_merge:
+    if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
         log.info("connecting to %s", REDMINE_ENDPOINT)
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
         log.debug("connected")
@@ -1857,18 +1857,32 @@ def build_branch(args):
                 prs.append(n)
     log.info("Will merge PRs: {}".format(prs))
 
-    # PRE-FLIGHT: Auto-detect base from the first PR if necessary
-    if prs and base is None:
-        first_pr = prs[0]
-        detected_base = get_pr_info(session, first_pr).get("base", {}).get("ref")
+
+    # PRE-FLIGHT: Validate base consistency and auto-detect base from PRs if necessary
+    if prs and (base is None or args.qe_label or args.integration):
+        bases_seen = {}
+        for pr_num in prs:
+            ref = get_pr_info(session, pr_num).get("base", {}).get("ref")
+            if not ref:
+                raise SystemExit(f"Could not determine base branch for PR #{pr_num}")
+            bases_seen[pr_num] = ref
         
-        if detected_base:
-            log.info(f"Auto-detected target base from PR #{first_pr}: {detected_base}")
+        unique_bases = set(bases_seen.values())
+        if len(unique_bases) > 1:
+            log.error("PRs target multiple different base branches! Ambiguity is not allowed.")
+            for p_num, b_ref in bases_seen.items():
+                log.error(f"  PR #{p_num} -> targets '{b_ref}'")
+            sys.exit(1)
+
+        detected_base = list(unique_bases)[0]
+        if base is None:
+            log.info(f"Auto-detected target base from PRs: {detected_base}")
             base = detected_base
             if args.merge_branch_name is False:
                 merge_branch_name = detected_base
-        else:
-            raise SystemExit(f"Could not auto-detect base for PR #{first_pr}. Use hard-coded --base")
+        elif base != detected_base:
+            log.error(f"Provided --base '{base}' does not match the target base branch '{detected_base}' of the PRs!")
+            sys.exit(1)
 
     if args.integration:
         if not base or base == 'HEAD':
@@ -1880,6 +1894,56 @@ def build_branch(args):
         args.credits = False
         args.always_fetch = True
         args.skip_conflict_check = True
+
+    if args.qe_label and not args.update_qa:
+        log.info(f"Searching Redmine for open QA tickets matching Ceph PR Label '{args.qe_label}'...")
+        filters = {
+            f"cf_{REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL}": args.qe_label,
+            "status_id": "open"
+        }
+        open_tickets = list(R.issue.filter(**filters))
+
+        matching_tickets = []
+        for t in open_tickets:
+            t_release = get_custom_field(t, REDMINE_CUSTOM_FIELD_ID_QA_RELEASE)
+            if t_release and t_release != base:
+                log.error(f"Open QA ticket #{t.id} ({REDMINE_ENDPOINT}/issues/{t.id}) uses label '{args.qe_label}' but targets release '{t_release}' (expected '{base}')! Release mismatch not allowed.")
+                sys.exit(1)
+            matching_tickets.append(t)
+
+        if len(matching_tickets) > 1:
+            log.error(f"Ambiguity error: Found {len(matching_tickets)} open QA tickets matching label '{args.qe_label}' for release '{base}':")
+            for t in matching_tickets:
+                log.error(f"  #{t.id}: {t.subject} ({REDMINE_ENDPOINT}/issues/{t.id})")
+            sys.exit(1)
+        elif len(matching_tickets) == 1:
+            t = matching_tickets[0]
+            t_url = f"{REDMINE_ENDPOINT}/issues/{t.id}"
+            print(f"\nFound existing open QA ticket: #{t.id} - {t.subject}")
+            print(f"Link: {t_url}")
+            while True:
+                ans = input("Do you want to update this existing QA ticket? [y/n/o/q] (y=update existing, n=create new, o=open in browser, q=quit): ").strip().lower()
+                if ans == 'y':
+                    args.update_qa = t.id
+                    log.info(f"Will update existing QA ticket #{t.id}.")
+                    break
+                elif ans == 'n':
+                    log.info("Will create a new QA ticket instead.")
+                    args.create_qa = True
+                    break
+                elif ans == 'o':
+                    open_in_browser([t_url])
+                    print(f"Opened {t_url} in browser.")
+                elif ans == 'q':
+                    log.info("Exiting script.")
+                    sys.exit(0)
+                elif ans == '':
+                    continue
+                else:
+                    print("Invalid choice. Please enter y, n, o, or q.")
+        else:
+            log.info("No open QA tickets found for this label. Will create a new QA ticket.")
+            args.create_qa = True
 
     if args.credits:
         try:
@@ -2156,6 +2220,7 @@ def main():
     group = parser.add_argument_group('GitHub PR Options')
     group.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     group.add_argument('--pr-label', dest='pr_label', action='store', help='source PRs to merge via label')
+    group.add_argument('--qe-label', dest='qe_label', action='store', help='variant of --integration that merges PRs by label and creates/updates an associated Redmine QA ticket')
 
     group = parser.add_argument_group('Branch Control Options')
     group.add_argument('--always-fetch', dest='always_fetch', action='store_true', help='always fetch commits from remote (bypass local cache)')
@@ -2210,6 +2275,13 @@ def main():
     group.add_argument('prs', metavar="PRs...", type=parse_pr, nargs='*', help='Pull Requests to Merge (numbers or URLs)')
 
     args = parser.parse_args(argv)
+
+    if args.qe_label:
+        if args.ci_mode:
+            log.error("--qe-label cannot be used with --ci-mode at this time.")
+            sys.exit(1)
+        args.integration = True
+        args.pr_label = args.qe_label
 
     # Make --audit-label redundant when --ci-mode is invoked
     if args.ci_mode and not args.audit_label:
@@ -2272,7 +2344,7 @@ def main():
         log.error("or set the PTL_TOOL_GITHUB_TOKEN environment variable.")
         sys.exit(1)
 
-    if args.create_qa or args.update_qa or args.audit or args.final_merge:
+    if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
         if Redmine is None:
             log.error("redmine library is not available so cannot create qa tracker ticket or audit")
             sys.exit(1)
