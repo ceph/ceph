@@ -188,6 +188,19 @@ class BaseAuditCheck:
         raise NotImplementedError
 
 class AuditReport:
+    # Declarative display priority (lower numbers render first in the report)
+    SECTION_PRIORITY = {
+        "Base Conflicts": 10,
+        "Redmine Linkage": 20,
+        "Multiple Source PRs": 30,
+        "Invalid Commit Format": 40,
+        "Unmerged Cherry-Picks": 50,
+        "Scrambled Commits": 60,
+        "Parity Mismatch": 70,
+        "Simulation Failure": 90,
+        "Conflict/Deviation": 100,
+    }
+
     def __init__(self):
         self.issues: List[Tuple[str, str]] = []
         self.interactive_failures: int = 0
@@ -215,21 +228,28 @@ class AuditReport:
         return len(self._get_active_issues()) > 0 or self.interactive_failures > 0
 
     def get_consolidated_text(self) -> str:
-        blocks = []
-        conflict_blocks = []
-        for cat, text in self._get_active_issues():
-            if not text:
-                continue
-            if cat in ("Conflict/Deviation"):
-                conflict_blocks.append(text)
+        active_issues = [(cat, text) for cat, text in self._get_active_issues() if text]
+        if not active_issues and not self.visualizer_md_table:
+            return ""
+
+        # Sort all report sections cleanly by their declarative priority
+        active_issues.sort(key=lambda x: self.SECTION_PRIORITY.get(x[0], 50))
+
+        pre_visualizer_blocks = []
+        post_visualizer_blocks = []
+
+        for cat, text in active_issues:
+            # Place conflicts and simulation failures after the visualizer table
+            if self.SECTION_PRIORITY.get(cat, 50) >= 90:
+                post_visualizer_blocks.append(text)
             else:
-                blocks.append(text)
-        
-        if self.visualizer_md_table and (blocks or conflict_blocks):
+                pre_visualizer_blocks.append(text)
+
+        blocks = list(pre_visualizer_blocks)
+        if self.visualizer_md_table and (blocks or post_visualizer_blocks):
             blocks.append(f"### Commit Parity Visualizer\n\n{self.visualizer_md_table}")
 
-        # Conflict review at the end:
-        blocks.extend(conflict_blocks)
+        blocks.extend(post_visualizer_blocks)
 
         blocks.append(textwrap.dedent("""\n\n
             🛟 **Need Help?**
