@@ -4,5 +4,6 @@ export enum HardwareNameMapping {
   processors = 'CPU',
   network = 'Network',
   power = 'Power supply',
-  fans = 'Fan module'
+  fans = 'Fan module',
+  temperatures = 'Temperature'
 }
