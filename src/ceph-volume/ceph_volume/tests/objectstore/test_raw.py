@@ -149,7 +149,7 @@ class TestRaw:
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
-    @patch('os.path.exists')
+    @patch('os.path.lexists')
     @patch('os.unlink')
     @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
     @patch('ceph_volume.objectstore.raw.process.run')
