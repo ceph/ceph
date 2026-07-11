@@ -82,6 +82,43 @@ jobs:
                 return;
               } 
               
+              if (commentBody.startsWith('/audit test-branch')) {
+                core.info(`[Router] Validating if user @${actor} is authorized to activate test branch.`);
+                const isAuthorized = await checkAuthorization(actor);
+                
+                if (isAuthorized) {
+                  const parts = commentBody.split(/\s+/);
+                  const testBranch = parts[2] || 'testing/releng-audit';
+                  
+                  try {
+                    await github.rest.repos.getBranch({
+                      owner: context.repo.owner, repo: context.repo.repo, branch: testBranch
+                    });
+                  } catch (e) {
+                    core.setFailed(`Test branch '${testBranch}' does not exist in ${context.repo.owner}/${context.repo.repo}.`);
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                      body: `❌ **Audit Test Mode Failed**\n\nBranch \`${testBranch}\` was not found in \`${context.repo.owner}/${context.repo.repo}\`. Please push the branch before triggering.`
+                    });
+                    core.setOutput('run_audit', 'false');
+                    return;
+                  }
+
+                  core.info(`[Router] User @${actor} is authorized. Activating test mode with branch: ${testBranch}`);
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: `🧪 **Audit Test Mode Activated** by @${actor}.\n\nExecuting audit using tooling checked out from branch \`${testBranch}\`.`
+                  });
+                  core.setOutput('run_audit', 'true');
+                  core.setOutput('checkout_ref', testBranch);
+                } else {
+                  core.info(`[Router] User @${actor} NOT authorized to use test branches.`);
+                  core.setFailed(`User @${actor} is not authorized to invoke test branches.`);
+                  core.setOutput('run_audit', 'false');
+                }
+                return;
+              }
+
               if (commentBody.startsWith('/audit override')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
                 const isAuthorized = await checkAuthorization(actor);
@@ -270,6 +307,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          ref: ${{ steps.router.outputs.checkout_ref || '' }}
 
       - name: Fetch main for parity check
         if: steps.router.outputs.run_audit == 'true'
