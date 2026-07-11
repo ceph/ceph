@@ -216,12 +216,20 @@ class AuditReport:
 
     def get_consolidated_text(self) -> str:
         blocks = []
+        conflict_blocks = []
         for cat, text in self._get_active_issues():
-            if text:
+            if not text:
+                continue
+            if cat in ("Conflict/Deviation"):
+                conflict_blocks.append(text)
+            else:
                 blocks.append(text)
         
-        if self.visualizer_md_table and blocks:
+        if self.visualizer_md_table and (blocks or conflict_blocks):
             blocks.append(f"### Commit Parity Visualizer\n\n{self.visualizer_md_table}")
+
+        # Conflict review at the end:
+        blocks.extend(conflict_blocks)
 
         blocks.append(textwrap.dedent("""\n\n
             🛟 **Need Help?**
@@ -1241,9 +1249,15 @@ class ConflictSimulationCheck(BaseAuditCheck):
             
             if recorded_deviations:
                 md_text = """
-                ### Automated Backport Parity Review - Backport Deviation Alert
+                ### Automated Backport Parity Review - Cherry-Pick Conflicts / Deviations
                 
-                A conflict or unapproved deviation was detected during the simulation of this backport. The code in this PR does not match a clean cherry-pick of the upstream commits.
+                **⚠️ WARNING: Cherry-pick conflicts or deviations were found that require component lead review.**
+
+                A conflict or deviation was detected during the simulation of this backport. The code in this PR does not match a clean cherry-pick of the upstream commits.
+
+                **This does not necessarily indicate an issue but a maintainer should review.**
+
+                <details><summary>**Click to expand conflict summaries.**</summary>
                 
                 """
                 md_text = textwrap.dedent(md_text)
@@ -1263,6 +1277,8 @@ class ConflictSimulationCheck(BaseAuditCheck):
                     md_text += f"**Range Diff**\n<details><summary>Click to expand</summary>\n\n```diff\n{dev['diff_text']}\n```\n</details>\n\n"
 
                 footer = """
+                </details>
+
                 **How to proceed:**
                 * **Authors (Genuine Conflicts):** If this is a genuine conflict requiring manual resolution, ensure your resolution is correct. You **must** explain the conflict resolution in the commit message (e.g., leave the standard Git `Conflicts:` block intact) and include an explanation for changes.
                 * **Authors (Need Help?):** Reach out to the Component Lead for technical guidance on complex code conflicts.
