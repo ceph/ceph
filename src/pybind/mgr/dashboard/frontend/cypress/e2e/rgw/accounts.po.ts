@@ -32,6 +32,8 @@ export class AccountsPageHelper extends PageHelper {
     // Enter email
     cy.get('#email').type(account.email);
 
+    cy.contains('button', 'Show advanced settings').click();
+
     // Enter max buckets
     cy.get('input#max_buckets').should('exist').should('have.value', '1000');
 
@@ -49,11 +51,13 @@ export class AccountsPageHelper extends PageHelper {
     cy.get('input#account_checkbox_input').check({ force: true });
 
     // Click the create button and wait for account to be made
-    cy.contains('button', 'Create Account').click();
+    cy.contains('button', 'Create account').click();
 
     this.getFirstTableCell(account.name).should('have.text', account.name);
     this.getTableRow(account.name).within(() => {
-      cy.get('td').eq(this.columnIndex.tenant).should('have.text', account.tenant);
+      cy.get('td')
+        .eq(this.columnIndex.tenant)
+        .should('have.text', account.tenant || '');
       cy.get('td').eq(this.columnIndex.account_id).should('not.be.empty');
       cy.get('td').eq(this.columnIndex.email).should('have.text', account.email);
       cy.get('td').eq(this.columnIndex.max_users).should('have.text', 1000);
@@ -104,6 +108,8 @@ export class AccountsPageHelper extends PageHelper {
     // Enter email
     cy.get('#email').clear().type(account.email);
 
+    cy.contains('button', 'Show advanced settings').click();
+
     // Enter max buckets
     this.selectOption('max_buckets_mode', 'Custom');
     cy.get('input#max_buckets').click().clear().type(account.max_buckets);
@@ -127,7 +133,7 @@ export class AccountsPageHelper extends PageHelper {
     cy.get('input#account_quota_max_objects').clear().type('200');
 
     // Click the create button and wait for account to be made
-    cy.contains('button', 'Edit Account').click();
+    cy.contains('button', 'Edit account').click();
 
     this.getTableRow(account.name).within(() => {
       cy.get('td').eq(this.columnIndex.tenant).should('have.text', account.tenant);
@@ -213,6 +219,8 @@ export class AccountsPageHelper extends PageHelper {
       .find('.cds--form-requirement')
       .should('have.text', ' Please enter a valid email ');
 
+    cy.contains('button', 'Show advanced settings').click();
+
     cy.get('input#max_buckets').click().clear().type('0').blur();
 
     cy.get('label[for=max_buckets]')
@@ -249,6 +257,8 @@ export class AccountsPageHelper extends PageHelper {
     cy.get('cds-text-label[for=email]')
       .find('.cds--form-requirement')
       .should('have.text', ' Please enter a valid email ');
+
+    cy.contains('button', 'Show advanced settings').click();
 
     cy.get('input#max_buckets').click().clear().type('0').blur();
 

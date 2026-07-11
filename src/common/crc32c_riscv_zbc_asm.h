@@ -41,8 +41,8 @@
 #define BUF0LOW  s11
 
 #define X3K1LOW  ra
-#define X3K2HIGH gp
-#define X2K1LOW  tp
+#define X3K2HIGH a4
+#define X2K1LOW  a2
 #define X2K2HIGH s0
 #define X1K1LOW  s1
 #define X1K2HIGH a0
@@ -65,8 +65,6 @@
         addi sp, sp, -128
         sd a3, 120(sp)
         sd ra, 112(sp)
-        sd gp, 104(sp)
-        sd tp, 96(sp)
         sd s0, 88(sp)
         sd s1, 80(sp)
         sd s2, 72(sp)
@@ -105,6 +103,7 @@
         slli a3, a3, 6
         add a3, BUF, a3
         and LEN, LEN, 0x3f
+        sd LEN, 104(sp)
 
 .align 3
 .Lfold_4_loop:
@@ -194,8 +193,8 @@
         /* pop register values saved on stack */
         ld a3, 120(sp)
         ld ra, 112(sp)
-        ld gp, 104(sp)
-        ld tp, 96(sp)
+        ld LEN, 104(sp)
+        ld MU, .Lmu
         ld s0, 88(sp)
         ld s1, 80(sp)
         ld s2, 72(sp)

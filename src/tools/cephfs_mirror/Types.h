@@ -4,8 +4,10 @@
 #ifndef CEPHFS_MIRROR_TYPES_H
 #define CEPHFS_MIRROR_TYPES_H
 
+#include <map>
 #include <set>
-#include <iostream>
+#include <iosfwd>
+#include <string>
 #include <string_view>
 #include <variant>
 

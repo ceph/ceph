@@ -45,6 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -184,7 +185,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TagModule,
     LinkModule,
     LayerModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
@@ -279,7 +281,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TearsheetStepComponent,
     PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent
+    NumberWithUnitComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {

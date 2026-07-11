@@ -8,7 +8,10 @@ import { ConfigurationFormComponent } from './ceph/cluster/configuration/configu
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
+import { HostDetailsComponent } from './ceph/cluster/hosts/host-details/host-details.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
+import { HostDetailsBreadcrumbResolver } from './ceph/cluster/hosts/host-details/host-details-breadcrumb.resolver';
+import { HostDetailsSectionComponent } from './ceph/cluster/hosts/host-details/host-details-section.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
@@ -154,6 +157,39 @@ const routes: Routes = [
         ]
       },
       {
+        path: 'hosts/:hostname',
+        component: HostDetailsComponent,
+        data: { breadcrumbs: HostDetailsBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'devices', pathMatch: 'full' },
+          {
+            path: 'devices',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Devices', section: 'devices' }
+          },
+          {
+            path: 'physical-disks',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Physical Disks', section: 'physical-disks' }
+          },
+          {
+            path: 'daemons',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Daemons', section: 'daemons' }
+          },
+          {
+            path: 'performance-details',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Performance Details', section: 'performance-details' }
+          },
+          {
+            path: 'device-health',
+            component: HostDetailsSectionComponent,
+            data: { breadcrumbs: 'Device health', section: 'device-health' }
+          }
+        ]
+      },
+      {
         path: 'ceph-users',
         component: CRUDTableComponent,
         data: {
@@ -271,13 +307,13 @@ const routes: Routes = [
       },
       {
         path: 'osd',
+        component: OsdListComponent,
         data: { breadcrumbs: 'Cluster/OSDs' },
         children: [
-          { path: '', component: OsdListComponent },
           {
             path: URLVerbs.CREATE,
             component: OsdFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },

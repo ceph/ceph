@@ -27,7 +27,8 @@ import {
   TabsModule,
   RadioModule,
   TilesModule,
-  LayerModule
+  LayerModule,
+  AccordionModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -60,6 +61,7 @@ import { CreateClusterStep4Component } from './create-cluster/create-cluster-ste
 import { CreateClusterComponent } from './create-cluster/create-cluster.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
+import { HostDetailsSectionComponent } from './hosts/host-details/host-details-section.component';
 import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
 import { InventoryDevicesComponent } from './inventory/inventory-devices/inventory-devices.component';
@@ -145,7 +147,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     FileUploaderModule,
     RadioModule,
     TilesModule,
-    LayerModule
+    LayerModule,
+    AccordionModule
   ],
   declarations: [
     MonitorComponent,
@@ -155,6 +158,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
     HostDetailsComponent,
+    HostDetailsSectionComponent,
     ConfigurationDetailsComponent,
     ConfigurationFormComponent,
     OsdReweightModalComponent,

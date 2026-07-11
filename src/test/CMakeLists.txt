@@ -684,10 +684,6 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
-set_property(
-  TEST ${tox_tests}
-  PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
-
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc

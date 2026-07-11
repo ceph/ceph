@@ -10,7 +10,10 @@ import { Account } from '~/app/ceph/rgw/models/rgw-user-accounts';
 export class RgwUserAccountsService {
   private url = 'api/rgw/accounts';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {}
 
   list(detailed?: boolean): Observable<any> {
     return this.rgwDaemonService.request((params: HttpParams) => {
@@ -53,5 +56,12 @@ export class RgwUserAccountsService {
     payload: { quota_type: string; max_size: string; max_objects: string; enabled: boolean }
   ) {
     return this.http.put(`${this.url}/${account_id}/quota`, payload);
+  }
+
+  exists(account_name: string): Observable<boolean> {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.append('account_name', account_name);
+      return this.http.get<boolean>(`${this.url}/exists`, { params });
+    });
   }
 }

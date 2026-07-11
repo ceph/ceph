@@ -33,6 +33,9 @@ Cache::Cache(
   ExtentPlacementManager &epm,
   store_index_t store_index)
   : epm(epm),
+    delta_based_overwrite_enabled(
+      crimson::common::get_conf<Option::size_t>(
+        "seastore_data_delta_based_overwrite") > 0),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
        "seastore_cachepin_size_pershard")))
@@ -1023,6 +1026,9 @@ void Cache::mark_transaction_conflicted(
   SUBTRACET(seastore_t, "", t);
   assert(!t.conflicted);
   t.conflicted = true;
+  // count is only *sampled* for the user-MUTATE do_transaction path,
+  // where the transaction is reused across retries
+  ++t.num_replays;
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                              t.get_src());

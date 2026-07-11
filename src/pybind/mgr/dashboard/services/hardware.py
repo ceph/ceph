@@ -75,7 +75,7 @@ class HardwareService(object):
     @staticmethod
     def validate_categories(categories: Optional[List[str]]) -> List[str]:
         categories_list = ['memory', 'storage', 'processors',
-                           'network', 'power', 'fans']
+                           'network', 'power', 'fans', 'temperatures']
 
         if isinstance(categories, str):
             categories = [categories]

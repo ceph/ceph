@@ -34,8 +34,8 @@
 %else
 %bcond_with rbd_rwl_cache
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-%if (0%{?rhel} && 0%{?rhel} < 9) || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
+%if 0%{?openEuler} || 0%{?openruyi}
 %bcond_with system_pmdk
 %else
 %ifarch s390x aarch64
@@ -44,7 +44,11 @@
 %bcond_without system_pmdk
 %endif
 %endif
+%if 0%{?openruyi}
+%bcond_with selinux
+%else
 %bcond_without selinux
+%endif
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %bcond_without lttng
@@ -97,23 +101,21 @@
 %else
 %bcond_without jaeger
 %endif
-%if 0%{?fedora} || 0%{?suse_version} >= 1500 || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?suse_version} >= 1500 || 0%{?rhel} || 0%{?openruyi}
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
-%if 0%{?fedora} || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?rhel}
 %bcond_without system_arrow
 %else
-# for centos 8, utf8proc-devel comes from the subversion-devel module which isn't available in EPEL8
-# this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
 %endif
 # qat only supported for intel devices
 %ifarch x86_64
-%if 0%{?fedora} || 0%{?rhel} >= 9
+%if 0%{?fedora} || 0%{?rhel}
 %bcond_without system_qat
 %else
 # not fedora/rhel
@@ -123,7 +125,7 @@
 # not x86_64
 %bcond_with system_qat
 %endif
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
 %if %{with selinux}
@@ -135,7 +137,11 @@
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 %endif
+%if 0%{?openruyi}
+%bcond_with cephadm_bundling
+%else
 %bcond_without cephadm_bundling
+%endif
 %bcond_without cephadm_pip_deps
 %bcond_without dwz
 %if %{with dwz}
@@ -152,7 +158,6 @@
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
-%{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
 %global c_ares_min_version 1.28.0
@@ -256,7 +261,7 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
-BuildRequires:	grpc-devel
+BuildRequires:	pkgconfig(grpc++)
 # Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
 # elsewhere. Require the fixed version so we can reenable lto. See
 # ceph bug https://tracker.ceph.com/issues/63867
@@ -275,61 +280,65 @@ BuildRequires:  libatomic
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
-BuildRequires:	gperftools-devel >= 2.7.90
-%endif
-%if 0%{?rhel} && 0%{?rhel} < 8
-BuildRequires:	gperftools-devel >= 2.6.1
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
+BuildRequires:	pkgconfig(libtcmalloc) >= 2.7.90
 %endif
 %if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
 %endif
 %endif
 BuildRequires:	libaio-devel
-BuildRequires:	libblkid-devel >= 2.17
-BuildRequires:	cryptsetup-devel
-BuildRequires:	libnbd-devel
-BuildRequires:	libcurl-devel
-BuildRequires:	libcap-devel
-BuildRequires:	libcap-ng-devel
-BuildRequires:	fmt-devel >= 6.2.1
+BuildRequires:	pkgconfig(blkid) >= 2.17
+BuildRequires:	pkgconfig(libcryptsetup)
+BuildRequires:	pkgconfig(libnbd)
+BuildRequires:	pkgconfig(libcurl)
+BuildRequires:	pkgconfig(libcap)
+BuildRequires:	pkgconfig(libcap-ng)
+BuildRequires:	pkgconfig(fmt) >= 6.2.1
 BuildRequires:	pkgconfig(libudev)
-BuildRequires:	libnl3-devel
-BuildRequires:	liboath-devel
+BuildRequires:	pkgconfig(nss)
+BuildRequires:	pkgconfig(libkeyutils)
+BuildRequires:	pkgconfig(openssl)
+BuildRequires:	pkgconfig(ldap)
+BuildRequires:	pkgconfig(libibverbs)
+BuildRequires:	pkgconfig(librdmacm)
+BuildRequires:	pkgconfig(liblz4) >= 1.7
+BuildRequires:	pkgconfig(libnl-3.0)
+BuildRequires:	pkgconfig(liboath)
 BuildRequires:	libtool
-BuildRequires:	libxml2-devel
+BuildRequires:	pkgconfig(libxml-2.0)
 BuildRequires:	make
-BuildRequires:	ncurses-devel
-BuildRequires:	libicu-devel
+BuildRequires:	pkgconfig(ncurses)
+BuildRequires:	pkgconfig(icu-uc)
 BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
-BuildRequires:	python%{python3_pkgversion}
-BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
-BuildRequires:	python%{python3_pkgversion}-pip
-BuildRequires:	python%{python3_pkgversion}-wheel
-BuildRequires:	snappy-devel
-BuildRequires:	sqlite-devel
+BuildRequires:	python3
+BuildRequires:	python3-devel
+BuildRequires:	python3-setuptools
+BuildRequires:	python3dist(cython)
+BuildRequires:	python3-pip
+BuildRequires:	python3-wheel
+BuildRequires:	pkgconfig(snappy)
+BuildRequires:	pkgconfig(sqlite3)
 BuildRequires:	sudo
 BuildRequires:	pkgconfig(udev)
-BuildRequires:	valgrind-devel
+BuildRequires:	pkgconfig(valgrind)
 BuildRequires:	which
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
-BuildRequires:	lua-devel
-BuildRequires:  lmdb-devel
+BuildRequires:	pkgconfig(lua)
+BuildRequires:  pkgconfig(lmdb)
 %if 0%{with crimson} || 0%{with jaeger}
-BuildRequires:  yaml-cpp-devel >= 0.6
+BuildRequires:  pkgconfig(yaml-cpp) >= 0.6
 %endif
 %if 0%{with amqp_endpoint}
-BuildRequires:  librabbitmq-devel
+BuildRequires:  pkgconfig(librabbitmq)
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  librdkafka-devel >= 1.1.0
+BuildRequires:  pkgconfig(rdkafka) >= 1.1.0
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
@@ -338,63 +347,67 @@ Requires:  %{luarocks_package_name}
 %if 0%{with make_check}
 BuildRequires:  hostname
 BuildRequires:  jq
-BuildRequires:	libuuid-devel
-BuildRequires:	python%{python3_pkgversion}-bcrypt
-BuildRequires:	python%{python3_pkgversion}-requests
-BuildRequires:	python%{python3_pkgversion}-dateutil
-BuildRequires:	python%{python3_pkgversion}-coverage
-BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	pkgconfig(uuid)
+BuildRequires:	python3dist(bcrypt)
+BuildRequires:	python3dist(requests)
+BuildRequires:	python3dist(python-dateutil)
+BuildRequires:	python3dist(coverage)
+BuildRequires:	python3dist(pyopenssl)
 BuildRequires:	socat
-BuildRequires:	python%{python3_pkgversion}-asyncssh
-BuildRequires:	python%{python3_pkgversion}-natsort
+BuildRequires:	python3dist(asyncssh)
+BuildRequires:	python3dist(natsort)
+%if 0%{?openruyi}
+BuildRequires:	python3dist(cryptography)
+BuildRequires:	python3dist(jsonpatch)
+BuildRequires:	python3dist(jinja2)
+BuildRequires:	python3dist(werkzeug)
+BuildRequires:	python3dist(mypy)
+BuildRequires:	python3dist(pecan)
+BuildRequires:	python3dist(requests-mock)
+BuildRequires:	python3dist(kubernetes)
+BuildRequires:	python3dist(asyncmock)
+BuildRequires:	python3dist(types-pyyaml)
 %endif
-%if 0%{?suse_version}
-BuildRequires:  libthrift-devel >= 0.13.0
-%else
-BuildRequires:  thrift-devel >= 0.13.0
 %endif
-BuildRequires:  re2-devel
+BuildRequires:	pkgconfig(thrift) >= 0.13.0
+BuildRequires:  pkgconfig(re2)
+BuildRequires:	pkgconfig(numa)
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
-%if 0%{?fedora} || 0%{?rhel}
-BuildRequires:  json-devel
-%endif
-%if 0%{?suse_version}
-BuildRequires:  nlohmann_json-devel
-%endif
-BuildRequires:  libevent-devel
+BuildRequires:	pkgconfig(nlohmann_json)
+BuildRequires:  pkgconfig(libevent)
 %endif
 %if 0%{with system_pmdk}
 %if 0%{?suse_version}
-BuildRequires:  libndctl-devel >= 63
+BuildRequires:  pkgconfig(libndctl) >= 63
 %else
-BuildRequires:  ndctl-devel >= 63
-BuildRequires:  daxctl-devel >= 63
+BuildRequires:  pkgconfig(libndctl) >= 63
+BuildRequires:  pkgconfig(libdaxctl) >= 63
 %endif
-BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel >= 1.8
+BuildRequires:  pkgconfig(libpmem)
+BuildRequires:  pkgconfig(libpmemobj) >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  libarrow-devel
-BuildRequires:  parquet-libs-devel
-BuildRequires:  utf8proc-devel
+BuildRequires:  pkgconfig(arrow)
+BuildRequires:  pkgconfig(parquet)
+BuildRequires:  pkgconfig(libutf8proc)
 %endif
 %if 0%{with system_qat}
-BuildRequires:  qatlib-devel
-BuildRequires:  qatzip-devel
+BuildRequires:  pkgconfig(qatlib)
+BuildRequires:  pkgconfig(qatzip)
 %endif
 %if 0%{with crimson}
-BuildRequires:  c-ares-devel
-BuildRequires:  gnutls-devel
-BuildRequires:  hwloc-devel
-BuildRequires:  libpciaccess-devel
-BuildRequires:  lksctp-tools-devel
+BuildRequires:  pkgconfig(libcares)
+BuildRequires:  pkgconfig(gnutls)
+BuildRequires:  pkgconfig(hwloc)
+BuildRequires:  pkgconfig(pciaccess)
+BuildRequires:  pkgconfig(libsctp)
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
-BuildRequires:  protobuf-devel
+BuildRequires:  pkgconfig(protobuf)
 BuildRequires:  protobuf-compiler
 %if 0%{?gts_version} > 0
 BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
@@ -402,6 +415,9 @@ BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
 %endif
+BuildRequires:	python3dist(prettytable)
+BuildRequires:	python3dist(pyyaml)
+BuildRequires:	python3dist(sphinx)
 #################################################################################
 # distro-conditional dependencies
 #################################################################################
@@ -413,20 +429,11 @@ PreReq:		%fillup_prereq
 BuildRequires:	fdupes
 BuildRequires:  memory-constraints
 BuildRequires:	net-tools
-BuildRequires:	libbz2-devel
-BuildRequires:	mozilla-nss-devel
-BuildRequires:	keyutils-devel
-BuildRequires:  libopenssl-devel
+BuildRequires:	pkgconfig(bzip2)
 BuildRequires:  ninja
-BuildRequires:  openldap2-devel
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
-BuildRequires:	python%{python3_pkgversion}-PrettyTable
-BuildRequires:	python%{python3_pkgversion}-PyYAML
-BuildRequires:	python%{python3_pkgversion}-Sphinx
-BuildRequires:  rdma-core-devel
-BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
 BuildRequires:	jsonnet
@@ -434,40 +441,39 @@ BuildRequires:	jsonnet
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:	systemd
 BuildRequires:  boost-random
-BuildRequires:	nss-devel
-BuildRequires:	keyutils-libs-devel
 BuildRequires:  libatomic
-BuildRequires:	libibverbs-devel
-BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
-BuildRequires:  openldap-devel
-BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
-BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
-BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-prettytable
-BuildRequires:	python%{python3_pkgversion}-pyyaml
-BuildRequires:	python%{python3_pkgversion}-sphinx
-BuildRequires:	lz4-devel >= 1.7
+BuildRequires:	python3-devel
+%endif
+%if 0%{?openruyi}
+BuildRequires:	ninja
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 BuildRequires:	golang
+BuildRequires:	pkgconfig(xmlsec1)
+BuildRequires:	pkgconfig(xmlsec1-openssl)
+BuildRequires:	python3dist(cherrypy)
+BuildRequires:	python3dist(routes)
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:	/usr/bin/promtool
 BuildRequires:	libtool-ltdl-devel
 BuildRequires:	xmlsec1
-BuildRequires:	xmlsec1-devel
 %ifarch x86_64
 BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
-BuildRequires:	xmlsec1-openssl-devel
-BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-routes
-BuildRequires:	python%{python3_pkgversion}-scipy
-BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	python3dist(scipy)
+BuildRequires:	python3dist(pyopenssl)
+%endif
+%if 0%{?openruyi}
+BuildRequires:	/usr/bin/promtool
+BuildRequires:	python3dist(scipy)
+BuildRequires:	python3dist(numpy)
+BuildRequires:	python3dist(tox)
+BuildRequires:	python3dist(pyfakefs)
 %endif
 BuildRequires:	jsonnet
 %if 0%{?suse_version}
@@ -475,30 +481,15 @@ BuildRequires:	golang-github-prometheus-prometheus
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
-BuildRequires:	python%{python3_pkgversion}-CherryPy
-BuildRequires:	python%{python3_pkgversion}-Routes
-BuildRequires:	python%{python3_pkgversion}-numpy-devel
-BuildRequires:	xmlsec1-devel
-BuildRequires:	xmlsec1-openssl-devel
+BuildRequires:	python3-numpy-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:	lttng-ust-devel
-BuildRequires:	libbabeltrace-devel
+BuildRequires:	pkgconfig(lttng-ust)
+BuildRequires:	pkgconfig(babeltrace)
 %endif
-%if 0%{?suse_version}
-BuildRequires:	lttng-ust-devel
-BuildRequires:  babeltrace-devel
-%endif
-%endif
-%if 0%{?suse_version}
-BuildRequires:	libexpat-devel
-%endif
-%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler}
-BuildRequires:	expat-devel
-%endif
+BuildRequires:	pkgconfig(expat)
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
@@ -507,15 +498,12 @@ BuildRequires:  redhat-rpm-config
 BuildRequires:  openEuler-rpm-config
 %endif
 %if 0%{with crimson}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:  cryptopp-devel
+# EPEL9's cryptopp-devel ships its pkgconfig file as cryptopp.pc (providing
+# pkgconfig(cryptopp)), while el10 and SUSE's cryptopp/libcryptopp-devel
+# provide pkgconfig(libcryptopp); accept either.
+BuildRequires:  (pkgconfig(libcryptopp) or pkgconfig(cryptopp))
 %endif
-%if 0%{?suse_version}
-BuildRequires:  libcryptopp-devel
-BuildRequires:  libnuma-devel
-%endif
-%endif
-%if 0%{?rhel} >= 9
+%if 0%{?rhel}
 BuildRequires: python-rpm-macros
 %endif
 
@@ -547,13 +535,6 @@ Requires:      logrotate
 Requires:      psmisc
 Requires:      util-linux
 Requires:      which
-%if 0%{?rhel} && 0%{?rhel} < 8
-# The following is necessary due to tracker 36508 and can be removed once the
-# associated upstream bugs are resolved.
-%if 0%{with tcmalloc}
-Requires:      gperftools-libs >= 2.6.1
-%endif
-%endif
 %if 0%{?weak_deps}
 Recommends:    chrony
 Recommends:    nvme-cli
@@ -570,7 +551,7 @@ Base is the package that includes all the files shared amongst ceph servers
 Summary:        Utility to bootstrap Ceph clusters
 BuildArch:      noarch
 Requires:       lvm2
-Requires:       python%{python3_pkgversion}
+Requires:       python3
 Requires:       openssh-server
 Requires:       which
 %if 0%{?weak_deps}
@@ -586,27 +567,14 @@ Recommends:     podman >= 2.0.2
 %if 0%{with cephadm_bundling}
 %if 0%{without cephadm_pip_deps}
 # Zipapp built from system RPMs at build time; bundled zipapp is self-contained at runtime.
-# SUSE and RHEL/Fedora use different PyPI RPM names (Jinja2/PyYAML vs jinja2/pyyaml).
-%if 0%{?suse_version}
-BuildRequires: python%{python3_pkgversion}-Jinja2 >= 2.10
-BuildRequires: python%{python3_pkgversion}-PyYAML
-%else
-BuildRequires: python%{python3_pkgversion}-jinja2 >= 2.10
-BuildRequires: python%{python3_pkgversion}-pyyaml
-%endif
-%dnl suse/else: rpm bundle, distinct RPM names only (not duplicate stanzas)
+BuildRequires: python3dist(jinja2) >= 2.10
+BuildRequires: python3dist(pyyaml)
 %endif
 %dnl end without cephadm_pip_deps (CEPHADM_BUNDLED_DEPENDENCIES=rpm)
 %else
 # Unbundled cephadm: host must provide yaml and jinja2 at runtime.
-%if 0%{?suse_version}
-Requires: python%{python3_pkgversion}-Jinja2 >= 2.10
-Requires: python%{python3_pkgversion}-PyYAML
-%else
-Requires: python%{python3_pkgversion}-jinja2 >= 2.10
-Requires: python%{python3_pkgversion}-pyyaml
-%endif
-%dnl suse/else: unbundled cephadm (CEPHADM_BUNDLED_DEPENDENCIES=none)
+Requires: python3dist(jinja2) >= 2.10
+Requires: python3dist(pyyaml)
 %endif
 %dnl end with cephadm_bundling
 %description -n cephadm
@@ -621,18 +589,13 @@ Group:		System/Filesystems
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rbd = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-cephfs = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rgw = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:	python%{python3_pkgversion}-prettytable
-%endif
-%if 0%{?suse_version}
-Requires:	python%{python3_pkgversion}-PrettyTable
-%endif
+Requires:	python3-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-rbd = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-cephfs = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-rgw = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3dist(prettytable)
 %if 0%{with libradosstriper}
 Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -729,27 +692,20 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} >= 9
-Requires:       python%{python3_pkgversion}-grpcio
-Requires:       python%{python3_pkgversion}-grpcio-tools
-Requires:       python%{python3_pkgversion}-jmespath
-Requires:       python%{python3_pkgversion}-xmltodict
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openruyi}
+Requires:       python3dist(grpcio)
+Requires:       python3dist(grpcio-tools)
+Requires:       python3dist(jmespath)
+Requires:       python3dist(xmltodict)
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-routes
+Requires:       python3dist(cherrypy)
+Requires:       python3dist(routes)
 %if 0%{?weak_deps}
-Recommends:     python%{python3_pkgversion}-saml
-%if 0%{?fedora} || (0%{?rhel} && 0%{?rhel} <= 8)
-Recommends:     python%{python3_pkgversion}-grpcio
-Recommends:     python%{python3_pkgversion}-grpcio-tools
+Recommends:     python3dist(python3-saml)
+%if 0%{?fedora}
+Recommends:     python3dist(grpcio)
+Recommends:     python3dist(grpcio-tools)
 %endif
-%endif
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Routes
-Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
 %description mgr-dashboard
 ceph-mgr-dashboard is a manager module, providing a web-based application
@@ -764,11 +720,11 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-numpy
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-scikit-learn
+Requires:       python3dist(numpy)
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?openEuler} || 0%{?openruyi}
+Requires:       python3dist(scikit-learn)
 %endif
-Requires:       python3-scipy
+Requires:       python3dist(scipy)
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
@@ -779,20 +735,10 @@ BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
-Requires:       python%{python3_pkgversion}-prettytable
-Requires:       python%{python3_pkgversion}-requests
-Requires:       python%{python3_pkgversion}-dateutil
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-pyyaml
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-PyYAML
-%endif
-# RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
-# backport dataclasses module instead.
-%if 0%{?rhel} && 0%{?rhel} <= 8
-Requires:       python%{python3_pkgversion}-dataclasses
-%endif
+Requires:       python3dist(prettytable)
+Requires:       python3dist(requests)
+Requires:       python3dist(python-dateutil)
+Requires:       python3dist(pyyaml)
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -840,8 +786,8 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-kubernetes
-Requires:       python%{python3_pkgversion}-jsonpatch
+Requires:       python3dist(kubernetes)
+Requires:       python3dist(jsonpatch)
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr module for orchestration functions using
 a Rook backend.
@@ -853,7 +799,7 @@ Summary:        Ceph Manager module to orchestrate ceph-events to kubernetes' ev
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-kubernetes
+Requires:       python3dist(kubernetes)
 %description mgr-k8sevents
 ceph-mgr-k8sevents is a ceph-mgr module that sends every ceph-events
 to kubernetes' events API
@@ -867,20 +813,18 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-asyncssh
-Requires:       python%{python3_pkgversion}-bcrypt
-Requires:       python%{python3_pkgversion}-natsort
-Requires:       python%{python3_pkgversion}-pyOpenSSL
+Requires:       python3dist(asyncssh)
+Requires:       python3dist(bcrypt)
+Requires:       python3dist(natsort)
+Requires:       python3dist(pyopenssl)
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
+Requires:       python3dist(cherrypy)
+Requires:       python3dist(jinja2)
 %if 0%{?suse_version}
 Requires:       openssh
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Jinja2
 %endif
-%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler}
+%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler} || 0%{?openruyi}
 Requires:       openssh-clients
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-jinja2
 %endif
 %description mgr-cephadm
 ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
@@ -917,7 +861,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
-Recommends:     python%{python3_pkgversion}-influxdb
+Recommends:     python3dist(influxdb)
 %endif
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
 %description mgr-influx
@@ -1015,7 +959,7 @@ Summary:        Ceph Manager module for OSD performance counter queries
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-prettytable
+Requires:       python3dist(prettytable)
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
 %description mgr-osd-perf-query
 ceph-mgr-osd-perf-query is a ceph-mgr module that exposes OSD
@@ -1041,12 +985,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-cherrypy
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-%endif
+Requires:       python3dist(cherrypy)
 %description mgr-prometheus
 ceph-mgr-prometheus is a ceph-mgr module that exposes cluster metrics
 in Prometheus exposition format.
@@ -1141,7 +1080,7 @@ Summary:	Ceph fuse-based client
 Group:		System/Filesystems
 %endif
 Requires:       fuse3
-Requires:	python%{python3_pkgversion}
+Requires:	python3
 %description fuse
 FUSE based client for Ceph distributed network file system
 
@@ -1233,7 +1172,7 @@ service as well as the OpenStack Object Storage ("Swift") API.
 %package -n cephfs-top
 Summary:    top(1) like utility for Ceph Filesystem
 BuildArch:  noarch
-Requires:   python%{python3_pkgversion}-rados
+Requires:   python3-rados
 %description -n cephfs-top
 This package provides a top(1) like utility to display Ceph Filesystem metrics
 in realtime.
@@ -1281,6 +1220,8 @@ Group:		System/Filesystems
 %endif
 Requires:   ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:  ceph-osd < %{_epoch_prefix}%{version}-%{release}
+Requires(posttrans): %{_sbindir}/update-alternatives
+Requires(preun): %{_sbindir}/update-alternatives
 %description osd-classic
 classic-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -1301,6 +1242,8 @@ Requires:	binutils
 Requires:	c-ares%{?_isa} >= %{c_ares_min_version}
 %endif
 Requires:	protobuf
+Requires(posttrans): %{_sbindir}/update-alternatives
+Requires(preun): %{_sbindir}/update-alternatives
 %description osd-crimson
 crimson-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -1320,8 +1263,8 @@ Requires: lvm2
 Requires: parted
 Requires: util-linux
 Requires: xfsprogs
-Requires: python%{python3_pkgversion}-setuptools
-Requires: python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires: python3-setuptools
+Requires: python3-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description volume
 This package contains a tool to deploy OSD with different devices like
 lvm or physical disks, and trying to follow a predictable, and robust
@@ -1388,31 +1331,31 @@ Obsoletes:	librgw2-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS gateway client library.
 
-%package -n python%{python3_pkgversion}-rgw
+%package -n python3-rgw
 Summary:	Python 3 libraries for the RADOS gateway
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
-%{?python_provide:%python_provide python%{python3_pkgversion}-rgw}
+Requires:	python3-rados = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python3-rgw}
 Provides:	python-rgw = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rgw < %{_epoch_prefix}%{version}-%{release}
-%description -n python%{python3_pkgversion}-rgw
+%description -n python3-rgw
 This package contains Python 3 libraries for interacting with Ceph RADOS
 gateway.
 
-%package -n python%{python3_pkgversion}-rados
+%package -n python3-rados
 Summary:	Python 3 libraries for the RADOS object store
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
-Requires:	python%{python3_pkgversion}
+Requires:	python3
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
-%{?python_provide:%python_provide python%{python3_pkgversion}-rados}
+%{?python_provide:%python_provide python3-rados}
 Provides:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rados < %{_epoch_prefix}%{version}-%{release}
-%description -n python%{python3_pkgversion}-rados
+%description -n python3-rados
 This package contains Python 3 libraries for interacting with Ceph RADOS
 object store.
 
@@ -1503,17 +1446,17 @@ Obsoletes:	librbd1-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS block device.
 
-%package -n python%{python3_pkgversion}-rbd
+%package -n python3-rbd
 Summary:	Python 3 libraries for the RADOS block device
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
-%{?python_provide:%python_provide python%{python3_pkgversion}-rbd}
+Requires:	python3-rados = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python3-rbd}
 Provides:	python-rbd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rbd < %{_epoch_prefix}%{version}-%{release}
-%description -n python%{python3_pkgversion}-rbd
+%description -n python3-rbd
 This package contains Python 3 libraries for interacting with Ceph RADOS
 block device.
 
@@ -1569,58 +1512,55 @@ Obsoletes:	libcephfs2-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use Ceph distributed file system.
 
-%package -n python%{python3_pkgversion}-cephfs
+%package -n python3-cephfs
 Summary:	Python 3 libraries for Ceph distributed file system
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
-%{?python_provide:%python_provide python%{python3_pkgversion}-cephfs}
+Requires:	python3-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python3-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python3-cephfs}
 Provides:	python-cephfs = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-cephfs < %{_epoch_prefix}%{version}-%{release}
-%description -n python%{python3_pkgversion}-cephfs
+%description -n python3-cephfs
 This package contains Python 3 libraries for interacting with Ceph distributed
 file system.
 
-%package -n python%{python3_pkgversion}-ceph-argparse
+%package -n python3-ceph-argparse
 Summary:	Python 3 utility libraries for Ceph CLI
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
-%{?python_provide:%python_provide python%{python3_pkgversion}-ceph-argparse}
-%description -n python%{python3_pkgversion}-ceph-argparse
+%{?python_provide:%python_provide python3-ceph-argparse}
+%description -n python3-ceph-argparse
 This package contains types and routines for Python 3 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
 command-description information, validating user command input against those
 descriptions, and submitting the command to the appropriate daemon.
 
-%package -n python%{python3_pkgversion}-ceph-common
+%package -n python3-ceph-common
 Summary:	Python 3 utility libraries for Ceph
-%if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
-Requires:       python%{python3_pkgversion}-pyyaml
+Requires:       python3dist(pyyaml)
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 %if %{with pypkg}
-Recommends:     python%{python3_pkgversion}-ceph-smb-ctl
+Recommends:     python3-ceph-smb-ctl
 %endif
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
-%{?python_provide:%python_provide python%{python3_pkgversion}-ceph-common}
-%description -n python%{python3_pkgversion}-ceph-common
+%{?python_provide:%python_provide python3-ceph-common}
+%description -n python3-ceph-common
 This package contains data structures, classes and functions used by Ceph.
 It also contains utilities used for the cephadm orchestrator.
 
 %if 0%{with cephfs_shell}
 %package -n cephfs-shell
 Summary:    Interactive shell for Ceph file system
-Requires:   python%{python3_pkgversion}-cmd2
-Requires:   python%{python3_pkgversion}-colorama
-Requires:   python%{python3_pkgversion}-cephfs
+Requires:   python3dist(cmd2)
+Requires:   python3dist(colorama)
+Requires:   python3-cephfs
 %description -n cephfs-shell
 This package contains an interactive tool that allows accessing a Ceph
 file system without mounting it  by providing a nice pseudo-shell which
@@ -1750,20 +1690,20 @@ Group:          System/Monitoring
 This package provides a Ceph hardware monitoring agent.
 
 %if %{with pypkg}
-%package -n python%{python3_pkgversion}-ceph-smb-ctl
+%package -n python3-ceph-smb-ctl
 Summary:        Ceph SMB Service Remote-Control Client
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
-Requires:       python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-grpcio
-Requires:       python%{python3_pkgversion}-grpcio-reflection
-%description -n python%{python3_pkgversion}-ceph-smb-ctl
+Requires:       python3-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:       python3dist(grpcio)
+Requires:       python3dist(grpcio-reflection)
+%description -n python3-ceph-smb-ctl
 This package provides a tool to interact with Ceph's SMB Service Remote-Control
 gRPC API as a client.
 %endif
-%dnl end package python%{python3_pkgversion}-ceph-smb-ctl
+%dnl end package python3-ceph-smb-ctl
 
 #################################################################################
 # common
@@ -1937,6 +1877,9 @@ popd
 
 %if 0%{with make_check}
 %check
+%if 0%{?openruyi}
+export CEPH_PYTHON_SYSTEM_SITE=true
+%endif
 # run in-tree unittests
 pushd %{_vpath_builddir}
 ctest %{_smp_mflags}
@@ -1958,7 +1901,7 @@ mv %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd-crimson
 mv %{buildroot}%{_bindir}/ceph-osd %{buildroot}%{_bindir}/ceph-osd-classic
 
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
 %endif
 %if 0%{?suse_version}
@@ -1992,7 +1935,10 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 # sudoers.d
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
-%if 0%{?rhel} >= 8 || 0%{?openEuler}
+%if 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
+# Undefine -P flag as it is only supported with python version >= 3.11
+%undefine _py3_shebang_P
+
 %{py3_shebang_fix} %{buildroot}%{_bindir}/* %{buildroot}%{_sbindir}/*
 %endif
 
@@ -2031,7 +1977,7 @@ install -m 644 -D -t %{buildroot}%{_datadir}/snmp/mibs monitoring/snmp/CEPH-MIB.
 %fdupes %{buildroot}%{_prefix}
 %endif
 
-%if 0%{?rhel} == 8 || 0%{?openEuler}
+%if 0%{?openEuler}
 %py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
 %endif
 
@@ -2075,7 +2021,7 @@ rm -rf %{_vpath_builddir}
 %{_libdir}/libmgr_op_tp.so*
 %endif
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
 %endif
 %if 0%{?suse_version}
@@ -2108,7 +2054,7 @@ if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl preset ceph.target ceph-crash.service >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph.target ceph-crash.service
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2119,7 +2065,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph.target ceph-crash.service
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph.target ceph-crash.service
 %endif
 
@@ -2139,6 +2085,7 @@ exit 0
 
 %files -n cephadm
 %{_sbindir}/cephadm
+%attr(0700,root,root) %{_libexecdir}/cephadm_invoker.py
 %{_mandir}/man8/cephadm.8*
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
@@ -2219,7 +2166,7 @@ exit 0
 %pre common
 CEPH_GROUP_ID=167
 CEPH_USER_ID=167
-%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler}
+%if 0%{?rhel} || 0%{?fedora} || 0%{?openEuler} || 0%{?openruyi}
 /usr/sbin/groupadd ceph -g $CEPH_GROUP_ID -o -r 2>/dev/null || :
 /usr/sbin/useradd ceph -u $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
 %endif
@@ -2258,7 +2205,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mds@\*.service ceph-mds.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-mds@\*.service ceph-mds.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2269,7 +2216,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-mds@\*.service ceph-mds.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-mds@\*.service ceph-mds.target
 %endif
 
@@ -2293,6 +2240,8 @@ fi
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
 %{_datadir}/ceph/mgr/object_format.*
+%{_datadir}/ceph/mgr/ceph_secrets_client.*
+%{_datadir}/ceph/mgr/ceph_secrets_types.*
 %{_datadir}/ceph/mgr/cherrypy_mgr.*
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
@@ -2304,7 +2253,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mgr@\*.service ceph-mgr.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-mgr@\*.service ceph-mgr.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2315,7 +2264,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-mgr@\*.service ceph-mgr.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-mgr@\*.service ceph-mgr.target
 %endif
 
@@ -2487,7 +2436,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-mon@\*.service ceph-mon.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2498,7 +2447,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-mon@\*.service ceph-mon.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-mon@\*.service ceph-mon.target
 %endif
 
@@ -2539,7 +2488,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset cephfs-mirror@\*.service cephfs-mirror.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post cephfs-mirror@\*.service cephfs-mirror.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2550,7 +2499,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun cephfs-mirror@\*.service cephfs-mirror.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun cephfs-mirror@\*.service cephfs-mirror.target
 %endif
 
@@ -2588,7 +2537,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-rbd-mirror@\*.service ceph-rbd-mirror.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2599,7 +2548,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 
@@ -2629,7 +2578,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2640,7 +2589,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
 %endif
 
@@ -2683,7 +2632,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2694,7 +2643,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 
@@ -2728,7 +2677,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-osd@\*.service ceph-osd.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -2740,7 +2689,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-osd@\*.service ceph-osd.target
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-osd@\*.service ceph-osd.target
 %endif
 
@@ -2776,7 +2725,7 @@ fi
 
 %preun osd-crimson
 if [ $1 -eq 0 ]; then
-    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-crimson
+    %{_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-crimson
 fi
 %endif
 
@@ -2786,7 +2735,7 @@ fi
 
 %preun osd-classic
 if [ $1 -eq 0 ]; then
-    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-classic
+    %{_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-classic
 fi
 
 %files volume
@@ -2805,7 +2754,7 @@ if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-volume@\*.service >/dev/null 2>&1 || :
 fi
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_post ceph-volume@\*.service
 %endif
 
@@ -2813,7 +2762,7 @@ fi
 %if 0%{?suse_version}
 %service_del_preun ceph-volume@\*.service
 %endif
-%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
 %systemd_preun ceph-volume@\*.service
 %endif
 
@@ -2878,7 +2827,7 @@ fi
 %{_includedir}/rados/cls_flags.hpp
 %{_includedir}/rados/cls_traits.hpp
 
-%files -n python%{python3_pkgversion}-rados
+%files -n python3-rados
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.dist-info
 
@@ -2950,11 +2899,11 @@ fi
 %{_libdir}/librgw_rados_tp.so
 %endif
 
-%files -n python%{python3_pkgversion}-rgw
+%files -n python3-rgw
 %{python3_sitearch}/rgw.cpython*.so
 %{python3_sitearch}/rgw-*.dist-info
 
-%files -n python%{python3_pkgversion}-rbd
+%files -n python3-rbd
 %{python3_sitearch}/rbd.cpython*.so
 %{python3_sitearch}/rbd-*.dist-info
 
@@ -2986,21 +2935,22 @@ fi
 %{_includedir}/cephfs/dump.h
 %{_includedir}/cephfs/json.h
 %{_includedir}/cephfs/keys_and_values.h
+%{_includedir}/cephfs/snap_types.h
 %{_libdir}/libcephfs.so
 %{_libdir}/libcephfs_proxy.so
 %{_libdir}/pkgconfig/cephfs.pc
 
-%files -n python%{python3_pkgversion}-cephfs
+%files -n python3-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
 %{python3_sitearch}/cephfs-*.dist-info
 
-%files -n python%{python3_pkgversion}-ceph-argparse
+%files -n python3-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py
 %{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
 %{python3_sitelib}/ceph_daemon.py
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
 
-%files -n python%{python3_pkgversion}-ceph-common
+%files -n python3-ceph-common
 %{python3_sitelib}/ceph
 %{python3_sitelib}/ceph-*.%{?with_pypkg:dist}%{!?with_pypkg:egg}-info
 
@@ -3200,7 +3150,7 @@ exit 0
 %{python3_sitelib}/ceph_node_proxy-*
 
 %if %{with pypkg}
-%files -n python%{python3_pkgversion}-ceph-smb-ctl
+%files -n python3-ceph-smb-ctl
 %{_bindir}/ceph-smb-ctl
 %endif
 

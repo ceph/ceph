@@ -474,7 +474,8 @@ options:
   level: advanced
   desc: Number of lifecycle data shards
   long_desc: Number of RADOS objects to use for storing lifecycle index. This affects
-    concurrency of lifecycle maintenance, as shards can be processed in parallel.
+    concurrency of lifecycle maintenance, as shards can be processed in parallel. Do not
+    change this value after deployment unless `radosgw-admin lc list` is empty.
   default: 32
   services:
   - rgw
@@ -1282,9 +1283,11 @@ options:
     is, RGW will be able to deal with more concurrent requests at the cost of more
     resource utilization.
   fmt_desc: The size of the thread pool.
-  default: 512
+  default: 128
   services:
   - rgw
+  see_also:
+  - rgw_max_concurrent_requests
   with_legacy: true
 - name: rgw_num_control_oids
   type: int
@@ -2003,34 +2006,17 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_max_concurrent_io
   with_legacy: true
-- name: rgw_gc_max_deferred_entries_size
-  type: uint
-  level: advanced
-  desc: maximum allowed size of deferred entries in queue head for gc
-  default: 3_K
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_gc_max_queue_size
   type: uint
   level: advanced
   desc: Maximum allowed queue size for gc
   long_desc: The maximum allowed size of each gc queue, and its value should not be
-    greater than (osd_max_object_size - rgw_gc_max_deferred_entries_size - 1K).
-  default: 131068_K
+    greater than osd_max_object_size - 1K.
+  default: 131071_K
   services:
   - rgw
   see_also:
   - osd_max_object_size
-  - rgw_gc_max_deferred_entries_size
-  with_legacy: true
-- name: rgw_gc_max_deferred
-  type: uint
-  level: advanced
-  desc: Number of maximum deferred data entries to be stored in queue for gc
-  default: 50
-  services:
-  - rgw
   with_legacy: true
 - name: rgw_s3_success_create_obj_status
   type: int
@@ -2064,6 +2050,40 @@ options:
   default: false
   services:
   - rgw
+  with_legacy: true
+- name: rgw_rest_conn_connect_to_resolved_ips
+  type: bool
+  level: advanced
+  long_desc: When an RGW endpoint hostname resolves to multiple A or AAAA
+    records, libcurl normally connects to only the first address returned by
+    DNS. Enabling this option causes RGW to resolve each configured endpoint
+    into all of its addresses and distribute outgoing requests across them
+    using round-robin, with per-IP health tracking. This applies to
+    multisite replication traffic between zones (via RGWRESTConn). For example, in a
+    multisite deployment where zone endpoints such as "https://zone-a.example.com"
+    map to several backend RGW nodes, this allows inter-zone traffic to be spread
+    across all peers without requiring an external load balancer.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_rest_conn_ip_fail_timeout_secs
+  with_legacy: true
+- name: rgw_rest_conn_ip_fail_timeout_secs
+  desc: IP failure tracking timeout (requires rgw_rest_conn_connect_to_resolved_ips=true)
+  type: uint
+  level: advanced
+  long_desc: When rgw_rest_conn_connect_to_resolved_ips is enabled, RGW tracks
+    per-IP connection failures by remembering the timestamp of the most recent
+    failure. This option controls how long (in seconds) an IP address remains
+    marked as "failed" before RGW considers it eligible for retry.
+    After this timeout expires, the IP will be tried again in the normal
+    round-robin rotation.
+  default: 2
+  services:
+  - rgw
+  see_also:
+  - rgw_rest_conn_connect_to_resolved_ips
   with_legacy: true
 - name: rgw_obj_stripe_size
   type: size
@@ -3867,6 +3887,7 @@ options:
   - rgw
   see_also:
   - rgw_frontends
+  - rgw_thread_pool_size
 - name: rgw_scheduler_type
   type: str
   level: advanced
@@ -4464,6 +4485,16 @@ options:
   desc: This is the interval in seconds for invoking write cache cleaning process
   default: 1000
   services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_localweight_processing_interval
+  type: int
+  level: advanced
+  desc: This is the interval in seconds for invoking local weight writer thread
+  default: 3600
+  services:
   - rgw
   flags:
   - startup

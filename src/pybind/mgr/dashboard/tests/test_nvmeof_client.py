@@ -6,8 +6,8 @@ import pytest
 
 from ..exceptions import DashboardException
 from ..services import nvmeof_client
-from ..services.nvmeof_client import MaxRecursionDepthError, convert_to_model, \
-    handle_nvmeof_error, obj_to_namedtuple, pick
+from ..services.nvmeof_client import MaxRecursionDepthError, NVMeoFClient, \
+    convert_to_model, handle_nvmeof_error, obj_to_namedtuple, pick
 
 
 class TestObjToNamedTuple:
@@ -646,3 +646,53 @@ class TestHandleNvmeofError:
         # Should not raise an exception when status is None (default)
         result = mock_function()
         assert result is not None
+
+
+class TestNVMeoFClientInit:
+
+    _GW1_ADDR = '10.0.0.1:5500'
+    _GW2_ADDR = '10.0.0.2:5500'
+    _GW1_DAEMON = 'nvmeof.nvmeof.mygroup1.node1.aaaaaa'
+    _GW2_DAEMON = 'nvmeof.nvmeof.mygroup1.node2.bbbbbb'
+    _SERVICE_INFO = ('nvmeof.nvmeof.mygroup1', _GW1_ADDR, _GW1_DAEMON)
+    _GATEWAYS_CONFIG = {
+        'gateways': {
+            'nvmeof.nvmeof.mygroup1': [
+                {'service_url': _GW1_ADDR, 'group': 'mygroup1', 'daemon_name': _GW1_DAEMON},
+                {'service_url': _GW2_ADDR, 'group': 'mygroup1', 'daemon_name': _GW2_DAEMON},
+            ]
+        }
+    }
+
+    @pytest.fixture
+    def mock_env(self):
+        with patch('dashboard.services.nvmeof_client.NvmeofGatewaysConfig.get_service_info',
+                   return_value=self._SERVICE_INFO), \
+             patch('dashboard.services.nvmeof_client.NvmeofGatewaysConfig.get_gateways_config',
+                   return_value=self._GATEWAYS_CONFIG), \
+             patch('dashboard.services.nvmeof_client.is_mtls_enabled', return_value=False), \
+             patch('dashboard.services.nvmeof_client.grpc') as mock_grpc, \
+             patch('dashboard.services.nvmeof_client.pb2_grpc'):
+            mock_grpc.insecure_channel.return_value = MagicMock()
+            yield
+
+    def test_client_without_server_address(self, mock_env):
+        # pylint: disable=unused-argument
+        client = NVMeoFClient()
+        assert client.daemon_name == self._GW1_DAEMON
+        assert client.gateway_addr == self._GW1_ADDR
+
+    def test_client_server_address_matched_gateway(self, mock_env):
+        # pylint: disable=unused-argument
+        client = NVMeoFClient(server_address='10.0.0.2')
+        assert client.daemon_name == self._GW2_DAEMON
+        assert client.gateway_addr == self._GW2_ADDR
+        client2 = NVMeoFClient(server_address='10.0.0.1')
+        assert client2.daemon_name == self._GW1_DAEMON
+        assert client2.gateway_addr == self._GW1_ADDR
+
+    def test_client_server_address_not_found_raises(self, mock_env):
+        # pylint: disable=unused-argument
+        with pytest.raises(DashboardException) as exc_info:
+            NVMeoFClient(server_address='10.0.0.99')
+        assert exc_info.value.code == 'server_address_not_found'

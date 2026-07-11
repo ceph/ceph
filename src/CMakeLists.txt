@@ -446,6 +446,8 @@ else()
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
+  get_target_property(FMT_VERSION fmt VERSION)
+  set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
@@ -473,6 +475,11 @@ if(WITH_CRIMSON)
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
   set(Seastar_IO_URING ${HAVE_LIBURING} CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
+  if(WITH_ASAN)
+    set(Seastar_SANITIZE "ON" CACHE STRING "" FORCE)
+  else()
+    set(Seastar_SANITIZE "OFF" CACHE STRING "" FORCE)
+  endif()
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
     if(NOT DPDK_FOUND)
@@ -502,7 +509,7 @@ if(WITH_CRIMSON)
   target_compile_options(seastar
   PUBLIC
     # required by any target that links to seastar
-    "-Wno-non-virtual-dtor"
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>"
   PRIVATE
     "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
@@ -510,6 +517,11 @@ if(WITH_CRIMSON)
     "-Wno-attributes"
     "-Wno-pessimizing-move"
     "-Wno-address-of-packed-member")
+  if(WITH_ASAN)
+    # As built here (RelWithDebInfo) seastar keeps its own allocator, which
+    # ASan calls via dlsym before init, crashing every test before main().
+    target_compile_definitions(seastar PUBLIC SEASTAR_DEFAULT_ALLOCATOR)
+  endif()
   add_subdirectory(crimson)
   add_dependencies(crimson-osd erasure_code)
 endif()
@@ -1023,10 +1035,12 @@ option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" 
 
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
-  # Find Protobuf installation
-  # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
-  option(protobuf_MODULE_COMPATIBLE TRUE)
-  find_package(Protobuf REQUIRED)
+  # Prefer config mode so gRPC sees protobuf's full target set
+  # (incl. upb); fall back to module mode.
+  find_package(Protobuf CONFIG)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+  endif()
 
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)

@@ -253,6 +253,7 @@ void EventCenter::set_owner()
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   ceph_assert(in_thread());
+  ceph_assert(fd >= 0);
   int r = 0;
   if (fd >= nevent) {
     int new_size = nevent << 2;

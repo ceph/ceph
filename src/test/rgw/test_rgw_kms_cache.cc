@@ -60,12 +60,6 @@ class TestKMSCacheReaperLifecycle : public ::testing::Test,
       : rgw::kms::KMSCache(g_ceph_context, std::make_unique<FakeKeyring>()) {};
 };
 
-static void rethrow(const std::exception_ptr& eptr) {
-  if (eptr) {
-    std::rethrow_exception(eptr);
-  }
-}
-
 TEST_F(TestKMSCacheReaperLifecycle, Threaded) {
   initialize_ttl_reaper(std::nullopt);
   EXPECT_TRUE(reaper_initialized());

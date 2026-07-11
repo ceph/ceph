@@ -373,12 +373,21 @@ class CephadmService(metaclass=ABCMeta):
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host, label=label)
         return tls_creds
 
+    def _get_certificates_from_spec_ssl_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        feature: Optional[str] = None
+    ) -> TLSCredentials:
+        return EMPTY_TLS_CREDENTIALS
+
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
                          fqdns: List[str] = [],
                          custom_sans: List[str] = [],
-                         ca_cert_required: bool = False
+                         ca_cert_required: bool = False,
+                         feature: Optional[str] = None
                          ) -> TLSCredentials:
 
         svc_spec = cast(ServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
@@ -398,6 +407,7 @@ class CephadmService(metaclass=ABCMeta):
             ips=ips,
             fqdns=fqdns,
             custom_sans=custom_sans,
+            feature=feature,
         )
 
     def get_certificates_generic(
@@ -414,6 +424,7 @@ class CephadmService(metaclass=ABCMeta):
         custom_sans: Optional[List[str]] = None,
         ips: Optional[List[str]] = None,
         fqdns: Optional[List[str]] = None,
+        feature: Optional[str] = None,
     ) -> TLSCredentials:
 
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
@@ -423,7 +434,9 @@ class CephadmService(metaclass=ABCMeta):
         cert_source = getattr(svc_spec, cert_source_attr, None)
         logger.debug(f'Getting certificate for {svc_spec.service_name()} using source: {cert_source}')
 
-        if cert_source == CertificateSource.INLINE.value:
+        if feature is not None:
+            return self._get_certificates_from_spec_ssl_certificates(svc_spec, daemon_spec, feature)
+        elif cert_source == CertificateSource.INLINE.value:
             return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name, ca_cert_attr, ca_cert_name)
         elif cert_source == CertificateSource.REFERENCE.value:
             return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
@@ -956,13 +969,14 @@ class CephadmService(metaclass=ABCMeta):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
         if curr_deps == last_deps:
-            return scheduled_action
+            return utils.NextDaemonStep(scheduled_action)
         sym_diff = set(curr_deps).symmetric_difference(last_deps)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -971,7 +985,7 @@ class CephadmService(metaclass=ABCMeta):
             curr_deps,
             sym_diff,
         )
-        return utils.Action.RECONFIG
+        return utils.NextDaemonStep(utils.Action.RECONFIG)
 
 
 class CephService(CephadmService):
@@ -1218,6 +1232,30 @@ class MgrService(CephService):
             # are not a concern.
             return True
 
+    @staticmethod
+    def _get_mgr_service_ports(mgr: "CephadmOrchestrator") -> List[int]:
+        """Return the list of ports from the mgr map services."""
+        ports: List[int] = []
+        mgr_map = mgr.get('mgr_map')
+        for end_point in mgr_map.get('services', {}).values():
+            port = re.search(r'\:(\d+)\/', end_point)
+            if port:
+                ports.append(int(port.group(1)))
+        return ports
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        return sorted(
+            [f'port:{p}' for p in cls._get_mgr_service_ports(mgr)]
+            + [f'sd_port:{mgr.service_discovery_port}']
+        )
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        config, _ = super().generate_config(daemon_spec)
+        return config, self.get_dependencies(self.mgr)
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
@@ -1237,17 +1275,7 @@ class MgrService(CephService):
         # user has decided to use different dashboard ports in each server
         # If this is the case then the dashboard port opened will be only the used
         # as default.
-        ports = []
-        ret, mgr_services, err = self.mgr.check_mon_command({
-            'prefix': 'mgr services',
-        })
-        if mgr_services:
-            mgr_endpoints = json.loads(mgr_services)
-            for end_point in mgr_endpoints.values():
-                port = re.search(r'\:\d+\/', end_point)
-                if port:
-                    ports.append(int(port[0][1:-1]))
-
+        ports = self._get_mgr_service_ports(self.mgr)
         # Always replace ports (do not append onto a list rehydrated from the
         # persisted host cache). When ``mgr services`` is empty, ``ports`` is
         # empty and we must not retain old entries + append service discovery
@@ -1540,7 +1568,7 @@ class RgwService(CephService):
         if spec.ssl:
             san_list = spec.zonegroup_hostnames or []
             custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-            tls_creds = self.get_certificates(daemon_spec, custom_sans)
+            tls_creds = self.get_certificates(daemon_spec, custom_sans=custom_sans)
             pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
@@ -1710,6 +1738,11 @@ class RgwService(CephService):
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
+        """
+        SMB and NFS services embed librgw. If the RGW service capabilities are
+        updated, verify whether the same changes are required for these
+        services as well.
+        """
         keyring = self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
                                              ['mon', 'allow *',
                                               'mgr', 'allow rw',
@@ -1970,7 +2003,8 @@ class CephExporterService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
@@ -2084,7 +2118,7 @@ def next_action_for_mgmt_stack_service(
     spec: Optional[ServiceSpec],
     curr_deps: List[str],
     last_deps: List[str],
-) -> utils.Action:
+) -> utils.NextDaemonStep:
     """This function exists to help refactor existing code to use
     choose_next_action instead of if-blocks inside serve.py.
     It avoids the need to muck around with common base classes at the
@@ -2092,7 +2126,7 @@ def next_action_for_mgmt_stack_service(
     Call this from choose_next_action.
     """
     if curr_deps == last_deps:
-        return scheduled_action
+        return utils.NextDaemonStep(scheduled_action)
     sym_diff = set(curr_deps).symmetric_difference(last_deps)
     logger.info(
         'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -2123,4 +2157,4 @@ def next_action_for_mgmt_stack_service(
     # If so we ought to be able to vastly simplify this...
     if any(svc in e for e in sym_diff for svc in REDEPLOY_TRIGGERS):
         action = utils.Action.REDEPLOY
-    return action
+    return utils.NextDaemonStep(action)

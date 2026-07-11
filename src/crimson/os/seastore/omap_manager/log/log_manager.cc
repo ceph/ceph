@@ -70,7 +70,7 @@ LogManager::omap_set_keys(
   auto resync_node = [&](LogNodeRef e)
     -> log_load_extent_iertr::future<CachedExtentRef> {
     CachedExtentRef node;
-    Transaction::get_extent_ret ret;
+    [[maybe_unused]] Transaction::get_extent_ret ret;
     // To find mutable extent in the same transaction
     ret = t.get_extent(e->get_paddr(), &node);
     assert(ret == Transaction::get_extent_ret::PRESENT);

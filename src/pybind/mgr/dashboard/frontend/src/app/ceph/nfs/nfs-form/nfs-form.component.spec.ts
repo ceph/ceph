@@ -222,8 +222,8 @@ describe('NfsFormComponent', () => {
 
   describe('pathExistence', () => {
     beforeEach(() => {
-      component['nfsService']['lsDir'] = jest.fn(
-        (): Observable<Directory> => of({ paths: ['/path1'] })
+      component['nfsService']['lsDir'] = jest.fn((): Observable<Directory> =>
+        of({ paths: ['/path1'] })
       );
       component.nfsForm.get('name').setValue('CEPH');
       component.setPathValidation();

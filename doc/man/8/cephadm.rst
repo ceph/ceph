@@ -13,8 +13,8 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images,update-osd-service}
-|             ...
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,deploy-file,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|               ...
 
 
 | **cephadm** **pull**
@@ -90,7 +90,18 @@ Synopsis
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
+| **cephadm** **remove-file** [-h] [--fsid FSID] --path PATH
+
+| **cephadm** **deploy-file** [-h] [--fsid FSID] --path PATH [--mode MODE]
+|                          [--uid UID] [--gid GID]
+
 | **cephadm** **prepare-host**
+
+| **cephadm** **prepare-host-sudo-hardening** [-h] [--ssh-user SSH_USER]
+|                                          [--ssh-pub-key SSH_PUB_KEY]
+|                                          [--cephadm-version VERSION]
+
+| **cephadm** **setup-ssh-user** [-h] --ssh-user SSH_USER --ssh-pub-key SSH_PUB_KEY
 
 | **cephadm** **add-repo** [-h] [--release RELEASE] [--version VERSION]
 |                          [--dev DEV] [--dev-commit DEV_COMMIT]
@@ -289,6 +300,32 @@ Arguments:
 * [--expect-hostname EXPECT_HOSTNAME] Check that hostname matches an expected value
 
 
+remove-file
+-----------
+
+Remove a regular file on the local host. Missing paths are ignored.
+
+Arguments:
+
+* [--fsid FSID]   cluster FSID
+* --path PATH     absolute path of the file to remove (required)
+
+
+deploy-file
+-----------
+
+Write or replace a file on the local host. The **entire file body** is read from
+**standard input** as raw bytes (no encoding or line-ending translation).
+
+Arguments:
+
+* [--fsid FSID]   cluster FSID
+* --path PATH     absolute destination path for the file (required)
+* [--mode MODE]   octal file mode (for example ``644`` or ``0644``)
+* [--uid UID]    numeric owner user id (**must** be given together with ``--gid``)
+* [--gid GID]    numeric owner group id (**must** be given together with ``--uid``)
+
+
 deploy
 ------
 
@@ -418,6 +455,49 @@ prepare a host for cephadm use
 Arguments:
 
 * [--expect-hostname EXPECT_HOSTNAME] Set hostname
+
+
+prepare-host-sudo-hardening
+---------------------------
+
+Prepare a host for sudo hardening by authorizing SSH keys, installing/upgrading
+the cephadm package, and setting up restricted sudoers permissions::
+
+    cephadm prepare-host-sudo-hardening --ssh-user cephadm --ssh-pub-key <key>
+
+This command performs the following steps:
+
+1. Authorizes the provided SSH public key for the specified user
+2. Installs or upgrades the cephadm package to match the cluster version (includes cephadm_invoker.py)
+3. Sets up sudoers with restricted permissions for cephadm_invoker.py
+
+Arguments:
+
+* [--ssh-user SSH_USER]       SSH user for key authorization (default: root)
+* [--ssh-pub-key SSH_PUB_KEY] SSH public key to authorize
+* [--cephadm-version VERSION] Specific cephadm version to install
+
+
+setup-ssh-user
+--------------
+
+Setup SSH user with passwordless sudo and SSH key authorization::
+
+    cephadm setup-ssh-user --ssh-user cephadm --ssh-pub-key <public_key>
+
+This command configures an SSH user for cephadm operations by:
+
+1. Validating that the user exists on the system
+2. Setting up passwordless sudo for the user (skipped for root)
+3. Authorizing the SSH public key for the user
+
+This command is automatically called by ``ceph cephadm set-user`` to configure
+SSH users across all cluster hosts.
+
+Arguments:
+
+* [--ssh-user SSH_USER]       SSH user to setup (required)
+* [--ssh-pub-key SSH_PUB_KEY] SSH public key to add to user's authorized_keys (required)
 
 
 pull

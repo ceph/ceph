@@ -2760,7 +2760,7 @@ int OSD::asok_route_to_pg(
   } catch (const TOPNSPC::common::bad_cmd_get& e) {
     (*target_pg)->unlock();
     ss << e.what();
-    on_finish(ret, ss.str(), outbl);
+    on_finish(-EINVAL, ss.str(), outbl);
     return -EINVAL;
   }
 }

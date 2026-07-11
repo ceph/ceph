@@ -7,6 +7,7 @@
 #include <memory>
 #include <string.h>
 
+#include <fmt/ostream.h>
 
 #include "include/buffer.h"
 
@@ -23,6 +24,16 @@
 namespace crimson::os::seastore {
 class LogicalChildNode;
 }
+
+namespace crimson::os::seastore::lba {
+struct LBALeafNode;
+}
+
+// declared ahead of the struct so the consteval {fmt} check sees it from
+// LBALeafNode's own inline logging methods.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
+#endif
 
 namespace crimson::os::seastore::lba {
 
@@ -141,12 +152,31 @@ struct LBALeafNode
 
   void update(
     internal_const_iterator_t iter,
-    lba_map_val_t val) final;
+    lba_map_val_t val,
+    modification_t mod) final;
 
   internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     laddr_t addr,
     lba_map_val_t val) final;
+
+  void replace(
+    internal_const_iterator_t iter,
+    laddr_t pivot,
+    lba_map_val_t val) {
+    LOG_PREFIX(FixedKVInternalNode::replace);
+    SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}",
+      this->pending_for_transaction,
+      iter.get_offset(),
+      iter.get_key(),
+      pivot);
+    this->on_modify();
+    return this->journal_replace(
+      iter,
+      pivot,
+      std::move(val),
+      maybe_get_delta_buffer());
+  }
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
@@ -470,6 +500,5 @@ using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBACursor> : fmt::ostream_formatter {};
 #endif

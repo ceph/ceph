@@ -2958,6 +2958,10 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
       ldpp_dout(s, 10) << "bad part number: " << multipart_part_str << ": " << err << dendl;
       return -EINVAL;
     }
+    if (multipart_part_num < 1 || multipart_part_num > 10000) {
+      ldpp_dout(s, 10) << "part number out of range: " << multipart_part_num << dendl;
+      return -EINVAL;
+    }
   } else if (!multipart_upload_id.empty()) {
     ldpp_dout(s, 10) << "part number with no multipart upload id" << dendl;
     return -EINVAL;
@@ -3117,8 +3121,27 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
                                    &block_crypt, &crypt_http_responses, copy_source,
                                    multipart_part_num);
-      if (res == 0 && block_crypt != nullptr)
+      if (res == 0 && block_crypt != nullptr) {
+        /*
+         * AEAD UploadPart: fold fresh per-UploadPart entropy into the part key so
+         * re-uploading the same part can't reuse (key, IV). Refuse the upload if
+         * the backend can't persist per-part salts rather than silently falling
+         * back to a deterministic part key.
+         */
+        if (is_aead_mode(get_str_attribute(obj->get_attrs(), RGW_ATTR_CRYPT_MODE))) {
+          if (!upload->supports_crypt_part_salts()) {
+            ldpp_dout(this, 0) << "ERROR: AEAD multipart upload requires a supported backend" << dendl;
+            return -ERR_NOT_IMPLEMENTED;
+          }
+          std::string part_salt(AES_256_GCM_PART_SALT_SIZE, '\0');
+          s->cct->random()->get_bytes(part_salt.data(), part_salt.size());
+          block_crypt->set_part_number(multipart_part_num, part_salt);
+          // string_view selects the raw-bytes set_attr overload, not the local
+          // length-prefixing one; the writer reads it back via to_str().
+          set_attr(this->attrs, RGW_ATTR_CRYPT_PART_SALT, std::string_view(part_salt));
+        }
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
+      }
     }
     /* it is ok, to not have encryption at all */
   }

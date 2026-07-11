@@ -5981,28 +5981,32 @@ int OSDMap::calc_pg_upmaps(
     ceph_assert(!(to_unmap.size() || to_upmap.size()));
     ldout(cct, 10) << " failed to find any changes for overfull osds"
                    << dendl;
-    for (auto& [deviation, osd] : deviation_osd) {
-      if (std::find(underfull.begin(), underfull.end(), osd) ==
-                    underfull.end())
-        break;
-      float target = osd_weight[osd] * pgs_per_weight;
-      ceph_assert(target > 0);
-      if (fabsf(deviation) < max_deviation) {
-        // respect max_deviation too
-        ldout(cct, 10) << " osd." << osd
-                       << " target " << target
-                       << " deviation " << deviation
-                       << " -> absolute " << fabsf(deviation)
-                       << " < max " << max_deviation
-                       << dendl;
-        break;
-      }
-      // look for remaps we can un-remap
-      candidates_t candidates = build_candidates(cct, tmp_osd_map, to_skip,
-      						 only_pools, aggressive, p_seed);
-      if (try_drop_remap_underfull(cct, candidates, osd, temp_pgs_by_osd,
-          to_unmap, to_upmap)) {
-	goto test_change;
+    {
+      const auto candidates_by_osd = build_candidates_by_osd(
+        cct, tmp_osd_map, to_skip, only_pools, aggressive, p_seed);
+      for (auto& [deviation, osd] : deviation_osd) {
+        if (std::find(underfull.begin(), underfull.end(), osd) ==
+                      underfull.end())
+          break;
+        float target = osd_weight[osd] * pgs_per_weight;
+        ceph_assert(target > 0);
+        if (fabsf(deviation) < max_deviation) {
+          // respect max_deviation too
+          ldout(cct, 10) << " osd." << osd
+                         << " target " << target
+                         << " deviation " << deviation
+                         << " -> absolute " << fabsf(deviation)
+                         << " < max " << max_deviation
+                         << dendl;
+          break;
+        }
+        // look for remaps we can un-remap
+        auto candidates = candidates_by_osd.find(osd);
+        if (candidates != candidates_by_osd.end() &&
+            try_drop_remap_underfull(cct, candidates->second, osd,
+                                     temp_pgs_by_osd, to_unmap, to_upmap)) {
+	  goto test_change;
+        }
       }
     }
 
@@ -6193,7 +6197,7 @@ float OSDMap::build_pool_pgs_info (
     }
     total_pgs += pdata.get_size() * pdata.get_pg_num();
 
-    osds_weight_total = get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
+    osds_weight_total += get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
   }
   for (auto& [oid, oweight] : osds_weight) {
     int pgs = 0;
@@ -6527,7 +6531,7 @@ int OSDMap::find_best_remap (
   return best_pos;
 }
 
-OSDMap::candidates_t OSDMap::build_candidates(
+OSDMap::candidates_by_osd_t OSDMap::build_candidates_by_osd(
   CephContext *cct,
   const OSDMap& tmp_osd_map,
   const set<pg_t> to_skip,
@@ -6551,7 +6555,13 @@ OSDMap::candidates_t OSDMap::build_candidates(
     // shuffle candidates so they all get equal (in)attention
     std::shuffle(candidates.begin(), candidates.end(), get_random_engine(cct, p_seed));
   }
-  return candidates;
+  candidates_by_osd_t candidates_by_osd;
+  for (auto& candidate : candidates) {
+    for (auto& mapping : candidate.second) {
+      candidates_by_osd[mapping.first].push_back(candidate);
+    }
+  }
+  return candidates_by_osd;
 }
 
 // return -1 if all PGs are OK, else the first PG which includes only zero PA OSDs
@@ -7800,7 +7810,7 @@ void OSDMap::check_health(CephContext *cct,
     }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH nodes/device-classes have one or more of these flags set: NOUP, NODOWN, NOIN, NOOUT";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str(), detail.size());
       d.detail.swap(detail);
     }

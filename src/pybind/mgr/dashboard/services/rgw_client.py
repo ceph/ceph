@@ -1020,19 +1020,31 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
-    def list_roles(self) -> List[Dict[str, Any]]:
+    def list_roles(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
         rgw_list_roles_command = ['role', 'list']
+        if account_id:
+            rgw_list_roles_command += ['--account-id', account_id]
         code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
-        if code < 0:
+        if code != 0:
             logger.warning('Error listing roles with code %d: %s', code, err)
             return []
 
+        if isinstance(roles, dict):
+            roles = roles.get('Roles', [])
+
+        result = []
         for role in roles:
+            if isinstance(role, dict) and 'member' in role:
+                role = role['member']
+            if not isinstance(role, dict):
+                continue
             if 'PermissionPolicies' not in role:
                 role['PermissionPolicies'] = []
-        return roles
+            result.append(role)
+        return result
 
-    def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str) -> None:
+    def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str,
+                    account_id: Optional[str] = None) -> None:
         try:
             json.loads(role_assume_policy_doc)
         except:  # noqa: E722
@@ -1065,6 +1077,8 @@ class RgwClient(RestClient):
         rgw_create_role_command = ['role', 'create', '--role-name', role_name, '--path', role_path]
         if role_assume_policy_doc:
             rgw_create_role_command += ['--assume-role-policy-doc', f"{role_assume_policy_doc}"]
+        if account_id:
+            rgw_create_role_command += ['--account-id', account_id]
 
         code, _roles, _err = mgr.send_rgwadmin_command(rgw_create_role_command,
                                                        stdout_as_json=False)
@@ -1084,25 +1098,34 @@ class RgwClient(RestClient):
                                      component='rgw')
         return lifecycle_progress
 
-    def get_role(self, role_name: str):
+    def get_role(self, role_name: str, account_id: Optional[str] = None):
         rgw_get_role_command = ['role', 'get', '--role-name', role_name]
+        if account_id:
+            rgw_get_role_command += ['--account-id', account_id]
         code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
         if code != 0:
             raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
                                      component='rgw')
+        if isinstance(role, dict) and 'role' in role:
+            role = role['role']
         return role
 
-    def update_role(self, role_name: str, max_session_duration: str):
+    def update_role(self, role_name: str, max_session_duration: str,
+                    account_id: Optional[str] = None):
         rgw_update_role_command = ['role', 'update', '--role-name',
                                    role_name, '--max_session_duration', max_session_duration]
+        if account_id:
+            rgw_update_role_command += ['--account-id', account_id]
         code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
                                                   stdout_as_json=False)
         if code != 0:
             raise DashboardException(msg=f'Error updating role with code {code}: {_err}',
                                      component='rgw')
 
-    def delete_role(self, role_name: str) -> None:
+    def delete_role(self, role_name: str, account_id: Optional[str] = None) -> None:
         rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
+        if account_id:
+            rgw_delete_role_command += ['--account-id', account_id]
         code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
                                                   stdout_as_json=False)
         if code != 0:
@@ -2734,10 +2757,11 @@ class RgwMultisite:
 
     def get_user_list(self, zoneName=None, realmName=None):
         user_list = []
+        rgw_user_list_cmd = ['user', 'list']
         if zoneName:
-            rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
+            rgw_user_list_cmd.extend(['--rgw-zone', zoneName])
         if realmName:
-            rgw_user_list_cmd = ['user', 'list', '--rgw-realm', realmName]
+            rgw_user_list_cmd.extend(['--rgw-realm', realmName])
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_list_cmd)
             if exit_code > 0:

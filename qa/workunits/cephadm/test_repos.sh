@@ -38,7 +38,7 @@ sudo $CEPHADM -v add-repo --dev main
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
-sudo $CEPHADM -v add-repo --release 17.2.6
+sudo $CEPHADM -v add-repo --release 17.2.7
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 

@@ -58,6 +58,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_account_default_quota_max_objects
 .. confval:: rgw_account_default_quota_max_size
 .. confval:: rgw_verify_ssl
+.. confval:: rgw_rest_conn_connect_to_resolved_ips
+.. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
 .. confval:: rgw_multi_obj_del_max_aio
 

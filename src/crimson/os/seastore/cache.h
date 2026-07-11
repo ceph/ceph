@@ -1731,6 +1731,9 @@ private:
   }
 
   ExtentPlacementManager& epm;
+  // when delta-based overwrite is enabled, RANDOM_BLOCK data extents may be
+  // mutated in place, leaving their LBA-leaf crc stale; see _read_extent().
+  const bool delta_based_overwrite_enabled;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
 
@@ -2062,14 +2065,26 @@ void stage_visibility_handoff(Transaction& t,
               offset, length, *extent);
 
             if (pin_crc != CRC_NULL) {
-              SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} veryfing integrity -- {}",
-                offset, length, *extent);
-              // We must check the integrity here prior to complete_io.
-              // Previously, concurrent transaction could have checked
-              // crc of non matching extent data.
-              // See: https://tracker.ceph.com/issues/73790
-              assert(extent->is_fully_loaded());
-              check_full_extent_integrity(extent->last_committed_crc, pin_crc);
+              // a RANDOM_BLOCK data extent that delta-based overwrite may have
+              // mutated in place has a stale LBA-leaf crc: its content and its
+              // leaf crc are updated through separate, non-atomic paths, so a
+              // cold read can see the new content against the old leaf crc.
+              // such extents are verified via the delta chain instead (see
+              // replay_delta()), so skip the leaf-crc check for them.
+              bool inplace_delta_overwrite =
+                delta_based_overwrite_enabled &&
+                extent->get_paddr().is_absolute_random_block() &&
+                can_inplace_rewrite(extent->get_type());
+              if (!inplace_delta_overwrite) {
+                SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} verifying integrity -- {}",
+                  offset, length, *extent);
+                // We must check the integrity here prior to complete_io.
+                // Previously, concurrent transaction could have checked
+                // crc of non matching extent data.
+                // See: https://tracker.ceph.com/issues/73790
+                assert(extent->is_fully_loaded());
+                check_full_extent_integrity(extent->last_committed_crc, pin_crc);
+              }
             }
           } else {
             extent->last_committed_crc = CRC_NULL;

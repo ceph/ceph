@@ -230,6 +230,13 @@ from cephadmlib.listing_updaters import (
 )
 from cephadmlib.container_lookup import infer_local_ceph_image, identify
 from ceph.cephadm.d3n_types import D3NCache, D3NCacheError
+from cephadmlib.user_utils import (
+    setup_ssh_user,
+    validate_user_exists,
+    setup_sudoers_restricted,
+    install_or_upgrade_cephadm
+)
+
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -1168,12 +1175,16 @@ def deploy_daemon(
             cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
+                # Disable automatic systemd enable for NFS and keepalived; the mgr
+                # starts them when appropriate (see cephadm serve / DISABLED_SERVICES).
+                enable_daemon = daemon_type not in ('nfs', 'keepalived')
                 deploy_daemon_units(
                     ctx,
                     ident,
                     uid,
                     gid,
                     c,
+                    enable=enable_daemon,
                     osd_fsid=osd_fsid,
                     endpoints=endpoints,
                     init_containers=init_containers,
@@ -1182,6 +1193,19 @@ def deploy_daemon(
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
+    else:
+        # On reconfig, update unit.meta so that port metadata
+        # stays current without requiring a full redeploy.
+        meta_path = os.path.join(data_dir, 'unit.meta')
+        ports = [e.port for e in endpoints] if endpoints else []
+        try:
+            update_meta_file(meta_path, {'ports': ports})
+        except FileNotFoundError:
+            logger.warning(f'unit.meta not found at {meta_path}, skipping port update')
+        except Exception as e:
+            logger.warning(
+                f'failed to update unit.meta at {meta_path}, skipping port update: {e}'
+            )
 
     if not os.path.exists(data_dir + '/unit.created'):
         with write_new(data_dir + '/unit.created', owner=(uid, gid)) as f:
@@ -1202,10 +1226,15 @@ def deploy_daemon(
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
     if deployment_type == DeploymentType.RECONFIG and daemon_type not in ceph_daemons():
-        # ceph daemons do not need a restart; others (presumably) do to pick
-        # up the new config
-        call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
-        call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        if not ctx.skip_restart_for_reconfig:
+            # ceph daemons do not need a restart; others (presumably) do to pick
+            # up the new config
+            call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
+            call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        elif ctx.send_signal_to_daemon:
+            ctx.signal_name = ctx.send_signal_to_daemon
+            ctx.signal_number = None
+            command_signal(ctx)
 
 
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
@@ -1312,7 +1341,11 @@ def deploy_daemon_units(
         DaemonSubIdentity.must(sc.identity) for sc in sidecars or []
     ]
     systemd_unit.update_files(
-        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids
+        ctx,
+        ident,
+        init_container_ids=ic_ids,
+        sidecar_ids=sc_ids,
+        success_exit_status=container.success_exit_status,
     )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
@@ -2423,8 +2456,7 @@ def prepare_ssh(
     cli: Callable, wait_for_mgr_restart: Callable
 ) -> None:
 
-    cli(['cephadm', 'set-user', ctx.ssh_user])
-
+    # SSH identity must be in the mgr before set-user
     if ctx.ssh_config:
         logger.info('Using provided ssh config...')
         mounts = {
@@ -2458,6 +2490,8 @@ def prepare_ssh(
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
         authorize_ssh_key(ssh_pub, ctx.ssh_user)
+
+    cli(['cephadm', 'set-user', ctx.ssh_user])
 
     host = get_hostname()
     logger.info('Adding host %s...' % host)
@@ -4446,6 +4480,10 @@ def command_check_host(ctx: CephadmContext) -> None:
 ##################################
 
 
+def command_check_online(ctx: CephadmContext) -> int:
+    return 0
+
+
 def command_prepare_host(ctx: CephadmContext) -> None:
     logger.info('Verifying podman|docker is present...')
     pkg = None
@@ -4631,6 +4669,75 @@ def command_gather_facts(ctx: CephadmContext) -> None:
     print(host.dump())
 
 
+def command_remove_file(ctx: CephadmContext) -> int:
+    """Remove a regular file on the host
+    """
+    norm = Path(os.path.normpath(str(Path(ctx.remove_file_path).expanduser())))
+
+    if not norm.is_absolute():
+        raise Error(f'Can not remove non-absolute path: {norm}')
+    try:
+        if not norm.exists():
+            return 0
+        # Refuse symlinks explicitly because is_file() follows them
+        if norm.is_symlink() or not norm.is_file():
+            raise Error(f'Can not remove non-regular file: {norm}')
+
+        norm.unlink()
+
+    except FileNotFoundError:
+        return 0
+    except OSError as e:
+        raise Error(f'failed to remove {norm}: {e}')
+    return 0
+
+
+@infer_fsid
+def command_deploy_file(ctx: CephadmContext) -> int:
+    """Write or replace a host file from raw stdin bytes (for mgr-driven config sync)."""
+    dest = Path(ctx.deploy_file_path).expanduser()
+    if not dest.is_absolute():
+        raise Error(f'deploy-file: destination must be an absolute path: {dest}')
+
+    uid = ctx.deploy_file_uid
+    gid = ctx.deploy_file_gid
+    if (uid is None) != (gid is None):
+        raise Error('deploy-file: --uid and --gid must be given together')
+
+    owner = (uid, gid) if uid is not None and gid is not None else None
+    perms = None
+    if ctx.deploy_file_mode is not None:
+        perms = int(str(ctx.deploy_file_mode), 8)
+
+    dest.parent.mkdir(parents=True, mode=0o755, exist_ok=True)
+    try:
+        with write_new(dest, owner=owner, perms=perms, binary=True) as fh:
+            fh.write(sys.stdin.buffer.read())
+    except Exception as e:
+        logger.exception('deploy-file: Failed to write file, exception: %s', e)
+        raise
+    return 0
+
+
+def command_sysctl_dir(ctx: CephadmContext) -> int:
+    """List basenames under sysctl.d or run sysctl --system"""
+    action = ctx.sysctl_dir_action
+    sysctl_dir = Path(SYSCTL_DIR)
+    if action == 'list':
+        if not sysctl_dir.is_dir():
+            raise Error(f'Not a directory: {SYSCTL_DIR}')
+        for name in sorted(p.name for p in sysctl_dir.iterdir()):
+            print(name)
+        return 0
+    if action == 'apply_system':
+        _out, _err, code = call(
+            ctx, ['sysctl', '--system'], verbosity=CallVerbosity.DEBUG)
+        if code:
+            raise Error(f'sysctl --system failed with code {code}: {_err}')
+        return 0
+    raise Error('sysctl-dir: no action specified')
+
+
 ##################################
 
 
@@ -4802,6 +4909,76 @@ def command_cluster_status(ctx: CephadmContext) -> int:
     return result
 
 
+def command_setup_ssh_user(ctx: CephadmContext) -> int:
+    """
+    Setup SSH user on the local host by configuring passwordless sudo and
+    copying SSH public key to user's authorized_keys.
+    """
+    if not ctx.ssh_user:
+        raise Error('--ssh-user is required')
+    if not ctx.ssh_pub_key:
+        raise Error('--ssh-pub-key is required')
+
+    setup_ssh_user(ctx, ctx.ssh_user, ctx.ssh_pub_key)
+    return 0
+
+##################################
+
+
+def command_prepare_host_sudo_hardening(ctx: CephadmContext) -> int:
+    """
+    Prepare host for sudo hardening by:
+    1. Authorizing SSH public key for the user
+    2. Installing/upgrading cephadm package to match cluster version (includes cephadm_invoker.py)
+    3. Setting up sudoers with restricted permissions for cephadm_invoker.py
+    """
+    logger.info('Preparing host for sudo hardening...')
+
+    user = ctx.ssh_user if hasattr(ctx, 'ssh_user') and ctx.ssh_user else 'root'
+    ssh_pub_key = ctx.ssh_pub_key if hasattr(ctx, 'ssh_pub_key') else None
+    cephadm_version = ctx.cephadm_version if hasattr(ctx, 'cephadm_version') else None
+
+    has_failures = False
+    if not validate_user_exists(user):
+        logger.error('User %s does not exists on this host.', user)
+        return 1
+    # Step 1: Authorize SSH public key for the user
+    if ssh_pub_key:
+        try:
+            logger.debug('Authorizing SSH key for user %s', user)
+            authorize_ssh_key(ssh_pub_key, user)
+        except Exception as e:
+            logger.exception('Failed to authorize SSH key for %s. err: %s', user, e)
+            has_failures = True
+    else:
+        logger.warning('SSH key authorization skipped (no key provided)')
+
+    # Step 2: Install/upgrade the cephadm package (includes cephadm_invoker.py)
+    success, message = install_or_upgrade_cephadm(ctx, cephadm_version)
+    if success:
+        logger.debug('Installed the cephadm package: %s', message)
+    else:
+        logger.error('Failed to install the cephadm package: %s', message)
+        has_failures = True
+
+    # Step 3: Setup sudoers with restricted permissions for cephadm_invoker.py
+    if user and user != 'root':
+        try:
+            setup_sudoers_restricted(ctx, user, '/usr/libexec/cephadm_invoker.py')
+            logger.debug('Sudoers configured for %s (restricted to cephadm_nvoker.py)', user)
+        except Exception as e:
+            logger.exception('Failed to setup sudoers for %s. err: %s', user, e)
+            has_failures = True
+    else:
+        logger.debug('Sudoers setup skipped (root user)')
+
+    logger.info('Successfully prepared host for sudo hardening')
+
+    # Raise error if any step failed
+    if has_failures:
+        raise Error('Failed to prepare host for sudo hardening')
+    return 0
+
 ##################################
 
 
@@ -4896,6 +5073,18 @@ def _add_deploy_parser_args(
         default=None,
         help='Time in seconds to wait for graceful service shutdown before forcefully killing it'
     )
+    parser_deploy.add_argument(
+        '--skip-restart-for-reconfig',
+        action='store_true',
+        default=False,
+        help='skip restart for non ceph daemons and perform default action'
+    )
+    parser_deploy.add_argument(
+        '--send-signal-to-daemon',
+        type=str,
+        default=None,
+        help='Send signal to daemon'
+    )
 
 
 def _name_opts(parser: argparse.ArgumentParser) -> None:
@@ -4979,6 +5168,11 @@ def _get_parser():
         action='store_true',
         default=False,
         help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
+    parser.add_argument(
+        '--logging-level',
+        choices=['info', 'debug', 'error', 'warning'],
+        default='debug',
+        help='Tunable log level for cephadm binary: info, debug, error, warning (default: debug)')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -5023,6 +5217,18 @@ def _get_parser():
 
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')
+    parser_list_networks.add_argument(
+        '--allow-lo-routes',
+        action='store_true',
+        default=False,
+        help='Include loopback (lo) routes in the listing (default: omit)',
+    )
+    parser_list_networks.add_argument(
+        '--allow-bgp-routes',
+        action='store_true',
+        default=False,
+        help='Merge BGP routes from ip -j route ls proto bgp (default: omit)',
+    )
     parser_list_networks.set_defaults(func=command_list_networks)
 
     parser_list_rdma = subparsers.add_parser(
@@ -5512,6 +5718,32 @@ def _get_parser():
         help='Configuration input source file',
     )
 
+    parser_check_online = subparsers_orch.add_parser(
+        'check-online', help='return true to indicate host is running')
+    parser_check_online.set_defaults(func=command_check_online)
+
+    parser_sysctl_dir = subparsers_orch.add_parser(
+        'sysctl-dir',
+        help='list entries in sysctl.d or run sysctl --system')
+    parser_sysctl_dir.set_defaults(func=command_sysctl_dir)
+    parser_sysctl_dir.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    _sysctl_dir_action = parser_sysctl_dir.add_mutually_exclusive_group(
+        required=True)
+    _sysctl_dir_action.add_argument(
+        '--list',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='list',
+        help=f'print one basename per line from {SYSCTL_DIR}')
+    _sysctl_dir_action.add_argument(
+        '--apply-system',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='apply_system',
+        help='reload sysctl settings from all config paths (sysctl --system)')
+
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
     parser_check_host.set_defaults(func=command_check_host)
@@ -5525,6 +5757,32 @@ def _get_parser():
     parser_prepare_host.add_argument(
         '--expect-hostname',
         help='Set hostname')
+
+    parser_setup_ssh_user = subparsers.add_parser(
+        'setup-ssh-user', help='set up SSH user with passwordless sudo and key')
+    parser_setup_ssh_user.set_defaults(func=command_setup_ssh_user)
+    parser_setup_ssh_user.add_argument(
+        '--ssh-user',
+        required=True,
+        help='SSH user to setup')
+    parser_setup_ssh_user.add_argument(
+        '--ssh-pub-key',
+        required=True,
+        help='SSH public key to add to authorized_keys')
+
+    parser_prepare_host_sudo_hardening = subparsers.add_parser(
+        'prepare-host-sudo-hardening',
+        help='prepare host by installing cephadm, configuring sudoers, and enabling sudo hardening')
+    parser_prepare_host_sudo_hardening.set_defaults(func=command_prepare_host_sudo_hardening)
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--ssh-user',
+        help='SSH user to configure (default: root)')
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--ssh-pub-key',
+        help='SSH public key to authorize for the user')
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--cephadm-version',
+        help='Specific cephadm version to install')
 
     parser_add_repo = subparsers.add_parser(
         'add-repo', help='configure package repository')
@@ -5584,6 +5842,48 @@ def _get_parser():
     parser_gather_facts = subparsers.add_parser(
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
+
+    parser_remove_file = subparsers.add_parser(
+        'remove-file', help='remove a file on the host')
+    parser_remove_file.set_defaults(func=command_remove_file)
+    parser_remove_file.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_remove_file.add_argument(
+        '--path',
+        required=True,
+        dest='remove_file_path',
+        help='absolute path of the file to remove')
+
+    parser_deploy_file = subparsers.add_parser(
+        'deploy-file',
+        help='write or replace a host file from stdin (raw bytes)')
+    parser_deploy_file.set_defaults(func=command_deploy_file)
+    parser_deploy_file.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_file.add_argument(
+        '--path',
+        required=True,
+        dest='deploy_file_path',
+        help='absolute destination path for the file')
+    parser_deploy_file.add_argument(
+        '--mode',
+        dest='deploy_file_mode',
+        default=None,
+        help='octal mode for the file (e.g. 644 or 0644)')
+    parser_deploy_file.add_argument(
+        '--uid',
+        type=int,
+        dest='deploy_file_uid',
+        default=None,
+        help='numeric owner uid (requires --gid)')
+    parser_deploy_file.add_argument(
+        '--gid',
+        type=int,
+        dest='deploy_file_gid',
+        default=None,
+        help='numeric owner gid (requires --uid)')
 
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
@@ -5728,11 +6028,14 @@ def main() -> None:
         if ctx.func not in \
                 [
                     command_check_host,
+                    command_check_online,
                     command_prepare_host,
+                    command_setup_ssh_user,
+                    command_prepare_host_sudo_hardening,
                     command_add_repo,
                     command_rm_repo,
                     command_install,
-                    command_bootstrap
+                    command_bootstrap,
                 ]:
             check_container_engine(ctx)
         # command handler

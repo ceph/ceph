@@ -9,15 +9,13 @@ describe('NvmeGatewayViewComponent', () => {
   let component: NvmeGatewayViewComponent;
   let fixture: ComponentFixture<NvmeGatewayViewComponent>;
 
-  beforeEach(
-    waitForAsync(() => {
-      TestBed.configureTestingModule({
-        declarations: [NvmeGatewayViewComponent],
-        imports: [RouterTestingModule, SideNavModule, ThemeModule],
-        schemas: [CUSTOM_ELEMENTS_SCHEMA]
-      }).compileComponents();
-    })
-  );
+  beforeEach(waitForAsync(() => {
+    TestBed.configureTestingModule({
+      declarations: [NvmeGatewayViewComponent],
+      imports: [RouterTestingModule, SideNavModule, ThemeModule],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeGatewayViewComponent);

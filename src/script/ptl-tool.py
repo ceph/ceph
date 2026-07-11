@@ -207,7 +207,7 @@ class AuditReport:
 
     def _get_active_issues(self):
         if self.redmine_linkage_correct:
-            return [i for i in self.issues if i != "Multiple Source PRs"]
+            return [(cat, text) for cat, text in self.issues if cat != "Multiple Source PRs"]
         return self.issues
 
     def has_errors(self) -> bool:
@@ -1604,32 +1604,35 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                 log.error(f"failed to update {issue}")
                 sys.exit(1)
 
-        for pr in added_prs:
-            body = f"This PR has been added to [{issue.subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted added comment to PR #{pr}")
+        if getattr(issue, 'is_private', False):
+            log.info(f"QA ticket {issue.url} is private. Skipping GitHub PR updates for added/removed PRs.")
+        else:
+            for pr in added_prs:
+                body = f"This PR has been added to [{issue.subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted added comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
-        for pr in removed_prs:
-            body = f"This PR has been removed from [{issue.subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted removed comment to PR #{pr}")
+            for pr in removed_prs:
+                body = f"This PR has been removed from [{issue.subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted removed comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
     elif args.create_qa:
-        now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d-%H:%M")
+        now_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d-%H:%M")
         default_subject = f"{base} integration testing by {USER} started {now_str}"
         issue_kwargs['subject'] = args.qa_subject if args.qa_subject else default_subject
 
@@ -1642,19 +1645,22 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             log.info("created redmine qa issue: %s", issue.url)
             issue_url = issue.url
 
-        for pr in prs:
-            log.debug(f"Posting QA Run in comment for ={pr}")
-            subject = issue_kwargs['subject']
-            body = f"This PR has been added to [{subject}]({issue_url})."
-            if args.dry_run:
-                log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
-            else:
-                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
-                if r.status_code == 201:
-                    log.info(f"Successfully posted comment to PR #{pr}")
+        if args.qa_private:
+            log.info("QA ticket is private. Skipping GitHub PR updates.")
+        else:
+            for pr in prs:
+                log.debug(f"Posting QA Run in comment for ={pr}")
+                subject = issue_kwargs['subject']
+                body = f"This PR has been added to [{subject}]({issue_url})."
+                if args.dry_run:
+                    log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
                 else:
-                    log.error(f"Failed to post comment: {r.status_code} {r.text}")
+                    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                    r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
+                    if r.status_code == 201:
+                        log.info(f"Successfully posted comment to PR #{pr}")
+                    else:
+                        log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
 def build_branch(args):
     base = args.base
@@ -1674,20 +1680,6 @@ def build_branch(args):
         get(session, endpoint, paging=False)
 
     G = git.Repo(args.git)
-
-    try:
-        c = resolve_ref(G, 'main', BASE_REMOTE_URL, args.always_fetch)
-        githubmap_content = G.git.show(f"{c.hexsha}:.githubmap")
-        comment = re.compile(r"\s*#")
-        patt = re.compile(r"([\w-]+)\s+(.*)")
-        for line in githubmap_content.splitlines():
-            if comment.match(line):
-                continue
-            m = patt.match(line)
-            if m:
-                CONTRIBUTORS[m.group(1)] = m.group(2)
-    except git.exc.GitCommandError as e:
-        raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
 
     R = None
     if args.create_qa or args.update_qa or args.audit or args.final_merge:
@@ -1739,8 +1731,23 @@ def build_branch(args):
         args.always_fetch = True
         args.skip_conflict_check = True
 
+    if args.credits:
+        try:
+            c = resolve_ref(G, 'main', BASE_REMOTE_URL, args.always_fetch)
+            githubmap_content = G.git.show(f"{c.hexsha}:.githubmap")
+            comment = re.compile(r"\s*#")
+            patt = re.compile(r"([\w-]+)\s+(.*)")
+            for line in githubmap_content.splitlines():
+                if comment.match(line):
+                    continue
+                m = patt.match(line)
+                if m:
+                    CONTRIBUTORS[m.group(1)] = m.group(2)
+        except git.exc.GitCommandError as e:
+            raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
+
     # Compute branch names now that integration flags and auto-detect have settled
-    branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
+    branch = datetime.datetime.now(datetime.UTC).strftime(args.branch).format(user=USER)
     if args.branch_release:
         branch = branch + "-" + args.branch_release
     if args.branch_append:

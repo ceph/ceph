@@ -1266,6 +1266,7 @@ IOHandler::close_io(
   } else {
     return shard_states->close(
     ).then([this] {
+      std::ignore = this; // as we are 'assert'ing, not ceph_assert'ing
       assert(shard_states->assert_closed_and_exit());
     });
   }
@@ -1291,6 +1292,14 @@ IOHandler::shard_states_t::notify_out_dispatching_stopped(
                     conn, what, io_state);
     }
   }
+}
+
+void
+IOHandler::shard_states_t::abort_wrong_io_state(SocketConnection &conn)
+{
+  logger().error("{} try_enter_out_dispatching() got wrong io_state {}",
+                 conn, io_state);
+  ceph_abort_msg("impossible");
 }
 
 seastar::future<>

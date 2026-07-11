@@ -204,6 +204,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
     def _get_list_text_output(self, data):
         columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
+        if not columns:
+            return ''
         table = self._create_table(columns)
         for d in data:
             table.add_row(self._get_row(columns, d))
@@ -211,6 +213,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
     def _get_object_text_output(self, data):
         columns = [k for k in data.keys() if k not in ["status", "error_message"]]
+        if not columns:
+            return ''
         table = self._create_table(columns)
         table.add_row(self._get_row(columns, data))
         return table.get_string()

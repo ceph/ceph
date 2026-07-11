@@ -105,7 +105,8 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    modification_t) final {
     return journal_update(
       iter,
       val,

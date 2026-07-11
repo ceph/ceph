@@ -1,64 +1,104 @@
-<div cdsCol
-     [columnNumbers]="{md: 4}">
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
   <ng-container *cdFormLoading="loading">
-    <form name="accountForm"
-          #formDir="ngForm"
-          [formGroup]="accountForm"
-          novalidate>
-
-      <div i18n="form title"
-           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}
+    <form
+      name="accountForm"
+      #formDir="ngForm"
+      [formGroup]="accountForm"
+      novalidate
+    >
+      <div
+        i18n="form title"
+        class="form-header cds--type-heading-04 cds-mb-5"
+      >
+        {{ action | titlecase }} {{ resource | lowercase }}
       </div>
+
+      <h4
+        class="cds--type-heading-03 cds-mb-4"
+        i18n
+      >
+        Account details
+      </h4>
 
       <!-- Account Name -->
       <div class="form-item">
-        <cds-text-label label="Account Name"
-                        for="acc_name"
-                        cdRequiredField="Account Name"
-                        [invalid]="!accountForm.controls.name.valid && accountForm.controls.name.dirty"
-                        [invalidText]="accountIdError"
-                        i18n>Account Name
-          <input cdsText
-                 type="text"
-                 placeholder="Enter account name"
-                 id="acc_name"
-                 name="acc_name"
-                 formControlName="name"/>
+        <cds-text-label
+          label="Account name"
+          for="acc_name"
+          [invalid]="!accountForm.controls.name.valid && accountForm.controls.name.dirty"
+          [invalidText]="accountIdError"
+          helperText="Name must start and end in alphanumeric characters (3 to 63). Characters allowed: lowercase, numbers and nonconsecutive dots and hyphens."
+          i18n-helperText
+          i18n
+          >Account name
+          <input
+            cdsText
+            type="text"
+            placeholder="for example, team-storage-01"
+            id="acc_name"
+            name="acc_name"
+            cdValidate
+            #accName="cdValidate"
+            [invalid]="accName.isInvalid"
+            formControlName="name"
+          />
         </cds-text-label>
         <ng-template #accountIdError>
-          <span *ngIf="accountForm.showError('name', formDir, 'required')"
-                class="invalid-feedback">
+          <span
+            *ngIf="accountForm.showError('name', formDir, 'required')"
+            class="invalid-feedback"
+          >
             <ng-container i18n>This field is required.</ng-container>
           </span>
+          @if (accountForm.showError('name', formDir, 'notUnique')) {
+            <div class="invalid-feedback">
+              <ng-container i18n>An account with this name already exists.</ng-container>
+            </div>
+          }
         </ng-template>
       </div>
       <!-- Tenant -->
       <div class="form-item">
-        <cds-text-label label="tenant"
-                        for="tenant"
-                        i18n>Tenant
-          <input cdsText
-                 type="text"
-                 placeholder="Enter tenant"
-                 id="tenant"
-                 name="tenant"
-                 formControlName="tenant"/>
+        <cds-text-label
+          label="Tenant (optional)"
+          for="tenant"
+          helperText="Associates this account with an existing tenant namespace."
+          i18n-helperText
+          i18n
+          >Tenant (optional)
+          <input
+            cdsText
+            type="text"
+            placeholder="for example, finance-team"
+            id="tenant"
+            name="tenant"
+            formControlName="tenant"
+          />
         </cds-text-label>
       </div>
 
       <!-- Email -->
       <div class="form-item">
-        <cds-text-label label="email"
-                        for="email"
-                        [invalid]="!accountForm.controls.email.valid && accountForm.controls.email.dirty"
-                        [invalidText]="emailError"
-                        i18n>Email
-          <input cdsText
-                 type="text"
-                 placeholder="Enter email"
-                 id="email"
-                 name="email"
-                 formControlName="email"/>
+        <cds-text-label
+          label="Email address (optional)"
+          for="email"
+          [invalid]="!accountForm.controls.email.valid && accountForm.controls.email.dirty"
+          [invalidText]="emailError"
+          helperText="Contact for quota alerts and notifications."
+          i18n-helperText
+          i18n
+          >Email address (optional)
+          <input
+            cdsText
+            type="text"
+            placeholder="for example, admin@example.com"
+            id="email"
+            name="email"
+            formControlName="email"
+          />
         </cds-text-label>
         <ng-template #emailError>
           <span *ngIf="accountForm.showError('email', formDir, 'email')">
@@ -67,229 +107,432 @@
         </ng-template>
       </div>
 
-      <div class="form-item form-item-append"
-           cdsRow>
-        <div cdsCol>
-          <!-- Max. bucket mode -->
-          <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_buckets_mode' }"></ng-container>
-        </div>
-        <div cdsCol>
-        <!-- Max buckets -->
-        <span *ngIf="1 == accountForm.get('max_buckets_mode').value">
-          <ng-container *ngTemplateOutlet="accountMaxValueTemplate;context: { formControl: 'max_buckets' }"></ng-container>
-          </span>
-        </div>
-      </div>
-
-      <div class="form-item form-item-append"
-           cdsRow>
-        <div cdsCol>
-          <!-- Max. users mode -->
-          <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_users_mode' }"></ng-container>
-        </div>
-        <div cdsCol>
-        <!-- Max users -->
-        <span *ngIf="1 == accountForm.get('max_users_mode').value">
-          <ng-container *ngTemplateOutlet="accountMaxValueTemplate;context: { formControl: 'max_users' }"></ng-container>
-          </span>
-        </div>
-      </div>
-
-      <div class="form-item form-item-append"
-           cdsRow>
-        <div cdsCol>
-          <!-- Max. roles mode -->
-          <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_roles_mode' }"></ng-container>
-        </div>
-        <div cdsCol>
-        <!-- Max roles -->
-        <span *ngIf="1 == accountForm.get('max_roles_mode').value">
-          <ng-container *ngTemplateOutlet="accountMaxValueTemplate;context: { formControl: 'max_roles' }"></ng-container>
-        </span>
+      <div class="form-item cds-mt-5 cds-mb-3">
+        <h4
+          class="cds--type-heading-03"
+          i18n
+        >
+          Advanced settings
+        </h4>
+        <p
+          class="cds--type-body-01"
+          i18n
+        >
+          Configure resource limits and quota for this account
+        </p>
+        <div class="cds-mt-3">
+          <button
+            type="button"
+            class="cds--btn cds--btn--ghost advanced-settings-btn"
+            (click)="showAdvanced = !showAdvanced"
+          >
+            {{ showAdvanced ? 'Hide advanced settings' : 'Show advanced settings' }}
+            <svg
+              cdsIcon="chevron--down"
+              *ngIf="!showAdvanced"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+            <svg
+              cdsIcon="chevron--up"
+              *ngIf="showAdvanced"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+          </button>
         </div>
       </div>
 
-      <div class="form-item form-item-append"
-           cdsRow>
-        <div cdsCol>
-          <!-- Max. group mode -->
-          <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_groups_mode' }"></ng-container>
+      <div *ngIf="showAdvanced">
+        <h5
+          class="cds--type-heading-02 cds-mb-2"
+          i18n
+        >
+          Resource limits
+        </h5>
+        <p
+          class="cds--type-body-01 cds-mb-4"
+          i18n
+        >
+          Set the mode and maximum allowed values for each resource type. Select Custom to specify a
+          limit.
+        </p>
+
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <!-- Max. bucket mode -->
+            <ng-container
+              *ngTemplateOutlet="selectModeTemplate; context: { formControl: 'max_buckets_mode' }"
+            ></ng-container>
+          </div>
+          <div cdsCol>
+            <!-- Max buckets -->
+            <ng-container
+              *ngTemplateOutlet="accountMaxValueTemplate; context: { formControl: 'max_buckets' }"
+            ></ng-container>
+          </div>
         </div>
-        <div cdsCol>
-        <!-- Max group -->
-        <span *ngIf="1 == accountForm.get('max_groups_mode').value">
-          <ng-container *ngTemplateOutlet="accountMaxValueTemplate;context: { formControl: 'max_groups' }"></ng-container>
-          </span>
+
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <!-- Max. users mode -->
+            <ng-container
+              *ngTemplateOutlet="selectModeTemplate; context: { formControl: 'max_users_mode' }"
+            ></ng-container>
+          </div>
+          <div cdsCol>
+            <!-- Max users -->
+            <ng-container
+              *ngTemplateOutlet="accountMaxValueTemplate; context: { formControl: 'max_users' }"
+            ></ng-container>
+          </div>
+        </div>
+
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <!-- Max. roles mode -->
+            <ng-container
+              *ngTemplateOutlet="selectModeTemplate; context: { formControl: 'max_roles_mode' }"
+            ></ng-container>
+          </div>
+          <div cdsCol>
+            <!-- Max roles -->
+            <ng-container
+              *ngTemplateOutlet="accountMaxValueTemplate; context: { formControl: 'max_roles' }"
+            ></ng-container>
+          </div>
+        </div>
+
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <!-- Max. group mode -->
+            <ng-container
+              *ngTemplateOutlet="selectModeTemplate; context: { formControl: 'max_groups_mode' }"
+            ></ng-container>
+          </div>
+          <div cdsCol>
+            <!-- Max group -->
+            <ng-container
+              *ngTemplateOutlet="accountMaxValueTemplate; context: { formControl: 'max_groups' }"
+            ></ng-container>
+          </div>
+        </div>
+
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <!-- Max. access keys mode -->
+            <ng-container
+              *ngTemplateOutlet="
+                selectModeTemplate;
+                context: { formControl: 'max_access_keys_mode' }
+              "
+            ></ng-container>
+          </div>
+          <div cdsCol>
+            <!-- Max access keys -->
+            <ng-container
+              *ngTemplateOutlet="
+                accountMaxValueTemplate;
+                context: { formControl: 'max_access_keys' }
+              "
+            ></ng-container>
+          </div>
+        </div>
+
+        <h5
+          class="cds--type-heading-02 cds-mb-2 cds-mt-5"
+          i18n
+        >
+          Quotas
+        </h5>
+        <p
+          class="cds--type-body-01 cds-mb-4"
+          i18n
+        >
+          Define storage usage limits for the account and the buckets it owns. Quotas help control
+          capacity consumption and enforce resource allocation policies.
+        </p>
+
+        <!-- Account Quota -->
+        <div class="form-item">
+          <ng-container
+            *ngTemplateOutlet="
+              quotaTemplate;
+              context: {
+                formControl: {
+                  enabled: 'account_quota_enabled',
+                  unlimitedSize: 'account_quota_max_size_unlimited',
+                  maxSize: 'account_quota_max_size',
+                  unlimitedObjects: 'account_quota_max_objects_unlimited',
+                  maxObjects: 'account_quota_max_objects'
+                },
+                quotaType: 'account'
+              }
+            "
+          >
+          </ng-container>
+        </div>
+
+        <!-- Bucket Quota -->
+        <div class="form-item">
+          <ng-container
+            *ngTemplateOutlet="
+              quotaTemplate;
+              context: {
+                formControl: {
+                  enabled: 'bucket_quota_enabled',
+                  unlimitedSize: 'bucket_quota_max_size_unlimited',
+                  maxSize: 'bucket_quota_max_size',
+                  unlimitedObjects: 'bucket_quota_max_objects_unlimited',
+                  maxObjects: 'bucket_quota_max_objects'
+                },
+                quotaType: 'bucket'
+              }
+            "
+          >
+          </ng-container>
         </div>
       </div>
-
-      <div class="form-item form-item-append"
-           cdsRow>
-        <div cdsCol>
-          <!-- Max. acess keys mode -->
-          <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_access_keys_mode' }"></ng-container>
-        </div>
-        <div cdsCol>
-        <!-- Max acess keys -->
-        <span *ngIf="1 == accountForm.get('max_access_keys_mode').value">
-          <ng-container *ngTemplateOutlet="accountMaxValueTemplate;context: { formControl: 'max_access_keys' }"></ng-container>
-        </span>
-        </div>
-      </div>
-
-      <!-- Account Quota -->
-      <div class="form-item">
-        <ng-container *ngTemplateOutlet="quotaTemplate;context: { formControl: {
-                      enabled: 'account_quota_enabled',
-                      unlimitedSize: 'account_quota_max_size_unlimited',
-                      maxSize: 'account_quota_max_size',
-                      unlimitedObjects: 'account_quota_max_objects_unlimited',
-                      maxObjects: 'account_quota_max_objects'
-                      },
-                      quotaType: 'account'
-                      }">
-        </ng-container>
-      </div>
-
-      <!-- Bucket Quota -->
-      <div class="form-item">
-        <ng-container *ngTemplateOutlet="quotaTemplate;
-                      context: {
-                      formControl: {
-                      enabled: 'bucket_quota_enabled',
-                      unlimitedSize: 'bucket_quota_max_size_unlimited',
-                      maxSize: 'bucket_quota_max_size',
-                      unlimitedObjects: 'bucket_quota_max_objects_unlimited',
-                      maxObjects: 'bucket_quota_max_objects'
-                      },
-                      quotaType: 'bucket'
-                      }">
-        </ng-container>
-      </div>
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="formDir"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                            wrappingClass="text-right"></cd-form-button-panel>
-
+      <cd-form-button-panel
+        (submitActionEvent)="submit()"
+        [form]="formDir"
+        [submitText]="(action | titlecase) + ' ' + (resource | lowercase)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
     </form>
   </ng-container>
 </div>
 
-<ng-template #selectModeTemplate
-             [formGroup]="accountForm"
-             let-formControl="formControl">
-  <cds-select [formControlName]="formControl"
-              [name]="formControl"
-              [id]="formControl"
-              label="{{formControl.split('_')[1] | upperFirst}} Mode"
-              (change)="onModeChange($event.target.value, formControl)"
-              [helperText]="getHelperTextForMode(formControl)">
+<ng-template
+  #selectModeTemplate
+  [formGroup]="accountForm"
+  let-formControl="formControl"
+>
+  <cds-select
+    [formControlName]="formControl"
+    [name]="formControl"
+    [id]="formControl"
+    label="{{ formControl.split('_')[1] | upperFirst }} mode"
+    (change)="onModeChange($event.target.value, formControl)"
+    [helperText]="getHelperTextForMode(formControl)"
+  >
     <option value="0">Unlimited</option>
     <option value="-1">Disabled</option>
     <option value="1">Custom</option>
   </cds-select>
 </ng-template>
 
-<ng-template #accountMaxValueTemplate
-             let-formControl="formControl"
-             [formGroup]="accountForm">
-<cds-number [id]="formControl"
-            [name]="formControl"
-            formControlName="{{formControl}}"
-            label="{{formControl.split('_')[0] | upperFirst}}. {{formControl.split('_').length > 2 ? formControl.split('_')[1]+' '+formControl.split('_')[2]: formControl.split('_')[1]}}"
-            [min]="1"
-            cdRequiredField="{{formControl.split('_')[0] | upperFirst}}. {{formControl.split('_').length > 2 ? formControl.split('_')[1]+' '+formControl.split('_')[2]: formControl.split('_')[1]}}"
-            [invalid]="!accountForm.controls[formControl].valid && accountForm.controls[formControl].dirty"
-            [invalidText]="maxValError"></cds-number>
-<ng-template #maxValError>
-  <span *ngIf="accountForm.showError(formControl, formDir, 'required')"
-        i18n>This field is required.</span>
-  <span *ngIf="accountForm.controls[formControl].value == 0 && accountForm.showError(formControl, formDir, 'min')"
-        i18n>Enter number greater than 0</span>
-  <span *ngIf="accountForm.showError(formControl, formDir, 'pattern')"
-        i18n>Enter a valid positive number</span>
-</ng-template>
+<ng-template
+  #accountMaxValueTemplate
+  let-formControl="formControl"
+  [formGroup]="accountForm"
+>
+  <cds-number
+    *ngIf="accountForm.get(formControl + '_mode').value == '1'"
+    [id]="formControl"
+    [name]="formControl"
+    formControlName="{{ formControl }}"
+    label="Maximum {{ formControl.replace('max_', '').replace('_', ' ') }}"
+    [min]="1"
+    [invalid]="!accountForm.controls[formControl].valid && accountForm.controls[formControl].dirty"
+    [invalidText]="maxValError"
+  ></cds-number>
+
+  <cds-text-label
+    *ngIf="accountForm.get(formControl + '_mode').value != '1'"
+    label="Maximum {{ formControl.replace('max_', '').replace('_', ' ') }}"
+    for="{{ formControl }}_disabled"
+  >
+    Maximum {{ formControl.replace('max_', '').replace('_', ' ') }}
+    <input
+      cdsText
+      type="text"
+      [id]="formControl + '_disabled'"
+      name="{{ formControl }}_disabled"
+      [ngModel]="'-'"
+      [ngModelOptions]="{ standalone: true }"
+      [disabled]="true"
+    />
+  </cds-text-label>
+
+  <ng-template #maxValError>
+    <span
+      *ngIf="accountForm.showError(formControl, formDir, 'required')"
+      i18n
+      >This field is required.</span
+    >
+    <span
+      *ngIf="
+        accountForm.controls[formControl].value == 0 &&
+        accountForm.showError(formControl, formDir, 'min')
+      "
+      i18n
+      >Enter number greater than 0</span
+    >
+    <span
+      *ngIf="accountForm.showError(formControl, formDir, 'pattern')"
+      i18n
+      >Enter a valid positive number</span
+    >
+  </ng-template>
 </ng-template>
 
-<ng-template #quotaTemplate
-             let-quotaType="quotaType"
-             let-formControl="formControl"
-             [formGroup]="accountForm">
-  <fieldset class="cds--fieldset">
-    <legend class="cds--label">{{quotaType | upperFirst}} Quota</legend>
-    <div *ngIf="quotaType == 'account';else bucket"
-         class="quota-heading">Set quota on account owned by users.</div>
-    <ng-template #bucket>
-      <div class="quota-heading">
-        Set quota on buckets owned by an account.
-      </div>
-    </ng-template>
+<ng-template
+  #quotaTemplate
+  let-quotaType="quotaType"
+  let-formControl="formControl"
+  [formGroup]="accountForm"
+>
+  <fieldset class="cds--fieldset cds-mb-4">
+    <legend class="cds--label">{{ quotaType | upperFirst }} quota</legend>
     <!-- Enabled -->
-    <cds-checkbox [formControlName]="formControl.enabled"
-                  [id]="quotaType+'_checkbox'">
-      Enabled
-    </cds-checkbox >
-    <div class="quota-sub-block"
-         *ngIf="accountForm.controls[formControl.enabled].value">
+    <cds-checkbox
+      *ngIf="quotaType == 'account'"
+      [formControlName]="formControl.enabled"
+      [id]="quotaType + '_checkbox'"
+      class="cds-mb-3"
+    >
+      Enable account quota
+    </cds-checkbox>
+    <cds-checkbox
+      *ngIf="quotaType == 'bucket'"
+      [formControlName]="formControl.enabled"
+      [id]="quotaType + '_checkbox'"
+      class="cds-mb-3"
+    >
+      Enable bucket quota
+    </cds-checkbox>
+    <p
+      class="cds--type-body-01 cds-mb-4"
+      *ngIf="quotaType == 'account'"
+    >
+      Applies a storage quota to each user account.
+    </p>
+    <p
+      class="cds--type-body-01 cds-mb-4"
+      *ngIf="quotaType == 'bucket'"
+    >
+      Limits the total storage available across all buckets in an account.
+    </p>
+    <div
+      class="quota-sub-block"
+      *ngIf="accountForm.controls[formControl.enabled].value"
+    >
       <!-- Unlimited size -->
-      <cds-checkbox *ngIf="accountForm.controls[formControl.enabled].value"
-                    [formControlName]="formControl.unlimitedSize"
-                    [id]="quotaType+'unlimitedSize_checkbox'">
-                    Unlimited size
+      <cds-checkbox
+        *ngIf="accountForm.controls[formControl.enabled].value"
+        [formControlName]="formControl.unlimitedSize"
+        [id]="quotaType + 'unlimitedSize_checkbox'"
+      >
+        Unlimited size
       </cds-checkbox>
       <!-- Maximum size -->
-      <div class="input-wrapper"
-           *ngIf="accountForm.controls[formControl.enabled].value && !accountForm.getValue(formControl.unlimitedSize)">
-        <cds-text-label [label]="formControl.maxSize"
-                        [for]="formControl.maxSize"
-                        cdRequiredField="Max. size"
-                        [invalid]="!accountForm.controls[formControl.maxSize].valid && accountForm.controls[formControl.maxSize].dirty"
-                        [invalidText]="quotaSizeError"
-                        i18n>Max. size
-          <input cdsText
-                 type="text"
-                 placeholder="Enter size"
-                 [id]="formControl.maxSize"
-                 [name]="formControl.maxSize"
-                 [formControlName]="formControl.maxSize"
-                 cdDimlessBinary/>
+      <div
+        class="input-wrapper"
+        *ngIf="
+          accountForm.controls[formControl.enabled].value &&
+          !accountForm.getValue(formControl.unlimitedSize)
+        "
+      >
+        <cds-text-label
+          [label]="formControl.maxSize"
+          [for]="formControl.maxSize"
+          [invalid]="
+            !accountForm.controls[formControl.maxSize].valid &&
+            accountForm.controls[formControl.maxSize].dirty
+          "
+          [invalidText]="quotaSizeError"
+          i18n
+          >Maximum size
+          <input
+            cdsText
+            type="text"
+            placeholder="Enter size"
+            [id]="formControl.maxSize"
+            [name]="formControl.maxSize"
+            [formControlName]="formControl.maxSize"
+            cdDimlessBinary
+          />
         </cds-text-label>
         <ng-template #quotaSizeError>
-          <span *ngIf="accountForm.showError(formControl.maxSize, formDir, 'required')"
-                i18n>This field is required.</span>
-          <span *ngIf="accountForm.showError(formControl.maxSize, formDir, 'quotaMaxSize')"
-                i18n>Enter a valid value.</span>
-          <span *ngIf="accountForm.showError(formControl.maxSize, formDir, 'pattern')"
-                i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+          <span
+            *ngIf="accountForm.showError(formControl.maxSize, formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            *ngIf="accountForm.showError(formControl.maxSize, formDir, 'quotaMaxSize')"
+            i18n
+            >Enter a valid value.</span
+          >
+          <span
+            *ngIf="accountForm.showError(formControl.maxSize, formDir, 'pattern')"
+            i18n
+            >Size must be a number or in a valid format. eg: 5 GiB</span
+          >
         </ng-template>
       </div>
       <!-- Unlimited objects -->
-      <cds-checkbox *ngIf="accountForm.controls[formControl.enabled].value"
-                    [formControlName]="formControl.unlimitedObjects"
-                    [id]="quotaType+'unlimitedObjects_checkbox'">
-                    Unlimited objects
+      <cds-checkbox
+        *ngIf="accountForm.controls[formControl.enabled].value"
+        [formControlName]="formControl.unlimitedObjects"
+        [id]="quotaType + 'unlimitedObjects_checkbox'"
+      >
+        Unlimited objects
       </cds-checkbox>
-    <!-- Maximum objects -->
-      <div class="input-wrapper"
-           *ngIf="accountForm.controls[formControl.enabled].value && !accountForm.getValue(formControl.unlimitedObjects)">
-        <cds-text-label [label]="formControl.maxObjects"
-                        [for]="formControl.maxObjects"
-                        cdRequiredField="Max. objects"
-                        [invalid]="!accountForm.controls[formControl.maxObjects].valid && accountForm.controls[formControl.maxObjects].dirty"
-                        [invalidText]="quotaObjectError"
-                        i18n>Max. objects
-          <input cdsText
-                 type="number"
-                 placeholder="Enter number of objects"
-                 [id]="formControl.maxObjects"
-                 [name]="formControl.maxObjects"
-                 [formControlName]="formControl.maxObjects"/>
+      <!-- Maximum objects -->
+      <div
+        class="input-wrapper"
+        *ngIf="
+          accountForm.controls[formControl.enabled].value &&
+          !accountForm.getValue(formControl.unlimitedObjects)
+        "
+      >
+        <cds-text-label
+          [label]="formControl.maxObjects"
+          [for]="formControl.maxObjects"
+          [invalid]="
+            !accountForm.controls[formControl.maxObjects].valid &&
+            accountForm.controls[formControl.maxObjects].dirty
+          "
+          [invalidText]="quotaObjectError"
+          i18n
+          >Maximum objects
+          <input
+            cdsText
+            type="number"
+            placeholder="Enter number of objects"
+            [id]="formControl.maxObjects"
+            [name]="formControl.maxObjects"
+            [formControlName]="formControl.maxObjects"
+          />
         </cds-text-label>
         <ng-template #quotaObjectError>
-          <span *ngIf="accountForm.showError(formControl.maxObjects, formDir, 'required')"
-                i18n>This field is required.</span>
-          <span *ngIf="accountForm.showError(formControl.maxObjects, formDir, 'pattern')"
-                i18n>Enter a valid positive number</span>
+          <span
+            *ngIf="accountForm.showError(formControl.maxObjects, formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            *ngIf="accountForm.showError(formControl.maxObjects, formDir, 'pattern')"
+            i18n
+            >Enter a valid positive number</span
+          >
         </ng-template>
       </div>
     </div>

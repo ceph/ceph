@@ -16,11 +16,6 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   let fixtureHelper: FixtureHelper;
   const devices: InventoryDevice[] = [Mocks.getInventoryDevice('node0', '1')];
 
-  const buttonSelector = '.cd-col-form-input button';
-  const getButton = () => {
-    const debugElement = fixtureHelper.getElementByCss(buttonSelector);
-    return debugElement.nativeElement;
-  };
   const clearTextSelector = '.tc_clearSelections';
   const getClearText = () => {
     const debugElement = fixtureHelper.getElementByCss(clearTextSelector);
@@ -42,7 +37,9 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
     fixture = TestBed.createComponent(OsdDevicesSelectionGroupsComponent);
     fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
+    component.type = 'data';
     component.canSelect = true;
+    component.inlineSelection = true;
   });
 
   describe('without available devices', () => {
@@ -55,14 +52,11 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       expect(component).toBeTruthy();
     });
 
-    it('should display Add button in disabled state', () => {
-      const button = getButton();
-      expect(button).toBeTruthy();
-      expect(button.disabled).toBe(true);
-      expect(button.textContent).toBe('Add');
+    it('should not display filter form', () => {
+      fixtureHelper.expectElementVisible('.device-filter-form', false);
     });
 
-    it('should not display devices table', () => {
+    it('should display devices table', () => {
       fixtureHelper.expectElementVisible('cd-inventory-devices', false);
     });
   });
@@ -77,23 +71,29 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       expect(component).toBeTruthy();
     });
 
-    it('should display Add button in enabled state', () => {
-      const button = getButton();
-      expect(button).toBeTruthy();
-      expect(button.disabled).toBe(false);
-      expect(button.textContent).toBe('Add');
+    it('should display filter form', () => {
+      fixtureHelper.expectElementVisible('.device-filter-form', true);
     });
 
-    it('should not display devices table', () => {
-      fixtureHelper.expectElementVisible('cd-inventory-devices', false);
+    it('should display empty devices table', () => {
+      fixtureHelper.expectElementVisible('cd-inventory-devices', true);
+      expect(component.tableDevices).toEqual([]);
     });
   });
 
   describe('with devices selected', () => {
     beforeEach(() => {
       component.isOsdPage = true;
-      component.availDevices = [];
+      component.availDevices = devices;
       component.devices = devices;
+      component.appliedFilters = [
+        {
+          name: 'Type',
+          prop: 'human_readable_type',
+          value: { raw: 'nvme/ssd', formatted: 'nvme/ssd' }
+        }
+      ];
+      component.selectedFilters = { human_readable_type: 'nvme/ssd' };
       component.ngOnInit();
       fixture.detectChanges();
     });
@@ -111,12 +111,87 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
     it('should clear devices by clicking Clear link', () => {
       spyOn(component.cleared, 'emit');
       fixtureHelper.clickElement(clearTextSelector);
-      fixtureHelper.expectElementVisible('cd-inventory-devices', false);
+      fixtureHelper.expectElementVisible('cd-inventory-devices', true);
       const event: Record<string, any> = {
-        type: undefined,
+        type: 'data',
         clearedDevices: devices
       };
       expect(component.cleared.emit).toHaveBeenCalledWith(event);
+      expect(component.devices).toEqual([]);
+    });
+  });
+
+  describe('wal inline selection', () => {
+    beforeEach(() => {
+      component.type = 'wal';
+      component.name = 'WAL';
+      component.availDevices = devices;
+      component.canSelect = true;
+      component.inlineSelection = true;
+      fixture.detectChanges();
+    });
+
+    it('should display filter form instead of Add button', () => {
+      fixtureHelper.expectElementVisible('.device-filter-form', true);
+      fixtureHelper.expectElementVisible('cd-inventory-devices', true);
+      fixtureHelper.expectElementVisible('.cd-col-form-input button.btn-light', false);
+    });
+
+    it('should display empty devices table before filters are applied', () => {
+      expect(component.tableDevices).toEqual([]);
+    });
+
+    it('should auto-apply filtered devices when a required filter is selected', () => {
+      spyOn(component.selected, 'emit');
+      component.onFilterFieldChange('human_readable_type', 'nvme/ssd');
+      fixture.detectChanges();
+
+      expect(component.tableDevices.length).toBe(1);
+      expect(component.devices.length).toBe(1);
+      expect(component.selected.emit).toHaveBeenCalled();
+    });
+  });
+
+  describe('wal inline selection without primary devices', () => {
+    beforeEach(() => {
+      component.type = 'wal';
+      component.name = 'WAL';
+      component.availDevices = devices;
+      component.canSelect = false;
+      component.inlineSelection = true;
+      fixture.detectChanges();
+    });
+
+    it('should display add primary first alert without filter form', () => {
+      fixtureHelper.expectElementVisible('.device-filter-form', false);
+      fixtureHelper.expectElementVisible('cd-inventory-devices', false);
+    });
+  });
+
+  describe('db inline selection', () => {
+    beforeEach(() => {
+      component.type = 'db';
+      component.name = 'DB';
+      component.availDevices = devices;
+      component.canSelect = true;
+      component.inlineSelection = true;
+      fixture.detectChanges();
+    });
+
+    it('should display filter form instead of Add button', () => {
+      fixtureHelper.expectElementVisible('.device-filter-form', true);
+      fixtureHelper.expectElementVisible('cd-inventory-devices', true);
+      fixtureHelper.expectElementVisible('.cd-col-form-input button.btn-light', false);
+    });
+
+    it('should auto-apply filtered devices when a required filter is selected', () => {
+      spyOn(component.selected, 'emit');
+      component.onFilterFieldChange('sys_api.vendor', 'AAA');
+      fixture.detectChanges();
+
+      expect(component.tableDevices.length).toBe(1);
+      expect(component.devices.length).toBe(1);
+      expect(component.selected.emit).toHaveBeenCalled();
     });
   });
 });

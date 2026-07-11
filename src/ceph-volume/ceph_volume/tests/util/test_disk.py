@@ -428,8 +428,10 @@ class TestGetDevices(object):
         fake_filesystem.create_file('/sys/block/dm-0/size', contents='204800')
         fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='1')
         fake_filesystem.create_file('/sys/block/dm-0/queue/hw_sector_size', contents='512')
+        fake_filesystem.create_file(lv_path, st_mode=(stat.S_IFBLK | 0o600))
         with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
             mock_instance = MagicMock()
+            mock_instance.is_internal_lv = False
             mock_instance.preferred_block_path = lv_path
             mock_instance.environment = {}
             MockUdevData.return_value = mock_instance
@@ -437,6 +439,46 @@ class TestGetDevices(object):
         assert lv_path in result
         assert result[lv_path]['type'] == 'lvm'
         assert result[lv_path]['human_readable_size'] == '100.00 MB'
+
+    def test_internal_raid_lv_is_excluded(self, patched_get_block_devs_sysfs, fake_filesystem):
+        mapper_path = '/dev/mapper/debian-var_rmeta_0'
+        dm_path = '/dev/dm-5'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'lvm', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-5/queue')
+        fake_filesystem.create_file('/sys/block/dm-5/size', contents='8192')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_internal_lv = True
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert mapper_path not in result
+        assert not result
+
+    def test_lvm_device_without_accessible_node_is_excluded(
+        self, patched_get_block_devs_sysfs, fake_filesystem
+    ):
+        mapper_path = '/dev/mapper/debian-var_rmeta_0'
+        dm_path = '/dev/dm-5'
+        patched_get_block_devs_sysfs.return_value = [
+            [dm_path, mapper_path, 'lvm', dm_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves')
+        fake_filesystem.create_dir('/sys/block/dm-5/queue')
+        fake_filesystem.create_file('/sys/block/dm-5/size', contents='8192')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/rotational', contents='1')
+        fake_filesystem.create_file('/sys/block/dm-5/queue/hw_sector_size', contents='512')
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_internal_lv = False
+            mock_instance.preferred_block_path = '/dev/debian/var_rmeta_0'
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert not result
 
     def test_nvme_reads_vendor_model_rev_under_controller(
         self, patched_get_block_devs_sysfs, fake_filesystem
@@ -1046,6 +1088,36 @@ V:1"""
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
     def test_dashed_path_with_lvm(self) -> None:
         assert disk.UdevData(self.fake_device).dashed_path == '/dev/mapper/fake_vg1-fake-lv1'
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_raid_metadata(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_NAME'] = 'var_rmeta_0'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_raid_image(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_NAME'] = 'var_rimage_1'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_true_for_layered_lv(self) -> None:
+        udev = disk.UdevData(self.fake_device)
+        udev.environment['DM_LV_LAYER'] = 'var'
+        assert udev.is_internal_lv
+
+    @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=998))
+    def test_is_internal_lv_false_for_public_lv(self) -> None:
+        assert not disk.UdevData(self.fake_device).is_internal_lv
 
     @patch('ceph_volume.util.disk.os.stat', _udev_data_patched_os_stat)
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=1))

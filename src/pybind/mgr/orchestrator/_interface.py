@@ -367,9 +367,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_firmware(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmware report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
-        Return node-proxy firmwares report
+        Return node-proxy firmware report (deprecated alias)
 
         :param hostname: hostname
         """
@@ -665,7 +673,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names: List[str]) -> OrchResult[List[str]]:
+    def remove_daemons(self, names: List[str], force_delete_data: bool = False) -> OrchResult[List[str]]:
         """
         Remove specific daemon(s).
 
@@ -673,7 +681,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_name: str, force: bool = False) -> OrchResult[str]:
+    def remove_service(self, service_name: str, force: bool = False, force_delete_data: bool = False) -> OrchResult[str]:
         """
         Remove a service (a collection of daemons).
 
@@ -1218,7 +1226,8 @@ class DaemonDescription(object):
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
-                 pending_daemon_config: bool = False
+                 pending_daemon_config: bool = False,
+                 user_stopped: bool = False
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -1294,6 +1303,7 @@ class DaemonDescription(object):
             self.extra_entrypoint_args = ArgumentSpec.from_general_args(
                 extra_entrypoint_args)
         self.pending_daemon_config = pending_daemon_config
+        self.user_stopped = user_stopped
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1418,6 +1428,9 @@ class DaemonDescription(object):
     def update_pending_daemon_config(self, value: bool) -> None:
         self.pending_daemon_config = value
 
+    def update_user_stopped_status(self, value: bool) -> None:
+        self.user_stopped = value
+
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
@@ -1452,6 +1465,7 @@ class DaemonDescription(object):
         out['rank_generation'] = self.rank_generation
         out['systemd_unit'] = self.systemd_unit
         out['pending_daemon_config'] = self.pending_daemon_config
+        out['user_stopped'] = self.user_stopped
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1490,6 +1504,7 @@ class DaemonDescription(object):
         out['ip'] = self.ip
         out['systemd_unit'] = self.systemd_unit
         out['pending_daemon_config'] = self.pending_daemon_config
+        out['user_stopped'] = self.user_stopped
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

@@ -41,6 +41,7 @@
 #include "MonitorDBStore.h"
 #include "MonMap.h"
 #include "Paxos.h"
+#include "MonitorBackup.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonCommand.h"
@@ -549,7 +550,11 @@ will start to track new ops received afterwards.";
 	    << duration << " seconds" << dendl;
     out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
 	<< " in " << duration << " seconds";
- } else {
+  } else if (command == "backup") {
+    r = perform_backup();
+  } else if (command == "backup_cleanup") {
+    r = cleanup_backup();
+  } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -566,6 +571,40 @@ abort:
     << "cmd=" << command << " "
     << "args=" << args << ": aborted";
   return r;
+}
+
+int Monitor::perform_backup()
+{
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  dout(1) << "triggering backup" << dendl;
+  if (backup_path.empty()) {
+    derr << "backup failed: mon_backup_path is empty" << dendl;
+    return -ENOTDIR;
+  }
+  if (!backup_manager) {
+    derr << "backup failed: monitor still initializing" << dendl;
+    return -EAGAIN;
+  }
+  uint64_t jobid = backup_manager->backup();
+  dout(1) << "queued backup job id " << jobid << dendl;
+  return 0;
+}
+
+int Monitor::cleanup_backup()
+{
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  dout(1) << "triggering backup_cleanup" << dendl;
+  if (backup_path.empty()) {
+    derr << "backup_cleanup failed: mon_backup_path is empty" << dendl;
+    return -ENOTDIR;
+  }
+  if (!backup_manager) {
+    derr << "backup_cleanup failed: monitor still initializing" << dendl;
+    return -EAGAIN;
+  }
+  uint64_t jobid = backup_manager->cleanup();
+  dout(1) << "queued backup cleanup job id " << jobid << dendl;
+  return 0;
 }
 
 void Monitor::handle_signal(int signum)
@@ -825,6 +864,44 @@ int Monitor::preinit()
         "ewon", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
         "elst", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_running, "backup_running", "Mon backup process is running",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_started, "backup_started", "Mon backups started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_success, "backup_success", "Mon backups finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_failed, "backup_failed", "Mon backups failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time(l_mon_backup_last_success, "backup_last_success", "Last successful mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_last_success_id, "backup_last_success_id", "Last successful mon backup id",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_last_size, "backup_last_size", "Last backup size",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_started, "backup_cleanup_started", "Mon backup cleanup started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_running, "backup_cleanup_running", "Mon backup cleanup is running",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_success, "backup_cleanup_success", "Mon backup cleanup finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_cleanup_failed", "Mon backup cleanup failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_cleanup_duration", "Mon backup cleanup duration",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_freed, "backup_cleanup_freed", "Mon backup cleanup freed size in bytes",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -983,6 +1060,13 @@ int Monitor::preinit()
 				       command.helpstring);
     ceph_assert(r == 0);
   }
+  r = admin_socket->register_command("backup", admin_hook,
+				     "create a backup of the mon database");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "backup_cleanup", admin_hook,
+    "delete old mon database backups according to retention config");
+  ceph_assert(r == 0);
   l.lock();
 
   // add ourselves as a conf observer
@@ -1031,6 +1115,9 @@ int Monitor::init()
 
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
+
+  backup_manager = std::make_unique<MonitorBackupManager>(cct, this);
+
   return 0;
 }
 
@@ -1125,6 +1212,9 @@ void Monitor::shutdown()
     cct->get_admin_socket()->unregister_commands(admin_hook);
     delete admin_hook;
     admin_hook = NULL;
+  }
+  if (backup_manager) {
+    backup_manager->stop();
   }
 
   elector.shutdown();
@@ -4782,6 +4872,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_REMOVE_SNAPS:
     case MSG_MON_GET_PURGED_SNAPS:
     case MSG_OSD_PG_READY_TO_MERGE:
+    case MSG_OSD_PG_STOP_MERGE:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;
 
@@ -6118,6 +6209,7 @@ void Monitor::tick()
     prepare_new_fingerprint(t);
     paxos->trigger_propose();
   }
+  backup_manager->tick();
 
   mgr_client.update_daemon_health(get_health_metrics());
   new_tick();

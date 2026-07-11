@@ -966,6 +966,8 @@ public:
 
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 
+  virtual bool supports_crypt_part_salts() const override { return next->supports_crypt_part_salts(); }
+
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,

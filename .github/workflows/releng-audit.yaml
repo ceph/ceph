@@ -212,7 +212,11 @@ jobs:
 
                   if (!isAuthorized) {
                     core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
-                    await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
+                    try {
+                      await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
+                    } catch (e) {
+                      core.info(`[Router] Label removal skipped or already deleted: ${e.message}`);
+                    }
                     core.setFailed(`User @${actor} is not authorized to override audits.`);
                   } else {
                     core.info(`[Router] User @${actor} is authorized. Stripping fail/pass labels to visually unblock PR.`);
@@ -224,7 +228,11 @@ jobs:
                 }
               }
               
-              core.info(`[Router] Labeled event handled without triggering audit.`);
+              if (hasFailLabel && labelName !== 'releng-audit-override') {
+                core.setFailed("PR is currently in a failed audit state. Remove the releng-audit-fail label to re-run.");
+              } else {
+                core.info(`[Router] Labeled event handled without triggering audit.`);
+              }
               core.setOutput('run_audit', 'false');
               return;
             }
@@ -250,7 +258,11 @@ jobs:
               return;
             }
 
-            core.info('[Router] Event did not match any trigger criteria. Skipping audit.');
+            if (hasFailLabel && eventName === 'pull_request_target') {
+              core.setFailed("PR is currently in a failed audit state. Remove the releng-audit-fail label to re-run.");
+            } else {
+              core.info('[Router] Event did not match any trigger criteria. Skipping audit.');
+            }
             core.setOutput('run_audit', 'false');
 
       - name: Checkout Trusted Base Repository
@@ -258,7 +270,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          
+
+      - name: Fetch main for parity check
+        if: steps.router.outputs.run_audit == 'true'
+        # checkout only fetches the PR's base branch (e.g. squid/tentacle/umbrella).
+        # The parity check needs the main ref to walk the commit history graph and find the upstream
+        # merge commit for each cherry-pick, so fetch it explicitly as origin/main.
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
       - name: Setup Python
         if: steps.router.outputs.run_audit == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0

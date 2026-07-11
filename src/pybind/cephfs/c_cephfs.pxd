@@ -26,7 +26,6 @@ cdef extern from *:
     unsigned long DIRENT_D_OFF(dirent *d)
 
 cdef extern from "../include/platform_errno.h":
-    ctypedef signed int int32_t;
     int32_t ceph_to_hostos_errno(int32_t e)
 
 cdef extern from "cephfs/ceph_ll_client.h":
@@ -148,10 +147,15 @@ cdef extern from "cephfs/libcephfs.h" nogil:
 
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_mkdirat(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode)
+
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata)
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_get_snap_info(ceph_mount_info *cmount, const char *path, snap_info *snap_info)
     void ceph_free_snap_info_buffer(snap_info *snap_info)
+    int ceph_do_snap_md_op(ceph_mount_info *cmount, const char *path,
+                           const char *md_key, const char *md_val,
+                           const unsigned int op_flag)
+
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)

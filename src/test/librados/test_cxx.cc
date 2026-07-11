@@ -212,10 +212,6 @@ std::string set_pool_flags_pp(const std::string &pool_name, librados::Rados &clu
       flags
   );
 
-  char *cmd[2];
-  cmd[0] = (char *)cmdstr.c_str();
-  cmd[1] = NULL;
-
   int ret = cluster.mon_command(std::move(cmdstr), {}, NULL, NULL);
   if (ret) {
     oss << "rados_mon_command osd pool set set_pool_flags_pp failed with error " << ret;

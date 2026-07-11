@@ -557,11 +557,19 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
   obj_op.meta.bucket_owner = bucket_info.owner;
+  obj_op.meta.category = RGWObjCategory::MultiPart;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
+
+  // Move the transient GCM salt onto the part info and drop it from attrs (never on the head).
+  std::string part_salt;
+  if (auto i = attrs.find(RGW_ATTR_CRYPT_PART_SALT); i != attrs.end()) {
+    part_salt = i->second.to_str();
+    attrs.erase(i);
+  }
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
@@ -586,6 +594,7 @@ int MultipartObjectProcessor::complete(
   info.accounted_size = accounted_size;
   info.modified = real_clock::now();
   info.manifest = manifest;
+  info.crypt_salt = std::move(part_salt);
 
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);

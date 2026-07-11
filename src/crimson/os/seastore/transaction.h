@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
@@ -464,6 +465,25 @@ public:
     return conflicted;
   }
 
+  // Number of times this transaction was conflicted and replayed before
+  // finally committing. do_transaction_no_callbacks() (user MUTATE writes)
+  std::size_t get_num_replays() const {
+    return num_replays;
+  }
+
+  // Time spent in each sub-phase of submit_transaction, accumulated across retries
+  struct phase_durations_t {
+    std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
+    std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+    std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
+    std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
+    std::chrono::steady_clock::duration prepare_record{0};  // prepare_record
+    std::chrono::steady_clock::duration journal{0};         // journal->submit_record (post-lock)
+  };
+  phase_durations_t &get_phase_durations() {
+    return phase_durations;
+  }
+
   auto &get_handle() {
     return handle;
   }
@@ -535,6 +555,8 @@ public:
     }
     get_handle().exit();
     views.clear();
+    copied_lba_keys.clear();
+    update_copied_lba_key = nullptr;
   }
 
   bool did_reset() const {
@@ -547,13 +569,19 @@ public:
     uint64_t num_erases = 0;
     uint64_t num_updates = 0;
     int64_t extents_num_delta = 0;
+    uint64_t lookup_count = 0;
+    uint64_t nodes_visited = 0;
+    uint64_t string_cmp_count = 0;
 
     bool is_clear() const {
       return (depth == 0 &&
               num_inserts == 0 &&
               num_erases == 0 &&
               num_updates == 0 &&
-	      extents_num_delta == 0);
+	      extents_num_delta == 0 &&
+              lookup_count == 0 &&
+              nodes_visited == 0 &&
+              string_cmp_count == 0);
     }
   };
   tree_stats_t& get_onode_tree_stats() {
@@ -651,7 +679,7 @@ public:
   bool force_rewrite_conflict = false;
 
   using update_copied_lba_key_func_t =
-    std::function<void (Transaction&, laddr_t, paddr_t)>;
+    std::function<void (laddr_t, paddr_t)>;
   void new_lba_key_copied(
     laddr_t src,
     laddr_t dest,
@@ -671,7 +699,7 @@ public:
       return;
     }
     laddr_t key = it->second;
-    update_copied_lba_key(*this, key, paddr);
+    update_copied_lba_key(key, paddr);
   }
   RootBlockRef peek_root() {
     return root;
@@ -882,6 +910,10 @@ private:
 
   bool conflicted = false;
 
+  std::size_t num_replays = 0;
+
+  phase_durations_t phase_durations;
+
   bool has_reset = false;
 
   OrderingHandle handle;
@@ -899,7 +931,7 @@ private:
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
 
   std::map<laddr_t, laddr_t> copied_lba_keys;
-  std::function<void (Transaction&, laddr_t, paddr_t)> update_copied_lba_key;
+  update_copied_lba_key_func_t update_copied_lba_key;
 };
 using TransactionRef = Transaction::Ref;
 

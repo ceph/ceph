@@ -83,6 +83,7 @@ int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair
 
 uint32_t StoreTool::traverse(const string& prefix,
                              const bool do_crc,
+                             const bool pretty_binary_key,
                              const bool do_value_dump,
                              ostream *out)
 {
@@ -100,8 +101,13 @@ uint32_t StoreTool::traverse(const string& prefix,
     if (!prefix.empty() && (rk.first != prefix))
       break;
 
-    if (out)
-      *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
+    if (out) {
+      if (pretty_binary_key) {
+        *out << url_escape(rk.first) << "\t" << pretty_binary_string(rk.second);
+      } else {
+        *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
+      }
+    }
     if (do_crc) {
       bufferlist bl;
       bl.append(rk.first);
@@ -130,9 +136,9 @@ uint32_t StoreTool::traverse(const string& prefix,
 }
 
 void StoreTool::list(const string& prefix, const bool do_crc,
-                     const bool do_value_dump)
+                     const bool pretty_binary_key, const bool do_value_dump)
 {
-  traverse(prefix, do_crc, do_value_dump,& std::cout);
+  traverse(prefix, do_crc, pretty_binary_key, do_value_dump,& std::cout);
 }
 
 bool StoreTool::exists(const string& prefix)

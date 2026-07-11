@@ -22,6 +22,8 @@ For general object store configuration, refer to the following:
    Storage devices <storage-devices>
    BlueStore RocksDB cache <../bluestore/rocksdb-config>
    BlueFS Spillover Cleaner <../bluestore/bluefs-spillover-cleaner>
+   Fast Crash Recovery for file-stored allocations <../bluestore/fast-onode-scan>
+   ExtBlkDev, FCM plugin <../bluestore/fcm-plugin>
    ceph-conf
 
 

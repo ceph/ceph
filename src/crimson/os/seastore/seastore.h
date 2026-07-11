@@ -47,6 +47,22 @@ enum class op_type_t : uint8_t {
     MAX
 };
 
+enum class txn_stage_t : uint8_t {
+    COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
+    THROTTLER_WAIT,    // waiting for a throttler slot
+    BUILD,             // building the transaction (_do_transaction_step loop)
+    BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
+    SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
+    // Sub-phases of submit_transaction:
+    SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
+    SUBMIT_OOL_WRITE,      // write_delayed + write_preallocated OOL extents (device I/O)
+    SUBMIT_LBA_UPDATE,     // update_lba_mappings
+    SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
+    SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
+    SUBMIT_JOURNAL,        // journal->submit_record -- POST-lock (not part of the hold)
+    MAX
+};
+
 class SeastoreCollection final : public FuturizedCollection {
 public:
   template <typename... T>
@@ -246,6 +262,10 @@ public:
       ceph::os::Transaction::iterator iter;
       std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
 
+      std::chrono::steady_clock::duration build_time{0};
+      std::chrono::steady_clock::duration get_onode_time{0};
+      std::chrono::steady_clock::duration submit_time{0};
+
       void reset_preserve_handle(TransactionManager &tm) {
         tm.reset_transaction_preserve_handle(*transaction);
         iter = ext_transaction.begin();
@@ -419,9 +439,50 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
+    // Histogram bucket upper bounds in microseconds (0.25ms–20ms).
+    // Ops above 20ms land in the last bucket as overflow.
+    static constexpr std::array<double, 14> lat_hist_bounds_us = {
+      250, 500, 1000,
+      1500, 2000, 3000,
+      5000,
+      7500, 10000,
+      15000, 20000,
+      30000, 50000,
+      100000
+    };
+
+    // Buckets for the per-transaction conflict/replay distribution.
+    static constexpr std::size_t REPLAY_BUCKETS = 16;
+
+    static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
+    // Upper bounds (microseconds) for the per-stage do_transaction latency histograms
+    static constexpr std::array<uint64_t, 14> STAGE_LAT_BUCKETS_US = {
+      250, 500, 1000, 1500, 2000, 3000, 5000, 7500,
+      10000, 15000, 20000, 30000, 50000, 100000
+    };
+
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
+      seastar::metrics::histogram conflict_replays;
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat;
+      uint64_t onode_lookups = 0;      // tree lookups
+      uint64_t onode_lookup_nodes = 0; // nodes searched (~depth/lookup)
+      uint64_t onode_str_cmp_count = 0;// ns/oid memcmp calls
+      uint64_t onode_inserts = 0;
+      uint64_t onode_updates = 0;
+      uint64_t onode_erases = 0;
+      int64_t  onode_extents_delta = 0;
     } stats;
+
+    void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
+      stats.onode_lookups        += ts.lookup_count;
+      stats.onode_lookup_nodes   += ts.nodes_visited;
+      stats.onode_str_cmp_count  += ts.string_cmp_count;
+      stats.onode_inserts        += ts.num_inserts;
+      stats.onode_updates        += ts.num_updates;
+      stats.onode_erases         += ts.num_erases;
+      stats.onode_extents_delta  += ts.extents_num_delta;
+    }
 
     seastar::metrics::histogram& get_latency(
       op_type_t op_type) {
@@ -432,8 +493,56 @@ public:
     void add_latency_sample(op_type_t op_type,
         std::chrono::steady_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
+      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
       lat.sample_count++;
-      lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+      lat.sample_sum += us;
+      bool found = false;
+      for (auto& b : lat.buckets) {
+        if (static_cast<double>(us) <= b.upper_bound) {
+          ++b.count;
+          found = true;
+          break;
+        }
+      }
+      if (!found && !lat.buckets.empty()) {
+        ++lat.buckets.back().count;
+      }
+    }
+
+    // Record how many times a just-completed transaction was conflicted/replayed.
+    // Called only from the do_transaction_no_callbacks() completion path.
+    void add_conflict_replay_sample(std::size_t num_replays) {
+      auto& hist = stats.conflict_replays;
+      if (hist.buckets.empty()) {
+        // register_metrics() did not run (store inactive); nothing to record.
+        return;
+      }
+      std::size_t idx = num_replays < REPLAY_BUCKETS ?
+        num_replays : REPLAY_BUCKETS - 1;
+      ++hist.buckets[idx].count;
+      ++hist.sample_count;
+      hist.sample_sum += num_replays;
+    }
+
+    // Record the latency of one do_transaction stage (microseconds). Buckets are
+    // non-cumulative (bucket = first upper_bound >= value); values above the top
+    // bound aren't bucketed but still land in sample_count/sample_sum.
+    void add_stage_latency_sample(txn_stage_t stage,
+        std::chrono::steady_clock::duration dur) {
+      auto& hist = stats.stage_lat[static_cast<std::size_t>(stage)];
+      if (hist.buckets.empty()) {
+        // register_metrics() did not run (store inactive); nothing to record.
+        return;
+      }
+      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+      for (auto& b : hist.buckets) {
+        if (static_cast<double>(us) <= b.upper_bound) {
+          ++b.count;
+          break;
+        }
+      }
+      ++hist.sample_count;
+      hist.sample_sum += us;
     }
 
     /*

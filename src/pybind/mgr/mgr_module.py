@@ -619,8 +619,13 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
                 self.log.debug("attempting reopen of database")
-                self.close_db()
-                self.open_db()
+                try:
+                    self.close_db()
+                    self.open_db()
+                except sqlite3.DatabaseError as e2:
+                    self.log.warning(
+                        f"reopen attempt {retries}/{MAX_DBCLEANUP_RETRIES} failed: {e2}"
+                    )
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
@@ -704,9 +709,8 @@ class MgrRootHandler(CPlusPlusHandler):
             "[mgr %(levelname)-4s %(name)s] %(message)s"
         ))
 
-    def emit(self, record: logging.LogRecord) -> None:
-        record.name = "mgr"
-        super().emit(record)
+    def set_module(self, module_inst: 'MgrModuleLoggingMixin') -> None:
+        self._module = module_inst
 
 
 class ClusterLogHandler(logging.Handler):
@@ -744,6 +748,7 @@ class FileHandler(logging.FileHandler):
 
 class MgrModuleLoggingMixin(object):
     module_name: str
+    _root_log_handler: Optional[MgrRootHandler] = None
 
     def _configure_logging(self,
                            mgr_level: str,
@@ -766,9 +771,20 @@ class MgrModuleLoggingMixin(object):
         self.log_to_cluster = log_to_cluster
 
         root = logging.getLogger()
-        if not any(isinstance(h, MgrRootHandler) for h in root.handlers):
-            root.addHandler(MgrRootHandler(self))
-            root.setLevel(logging.NOTSET)
+        root_handler = None
+        for handler in root.handlers:
+            if isinstance(handler, MgrRootHandler):
+                root_handler = handler
+                break
+        if root_handler is None:
+            root_handler = MgrRootHandler(self)
+            root.addHandler(root_handler)
+        else:
+            root_handler.set_module(self)
+        self._root_log_handler = root_handler
+        # Module loggers rely on handler thresholds, so keep root permissive
+        # and apply the mgr fallback threshold on MgrRootHandler itself.
+        root.setLevel(logging.NOTSET)
 
         self._module_logger.addHandler(self._mgr_log_handler)
         if log_to_file:
@@ -796,6 +812,8 @@ class MgrModuleLoggingMixin(object):
                        module_level: str,
                        cluster_level: str) -> None:
         self._cluster_log_handler.setLevel(cluster_level.upper())
+        if self._root_log_handler is not None:
+            self._root_log_handler.setLevel(self._ceph_log_level_to_python(mgr_level))
 
         module_level = module_level.upper() if module_level else ''
         if not self._module_level:

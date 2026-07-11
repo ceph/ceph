@@ -16,7 +16,10 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 export class RgwUserService {
   private url = 'api/rgw/user';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {}
 
   /**
    * Get the list of users.

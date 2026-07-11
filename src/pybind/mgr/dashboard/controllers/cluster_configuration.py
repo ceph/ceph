@@ -54,7 +54,7 @@ class ClusterConfiguration(RESTController):
         module_options = cephadm_module_config.get('module_options', {})
 
         for option_name, opt in module_options.items():
-            current_value = mgr.get_module_option_ex(
+            mgr_value = mgr.get_module_option_ex(
                 'cephadm', option_name, opt.get('default_value'))
 
             option = dict(opt)
@@ -64,10 +64,18 @@ class ClusterConfiguration(RESTController):
             option['enum_values'] = option.pop('enum_allowed', [])
             option['services'] = ['mgr']
             option['can_update_at_runtime'] = True
-            option['value'] = [{'section': 'mgr', 'value': current_value}]
+            option['value'] = []
             option['source'] = 'mgr_module'
+            option['_mgr_value'] = mgr_value
 
             cephadm_options.append(option)
+
+        self._append_config_option_values(cephadm_options)
+
+        for option in cephadm_options:
+            mgr_value = option.pop('_mgr_value')
+            if not any(v['section'] == 'mgr' for v in option.get('value', [])):
+                option['value'].append({'section': 'mgr', 'value': mgr_value})
 
         return cephadm_options
 

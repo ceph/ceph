@@ -58,6 +58,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   pwdExpirationFormat = 'YYYY-MM-DD';
   selectedRole: string[];
   passwordexp: boolean = false;
+  isSSO = false;
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
@@ -74,6 +75,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`user`;
+    this.isSSO = this.authStorageService.isSSO();
     this.createForm();
     this.messages = new SelectMessages({ empty: $localize`There are no roles.` });
   }
@@ -92,25 +94,36 @@ export class UserFormComponent extends CdForm implements OnInit {
         name: [''],
         password: [
           '',
-          [],
-
+          [
+            (control) =>
+              this.mode === this.userFormMode.editing || this.isSSO
+                ? null
+                : Validators.required(control)
+          ],
           [
             CdValidators.passwordPolicy(
               this.userService,
               () => this.userForm.getValue('username'),
               (_valid: boolean, credits: number, valuation: string) => {
-                this.passwordStrengthLevelClass = this.passwordPolicyService.mapCreditsToCssClass(
-                  credits
-                );
+                this.passwordStrengthLevelClass =
+                  this.passwordPolicyService.mapCreditsToCssClass(credits);
                 this.passwordValuation = _.defaultTo(valuation, '');
               }
             )
           ]
         ],
-        confirmpassword: [''],
+        confirmpassword: [
+          '',
+          [
+            (control) =>
+              this.mode === this.userFormMode.editing || this.isSSO
+                ? null
+                : Validators.required(control)
+          ]
+        ],
         pwdExpirationDate: [''],
         email: ['', [CdValidators.email]],
-        roles: [[]],
+        roles: [[], [(control) => (this.isSSO ? null : Validators.required(control))]],
         enabled: [true, [Validators.required]],
         pwdUpdateRequired: [true]
       },
@@ -129,6 +142,8 @@ export class UserFormComponent extends CdForm implements OnInit {
       this.action = this.actionLabels.CREATE;
       this.passwordexp = true;
     }
+    this.userForm.get('password').updateValueAndValidity();
+    this.userForm.get('confirmpassword').updateValueAndValidity();
 
     const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
     observableForkJoin(observables).subscribe(
@@ -149,6 +164,7 @@ export class UserFormComponent extends CdForm implements OnInit {
             expirationDate.add(this.pwdExpirationSettings.pwdExpirationSpan, 'day');
             pwdExpirationDateField.setValue(expirationDate.format(this.pwdExpirationFormat));
             pwdExpirationDateField.setValidators([Validators.required]);
+            pwdExpirationDateField.updateValueAndValidity();
           }
 
           this.loadingReady();

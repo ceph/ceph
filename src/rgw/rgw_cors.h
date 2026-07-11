@@ -18,6 +18,8 @@
 #include <map>
 #include <string>
 #include <include/types.h>
+#include "include/encoding.h" // for WRITE_CLASS_ENCODER()
+#include "include/str_list.h"
 
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
@@ -33,6 +35,8 @@
                          RGW_CORS_COPY)
 
 #define CORS_MAX_AGE_INVALID ((uint32_t)-1)
+
+namespace ceph { class Formatter; }
 
 class RGWCORSRule
 {
@@ -89,8 +93,13 @@ public:
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);
   void dump_origins();
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len);
+  bool matches_method(const char *req_meth);
+  bool matches_preflight_headers(const char *req_hdrs);
+  bool matches(const char *origin,
+               const char *req_meth,
+               const char *req_hdrs);
 };
 WRITE_CLASS_ENCODER(RGWCORSRule)
 
@@ -112,7 +121,7 @@ class RGWCORSConfiguration
     decode(rules, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   std::list<RGWCORSRule>& get_rules() {
     return rules;
   }
@@ -121,6 +130,9 @@ class RGWCORSConfiguration
   }
   void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
+  RGWCORSRule * match_rule(const char *origin,
+                           const char *req_meth,
+                           const char *req_hdrs);
   void erase_host_name_rule(std::string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r) {
@@ -161,7 +173,7 @@ static inline uint8_t get_multi_cors_method_flags(const char *req_meth) {
     else if (method == "HEAD") flags |= RGW_CORS_HEAD;
     else if (method == "COPY") flags |= RGW_CORS_COPY;
   };
-  for_each_substr(allowed_methods, ";,= \t", apply_flag);
+  ceph::for_each_substr(allowed_methods, ";,= \t", apply_flag);
 
   return flags;
 }

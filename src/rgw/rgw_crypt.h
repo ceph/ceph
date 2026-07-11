@@ -101,15 +101,18 @@ public:
 
   /**
    * Set the part number for multipart object decryption.
-   * AEAD modes use this for per-part IV derivation.
+   * AEAD modes use this for per-part IV derivation, and for GCM also fold the
+   * optional per-UploadPart salt into part-key derivation.
    * Default is no-op; CBC derives IVs from block offsets instead.
    */
-  virtual void set_part_number(uint32_t part_number) {}
+  virtual void set_part_number(uint32_t part_number,
+                               std::string_view part_salt = {}) {}
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
 static const size_t AES_256_GCM_IV_SIZE = 96 / 8;  // 12 bytes, GCM standard
 static const size_t AES_256_GCM_SALT_SIZE = 32;  // 256-bit random salt for HMAC-based key derivation
+static constexpr size_t AES_256_GCM_PART_SALT_SIZE = 16;  // per-UploadPart entropy folded into part-key derivation
 
 /**
  * AEAD chunk size constants used for size calculations across RGW.
@@ -266,7 +269,7 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   size_t encrypted_block_size; /**< snapshot of \ref BlockCrypt.get_encrypted_block_size() (includes auth tag for GCM) */
   optional_yield y;
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
-  std::vector<uint32_t> part_nums; /**< actual S3 part numbers for multipart (e.g., [1,3,5]) */
+  std::vector<std::pair<uint32_t, std::string>> part_keys; /**< per part: (S3 part number, GCM salt) */
   uint32_t current_part_num = 0; /**< current part number (1-based, 0 means single-part object) */
 
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
@@ -289,7 +292,7 @@ public:
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
                          std::vector<size_t> parts_len,
-                         std::vector<uint32_t> part_nums,
+                         std::vector<std::pair<uint32_t, std::string>> part_keys,
                          off_t encrypted_total_size,
                          bool has_compression,
                          optional_yield y);

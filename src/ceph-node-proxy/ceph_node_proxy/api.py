@@ -101,6 +101,12 @@ class API(Server):
     @cherrypy.expose
     @cherrypy.tools.allow(methods=["GET"])
     @cherrypy.tools.json_out()
+    def fcm(self) -> Dict[str, Any]:
+        return {"fcm": self.backend.get_fcm()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=["GET"])
+    @cherrypy.tools.json_out()
     def power(self) -> Dict[str, Any]:
         return {"power": self.backend.get_power()}
 
@@ -113,8 +119,20 @@ class API(Server):
     @cherrypy.expose
     @cherrypy.tools.allow(methods=["GET"])
     @cherrypy.tools.json_out()
+    def temperatures(self) -> Dict[str, Any]:
+        return {"temperatures": self.backend.get_temperatures()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=["GET"])
+    @cherrypy.tools.json_out()
+    def firmware(self) -> Dict[str, Any]:
+        return {"firmware": self.backend.get_firmware()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=["GET"])
+    @cherrypy.tools.json_out()
     def firmwares(self) -> Dict[str, Any]:
-        return {"firmwares": self.backend.get_firmwares()}
+        return {"firmwares": self.backend.get_firmware()}
 
     def _cp_dispatch(self, vpath: List[str]) -> "API":
         if vpath[0] == "led" and len(vpath) > 1:  # /led/{type}/{id}

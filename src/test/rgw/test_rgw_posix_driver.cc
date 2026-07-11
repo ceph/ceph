@@ -273,7 +273,7 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::DIRECTORY);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -485,7 +485,7 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::FILE);
 
-  ret = testfile->remove(env->dpp, null_yield, false);
+  ret = testfile->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -549,7 +549,7 @@ TEST(FSEnt, SymlinkBase)
   EXPECT_EQ(ent->get_type(), ObjectType::SYMLINK);
 
 
-  ret = testlink->remove(env->dpp, null_yield, false);
+  ret = testlink->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -667,7 +667,7 @@ TEST(FSEnt, MPDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::MULTIPART);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -877,7 +877,7 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::VERSIONED);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -2189,7 +2189,8 @@ TEST_F(POSIXVerObjectTest, DeleteCurVersion)
   EXPECT_TRUE(sf::is_regular_file(op2));
   EXPECT_TRUE(sf::exists(op3));
   EXPECT_TRUE(sf::is_regular_file(op3));
-  EXPECT_FALSE(sf::exists(ops));
+  // a temporary 0 byte file exists to represent a delete marker
+  EXPECT_TRUE(sf::exists(ops));
   EXPECT_TRUE(sf::is_symlink(ops));
   /* Need to find a way to get the correct version */
   //EXPECT_EQ(sf::read_symlink(ops), dfname);

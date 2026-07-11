@@ -75,6 +75,20 @@ if(MINGW)
   link_directories(${MINGW_LINK_DIRECTORIES})
 endif()
 
+option(WITH_MOLD "Use the Mold linker" OFF)
+if(WITH_MOLD)
+  find_program(_mold_path mold REQUIRED)
+  message(STATUS "Mold linker: ${_mold_path}")
+  set(CMAKE_LINKER ${_mold_path} CACHE FILEPATH "Linker" FORCE)
+  set(MOLD_FUSE_LD_FLAG "-fuse-ld=mold" CACHE INTERNAL "")
+  foreach(_flags CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+    if(NOT "${${_flags}}" MATCHES "fuse-ld=")
+      string(APPEND ${_flags} " ${MOLD_FUSE_LD_FLAG}")
+    endif()
+  endforeach()
+  set(USING_MOLD_LINKER TRUE CACHE INTERNAL "")
+endif()
+
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
@@ -460,6 +474,10 @@ if(ALLOCATOR)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
+elseif(WITH_ASAN)
+  # Force libc: tcmalloc/jemalloc still export operator new/delete even when the
+  # sanitizer shadows malloc, so sanitizer-allocated memory is freed via tcmalloc and SIGSEGVs.
+  set(ALLOCATOR "libc")
 else(ALLOCATOR)
   find_package(gperftools 2.6.2)
   set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
@@ -574,7 +592,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF) # posix depends on dbstore
+option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
@@ -582,6 +600,9 @@ option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
+
+# POSIX depends on DBStore:
+cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF) 
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -635,6 +656,23 @@ if(WITH_RADOSGW)
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
+
+if(WITH_RADOSGW_FDB)
+ include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+ CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
+ message("-- enabled zpp_bits")
+
+# JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
+# to "just working". But, how would we install the RPMs, etc.? This will need looking at
+# before this can be non-experimental:
+# CPMAddPackage("gh:apple/foundationdb@7.3.63")
+ message("FoundationDB support is EXPERIMENTAL and requires manual setup:")
+ message(" wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients-7.3.63-1.el7.x86_64.rpm")
+ message(" wget https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-server-7.3.63-1.el7.x86_64.rpm")
+ message("-- enabled FoundationDB (whether its there or not)")
+
+endif()
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
@@ -720,6 +758,13 @@ endif(LINUX)
 option(WITH_ASAN "build with ASAN" OFF)
 if(WITH_ASAN)
   list(APPEND sanitizers "address")
+  # Shared ASan/LSan runtime options: the in-tree suppression files plus the
+  # flags our tests need.  Consumed by add_ceph_test() and baked into bin/ceph
+  # so both ignore the same still-reachable third-party leaks.
+  set(CEPH_ASAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0"
+      CACHE INTERNAL "ASAN_OPTIONS for ceph tests and the ceph CLI")
+  set(CEPH_LSAN_OPTIONS "suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0"
+      CACHE INTERNAL "LSAN_OPTIONS for ceph tests and the ceph CLI")
 endif()
 
 option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
@@ -817,6 +862,12 @@ else()
   include(BuildBoost)
   build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  if(WITH_ASAN)
+    # Boost.Context is built ucontext-only here (context-impl=ucontext); define
+    # the matching backend tree-wide so every Boost.Context/Coroutine2 consumer
+    # agrees on it, instead of relying on per-target propagation that is easy to miss.
+    add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
+  endif()
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 add_library(Boost::asio INTERFACE IMPORTED)
@@ -893,4 +944,3 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
-

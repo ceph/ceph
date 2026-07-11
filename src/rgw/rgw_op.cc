@@ -1856,38 +1856,6 @@ int RGWOp::init_quota()
   return 0;
 }
 
-static bool validate_cors_rule_method(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_meth) {
-  if (!req_meth) {
-    ldpp_dout(dpp, 5) << "req_meth is null" << dendl;
-    return false;
-  }
-
-  uint8_t flags = get_multi_cors_method_flags(req_meth);
-
-  if (rule->get_allowed_methods() & flags) {
-    ldpp_dout(dpp, 10) << "Method " << req_meth << " is supported" << dendl;
-  } else {
-    ldpp_dout(dpp, 5) << "Method " << req_meth << " is not supported" << dendl;
-    return false;
-  }
-
-  return true;
-}
-
-static bool validate_cors_rule_header(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs) {
-  if (req_hdrs) {
-    vector<string> hdrs;
-    get_str_vec(req_hdrs, hdrs);
-    for (const auto& hdr : hdrs) {
-      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
-        ldpp_dout(dpp, 5) << "Header " << hdr << " is not registered in this rule" << dendl;
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 int RGWOp::read_bucket_cors()
 {
   bufferlist bl;
@@ -2000,9 +1968,15 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return false;
   }
 
-  /* CORS 6.2.2. */
-  RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
-  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age] (RGWCORSRule *rule) {
+  /* CORS 6.2.2–6.2.5: first rule matching origin, method, and preflight headers. */
+  const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+  if (!req_meth) {
+    req_meth = s->info.method;
+  }
+  const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
+
+  RGWCORSRule *rule = bucket_cors.match_rule(orig, req_meth, req_hdrs);
+  auto is_allowed_to_generate_rule_cors_header = [this, &origin, &method, &headers, &exp_headers, &max_age, req_meth, req_hdrs] (RGWCORSRule *rule) {
     if (!rule)
       return false;
 
@@ -2019,21 +1993,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
       origin = "*";
 
     /* CORS 6.2.3. */
-    const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-    if (!req_meth) {
-      req_meth = s->info.method;
-    }
-
     if (req_meth) {
       method = req_meth;
-      /* CORS 6.2.5. */
-      if (!validate_cors_rule_method(this, rule, req_meth)) {
-        return false;
-      }
     }
-
-    /* CORS 6.2.4. */
-    const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
     /* CORS 6.2.6. */
     get_cors_response_headers(this, rule, req_hdrs, headers, exp_headers, max_age);
@@ -2045,7 +2007,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return true;
   }
 
-  if (optional_global_cors.has_value() && is_allowed_to_generate_rule_cors_header(&(*optional_global_cors))) {
+  if (optional_global_cors.has_value() &&
+      optional_global_cors->matches(orig, req_meth, req_hdrs) &&
+      is_allowed_to_generate_rule_cors_header(&(*optional_global_cors))) {
     return true;
   }
 
@@ -2760,6 +2724,7 @@ void RGWGetObj::execute(optional_yield y)
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
+  
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
     op_ret = 0;
     goto done_err;
@@ -2958,6 +2923,10 @@ void RGWGetObj::execute(optional_yield y)
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
+    if (!get_data) {
+      rgw::op_counters::inc(counters, l_rgw_op_head_obj, 1);
+      rgw::op_counters::tinc(counters, l_rgw_op_head_obj_lat, s->time_elapsed());
+    }
     return;
   }
 
@@ -7253,17 +7222,10 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
 }
 
 int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
-  rule = cc->host_name_rule(origin);
+  rule = cc->match_rule(origin, req_meth, req_hdrs);
   if (!rule) {
-    ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_method(this, rule, req_meth)) {
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_header(this, rule, req_hdrs)) {
+    ldpp_dout(this, 10) << "no CORS rule matching origin=" << origin
+                        << " method=" << req_meth << dendl;
     return -ENOENT;
   }
 
@@ -7273,21 +7235,9 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
 int RGWOptionsCORS::validate_global_cors_request(RGWCORSRule *global_cors_rule) {
   ldpp_dout(this, 20) << "Validating request with global CORS" << dendl;
   rule = global_cors_rule;
-  if (!rule) {
-    ldpp_dout(this, 10) << "There is no global cors rule present" << dendl;
-    return -ENOENT;
-  }
-
-  if (!rule->is_origin_present(origin)) {
-    ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_method(this, rule, req_meth)) {
-    return -ENOENT;
-  }
-
-  if (!validate_cors_rule_header(this, rule, req_hdrs)) {
+  if (!rule || !rule->matches(origin, req_meth, req_hdrs)) {
+    ldpp_dout(this, 10) << "no global CORS rule matching origin=" << origin
+                        << " method=" << req_meth << dendl;
     return -ENOENT;
   }
 
@@ -8291,9 +8241,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(dpp);
-  if (op_ret < 0) {
-    send_partial_response(o, false, "", op_ret);
+  int r = res->publish_reserve(dpp);
+  if (r < 0) {
+    send_partial_response(o, false, "", r);
     return;
   }
 
@@ -8309,10 +8259,10 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y,
-                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (op_ret == -ENOENT) {
-    op_ret = 0;
+  r = del_op->delete_obj(dpp, y,
+                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+  if (r == -ENOENT) {
+    r = 0;
   }
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
@@ -8320,7 +8270,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
   }
 
-  if (op_ret == 0) {
+  if (r == 0) {
     // send request to notification manager
     int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
@@ -8329,7 +8279,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
     }
   }
   
-  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -10425,27 +10375,43 @@ int get_decrypt_filter(
   // correctly decrypt across part boundaries
   std::vector<size_t> parts_len;
 
-  // Read actual S3 part numbers from attribute (set by CompleteMultipartUpload)
-  std::vector<uint32_t> part_nums;
+  // Read (S3 part number, GCM salt) pairs from the attribute (set by Complete).
+  std::vector<std::pair<uint32_t, std::string>> part_keys;
   if (auto it = attrs.find(RGW_ATTR_CRYPT_PART_NUMS); it != attrs.end()) {
     try {
       auto p = it->second.cbegin();
       using ceph::decode;
-      decode(part_nums, p);
+      decode(part_keys, p);
     } catch (const buffer::error&) {
       ldpp_dout(s, 1) << "failed to decode RGW_ATTR_CRYPT_PART_NUMS" << dendl;
-      // Continue with empty part_nums - will fail for multipart, ok for single-part
+      // Continue with empty part_keys - will fail for multipart, ok for single-part
     }
   }
 
-  /**
-   * Fallback for GET ?partNumber=N (single part read).
-   * When reading an individual part, the CRYPT_PART_NUMS attribute is skipped
-   * (see rgw_rados.cc skip list), so we use the requested part_num to ensure
-   * correct key derivation and IV generation.
+  /*
+   * GET ?partNumber=N receives the full pair vector; reduce it to the requested
+   * part so the salt/key derivation is correct and the vector matches the
+   * single-part manifest.
    */
-  if (part_nums.empty() && part_num > 0) {
-    part_nums.push_back(part_num);
+  if (part_num > 0 && !part_keys.empty()) {
+    size_t idx = part_keys.size();
+    for (size_t k = 0; k < part_keys.size(); k++) {
+      if (part_keys[k].first == static_cast<uint32_t>(part_num)) { idx = k; break; }
+    }
+    if (idx == part_keys.size()) {
+      return -ERR_INVALID_PART;
+    }
+    auto sel = std::move(part_keys[idx]);
+    part_keys.clear();
+    part_keys.push_back(std::move(sel));
+  }
+
+  /*
+   * No CRYPT_PART_NUMS attr but a part was requested: derive from part_num with
+   * an empty salt.
+   */
+  if (part_keys.empty() && part_num > 0) {
+    part_keys.push_back({static_cast<uint32_t>(part_num), {}});
   }
 
   // for replicated objects, the original part lengths are preserved in an xattr
@@ -10497,7 +10463,7 @@ int get_decrypt_filter(
   const bool has_compression = attrs.count(RGW_ATTR_COMPRESSION);
   *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
       s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), std::move(part_nums), encrypted_total_size,
+      std::move(parts_len), std::move(part_keys), encrypted_total_size,
       has_compression, s->yield);
   return 0;
 }

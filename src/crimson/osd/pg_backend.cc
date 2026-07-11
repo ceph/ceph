@@ -1022,16 +1022,12 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   int num_bytes)
 {
   if (!os.exists) {
-    return crimson::ct_error::enoent::make();
-  }
-
-  if (!os.exists) {
     logger().debug("{} {} does not exist",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   if (whiteout && os.oi.is_whiteout()) {
     logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
-    return seastar::now();
+    return crimson::ct_error::enoent::make();
   }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
@@ -1174,6 +1170,10 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
     return crimson::ct_error::enodata::make();
   };
+  if (is_erasure() && !os.exists) {
+    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
@@ -1455,7 +1455,7 @@ PGBackend::omap_get_keys(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1549,7 +1549,7 @@ PGBackend::omap_cmp(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
 
@@ -1585,7 +1585,7 @@ PGBackend::omap_get_vals(
   object_stat_sum_t& delta_stats) const
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     co_await ll_read_ierrorator::future<>(crimson::ct_error::enoent::make());
   }
   std::string start_after;
@@ -1756,7 +1756,9 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_range(
 PGBackend::interruptible_future<> PGBackend::omap_remove_key(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  osd_op_params_t &osd_op_params,
+  object_stat_sum_t &delta_stats)
 {
   ceph::bufferlist to_rm_bl;
   try {
@@ -1766,9 +1768,8 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_key(
     throw crimson::osd::invalid_argument{};
   }
   txn.omap_rmkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_rm_bl);
-  // TODO:
-  // ctx->clean_regions.mark_omap_dirty();
-  // ctx->delta_stats.num_wr++;
+  osd_op_params.clean_regions.mark_omap_dirty();
+  delta_stats.num_wr++;
   os.oi.clear_omap_digest();
   return seastar::now();
 }
@@ -1782,7 +1783,7 @@ PGBackend::omap_clear(
   object_stat_sum_t& delta_stats)
 {
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
   if (!os.oi.is_omap()) {

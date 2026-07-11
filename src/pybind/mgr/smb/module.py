@@ -25,12 +25,14 @@ from . import (
     rados_store,
     resources,
     results,
+    rgw,
     sqlite_store,
     utils,
 )
 from .cli import SMBCLICommand
 from .enums import (
     AuthMode,
+    ClientSupportMode,
     InputPasswordFilter,
     JoinSourceType,
     PasswordFilter,
@@ -98,8 +100,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_store=self._public_store,
             path_resolver=path_resolver,
             authorizer=authorizer,
+            mon_cmd_issuer=self,
             orch=self._orch_backend(enable_orch=uo),
             earmark_resolver=earmark_resolver,
+            tool_execer=self,
         )
 
     def _backend_store(self, store_conf: str = '') -> ConfigStore:
@@ -203,6 +207,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return results.ResultGroup(
                 [results.InvalidResourceResult(err.resource_data, str(err))]
             )
+        except sqlite_store.StoreUnavailable as err:
+            # Reached only via remote() calls (e.g. dashboard), which bypass
+            # cli.py's error_wrapper. Return a result instead of raising so a
+            # transient db outage doesn't surface as an unhandled exception.
+            return results.ResultGroup(
+                [
+                    results.InvalidResourceResult(
+                        {}, f'smb database temporarily unavailable: {err}'
+                    )
+                ]
+            )
 
     @SMBCLICommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
@@ -223,6 +238,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         placement: Optional[str] = None,
         clustering: Optional[SMBClustering] = None,
         public_addrs: Optional[List[str]] = None,
+        client_compat: Optional[ClientSupportMode] = None,
         password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
         password_filter_out: Optional[PasswordFilter] = None,
     ) -> results.Result:
@@ -333,6 +349,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             placement=pspec,
             clustering=clustering,
             public_addrs=c_public_addrs,
+            client_compat=client_compat,
         )
         to_apply.append(cluster)
         return self._apply_res(
@@ -442,6 +459,75 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             password_filter_out=password_filter,
         )
 
+    @SMBCLICommand('cluster update client-compat', perm='rw')
+    def cluster_update_client_compat(
+        self,
+        client_compat: ClientSupportMode,
+        cluster_id: str,
+    ) -> Simplified:
+        """Update client compatibility mode for an SMB cluster and all its shares"""
+        # Get the existing cluster
+        clusters = self._handler.matching_resources(
+            [f'ceph.smb.cluster.{cluster_id}']
+        )
+
+        active_clusters = [
+            c for c in clusters if isinstance(c, resources.Cluster)
+        ]
+
+        if not active_clusters:
+            raise ValueError(f"Cluster {cluster_id} not found")
+
+        if len(active_clusters) > 1:
+            raise ValueError(f"Multiple clusters found matching {cluster_id}")
+
+        cluster = active_clusters[0]
+
+        # Create updated cluster with new client_compat setting
+        updated_cluster = replace(cluster, client_compat=client_compat)
+
+        # Get all shares for this cluster
+        shares = self._handler.matching_resources(
+            [f'ceph.smb.share.{cluster_id}']
+        )
+
+        active_shares = [s for s in shares if isinstance(s, resources.Share)]
+
+        # Prepare resources to update: cluster + all shares
+        resources_to_update: List[resources.SMBResource] = [updated_cluster]
+        resources_to_update.extend(active_shares)
+
+        # Apply the updates
+        result_group = self._apply_res(resources_to_update)
+
+        # Process results
+        cluster_updated = False
+        successful_share_updates = []
+        failed_share_updates = []
+
+        for result in result_group:
+            if result.success:
+                if isinstance(result.src, resources.Cluster):
+                    cluster_updated = True
+                elif hasattr(result.src, 'share_id'):
+                    successful_share_updates.append(result.src.share_id)
+            else:
+                if isinstance(result.src, resources.Share) and hasattr(
+                    result.src, 'share_id'
+                ):
+                    failed_share_updates.append(
+                        {"share_id": result.src.share_id, "error": result.msg}
+                    )
+
+        return {
+            "cluster_id": cluster_id,
+            "client_compat": client_compat.value,
+            "cluster_updated": cluster_updated,
+            "successful_share_updates": successful_share_updates,
+            "failed_share_updates": failed_share_updates,
+            "total_shares": len(active_shares),
+        }
+
     @SMBCLICommand('cluster update cephfs qos', perm='rw')
     def cluster_update_qos(
         self,
@@ -542,6 +628,48 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for cid, shid in self._handler.share_ids()
             if cid == cluster_id
         ]
+
+    @SMBCLICommand('share create rgw', perm='rw')
+    def share_create_rgw(
+        self,
+        cluster_id: str,
+        share_id: str,
+        bucket: str,
+        share_name: str = '',
+        user_id: str = '',
+        readonly: bool = False,
+    ) -> results.Result:
+        """Create an SMB share backed by RGW"""
+        try:
+            # Pass 'self' which conforms to ToolExecer protocol
+            fetched_user_id = rgw.fetch_rgw_credentials(
+                self, bucket, user_id
+            )[0]
+
+            # Create share with user credentials
+            # The staging layer will auto-create the credential if needed
+            share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                readonly=readonly,
+                rgw=resources.RGWStorage(
+                    bucket=bucket,
+                    user_id=fetched_user_id,
+                ),
+            )
+
+            # Apply share resource (staging may create credential too)
+            return self._apply_res([share], create_only=True).squash(share)
+        except ValueError as e:
+            # Create a minimal share resource for error reporting
+            error_share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                rgw=resources.RGWStorage(bucket='error'),
+            )
+            return results.ErrorResult(error_share, msg=str(e))
 
     @SMBCLICommand('share create', perm='rw')
     def share_create(
@@ -666,20 +794,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Show resources fetched from the local config store based on resource
         type or resource type and id(s).
         """
-        if not resource_names:
-            resources = self._handler.all_resources()
-        else:
-            try:
-                resources = self._handler.matching_resources(resource_names)
-            except handler.InvalidResourceMatch as err:
-                raise cli.InvalidInputValue(str(err)) from err
-        if password_filter is not PasswordFilter.NONE:
-            op = (PasswordFilter.NONE, password_filter)
-            log.debug('Password filtering for smb show: %r', op)
-            resources = [r.convert(op) for r in resources]
-        if len(resources) == 1 and results is ShowResults.COLLAPSED:
-            return resources[0].to_simplified()
-        return {"resources": [r.to_simplified() for r in resources]}
+        try:
+            if not resource_names:
+                resources = self._handler.all_resources()
+            else:
+                try:
+                    resources = self._handler.matching_resources(
+                        resource_names
+                    )
+                except handler.InvalidResourceMatch as err:
+                    raise cli.InvalidInputValue(str(err)) from err
+            if password_filter is not PasswordFilter.NONE:
+                op = (PasswordFilter.NONE, password_filter)
+                log.debug('Password filtering for smb show: %r', op)
+                resources = [r.convert(op) for r in resources]
+            if len(resources) == 1 and results is ShowResults.COLLAPSED:
+                return resources[0].to_simplified()
+            return {"resources": [r.to_simplified() for r in resources]}
+        except sqlite_store.StoreUnavailable as err:
+            # Reached only via remote() calls (e.g. dashboard), which bypass
+            # cli.py's error_wrapper. Return a value instead of raising so a
+            # transient db outage doesn't surface as an unhandled exception.
+            return {
+                "error": f"smb database temporarily unavailable: {err}",
+                "resources": [],
+            }
 
     def submit_smb_spec(self, spec: SMBSpec) -> None:
         """Submit a new or updated smb spec object to ceph orchestration."""

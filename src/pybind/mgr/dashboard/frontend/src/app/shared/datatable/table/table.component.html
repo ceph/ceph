@@ -1,172 +1,330 @@
-<cds-table-container [cdsLayer]="layer"
-                     [cdsTheme]="theme"
-                     class="content-theme">
+<cds-table-container
+  [cdsLayer]="layer"
+  [cdsTheme]="theme"
+  class="content-theme"
+>
   <cds-table-header *ngIf="headerTitle">
-    <h4 cdsTableHeaderTitle
-        i18n>
+    <h4
+      cdsTableHeaderTitle
+      i18n
+    >
       @if (isHeaderTitleString) {
         {{ headerTitle }}
-    } @else {
-      <ng-container *ngTemplateOutlet="headerTitle"></ng-container>
-    }
+      } @else {
+        <ng-container *ngTemplateOutlet="headerTitle"></ng-container>
+      }
     </h4>
-    <p cdsTableHeaderDescription
-       i18n
-       *ngIf="headerDescription">
-      {{headerDescription}}
+    <p
+      cdsTableHeaderDescription
+      i18n
+      *ngIf="headerDescription"
+    >
+      {{ headerDescription }}
     </p>
   </cds-table-header>
-  <cds-table-toolbar #toolbar
-                     *ngIf="toolHeader"
-                     (cancel)="onBatchActionsCancel()"
-                     [model]="selectionType === 'multiClick' ? model : []"
-                     [batchText]="{ SINGLE: '1 item selected', MULTIPLE: '{{count}} items selected' }">
+  <cds-table-toolbar
+    #toolbar
+    *ngIf="toolHeader"
+    (cancel)="onBatchActionsCancel()"
+    [model]="selectionType === 'multiClick' ? model : []"
+    [batchText]="{ SINGLE: '1 item selected', MULTIPLE: '{{count}} items selected' }"
+  >
     <!-- batch actions -->
     <cds-table-toolbar-actions *ngIf="tableActions?.dropDownActions.length > 0">
       <ng-container *ngFor="let action of tableActions?.dropDownActions">
-        <button *ngIf="tableActions.currentAction !== action"
-                cdsButton="primary"
-                [tabindex]="toolbar.selected ? 0 : -1"
-                class="{{ tableActions.toClassName(action) }}"
-                title="{{ tableActions.useDisableDesc(action) }}"
-                (click)="tableActions.useClickAction(action)"
-                [routerLink]="tableActions.useRouterLink(action)"
-                [preserveFragment]="action.preserveFragment ? '' : null"
-                [disabled]="tableActions.disableSelectionAction(action)"
-                [attr.aria-label]="action.name"
-                i18n>
+        <button
+          *ngIf="tableActions.currentAction !== action"
+          cdsButton="primary"
+          [tabindex]="toolbar.selected ? 0 : -1"
+          class="{{ tableActions.toClassName(action) }}"
+          title="{{ tableActions.useDisableDesc(action) }}"
+          (click)="tableActions.useClickAction(action)"
+          [routerLink]="tableActions.useRouterLink(action)"
+          [preserveFragment]="action.preserveFragment ? '' : null"
+          [disabled]="tableActions.disableSelectionAction(action)"
+          [attr.aria-label]="action.name"
+          type="button"
+          i18n
+        >
           {{ action.name }}
         </button>
       </ng-container>
     </cds-table-toolbar-actions>
     <!-- end batch actions -->
     <cds-table-toolbar-content>
+      <!-- gateway group / custom filter slot -->
+      <ng-content select=".table-filter"></ng-content>
+      <!-- end custom filter slot -->
       <!-- search -->
-      <cds-table-toolbar-search *ngIf="searchField"
-                                [expandable]="false"
-                                [(ngModel)]="search"
-                                aria-label="search"
-                                (valueChange)="updateFilter($event)"
-                                (clear)="onClearSearch()">
+      <cds-table-toolbar-search
+        *ngIf="searchField"
+        [expandable]="false"
+        [(ngModel)]="search"
+        aria-label="search"
+        (valueChange)="updateFilter($event)"
+        (clear)="onClearSearch()"
+      >
       </cds-table-toolbar-search>
       <!-- end search -->
       <!-- column filters -->
-       @if (columnFilters.length !== 0) {
-        <div cdsPopover
-             [isOpen]="openFilterPopover"
-             [autoAlign]="true"
-             [caret]="false">
+      @if (columnFilters.length !== 0 || customFilter) {
+        <div
+          cdsPopover
+          [isOpen]="openFilterPopover"
+          [autoAlign]="true"
+          [caret]="false"
+        >
           <cds-icon-button
             kind="ghost"
             class="toolbar-action"
             (click)="toggleFilterPopover()"
-            data-testid="filter-button">
-            <svg [cdsIcon]="icons.filter"
-                 [size]="icons.size16"
-                 class="cds--toolbar-action__icon"></svg>
+            data-testid="filter-button"
+          >
+            <svg
+              [cdsIcon]="icons.filter"
+              [size]="icons.size16"
+              class="cds--toolbar-action__icon"
+            ></svg>
           </cds-icon-button>
           <cds-popover-content [cdsLayer]="0">
+            <div
+              cdsStack="horizontal"
+              class="filter--header"
+            >
+              <span
+                class="cds--type-heading-03"
+                i18n
+                >Filters</span
+              >
+              <cds-icon-button
+                kind="ghost"
+                size="sm"
+                (click)="toggleFilterPopover()"
+              >
+                <cd-icon type="destroy"></cd-icon>
+              </cds-icon-button>
+            </div>
             <div
               cdsGrid
               [fullWidth]="true"
               [condensed]="true"
-              [narrow]="true">
-            @for (filter of columnFilters; track filter.column.name; let i = $index) {
-            <div
-              cdsRow
-              [cdsLayer]="2"
-              class="cds-mt-4">
+              [narrow]="true"
+            >
+              @if (columnFilters.length !== 0) {
+                @for (filter of columnFilters; track filter.column.name; let i = $index) {
+                  <div
+                    cdsRow
+                    [cdsLayer]="2"
+                    class="cds-mt-4"
+                  >
+                    <!-- filter names column -->
+                    <div
+                      cdsCol
+                      [columnNumbers]="{ sm: 4, md: 4 }"
+                    >
+                      <cds-text-label
+                        >Filter
+                        <input
+                          cdsText
+                          readonly
+                          size="md"
+                          [id]="'filter_key_' + i"
+                          [name]="'filter_key_' + i"
+                          [value]="filter.column.name"
+                        />
+                      </cds-text-label>
+                    </div>
 
-              <!-- filter names column -->
-              <div
-                cdsCol
-                [columnNumbers]="{sm: 4, md: 4}">
-                <cds-text-label>Filter
-                  <input cdsText
-                         readonly
-                         size="sm"
-                         [id]="'filter_key_' + i"
-                         [name]="'filter_key_' + i"
-                         [value]="filter.column.name">
-                </cds-text-label>
-              </div>
-
-              <!-- filter values column -->
-              <div
-                cdsCol
-                [columnNumbers]="{sm: 4, md: 4}">
-                <cds-select (valueChange)="onChangeFilter($event, filter)"
-                            [id]="'filter_value_' + i"
-                            label="Value"
-                            size="sm"
-                            [attr.data-testid]="'filter-select-' + filter.column.name"
-                            i18n-label>
-                  <option i18n>Any</option>
-                  @for (option of filter.options; track option.raw) {
-                    <option [value]="option.raw"
-                            [selected]="option.raw === selectedFilters[filter.column.name]">
-                      {{ option.formatted }}
-                    </option>
+                    <!-- filter values column -->
+                    <div
+                      cdsCol
+                      [columnNumbers]="{ sm: 4, md: 4 }"
+                    >
+                      <cds-select
+                        (valueChange)="onChangeFilter($event, filter)"
+                        [id]="'filter_value_' + i"
+                        label="Value"
+                        size="md"
+                        [attr.data-testid]="'filter-select-' + filter.column.name"
+                        i18n-label
+                      >
+                        <option i18n>Any</option>
+                        @for (option of filter.options; track option.raw) {
+                          <option
+                            [value]="option.raw"
+                            [selected]="option.raw === selectedFilters[filter.column.name]"
+                          >
+                            {{ option.formatted }}
+                          </option>
+                        }
+                      </cds-select>
+                    </div>
+                  </div>
+                }
+              }
+              @if (customFilter) {
+                @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
+                  @if (isCustomFilterString) {
+                    <div
+                      cdsRow
+                      class="cds-mt-4 cds--type-body-02"
+                    >
+                      Filter {{ customFilter }}:
+                    </div>
                   }
+                  <div
+                    cdsRow
+                    [cdsLayer]="1"
+                    class="cds-mt-4"
+                  >
+                    <div
+                      cdsCol
+                      [columnNumbers]="{ sm: 4, md: 3, lg: 7 }"
+                    >
+                      <cds-text-label
+                        >Key
+                        <input
+                          cdsText
+                          size="md"
+                          [id]="'filter_key_' + i"
+                          [value]="filter.key"
+                          (input)="filter.key = $any($event.target).value"
+                        />
+                      </cds-text-label>
+                    </div>
 
-                </cds-select>
-              </div>
+                    <div
+                      cdsCol
+                      [columnNumbers]="{ sm: 4, md: 3, lg: 7 }"
+                    >
+                      <cds-text-label
+                        >Value
+                        <input
+                          cdsText
+                          size="md"
+                          [id]="'filter_value_' + i"
+                          [value]="filter.value"
+                          (input)="filter.value = $any($event.target).value"
+                        />
+                      </cds-text-label>
+                    </div>
+
+                    @if (i !== 0) {
+                      <div
+                        cdsCol
+                        [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
+                        class="cds-mt-6"
+                      >
+                        <cds-icon-button
+                          kind="ghost"
+                          size="sm"
+                          (click)="removeCustomFilter(filter.id)"
+                        >
+                          <cd-icon type="trash"></cd-icon>
+                        </cds-icon-button>
+                      </div>
+                    }
+                  </div>
+                }
+                @if (stagedCustomFilters.length < 5) {
+                  <div
+                    cdsRow
+                    class="cds-mt-4"
+                  >
+                    <div cdsCol>
+                      <button
+                        cdsButton="tertiary"
+                        size="md"
+                        type="button"
+                        (click)="addCustomFilter()"
+                      >
+                        Add new filter rule +
+                      </button>
+                    </div>
+                  </div>
+                }
+              }
             </div>
-          }
-          <div cdsRow
-               class="cds-mt-4 cds-mb-4">
 
-            <button cdsButton="primary"
-                    size="sm"
-                    data-testid="apply-filters"
-                    (click)="onSubmitFilter()">
-              <ng-container i18n>Apply filters</ng-container>
-            </button>
-          </div>
-          </div>
+            <div class="filter--footer">
+              <button
+                cdsButton="secondary"
+                size="lg"
+                data-testid="clear-filters"
+                type="button"
+                (click)="onClearFilters()"
+              >
+                <ng-container i18n>Clear all</ng-container>
+              </button>
+
+              <button
+                cdsButton="primary"
+                size="lg"
+                data-testid="apply-filters"
+                [disabled]="isApplyFilterDisabled"
+                type="button"
+                (click)="onSubmitFilter()"
+              >
+                <ng-container i18n>Apply</ng-container>
+              </button>
+            </div>
           </cds-popover-content>
         </div>
       }
       <!-- end column filters -->
       <!-- refresh button -->
       <cds-icon-button
-              [kind]="status.type"
-              [disabled]="!fetchData?.observers?.length"
-              (click)="refreshBtn()"
-              [title]="status.msg"
-              [description]="status.msg"
-              i18n-title
-              i18n-description
-              class="toolbar-action"
-              placement="bottom"
-              *ngIf="fetchData?.observers?.length > 0">
-        <svg [cdsIcon]="icons.refresh"
-             [size]="icons.size16"
-             [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
+        [kind]="status.type"
+        [disabled]="!fetchData?.observers?.length"
+        (click)="refreshBtn()"
+        [title]="status.msg"
+        [description]="status.msg"
+        i18n-title
+        i18n-description
+        class="toolbar-action"
+        placement="bottom"
+        *ngIf="fetchData?.observers?.length > 0"
+      >
+        <svg
+          [cdsIcon]="icons.refresh"
+          [size]="icons.size16"
+          [ngClass]="{ 'cds--toolbar-action__icon': true, reload: loadingIndicator }"
+        ></svg>
       </cds-icon-button>
       <!-- end refresh button -->
       <!-- show hide columns -->
-      <button cdsButton="ghost"
-              class="toolbar-action"
-              [cdsOverflowMenu]="showHideColumnsRef"
-              placement="bottom"
-              [flip]="true"
-              [offset]="{ x: 3, y: 0 }">
-        <svg [cdsIcon]="icons.dataTable"
-             [size]="icons.size16"
-             class="cds--toolbar-action__icon"></svg>
+      <button
+        cdsButton="ghost"
+        class="toolbar-action"
+        type="button"
+        [cdsOverflowMenu]="showHideColumnsRef"
+        placement="bottom"
+        [flip]="true"
+        [offset]="{ x: 3, y: 0 }"
+      >
+        <svg
+          [cdsIcon]="icons.dataTable"
+          [size]="icons.size16"
+          class="cds--toolbar-action__icon"
+        ></svg>
       </button>
       <ng-template #showHideColumnsRef>
-        <div class="vstack gap-3 p-3"
-             (click)="$event.stopPropagation()"
-             [cdsTheme]="theme">
+        <div
+          class="vstack gap-3 p-3"
+          (click)="$event.stopPropagation()"
+          tabindex="0"
+          (keydown.enter)="$event.stopPropagation()"
+          [cdsTheme]="theme"
+        >
           <ng-container *ngFor="let column of localColumns">
-            <cds-checkbox *ngIf="!column?.isInvisible"
-                          id="{{ column.prop }}{{ tableName }}"
-                          name="{{ column.prop }}{{ tableName }}"
-                          [checked]="!column?.isHidden"
-                          (checkedChange)="toggleColumn(column);">{{ column.name }}
-          </cds-checkbox>
+            <cds-checkbox
+              *ngIf="!column?.isInvisible"
+              id="{{ column.prop }}{{ tableName }}"
+              name="{{ column.prop }}{{ tableName }}"
+              [checked]="!column?.isHidden"
+              (checkedChange)="toggleColumn(column)"
+              >{{ column.name }}
+            </cds-checkbox>
           </ng-container>
         </div>
       </ng-template>
@@ -177,138 +335,170 @@
     </cds-table-toolbar-content>
   </cds-table-toolbar>
   <!-- filter chips for column filters -->
-   @if (toolHeader && columnFiltered) {
+  @if (toolHeader && columnFiltered) {
     <div class="filter-tags">
       <div
         class="align-items-center"
         cdsStack="horizontal"
-        [gap]="2">
-        @for (filter of activeFilters | slice:0:3; track filter.column.name) {
+        [gap]="2"
+      >
+        @for (filter of activeFilters | slice: 0 : 3; track filter.id) {
           @if (filter.value) {
             <cds-tag-filter
               closeButtonLabel="Clear"
               i18n-closeButtonLabel
-              (close)="onRemoveFilter(filter)">
-              {{ filter.column.name }}={{ filter.value.formatted }}
+              (close)="onRemoveFilter(filter)"
+            >
+              {{ filter.name }}={{ filter.value }}
             </cds-tag-filter>
           }
         }
         @if (activeFilters.length > 3) {
           <cds-tooltip [description]="remainingFiltersTpl">
-            <cds-tag>
-              +{{ activeFilters.length - 3 }}
-            </cds-tag>
+            <cds-tag> +{{ activeFilters.length - 3 }} </cds-tag>
 
             <ng-template #remainingFiltersTpl>
               <div
                 cdsStack="vertical"
-                [gap]="2">
-              @for (filter of activeFilters | slice:3; track filter.column.name) {
-                <cds-tag-filter
-                  closeButtonLabel="Clear"
-                  i18n-closeButtonLabel
-                  (close)="onRemoveFilter(filter)">
-                  {{ filter.column.name }}={{ filter.value.formatted }}
-                </cds-tag-filter>
-              }
+                [gap]="2"
+              >
+                @for (filter of activeFilters | slice: 3; track filter.id) {
+                  <cds-tag-filter
+                    closeButtonLabel="Clear"
+                    i18n-closeButtonLabel
+                    (close)="onRemoveFilter(filter)"
+                  >
+                    {{ filter.name }}={{ filter.value }}
+                  </cds-tag-filter>
+                }
               </div>
             </ng-template>
           </cds-tooltip>
         }
-        <button cdsButton="ghost"
-                (click)="onClearFilters($event)">
+        <button
+          cdsButton="ghost"
+          (click)="onClearFilters($event)"
+          type="button"
+        >
           <ng-container i18n>Clear filters</ng-container>
         </button>
       </div>
     </div>
   }
   <!-- end filter chips for column filters -->
-  <table cdsTable
-         [sortable]="sortable"
-         [noBorder]="false"
-         [size]="size"
-         [striped]="false"
-         [skeleton]="loadingIndicator">
-    <thead cdsTableHead
-           [sortable]="sortable"
-           (deselectAll)="onDeselectAll()"
-           (selectAll)="onSelectAll()"
-           (sort)="changeSorting($event)"
-           [model]="model"
-           [selectAllCheckbox]="selectAllCheckbox"
-           [selectAllCheckboxSomeSelected]="selectAllCheckboxSomeSelected"
-           [showSelectionColumn]="showSelectionColumn"
-           [enableSingleSelect]="enableSingleSelect"
-           [skeleton]="loadingIndicator"
-           [stickyHeader]="false">
-    </thead>
-    <tbody cdsTableBody
-           *ngIf="!noData; else noDataTemplate"
-           [enableSingleSelect]="enableSingleSelect"
-           [skeleton]="loadingIndicator">
-      <ng-container *ngFor="let row of model.data; let i = index; trackBy: trackByFn.bind(this, identifier)">
-        <tr	cdsTableRow
+  <table
+    cdsTable
+    [sortable]="sortable"
+    [noBorder]="false"
+    [size]="size"
+    [striped]="false"
+    [skeleton]="loadingIndicator"
+  >
+    <thead
+      cdsTableHead
+      [sortable]="sortable"
+      (deselectAll)="onDeselectAll()"
+      (selectAll)="onSelectAll()"
+      (sort)="changeSorting($event)"
+      [model]="model"
+      [selectAllCheckbox]="selectAllCheckbox"
+      [selectAllCheckboxSomeSelected]="selectAllCheckboxSomeSelected"
+      [showSelectionColumn]="showSelectionColumn"
+      [enableSingleSelect]="enableSingleSelect"
+      [skeleton]="loadingIndicator"
+      [stickyHeader]="false"
+    ></thead>
+    <tbody
+      cdsTableBody
+      *ngIf="!noData; else noDataTemplate"
+      [enableSingleSelect]="enableSingleSelect"
+      [skeleton]="loadingIndicator"
+    >
+      <ng-container
+        *ngFor="let row of model.data; let i = index; trackBy: trackByFn.bind(this, identifier)"
+      >
+        <tr
+          cdsTableRow
+          [model]="model"
+          [row]="row"
+          [size]="size"
+          [selected]="model.isRowSelected(i)"
+          [expandable]="model.isRowExpandable(i)"
+          [expanded]="model.isRowExpanded(i)"
+          [showSelectionColumn]="showSelectionColumn"
+          [enableSingleSelect]="enableSingleSelect"
+          [skeleton]="loadingIndicator"
+          (selectRow)="onSelect(i)"
+          (deselectRow)="onDeselect(i)"
+          (expandRow)="model.expandRow(i, !model.isRowExpanded(i))"
+          (rowClick)="onSelect(i)"
+          *ngIf="!model.isRowFiltered(i)"
+        ></tr>
+        <tr
+          cdsTableExpandedRow
+          cdsExpandedRowHover
+          *ngIf="model.isRowExpandable(i) && !shouldExpandAsTable(row) && !model.isRowFiltered(i)"
+          [row]="row"
+          [expanded]="model.isRowExpanded(i)"
+          [skeleton]="loadingIndicator"
+        ></tr>
+        <ng-container
+          *ngIf="
+            model.isRowExpandable(i) &&
+            shouldExpandAsTable(row) &&
+            model.isRowExpanded(i) &&
+            !model.isRowFiltered(i)
+          "
+        >
+          <tr
+            cdsTableRow
+            *ngFor="let expandedDataRow of firstExpandedDataInRow(row)"
             [model]="model"
-            [row]="row"
+            [showSelectionColumnCheckbox]="false"
+            [showSelectionColumn]="showSelectionColumn"
+            [row]="expandedDataRow"
             [size]="size"
             [selected]="model.isRowSelected(i)"
-            [expandable]="model.isRowExpandable(i)"
-            [expanded]="model.isRowExpanded(i)"
-            [showSelectionColumn]="showSelectionColumn"
-            [enableSingleSelect]="enableSingleSelect"
             [skeleton]="loadingIndicator"
-            (selectRow)="onSelect(i)"
-            (deselectRow)="onDeselect(i)"
-            (expandRow)="model.expandRow(i, !model.isRowExpanded(i))"
-            (rowClick)="onSelect(i)"
-            *ngIf="!model.isRowFiltered(i)">
-        </tr>
-        <tr	cdsTableExpandedRow
-            cdsExpandedRowHover
-            *ngIf="model.isRowExpandable(i) && !shouldExpandAsTable(row) && !model.isRowFiltered(i)"
-            [row]="row"
-            [expanded]="model.isRowExpanded(i)"
-            [skeleton]="loadingIndicator">
-        </tr>
-        <ng-container	*ngIf="model.isRowExpandable(i) && shouldExpandAsTable(row) && model.isRowExpanded(i) && !model.isRowFiltered(i)">
-          <tr	cdsTableRow
-              *ngFor="let expandedDataRow of firstExpandedDataInRow(row)"
-              [model]="model"
-              [showSelectionColumnCheckbox]="false"
-              [showSelectionColumn]="showSelectionColumn"
-              [row]="expandedDataRow"
-              [size]="size"
-              [selected]="model.isRowSelected(i)"
-              [skeleton]="loadingIndicator">
-          </tr>
+          ></tr>
         </ng-container>
       </ng-container>
     </tbody>
   </table>
-  <cds-pagination [model]="model"
-                  (selectPage)="onPageChange($event)"
-                  [disabled]="limit === 0"
-                  [skeleton]="loadingIndicator"
-                  [pageInputDisabled]="limit === 0">
+  <cds-pagination
+    [model]="model"
+    (selectPage)="onPageChange($event)"
+    [disabled]="limit === 0"
+    [skeleton]="loadingIndicator"
+    [pageInputDisabled]="limit === 0"
+  >
   </cds-pagination>
 </cds-table-container>
 
 <ng-template #noDataTemplate>
   <tbody>
     <tr cdstablerow>
-      <td *ngIf="!rows?.length && !loadingIndicator"
-          class="no-data"
-          cdstabledata
-          [attr.colspan]="visibleColumns.length + 2">
-        <div class="empty-state cds-ml-3"
-             cdsStack="vertical"
-             gap="11">
+      <td
+        *ngIf="!rows?.length && !loadingIndicator"
+        class="no-data"
+        cdstabledata
+        [attr.colspan]="visibleColumns.length + 2"
+      >
+        <div
+          class="empty-state cds-ml-3"
+          cdsStack="vertical"
+          gap="11"
+        >
           <div></div>
-          <div cdsStack="vertical"
-               gap="1">
+          <div
+            cdsStack="vertical"
+            gap="1"
+          >
             <div>
-              <img src="{{ emptyStateImage }}"
-                   alt="No data available" />
+              <img
+                src="{{ emptyStateImage }}"
+                alt="No data available"
+              />
             </div>
             <legend class="cds--type-body-compact-02">
               <ng-container>{{ emptyStateTitle }}</ng-container>
@@ -323,273 +513,415 @@
   </tbody>
 </ng-template>
 
-<ng-template #rowDetailTpl
-             let-row="data">
+<ng-template
+  #rowDetailTpl
+  let-row="data"
+>
   @if (row[identifier] === expanded?.[identifier] && !scrollable) {
-  <div
-    (mouseenter)="onRowDetailHover($event)"
-    data-testid="datatable-row-detail">
-    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
-  </div>
+    <div
+      (mouseenter)="onRowDetailHover($event)"
+      data-testid="datatable-row-detail"
+    >
+      <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+    </div>
   } @else if (row[identifier] === expanded?.[identifier] && scrollable) {
-  <div
-    (mouseenter)="onRowDetailHover($event)"
-    data-testid="datatable-row-detail"
-    class="scrollable-expanded-row">
-    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
-  </div>
+    <div
+      (mouseenter)="onRowDetailHover($event)"
+      data-testid="datatable-row-detail"
+      class="scrollable-expanded-row"
+    >
+      <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+    </div>
   }
 </ng-template>
 
-<ng-template #defaultValueTpl
-             let-value="data.value"
-             let-expanded="expanded"
-             let-column="data.column">
+<ng-template
+  #defaultValueTpl
+  let-value="data.value"
+  let-expanded="expanded"
+  let-column="data.column"
+>
   <span [ngClass]="column?.cellClass">{{ value }}</span>
 </ng-template>
 
 <ng-template #tableActionTpl>
-  <cds-overflow-menu *ngIf="tableActions?.dropDownActions.length > 1 && selectionType !== 'multiClick'"
-                     [flip]="true"
-                     data-testid="table-action-btn"
-                     class="d-flex justify-content-end">
+  <cds-overflow-menu
+    *ngIf="tableActions?.dropDownActions.length > 1 && selectionType !== 'multiClick'"
+    [flip]="true"
+    data-testid="table-action-btn"
+    class="d-flex justify-content-end"
+  >
     <ng-container *ngFor="let action of tableActions?.dropDownActions">
-      <cds-overflow-menu-option *ngIf="tableActions.currentAction !== action"
-                                class="{{ tableActions.toClassName(action) }}"
-                                title="{{ tableActions.useDisableDesc(action) }}"
-                                (click)="tableActions.useClickAction(action)"
-                                [routerLink]="tableActions.useRouterLink(action)"
-                                [preserveFragment]="action.preserveFragment ? '' : null"
-                                [disabled]="tableActions.disableSelectionAction(action)"
-                                [attr.aria-label]="action.name"
-                                data-testid="table-action-option-btn"
-                                i18n>
+      <cds-overflow-menu-option
+        *ngIf="tableActions.currentAction !== action"
+        class="{{ tableActions.toClassName(action) }}"
+        title="{{ tableActions.useDisableDesc(action) }}"
+        (click)="tableActions.useClickAction(action)"
+        [routerLink]="tableActions.useRouterLink(action)"
+        [preserveFragment]="action.preserveFragment ? '' : null"
+        [disabled]="tableActions.disableSelectionAction(action)"
+        [attr.aria-label]="action.name"
+        data-testid="table-action-option-btn"
+        i18n
+      >
         {{ action.name }}
       </cds-overflow-menu-option>
     </ng-container>
   </cds-overflow-menu>
 </ng-template>
 
-
 <!-- cell templates that can be accessed from outside -->
-<ng-template #tableCellBoldTpl
-             let-value="data.value">
+<ng-template
+  #tableCellBoldTpl
+  let-value="data.value"
+>
   <strong>{{ value }}</strong>
 </ng-template>
 
-<ng-template #sparklineTpl
-             let-row="data.row"
-             let-value="data.value">
+<ng-template
+  #sparklineTpl
+  let-row="data.row"
+  let-value="data.value"
+>
   <div class="position-relative">
-    <cd-sparkline [data]="value"
-                  [isBinary]="row.cdIsBinary"></cd-sparkline>
+    <cd-sparkline
+      [data]="value"
+      [isBinary]="row.cdIsBinary"
+    ></cd-sparkline>
   </div>
 </ng-template>
 
-<ng-template #routerLinkTpl
-             let-row="data.row"
-             let-value="data.value">
-  <a [routerLink]="[row.cdLink]"
-     [queryParams]="row.cdParams">{{ value }}</a>
+<ng-template
+  #routerLinkTpl
+  let-row="data.row"
+  let-value="data.value"
+>
+  <a
+    [routerLink]="[row.cdLink]"
+    [queryParams]="row.cdParams"
+    >{{ value }}</a
+  >
 </ng-template>
 
-<ng-template #checkIconTpl
-             let-value="data.value">
+<ng-template
+  #checkIconTpl
+  let-value="data.value"
+>
   @if (value | boolean) {
-  <cd-icon type="check"></cd-icon>
-}
+    <cd-icon type="check"></cd-icon>
+  }
 </ng-template>
 
-<ng-template #perSecondTpl
-             let-row="data.row"
-             let-value="data.value">
+<ng-template
+  #perSecondTpl
+  let-row="data.row"
+  let-value="data.value"
+>
   {{ value | dimless }} /s
 </ng-template>
 
-<ng-template #executingTpl
-             let-column="data.column"
-             let-row="data.row"
-             let-value="data.value">
-  <cds-inline-loading *ngIf="row.cdExecuting"
-                      state="active"></cds-inline-loading>
-  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+<ng-template
+  #executingTpl
+  let-column="data.column"
+  let-row="data.row"
+  let-value="data.value"
+>
+  @if (row.cdExecuting) {
+    <cds-inline-loading></cds-inline-loading>
+  }
+  <span [ngClass]="column?.customTemplateConfig?.valueClass || ''">
     {{ value }}
   </span>
-  <span *ngIf="row.cdExecuting"
-        [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
+  @if (row.cdExecuting) {
+    <span
+      [ngClass]="
+        column?.customTemplateConfig?.executingClass
+          ? column?.customTemplateConfig.executingClass
+          : 'text-muted italic'
+      "
+      >({{ row.cdExecuting }})</span
+    >
+  }
 </ng-template>
-<ng-template #classAddingTpl
-             let-value="data.value">
+<ng-template
+  #classAddingTpl
+  let-value="data.value"
+>
   <span *ngIf="value">
-    <span *ngIf="!(value=='active')||(value=='expired')||(value=='pending')">
+    <span *ngIf="!(value == 'active') || value == 'expired' || value == 'pending'">
       {{ value }}
     </span>
-    <cds-tag *ngIf="(value==='active')||(value=== 'expired')||(value=== 'pending')"
-             class="{{ value | pipeFunction:useCustomClass:this }}">
-       {{value}}
+    <cds-tag
+      *ngIf="value === 'active' || value === 'expired' || value === 'pending'"
+      class="{{ value | pipeFunction: useCustomClass : this }}"
+    >
+      {{ value }}
     </cds-tag>
   </span>
 </ng-template>
 
-<ng-template #tagTpl
-             let-column="data.column"
-             let-value="data.value">
-  <span *ngFor="let item of (value | array); last as last">
-    <cds-tag [size]="'md'"
-             [class]="'table-tag ' + ((column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary'))"
-             *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
-      {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+<ng-template
+  #tagTpl
+  let-column="data.column"
+  let-value="data.value"
+>
+  <span *ngFor="let item of value | array; last as last">
+    <cds-tag
+      [size]="'md'"
+      [class]="
+        'table-tag ' +
+        (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class
+          ? column.customTemplateConfig.map[item].class
+          : column?.customTemplateConfig?.class
+            ? column.customTemplateConfig.class
+            : 'tag-primary')
+      "
+      *ngIf="
+        column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value
+          ? column.customTemplateConfig.map[item].value
+          : column?.customTemplateConfig?.prefix
+            ? column.customTemplateConfig.prefix + item
+            : item
+      "
+    >
+      {{
+        column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value
+          ? column.customTemplateConfig.map[item].value
+          : column?.customTemplateConfig?.prefix
+            ? column.customTemplateConfig.prefix + item
+            : item
+      }}
     </cds-tag>
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
 
-<ng-template #mapTpl
-             let-column="data.column"
-             let-value="data.value">
-  <span>{{ value | map:column?.customTemplateConfig }}</span>
+<ng-template
+  #mapTpl
+  let-column="data.column"
+  let-value="data.value"
+>
+  <span>{{ value | map: column?.customTemplateConfig }}</span>
 </ng-template>
 
-<ng-template #tooltipTpl
-             let-column="data.column"
-             let-value="data.value">
-  <span *ngFor="let item of (value | array);">
+<ng-template
+  #tooltipTpl
+  let-column="data.column"
+  let-value="data.value"
+>
+  <span *ngFor="let item of value | array">
     <cds-tag
       i18n
       i18n-ngbTooltip
-      class="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : ''}}"
-      ngbTooltip="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip) ? column.customTemplateConfig.map[item].tooltip : ''}}">
-      {{value}}
-  </cds-tag>
+      class="{{
+        column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class
+          ? column.customTemplateConfig.map[item].class
+          : ''
+      }}"
+      ngbTooltip="{{
+        column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip
+          ? column.customTemplateConfig.map[item].tooltip
+          : ''
+      }}"
+    >
+      {{ value }}
+    </cds-tag>
   </span>
 </ng-template>
 
-<ng-template #truncateTpl
-             let-column="data.column"
-             let-value="data.value">
-  <span data-toggle="tooltip"
-        [title]="value">{{ value | truncate:column?.customTemplateConfig?.length:column?.customTemplateConfig?.omission }}</span>
+<ng-template
+  #truncateTpl
+  let-column="data.column"
+  let-value="data.value"
+>
+  <span
+    data-toggle="tooltip"
+    [title]="value"
+    >{{
+      value
+        | truncate: column?.customTemplateConfig?.length : column?.customTemplateConfig?.omission
+    }}</span
+  >
 </ng-template>
 
-<ng-template #rowDetailsTpl
-             let-row="data.row"
-             let-isExpanded="data.expanded"
-             ngx-datatable-cell-template>
-  <a href="javascript:void(0)"
-     [class.expand-collapse-icon-right]="!isExpanded"
-     [class.expand-collapse-icon-down]="isExpanded"
-     class="expand-collapse-icon tc_expand-collapse"
-     title="Expand/Collapse Row"
-     i18n-title
-     (click)="toggleExpandRow(row, isExpanded, $event)">
+<ng-template
+  #rowDetailsTpl
+  let-row="data.row"
+  let-isExpanded="data.expanded"
+  ngx-datatable-cell-template
+>
+  <a
+    href="javascript:void(0)"
+    [class.expand-collapse-icon-right]="!isExpanded"
+    [class.expand-collapse-icon-down]="isExpanded"
+    class="expand-collapse-icon tc_expand-collapse"
+    title="Expand/Collapse Row"
+    i18n-title
+    (click)="toggleExpandRow(row, isExpanded, $event)"
+  >
   </a>
 </ng-template>
 
-<ng-template #timeAgoTpl
-             let-value="data.value">
-  <span data-toggle="tooltip"
-        [title]="value | cdDate">{{ value | relativeDate }}</span>
+<ng-template
+  #timeAgoTpl
+  let-value="data.value"
+>
+  <span
+    data-toggle="tooltip"
+    [title]="value | cdDate"
+    >{{ value | relativeDate }}</span
+  >
 </ng-template>
 
-<ng-template #pathTpl
-             let-value="data.value">
-  <cd-copy-2-clipboard-button *ngIf="value"
-                              [source]="value"
-                              [byId]="false"
-                              size="lg"
-                              text="{{ value | path }}">
+<ng-template
+  #pathTpl
+  let-value="data.value"
+>
+  <cd-copy-2-clipboard-button
+    *ngIf="value"
+    [source]="value"
+    [byId]="false"
+    size="lg"
+    text="{{ value | path }}"
+  >
   </cd-copy-2-clipboard-button>
 </ng-template>
 
-<ng-template #copyTpl
-             let-value="data.value">
-  <cd-copy-2-clipboard-button *ngIf="value"
-                              [source]="value"
-                              [byId]="false"
-                              [size]="lg"
-                              [text]="value">
+<ng-template
+  #copyTpl
+  let-value="data.value"
+>
+  <cd-copy-2-clipboard-button
+    *ngIf="value"
+    [source]="value"
+    [byId]="false"
+    [size]="lg"
+    [text]="value"
+  >
   </cd-copy-2-clipboard-button>
 </ng-template>
 
-<ng-template #editingTpl
-             let-value="data.value"
-             let-row="data.row"
-             let-column="data.column">
+<ng-template
+  #editingTpl
+  let-value="data.value"
+  let-row="data.row"
+  let-column="data.column"
+>
   @if (isCellEditing(row?.[identifier], column?.prop)) {
-  <form [formGroup]="formGroup"
-        #formDir="ngForm">
-    <div cdsRow>
-      <div cdsCol>
-        <cds-text-label [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty"
-                        [invalidText]="errorTpl">
-          <input type="text"
-                 cdsText
-                 size="sm"
-                 [id]="row?.[identifier] + '-' + column?.prop"
-                 [formControlName]="row?.[identifier] + '-' + column?.prop"
-                 (input)="valueChange(row?.[identifier], column?.prop, $event.target.value)"
-                 [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty">
-        </cds-text-label>
-        <ng-template #errorTpl>
-          @for (errorKey of formGroup?.get(row?.[identifier] + '-' + column?.prop)?.errors | keyvalue; track $index) {
-          @if (formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, errorKey.key)) {
-          <ng-container i18n>
-            {{ column.customTemplateConfig?.errorMessages?.[errorKey.key] || ('Invalid ' + column.name) }}
-          </ng-container>
-          }}
-        </ng-template>
-      </div>
-      <div cdsCol
-           [columnNumbers]="{sm:1}"
-           class="cds-p-0 cds-pt-3">
-        <div cdsRow>
-        <cds-icon-button kind="tertiary"
-                         size="sm"
-                         id="cell-inline-save-btn"
-                         type="button"
-                         (click)="saveCellItem(row, column?.prop)">
-          <cd-icon type="check"></cd-icon>
-        </cds-icon-button>
-        <cds-icon-button kind="ghost"
-                         size="sm"
-                         id="cell-inline-cancel-btn"
-                         type="button"
-                         (click)="cancelCellEdit(row[identifier], column?.prop)">
-          <cd-icon type="destroy"></cd-icon>
-        </cds-icon-button>
+    <form
+      [formGroup]="formGroup"
+      #formDir="ngForm"
+    >
+      <div cdsRow>
+        <div cdsCol>
+          <cds-text-label
+            [invalid]="
+              formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid &&
+              formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty
+            "
+            [invalidText]="errorTpl"
+          >
+            <input
+              type="text"
+              cdsText
+              size="sm"
+              [id]="row?.[identifier] + '-' + column?.prop"
+              [formControlName]="row?.[identifier] + '-' + column?.prop"
+              (input)="valueChange(row?.[identifier], column?.prop, $event.target.value)"
+              [invalid]="
+                formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid &&
+                formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty
+              "
+            />
+          </cds-text-label>
+          <ng-template #errorTpl>
+            @for (
+              errorKey of formGroup?.get(row?.[identifier] + '-' + column?.prop)?.errors | keyvalue;
+              track $index
+            ) {
+              @if (
+                formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, errorKey.key)
+              ) {
+                <ng-container i18n>
+                  {{
+                    column.customTemplateConfig?.errorMessages?.[errorKey.key] ||
+                      'Invalid ' + column.name
+                  }}
+                </ng-container>
+              }
+            }
+          </ng-template>
+        </div>
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 1 }"
+          class="cds-p-0 cds-pt-3"
+        >
+          <div cdsRow>
+            <cds-icon-button
+              kind="tertiary"
+              size="sm"
+              id="cell-inline-save-btn"
+              type="button"
+              (click)="saveCellItem(row, column?.prop)"
+            >
+              <cd-icon type="check"></cd-icon>
+            </cds-icon-button>
+            <cds-icon-button
+              kind="ghost"
+              size="sm"
+              id="cell-inline-cancel-btn"
+              type="button"
+              (click)="cancelCellEdit(row[identifier], column?.prop)"
+            >
+              <cd-icon type="destroy"></cd-icon>
+            </cds-icon-button>
+          </div>
         </div>
       </div>
-    </div>
-  </form>
+    </form>
   } @else {
-  <div cdsRow>
-    <div cdsCol
-         class="cds-pt-3">
-      {{ value }}
+    <div cdsRow>
+      <div
+        cdsCol
+        class="cds-pt-3"
+      >
+        {{ value }}
+      </div>
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 5 }"
+        class="edit-btn"
+      >
+        <cds-icon-button
+          kind="ghost"
+          size="sm"
+          id="cell-inline-edit-btn"
+          (click)="editCellItem(row[identifier], column, value)"
+        >
+          <cd-icon type="edit"></cd-icon>
+        </cds-icon-button>
+      </div>
     </div>
-    <div cdsCol
-         [columnNumbers]="{lg: 5}"
-         class="edit-btn">
-      <cds-icon-button kind="ghost"
-                       size="sm"
-                       id="cell-inline-edit-btn"
-                       (click)="editCellItem(row[identifier], column, value)">
-        <cd-icon type="edit"></cd-icon>
-      </cds-icon-button>
-    </div>
-  </div>
   }
 </ng-template>
 
-<ng-template #redirectTpl
-             let-value="data.value"
-             let-row="data.row"
-             let-column="data.column">
-@if (column.customTemplateConfig?.customRowProperty && row[column.customTemplateConfig?.customRowProperty]) {
-  <a [routerLink]="row[column.customTemplateConfig?.customRowProperty]">{{value}}</a>
-} @else if (column.customTemplateConfig?.redirectLink) {
-  <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver:value">{{value}}</a>
-} @else {
-  {{ value }}
-}
+<ng-template
+  #redirectTpl
+  let-value="data.value"
+  let-row="data.row"
+  let-column="data.column"
+>
+  @if (
+    column.customTemplateConfig?.customRowProperty &&
+    row[column.customTemplateConfig?.customRowProperty]
+  ) {
+    <a [routerLink]="row[column.customTemplateConfig?.customRowProperty]">{{ value }}</a>
+  } @else if (column.customTemplateConfig?.redirectLink) {
+    <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver: value">{{
+      value
+    }}</a>
+  } @else {
+    {{ value }}
+  }
 </ng-template>

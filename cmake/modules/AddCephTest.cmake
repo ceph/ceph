@@ -33,8 +33,8 @@ function(add_ceph_test test_name test_path)
     set_property(TEST ${test_name}
       APPEND
       PROPERTY ENVIRONMENT
-      ASAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0
-      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0)
+      ASAN_OPTIONS=${CEPH_ASAN_OPTIONS}
+      LSAN_OPTIONS=${CEPH_LSAN_OPTIONS})
   endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
@@ -73,8 +73,11 @@ if(WITH_GTEST_PARALLEL)
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
+    # CACHE INTERNAL: the set() runs only in the first directory to create the
+    # target, so a plain variable would be invisible to PARALLEL tests elsewhere.
     set(GTEST_PARALLEL_COMMAND
-      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel
+      CACHE INTERNAL "command to run a gtest binary through gtest-parallel")
   endif()
 endif()
 

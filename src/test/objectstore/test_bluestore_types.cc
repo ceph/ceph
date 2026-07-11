@@ -1078,12 +1078,12 @@ TEST(Blob, split) {
 
 TEST(ExtentMap, split_blob) {
   BlueStore store(g_ceph_context, "", 4096);
-  BlueStore::OnodeCacheShard *oc =
-      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
-  BlueStore::BufferCacheShard *bc =
-      BlueStore::BufferCacheShard::create(&store, "lru", NULL);
+  std::unique_ptr<BlueStore::OnodeCacheShard> oc{
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL)};
+  std::unique_ptr<BlueStore::BufferCacheShard> bc{
+      BlueStore::BufferCacheShard::create(&store, "lru", NULL)};
 
-  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc.get(), bc.get(), coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
   size_t shard_size =
     g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size;

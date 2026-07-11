@@ -176,6 +176,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   entity_name_t::MGR(gid),
 			   "mgr",
 			   Messenger::get_random_nonce());
+  msgr->set_dispatch_throttle_size(
+      g_conf().get_val<Option::size_t>("mgr_dispatch_throttle_bytes"));
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   // throttle policy
   msgr->set_policy(entity_name_t::TYPE_OSD,
@@ -1276,6 +1278,7 @@ int DaemonServer::_populate_crush_bucket_osds(
   } else if (bucket_type_str == "host" || bucket_type_str == "osd") {
     bucket_names.push_back(item_name);
   }
+
   // The following struct is to help re-order the
   // osds based on the number of pgs on them.
   struct pgs_per_osd {
@@ -1283,10 +1286,8 @@ int DaemonServer::_populate_crush_bucket_osds(
     size_t num_pgs;
   };
   std::vector<pgs_per_osd> child_bucket_pgs_per_osd;
-  // get osds under each child bucket
+  // get osds under each child bucket and associate with their PG counts
   for (const auto &name : bucket_names) {
-    // Clear the items for the current child bucket
-    child_bucket_pgs_per_osd.clear();
     std::set<int> tmp_bucket_osds;
     r = osdmap.get_osds_by_bucket_name(name, &tmp_bucket_osds);
     if (r < 0) {
@@ -1300,39 +1301,27 @@ int DaemonServer::_populate_crush_bucket_osds(
       dout(20) << os.str() << dendl;
       return r;
     }
-
-    // Special case when bucket contains only 1 osd
-    if (tmp_bucket_osds.size() == 1) {
-      for (const auto &osd : tmp_bucket_osds) {
-        crush_bucket_osds.push_back(osd);
-      }
-      dout(20) << "picked osd: " << tmp_bucket_osds
-               << " from bucket: " << name << dendl;
-      continue;
-    }
-    /**
-     * The osds in this bucket are further re-ordered based on the
-     * number of pgs (ascending) they host. This helps optimize
-     * the result of _check_offlines_pgs() down the line.
-     */
     for (const auto &osd : tmp_bucket_osds) {
       child_bucket_pgs_per_osd.push_back({osd, pgmap.get_num_pg_by_osd(osd)});
-    }
-    // Sort once after all data is added
-    std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
-              [](const pgs_per_osd& a, const pgs_per_osd& b) {
-        return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
-    });
-    /**
-     * The sorted osds are finally pushed to the passed crush_bucket_osds
-     * vector where osds are maintained according to the child order.
-     */
-    for (const auto &item : child_bucket_pgs_per_osd) {
-      crush_bucket_osds.push_back(item.osd_id);
     }
     dout(20) << "picked osds: " << tmp_bucket_osds
              << " from bucket: " << name << dendl;
   }
+
+  /**
+   * Sort all collected osds globally based on the number of pgs (ascending)
+   * they host and update the crush_bucket_osds vector with the same order.
+   */
+  std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
+            [](const pgs_per_osd& a, const pgs_per_osd& b) {
+      return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
+  });
+  crush_bucket_osds.reserve(
+    crush_bucket_osds.size() + child_bucket_pgs_per_osd.size());
+  for (const auto &item : child_bucket_pgs_per_osd) {
+    crush_bucket_osds.push_back(item.osd_id);
+  }
+
   return r;
 }
 

@@ -68,6 +68,7 @@ class NodeProxy(CephService):
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
             'listener.crt': tls_pair.cert,
             'listener.key': tls_pair.key,
+            'system': {'vendor': self.mgr.hw_monitoring_vendor},
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 

@@ -43,3 +43,23 @@ def test_login_access_expand():
         == smb.enums.LoginAccess.READ_WRITE
     )
     assert smb.enums.LoginAccess.NONE.expand() == smb.enums.LoginAccess.NONE
+
+
+def test_client_compat_enum():
+    """Test ClientSupportMode enum values and string representation."""
+    assert smb.enums.ClientSupportMode.DEFAULT == 'default'
+    assert smb.enums.ClientSupportMode.MACOS == 'macos'
+    assert str(smb.enums.ClientSupportMode.DEFAULT) == 'default'
+    assert str(smb.enums.ClientSupportMode.MACOS) == 'macos'
+
+
+def test_client_compat_values():
+    """Test that ClientSupportMode can be constructed from string values."""
+    assert (
+        smb.enums.ClientSupportMode('default')
+        == smb.enums.ClientSupportMode.DEFAULT
+    )
+    assert (
+        smb.enums.ClientSupportMode('macos')
+        == smb.enums.ClientSupportMode.MACOS
+    )

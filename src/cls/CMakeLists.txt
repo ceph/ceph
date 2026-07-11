@@ -147,7 +147,7 @@ add_library(cls_log_client STATIC ${cls_log_client_srcs})
 
 
 # cls_timeindex
-set(cls_timeindex_srcs timeindex/cls_timeindex.cc)
+set(cls_timeindex_srcs timeindex/cls_timeindex.cc timeindex/cls_timeindex_types.cc)
 add_library(cls_timeindex SHARED ${cls_timeindex_srcs})
 set_target_properties(cls_timeindex PROPERTIES
   VERSION "1.0.0"

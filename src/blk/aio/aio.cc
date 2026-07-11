@@ -48,7 +48,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     }
 #elif defined(HAVE_POSIXAIO)
     cur->priv = priv;
-    if ((cur->n_aiocb == 1) {
+    if (cur->n_aiocb == 1) {
       // TODO: consider batching multiple reads together with lio_listio
       cur->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
       cur->aio.aiocb.aio_sigevent.sigev_notify_kqueue = ctx;

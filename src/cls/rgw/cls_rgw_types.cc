@@ -140,6 +140,7 @@ std::string_view to_string(RGWObjCategory c)
     case RGWObjCategory::Shadow: return "rgw.shadow";
     case RGWObjCategory::MultiMeta: return "rgw.multimeta";
     case RGWObjCategory::CloudTiered: return "rgw.cloudtiered";
+    case RGWObjCategory::MultiPart: return "rgw.multipart";
     default: return "unknown";
   }
 }

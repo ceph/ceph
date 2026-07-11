@@ -4,9 +4,22 @@
 #include <utility>
 #include <functional>
 
+#include <fmt/ostream.h>
+
 #include "crimson/common/log.h"
 
 #include "crimson/os/seastore/object_data_handler.h"
+
+// declared ahead of the logging functions below so the consteval {fmt}
+// check can see them at the call sites.
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::overwrite_range_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::data_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::edge_t>
+  : fmt::ostream_formatter {};
+#endif
 
 namespace {
   seastar::logger& logger() {
@@ -1442,7 +1455,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
   context_t ctx, object_data_t &object_data, extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
-  DEBUGT("0x{:x}~0x{:x}, 0x{:x}",
+  DEBUGT("{}~0x{:x}, 0x{:x}",
     ctx.t, object_data.get_reserved_data_base(),
     object_data.get_reserved_data_len(), size);
   ceph_assert(!object_data.is_null());
@@ -1453,6 +1466,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
     ctx.t, unaligned_begin.get_aligned_laddr(ctx.tm.get_block_size())
   ).si_then([ctx, data_base, size, this,
 	    unaligned_begin, &object_data](auto mapping) {
+    std::ignore = unaligned_begin;
     assert(mapping.get_key() <= unaligned_begin &&
       mapping.get_key() + mapping.get_length() > unaligned_begin);
     auto data_len = object_data.get_reserved_data_len();
@@ -1881,11 +1895,3 @@ ObjectDataHandler::rename(context_t ctx)
 
 } // namespace crimson::os::seastore
 
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::overwrite_range_t>
-  : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::data_t>
-  : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::edge_t>
-  : fmt::ostream_formatter {};
-#endif

@@ -342,8 +342,9 @@ struct lba_btree_test : btree_test_base {
 	    get_op_context(t), addr,
             get_map_val(len, extent->get_type()), extent.get()
 	  ).si_then([addr, extent](auto p){
-	    auto& [iter, inserted] = p;
-	    assert(inserted);
+	    // there should be no element at the given addr before insert(),
+	    // so the insertion (p.second) should take place here.
+	    EXPECT_TRUE(p.second);
 	    extent->set_laddr(addr);
 	  });
 	});

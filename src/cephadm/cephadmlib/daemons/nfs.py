@@ -28,7 +28,9 @@ class NFSGanesha(ContainerDaemonForm):
     """Defines a NFS-Ganesha container"""
 
     daemon_type = 'nfs'
-    entrypoint = '/usr/bin/ganesha.nfsd'
+    entrypoint = '/usr/local/scripts/ganesha-entrypoint.sh'
+    ganesha_binary = '/usr/bin/ganesha.nfsd'
+    entrypoint_script_name = 'ganesha-entrypoint.sh'
     daemon_args = ['-F', '-L', 'STDERR']
 
     required_files = ['ganesha.conf', 'idmap.conf']
@@ -88,6 +90,9 @@ class NFSGanesha(ContainerDaemonForm):
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        mounts[
+            os.path.join(data_dir, self.entrypoint_script_name)
+        ] = self.entrypoint
         if self.rgw:
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
@@ -118,7 +123,7 @@ class NFSGanesha(ContainerDaemonForm):
                 ctx.container_engine.path,
                 'exec',
                 container_id,
-                NFSGanesha.entrypoint,
+                NFSGanesha.ganesha_binary,
                 '-v',
             ],
             verbosity=CallVerbosity.QUIET,
@@ -168,6 +173,42 @@ class NFSGanesha(ContainerDaemonForm):
         # type: () -> List[str]
         return self.daemon_args + self.extra_args
 
+    @staticmethod
+    def ganesha_conf_text(conf: Union[str, List[str]]) -> str:
+        if isinstance(conf, list):
+            return '\n'.join(conf)
+        return conf
+
+    @staticmethod
+    def nfsv3_enabled_in_ganesha_conf(conf: Union[str, List[str]]) -> bool:
+        """Return True when ganesha.conf enables NFSv3 (Protocols includes 3)."""
+        text = NFSGanesha.ganesha_conf_text(conf)
+        match = re.search(r'Protocols\s*=\s*([^;]+)', text, re.MULTILINE)
+        if not match:
+            # No Protocols line (e.g. minimal test stubs): keep legacy behavior.
+            return True
+        protocols = match.group(1)
+        return bool(re.search(r'(?:^|[,\s])3(?:[,\s]|$)', protocols))
+
+    @staticmethod
+    def ganesha_entrypoint_script(nfsv3: bool = True) -> str:
+        # NFSv3 registration with SunRPC requires a running portmapper.
+        # The image installs rpcbind but cephadm previously started only
+        # ganesha.nfsd, which fails on Rocky 10 / Ganesha 9.x with
+        # "Cannot register NFS V3 on TCP" when rpcbind is not up.
+        rpcbind_block = ''
+        if nfsv3:
+            rpcbind_block = """if command -v rpcbind >/dev/null 2>&1; then
+    if ! rpcinfo -p >/dev/null 2>&1; then
+        rpcbind
+    fi
+fi
+"""
+        return f"""#!/bin/bash
+set -e
+{rpcbind_block}exec /usr/bin/ganesha.nfsd "$@"
+"""
+
     def create_daemon_dirs(self, data_dir, uid, gid):
         # type: (str, int, int) -> None
         """Create files under the container data dir"""
@@ -195,6 +236,13 @@ class NFSGanesha(ContainerDaemonForm):
         # populate files from the config-json
         populate_files(config_dir, config_files, uid, gid)
         populate_files(tls_dir, tls_files, uid, gid)
+
+        ganesha_conf = self.files.get('ganesha.conf', '')
+        nfsv3 = self.nfsv3_enabled_in_ganesha_conf(ganesha_conf)
+        entrypoint_path = os.path.join(data_dir, self.entrypoint_script_name)
+        with write_new(entrypoint_path, owner=(uid, gid)) as f:
+            f.write(self.ganesha_entrypoint_script(nfsv3=nfsv3))
+        os.chmod(entrypoint_path, 0o700)
 
         # write the RGW keyring
         if self.rgw:

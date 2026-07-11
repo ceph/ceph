@@ -2,7 +2,6 @@ import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
-import ipaddress
 import time
 import requests
 
@@ -74,8 +73,15 @@ class GrafanaService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
-                if ipaddress.ip_network(grafana_ip).version == 6:
-                    grafana_ip = f"[{grafana_ip}]"
+
+        if not grafana_ip:
+            # Grafana 11.1+ validates http_addr with net.ParseIP; hostnames such as
+            # localhost fail in grafana-apiserver. Use a literal address (bind all IPv4).
+            # Check if the primary manager or orchestrator is configured for IPv6
+            if self.mgr.get_mgr_ip().startswith('::') or ':' in self.mgr.get_mgr_ip():
+                grafana_ip = '::'
+            else:
+                grafana_ip = '0.0.0.0'
 
         domain = self.mgr.get_fqdn(daemon_spec.host)
         mgmt_gw_ips = []
@@ -153,7 +159,7 @@ class GrafanaService(CephadmService):
     def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -295,7 +301,7 @@ class AlertmanagerService(CephadmService):
     def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -485,7 +491,8 @@ class AlertmanagerService(CephadmService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
@@ -517,7 +524,7 @@ class PrometheusService(CephadmService):
     def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
-        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     def get_service_discovery_cfg(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Dict[str, List[str]]:
         """
@@ -627,6 +634,28 @@ class PrometheusService(CephadmService):
         files = {
             'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context)
         }
+
+        # check if the prometheus.yml already exists in the config-key store,
+        # if not we need to set the initial config-key with the default template content.
+        # If it already exists, we need not override user config changes.
+        r, outs, err = self.mgr.mon_command({
+            'prefix': 'config-key get',
+            'key': 'mgr/cephadm/services/prometheus/prometheus.yml'
+        })
+        if r == -errno.ENOENT:
+            loader = self.mgr.template.engine.env.loader
+            assert loader is not None
+
+            raw_template, _, _ = loader.get_source(
+                self.mgr.template.engine.env,
+                'services/prometheus/prometheus.yml.j2'
+            )
+            self.mgr.check_mon_command({
+                'prefix': 'config-key set',
+                'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
+                'val': raw_template
+            })
+
         r: Dict[str, Any] = {
             'files': files,
             'retention_time': retention_time,
@@ -796,7 +825,8 @@ class PrometheusService(CephadmService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
@@ -863,7 +893,8 @@ class NodeExporterService(CephadmService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.

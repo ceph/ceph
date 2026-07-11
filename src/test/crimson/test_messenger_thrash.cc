@@ -10,7 +10,9 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/core/thread.hh>
 #include <seastar/core/with_timeout.hh>
+#include <seastar/util/closeable.hh>
 
 #include "common/ceph_argparse.h"
 #include "messages/MPing.h"
@@ -636,31 +638,24 @@ seastar::future<int> do_test(seastar::app_template& app)
                                               CEPH_ENTITY_TYPE_CLIENT,
                                               &cluster,
                                               &conf_file_list);
-  return crimson::common::sharded_conf().start(
-    init_params.name, cluster
-  ).then([] {
-    return local_conf().start();
-  }).then([conf_file_list] {
-    return local_conf().parse_config_files(conf_file_list);
-  }).then([&app] {
-    auto&& config = app.configuration();
-    verbose = config["verbose"].as<bool>();
-      return test_stress(thrash_params_t{8, 32, 50, 120})
-    .then([] {
-      return test_injection(thrash_params_t{16, 32, 50, 120});
-    }).then([] {
+  return seastar::async([init_params, cluster, conf_file_list, &app] {
+    try {
+      crimson::common::sharded_conf().start(init_params.name, cluster).get();
+      local_conf().start().get();
+      auto stop_conf = seastar::deferred_stop(crimson::common::sharded_conf());
+      local_conf().parse_config_files(conf_file_list).get();
+      verbose = app.configuration()["verbose"].as<bool>();
+      test_stress(thrash_params_t{8, 32, 50, 120}).get();
+      test_injection(thrash_params_t{16, 32, 50, 120}).get();
       logger().info("All tests succeeded");
       // Seastar has bugs to have events undispatched during shutdown,
       // which will result in memory leak and thus fail LeakSanitizer.
-      return seastar::sleep(100ms);
-    });
-  }).then([] {
-    return crimson::common::sharded_conf().stop();
-  }).then([] {
-    return 0;
-  }).handle_exception([] (auto eptr) {
-    logger().error("Test failed: got exception {}", eptr);
-    return 1;
+      seastar::sleep(100ms).get();
+      return 0;
+    } catch (...) {
+      logger().error("Test failed: got exception {}", std::current_exception());
+      return 1;
+    }
   });
 }
 

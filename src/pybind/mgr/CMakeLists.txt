@@ -4,7 +4,8 @@ set(mgr_module_install_excludes
   PATTERN "tox.ini" EXCLUDE
   PATTERN "requirements*.txt" EXCLUDE
   PATTERN "constraints*.txt" EXCLUDE
-  PATTERN "tests/*" EXCLUDE)
+  PATTERN "tests" EXCLUDE
+  PATTERN "ci" EXCLUDE)
 
 add_subdirectory(dashboard)
 
@@ -60,5 +61,5 @@ set(mgr_modules
 install(DIRECTORY ${mgr_modules}
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr
   ${mgr_module_install_excludes})
-install(FILES mgr_module.py mgr_util.py object_format.py cherrypy_mgr.py
+install(FILES mgr_module.py mgr_util.py object_format.py cherrypy_mgr.py ceph_secrets_client.py ceph_secrets_types.py
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr)

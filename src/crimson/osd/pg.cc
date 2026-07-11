@@ -35,7 +35,6 @@
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/ec_backend.h"
 #include "crimson/osd/ec_recovery_backend.h"
@@ -760,7 +759,7 @@ PG::interruptible_future<bool> PG::do_recover_missing(
   }
   DEBUGDPP(
     "reqid {} need to wait for recovery, {} version {}",
-    *this, reqid, soid);
+    *this, reqid, soid, ver);
   if (recovery_backend->is_recovering(soid)) {
     DEBUGDPP(
       "reqid {} object {} version {}, already recovering",
@@ -1683,20 +1682,28 @@ seastar::future<> PG::stop()
 {
   logger().info("PG {} {}", pgid, __func__);
   stopping = true;
+
+  context_registry_on_change();
+  clear_primary_state();
+  if (is_primary()) {
+    clear_ready_to_merge();
+  }
+
+  reset_merge_rendezvous();
+
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
   backend->on_actingset_changed(false);
-  return osdmap_gate.stop().then([this] {
-    return wait_for_active_blocker.stop();
-  }).then([this] {
-    return recovery_handler->stop();
-  }).then([this] {
-    return recovery_backend->stop();
-  }).then([this] {
-    return backend->stop();
-  });
+
+  co_await merge_notify_gate.close();
+  co_await osdmap_gate.stop();
+  co_await wait_for_active_blocker.stop();
+  client_request_orderer.clear_and_cancel(*this);
+  co_await recovery_handler->stop();
+  co_await recovery_backend->stop();
+  co_await backend->stop();
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
@@ -2031,4 +2038,89 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
                  __func__, info->partial_writes_last_complete);
 }
 
+void PG::add_merge_source(
+    spg_t source,
+    core_id_t birth_shard,
+    seastar::foreign_ptr<Ref<PG>> source_pg)
+{
+  LOG_PREFIX(PG::add_merge_source);
+  auto wrapped =
+    crimson::make_local_shared_foreign<Ref<PG>>(std::move(source_pg));
+  auto [_, inserted] = merge_rendezvous.sources.emplace(
+    source, std::make_pair(birth_shard, std::move(wrapped)));
+  if (inserted) {
+    DEBUG("target {} source {} arrived from shard {} ({} total)",
+          get_pgid(), source, birth_shard,
+          merge_rendezvous.sources.size());
+    merge_rendezvous.arrivals.signal(1);
+  } else {
+    DEBUG("target {} source {} already registered, ignoring",
+          get_pgid(), source);
+  }
+}
+
+seastar::future<PG::merge_source_map_t>
+PG::collect_merge_sources(std::size_t n)
+{
+  LOG_PREFIX(PG::collect_merge_sources);
+  DEBUG("target {} waiting for {} sources ({} already arrived)",
+        get_pgid(), n, merge_rendezvous.sources.size());
+  try {
+    co_await merge_rendezvous.arrivals.wait(n);
+  } catch (const seastar::broken_semaphore&) {
+    DEBUG("target {} merge rendezvous broken, aborting wait", get_pgid());
+    co_return merge_source_map_t{};
+  }
+  ceph_assert(merge_rendezvous.sources.size() == n);
+  auto sources = std::move(merge_rendezvous.sources);
+  merge_rendezvous.sources.clear();
+  co_return sources;
+}
+
+void PG::reset_merge_rendezvous()
+{
+  // Unblock any waiter in collect_merge_sources() with broken(); then
+  // replace the semaphore so the next merge attempt starts at zero signals.
+  merge_rendezvous.arrivals.broken();
+  merge_rendezvous = merge_rendezvous_t{};
+}
+
+void PG::merge_from(
+    merge_source_map_t& sources,
+    PeeringCtx &rctx,
+    unsigned split_bits,
+    const pg_merge_meta_t& last_pg_merge_meta)
+{
+  LOG_PREFIX(PG::merge_from);
+  DEBUG("target {}", get_pgid());
+
+  std::map<spg_t, PeeringState*> source_states;
+  for (auto& [pgid, entry] : sources) {
+    auto& src_pg = entry.second;
+    source_states.emplace(pgid, &src_pg->peering_state);
+  }
+
+  // Updates the target's PeeringState and stats (Synchronous)
+  peering_state.merge_from(source_states, rctx, split_bits, last_pg_merge_meta);
+
+  // We iterate through each source and move its objects into the target collection
+  for (auto& [pgid, entry] : sources) {
+    auto& src_pg = entry.second;
+    auto src_coll = src_pg->get_collection_ref()->get_cid();
+    auto dst_coll = coll_ref->get_cid();
+    DEBUG("merging source {}", pgid);
+
+    // Remove source-specific metadata objects that are no longer needed
+    // now that the collections are being collapsed.
+    rctx.transaction.remove(src_coll, src_pg->get_pgid().make_snapmapper_oid());
+    rctx.transaction.remove(src_coll, src_pg->pgmeta_oid);
+    // Move source collection into target collection.
+    rctx.transaction.merge_collection(src_coll, dst_coll, split_bits);
+  }
+
+  // Adjust the collection and snap_mapper to reflect the
+  // new, smaller PG count (reducing bitmask).
+  rctx.transaction.collection_set_bits(coll_ref->get_cid(), split_bits);
+  snap_mapper.update_bits(split_bits);
+}
 }

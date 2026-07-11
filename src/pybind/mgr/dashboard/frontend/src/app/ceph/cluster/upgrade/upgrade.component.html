@@ -1,107 +1,163 @@
-<main *cdScope="'configOpt'"
-      cdsGrid
-      [fullWidth]="true"
-      [narrow]="true"
-      class="cds-mt-5">
+<main
+  *cdScope="'configOpt'"
+  cdsGrid
+  [fullWidth]="true"
+  [narrow]="true"
+  class="cds-mt-5"
+>
   <ng-container *ngIf="healthData$ | async as healthData">
-    <div cdsRow
-         class="cds-mb-5">
-      <div cdsCol
-           [columnNumbers]="{lg: 16}">
-        <cds-tile aria-label="Cluster Information"
-                  i18n-aria-label>
-          <h4 class="cds--type-heading-03 tile-title"
-              i18n>Cluster Information</h4>
+    <div
+      cdsRow
+      class="cds-mb-5"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 16 }"
+      >
+        <cds-tile
+          aria-label="Cluster Information"
+          i18n-aria-label
+        >
+          <h4
+            class="cds--type-heading-03 tile-title"
+            i18n
+          >
+            Cluster Information
+          </h4>
           <div class="details-grid">
             <!-- Current Version -->
             <div class="detail-item">
-              <span class="cds--type-label-01"
-                    i18n>Current Version</span>
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Current Version</span
+              >
               <span class="cds--type-body-compact-01">{{ version }}</span>
             </div>
 
             <!-- New Version / Upgrade Status -->
-            <div class="detail-item"
-                 *ngIf="upgradeStatus$ | async as status"
-                 id="newVersionAvailable">
-              <span class="cds--type-label-01"
-                    i18n>New Version</span>
+            <div
+              class="detail-item"
+              *ngIf="upgradeStatus$ | async as status"
+              id="newVersionAvailable"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >New Version</span
+              >
               <ng-container *ngIf="status.in_progress; else upgradeStatusTpl">
-                <div cdsStack
-                     orientation="vertical"
-                     gap="2">
-                  <span class="cds--type-body-compact-01"
-                        i18n
-                        *ngIf="status.is_paused; else inProgress">
+                <div
+                  cdsStack
+                  orientation="vertical"
+                  gap="2"
+                >
+                  <span
+                    class="cds--type-body-compact-01"
+                    i18n
+                    *ngIf="status.is_paused; else inProgress"
+                  >
                     <cds-inline-loading></cds-inline-loading>
-                    Upgrade is paused {{executingTasks?.progress}}%</span>
-                  <a class="cds--link"
-                     routerLink="/upgrade/progress"
-                     i18n>View Details...</a>
+                    Upgrade is paused {{ executingTasks?.progress }}%</span
+                  >
+                  <a
+                    class="cds--link"
+                    routerLink="/upgrade/progress"
+                    i18n
+                    >View Details...</a
+                  >
                 </div>
 
                 <ng-template #inProgress>
-                  <span class="cds--type-body-compact-01"
-                        i18n>
+                  <span
+                    class="cds--type-body-compact-01"
+                    i18n
+                  >
                     <cds-inline-loading></cds-inline-loading>
-                    Upgrading {{executingTasks?.progress}}%
+                    Upgrading {{ executingTasks?.progress }}%
                   </span>
                 </ng-template>
               </ng-container>
             </div>
 
             <!-- Cluster Status -->
-            <div class="detail-item"
-                 id="clusterStatus">
-              <span class="cds--type-label-01"
-                    i18n>Cluster Status</span>
+            <div
+              class="detail-item"
+              id="clusterStatus"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Cluster Status</span
+              >
               <ng-container *ngIf="healthData.health?.status !== 'HEALTH_OK'; else healthOk">
-                <a class="cds--link cds--type-body-compact-01"
-                   routerLink="/overview"
-                   [ngStyle]="healthData.health.status | healthColor">
+                <a
+                  class="cds--link cds--type-body-compact-01"
+                  routerLink="/overview"
+                  [ngStyle]="healthData.health.status | healthColor"
+                >
                   {{ healthData.health.status | healthLabel | titlecase }}
                   <cd-icon type="warning"></cd-icon>
                 </a>
               </ng-container>
               <ng-template #healthOk>
-                <span class="cds--type-body-compact-01"
-                      [ngStyle]="healthData.health.status | healthColor">
+                <span
+                  class="cds--type-body-compact-01"
+                  [ngStyle]="healthData.health.status | healthColor"
+                >
                   {{ healthData.health.status | healthLabel | titlecase }}
                 </span>
               </ng-template>
             </div>
 
             <!-- MGR Count -->
-            <div class="detail-item"
-                 id="mgrCount">
-              <span class="cds--type-label-01"
-                    i18n>MGR Count</span>
+            <div
+              class="detail-item"
+              id="mgrCount"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >MGR Count</span
+              >
               <span class="cds--type-body-compact-01">
-                <cd-icon type="success"
-                         *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon">
+                <cd-icon
+                  type="success"
+                  *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon"
+                >
                 </cd-icon>
                 {{ (healthData.mgr_map | mgrSummary)?.total }}
               </span>
             </div>
 
             <!-- Cluster FSID -->
-            <div class="detail-item"
-                 *ngIf="fsid$ | async as fsid">
-              <span class="cds--type-label-01"
-                    i18n>Cluster FSID</span>
+            <div
+              class="detail-item"
+              *ngIf="fsid$ | async as fsid"
+            >
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Cluster FSID</span
+              >
               <span class="cds--type-body-compact-01">{{ fsid }}</span>
             </div>
 
             <!-- Release Image -->
             <div class="detail-item">
-              <span class="cds--type-label-01"
-                    i18n>Release Image</span>
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Release Image</span
+              >
               <ng-container *ngIf="info$ | async as info; else releaseImageError">
                 <span class="cds--type-body-compact-01">{{ info.image }}</span>
               </ng-container>
               <ng-template #releaseImageError>
-                <span class="cds--type-body-compact-01"
-                      *ngIf="!errorMessage; else showError">
+                <span
+                  class="cds--type-body-compact-01"
+                  *ngIf="!errorMessage; else showError"
+                >
                   <cds-inline-loading></cds-inline-loading>
                   <span i18n>Loading...</span>
                 </span>
@@ -116,14 +172,19 @@
 
             <!-- Registry -->
             <div class="detail-item">
-              <span class="cds--type-label-01"
-                    i18n>Registry</span>
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Registry</span
+              >
               <ng-container *ngIf="info$ | async as info; else registryError">
                 <span class="cds--type-body-compact-01">{{ info.registry }}</span>
               </ng-container>
               <ng-template #registryError>
-                <span class="cds--type-body-compact-01"
-                      *ngIf="!errorMessage; else showRegistryError">
+                <span
+                  class="cds--type-body-compact-01"
+                  *ngIf="!errorMessage; else showRegistryError"
+                >
                   <cds-inline-loading></cds-inline-loading>
                   <span i18n>Loading...</span>
                 </span>
@@ -140,63 +201,101 @@
       </div>
     </div>
 
-    <div cdsRow
-         class="cds-mb-5">
-      <div cdsCol
-           [columnNumbers]="{lg: 16}">
+    <div
+      cdsRow
+      class="cds-mb-5"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 16 }"
+      >
         <cds-tile *ngIf="daemons$ | async as daemons">
-          <h4 class="cds--type-heading-03 tile-title"
-              i18n>Daemon Versions</h4>
+          <h4
+            class="cds--type-heading-03 tile-title"
+            i18n
+          >
+            Daemon Versions
+          </h4>
           <div>
-            <cd-table #daemonsTable
-                      [data]="daemons"
-                      selectionType="single"
-                      [columns]="columns"
-                      columnMode="flex"
-                      [limit]="5">
+            <cd-table
+              #daemonsTable
+              [data]="daemons"
+              selectionType="single"
+              [columns]="columns"
+              columnMode="flex"
+              [limit]="5"
+            >
             </cd-table>
           </div>
         </cds-tile>
       </div>
     </div>
 
-    <div cdsRow
-         class="cds-mb-5">
-      <div cdsCol
-           [columnNumbers]="{lg: 16}">
+    <div
+      cdsRow
+      class="cds-mb-5"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 16 }"
+      >
         <cds-tile>
-          <h4 class="cds--type-heading-03 tile-title"
-              i18n>Cluster Logs</h4>
-          <cd-logs [showAuditLogs]="false"
-                   [showDaemonLogs]="false"
-                   [showNavLinks]="false"
-                   [showFilterTools]="false"
-                   [showDownloadCopyButton]="false"
-                   defaultTab="cluster-logs"></cd-logs>
+          <h4
+            class="cds--type-heading-03 tile-title"
+            i18n
+          >
+            Cluster Logs
+          </h4>
+          <cd-logs
+            [showAuditLogs]="false"
+            [showDaemonLogs]="false"
+            [showNavLinks]="false"
+            [showFilterTools]="false"
+            [showDownloadCopyButton]="false"
+            defaultTab="cluster-logs"
+          ></cd-logs>
         </cds-tile>
       </div>
     </div>
 
     <ng-template #upgradeStatusTpl>
-      <div cdsStack
-           orientation="vertical"
-           gap="4"
-           class="cds-mt-3"
-           *ngIf="info$ | async as info; else checkingForUpgradeStatus">
+      <div
+        cdsStack
+        orientation="vertical"
+        gap="4"
+        class="cds-mt-3"
+        *ngIf="info$ | async as info; else checkingForUpgradeStatus"
+      >
         <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
-          <div [cdsTip]="(healthData.mgr_map | mgrSummary)?.total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''"
-               i18n-cdsTip>
-            <button cdsButton="primary"
-                    class="cds-mt-3"
-                    id="upgrade"
-                    aria-label="Upgrade now"
-                    (click)="upgradeNow(info.versions[info.versions.length - 1])"
-                    [disabled]="(healthData.mgr_map | mgrSummary)?.total <= 1"
-                    i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
+          <div
+            [cdsTip]="
+              (healthData.mgr_map | mgrSummary)?.total <= 1
+                ? 'To upgrade, you need minimum 2 mgr daemons.'
+                : ''
+            "
+            i18n-cdsTip
+          >
+            <button
+              cdsButton="primary"
+              class="cds-mt-3"
+              id="upgrade"
+              aria-label="Upgrade now"
+              (click)="upgradeNow(info.versions[info.versions.length - 1])"
+              [disabled]="(healthData.mgr_map | mgrSummary)?.total <= 1"
+              type="button"
+              i18n
+            >
+              Upgrade to {{ info.versions[info.versions.length - 1] }}
+            </button>
           </div>
-          <a class="cds--link cds-mb-3"
-             (click)="startUpgradeModal()"
-             i18n>Select another version...</a>
+          <a
+            class="cds--link cds-mb-3"
+            (click)="startUpgradeModal()"
+            tabindex="0"
+            (keydown.enter)="startUpgradeModal()"
+            i18n
+            >Select another version...</a
+          >
         </ng-container>
       </div>
     </ng-template>
@@ -204,78 +303,114 @@
 </main>
 
 <ng-template #noUpgradesAvailable>
-  <span class="cds--type-body-compact-01"
-        id="no-upgrades-available"
-        i18n>
+  <span
+    class="cds--type-body-compact-01"
+    id="no-upgrades-available"
+    i18n
+  >
     <cd-icon type="success"></cd-icon>
     Cluster is up-to-date
   </span>
-  <a class="cds--link cds-mb-3"
-     (click)="startUpgradeModal()"
-     i18n>Upgrade using custom image...</a>
+  <a
+    class="cds--link cds-mb-3"
+    (click)="startUpgradeModal()"
+    tabindex="0"
+    (keydown.enter)="startUpgradeModal()"
+    i18n
+    >Upgrade using custom image...</a
+  >
 </ng-template>
 
 <ng-template #warningIcon>
-  <cd-icon type="warning"
-           title="To upgrade, you need minimum 2 mgr daemons.">
+  <cd-icon
+    type="warning"
+    title="To upgrade, you need minimum 2 mgr daemons."
+  >
   </cd-icon>
 </ng-template>
 
 <ng-template #checkingForUpgradeStatus>
-  <div cdsStack
-       orientation="vertical"
-       gap="4"
-       class="cds-mt-3"
-       *ngIf="!errorMessage; else upgradeStatusError">
-    <button cdsButton="primary"
-            class="cds-mt-3 cds-mb-5"
-            id="upgrade"
-            aria-label="Upgrade now"
-            [disabled]="true"
-            i18n>Checking for upgrades
+  <div
+    cdsStack
+    orientation="vertical"
+    gap="4"
+    class="cds-mt-3"
+    *ngIf="!errorMessage; else upgradeStatusError"
+  >
+    <button
+      cdsButton="primary"
+      class="cds-mt-3 cds-mb-5"
+      id="upgrade"
+      aria-label="Upgrade now"
+      [disabled]="true"
+      type="button"
+      i18n
+    >
+      Checking for upgrades
       <cds-inline-loading></cds-inline-loading>
     </button>
   </div>
 </ng-template>
 
 <ng-template #loadingDetails>
-  <div class="w-50"
-       *ngIf="!errorMessage; else upgradeInfoError">
-    <span class="text-info justify-content-center align-items-center"
-          i18n>Fetching registry information
+  <div
+    class="w-50"
+    *ngIf="!errorMessage; else upgradeInfoError"
+  >
+    <span
+      class="text-info justify-content-center align-items-center"
+      i18n
+      >Fetching registry information
       <cds-inline-loading></cds-inline-loading>
     </span>
   </div>
 </ng-template>
 
 <ng-template #upgradeStatusError>
-  <div cdsStack
-       orientation="vertical"
-       gap="4"
-       class="cds-mt-3 cds-mb-5">
-    <span class="cds--type-body-compact-01"
-          id="upgrade-status-error"
-          i18n>
+  <div
+    cdsStack
+    orientation="vertical"
+    gap="4"
+    class="cds-mt-3 cds-mb-5"
+  >
+    <span
+      class="cds--type-body-compact-01"
+      id="upgrade-status-error"
+      i18n
+    >
       <cd-icon type="danger"></cd-icon>
       {{ errorMessage }}
     </span>
-    <a class="cds--link cds-mb-3"
-       (click)="startUpgradeModal()"
-       i18n>Upgrade using custom image...</a>
+    <a
+      class="cds--link cds-mb-3"
+      (click)="startUpgradeModal()"
+      tabindex="0"
+      (keydown.enter)="startUpgradeModal()"
+      i18n
+      >Upgrade using custom image...</a
+    >
   </div>
 </ng-template>
 
 <ng-template #upgradeProgress>
-  <div cdsStack
-       orientation="vertical"
-       gap="4"
-       class="cds-mt-3">
-    <h5 class="cds--type-heading-compact-01"
-        i18n>
+  <div
+    cdsStack
+    orientation="vertical"
+    gap="4"
+    class="cds-mt-3"
+  >
+    <h5
+      class="cds--type-heading-compact-01"
+      i18n
+    >
       <cds-inline-loading></cds-inline-loading>
-      Upgrade in progress {{executingTasks?.progress}}%</h5>
-    <a class="cds--link cds-mb-3"
-       routerLink="/upgrade/progress"
-       i18n>View Details...</a>
+      Upgrade in progress {{ executingTasks?.progress }}%
+    </h5>
+    <a
+      class="cds--link cds-mb-3"
+      routerLink="/upgrade/progress"
+      i18n
+      >View Details...</a
+    >
   </div>
 </ng-template>

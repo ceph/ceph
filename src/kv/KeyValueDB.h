@@ -13,6 +13,7 @@
 #include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
+#include "include/utime.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
@@ -24,6 +25,25 @@
  */
 class KeyValueDB {
 public:
+  struct BackupCleanupStats {
+    bool error{false};
+    utime_t timestamp;
+    uint32_t corrupted{0};
+    uint32_t deleted{0};
+    uint32_t kept{0};
+    uint64_t size{0};
+    uint64_t freed{0};
+  };
+
+  struct BackupStats {
+    bool error{false};
+    uint64_t id{0};
+    utime_t timestamp;
+    std::string msg;
+    uint64_t size{0};
+    uint64_t number_files{0};
+  };
+
   class TransactionImpl {
   public:
     // amount of ops included
@@ -112,8 +132,8 @@ public:
     }
 
     /// Remove Single Key which exists and was not overwritten.
-    /// This API is only related to performance optimization, and should only be 
-    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB). 
+    /// This API is only related to performance optimization, and should only be
+    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB).
     /// If a key is overwritten (by calling set multiple times), then the result
     /// of calling rm_single_key on this key is undefined.
     virtual void rm_single_key(
@@ -417,6 +437,29 @@ public:
     const std::string& key_to) {
       return 0;
   };
+
+  /// Create a kv database backup in directory path.
+  virtual BackupStats backup(const std::string &path) {
+    return {.error = true, .msg = "backup not supported by this backend"};
+  }
+
+  /// Remove old backups in directory path according to retention.
+  virtual BackupCleanupStats backup_cleanup(const std::string &path,
+                                            uint64_t keep_last,
+                                            uint64_t keep_hourly,
+                                            uint64_t keep_daily) {
+    return {.error = true};
+  }
+
+  /// restore from backup the specified backup version
+  static bool restore_backup(CephContext *cct, const std::string &type,
+                             const std::string &path,
+                             const std::string &backup_location,
+                             const std::optional<uint32_t> &version);
+
+  static std::optional<std::vector<BackupStats>> list_backups(
+    CephContext *cct, const std::string &type,
+    const std::string &backup_location);
 
   /// compact the underlying store
   virtual void compact() {}

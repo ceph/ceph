@@ -30,11 +30,6 @@ if(WITH_CEPH_DEBUG_MUTEX)
     ${PROJECT_SOURCE_DIR}/src/common/condition_variable_debug.cc
     ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc)
 endif()
-add_library(crimson-alien-common STATIC
-  ${crimson_alien_common_srcs})
-if(WITH_BREAKPAD)
-  target_link_libraries(crimson-alien-common Breakpad::client)
-endif()
 
 set(alien_store_srcs
   alien_store.cc
@@ -65,20 +60,32 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/OnodeScan.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
 
+# Merge alienstore + alien-common into a single archive.  The common sources
+# are compiled without WITH_CRIMSON and duplicate symbols in crimson-common.
+# ld.bfd resolves these by archive order; Mold treats them as errors.
+# After building, localize the duplicate symbols so they resolve internally
+# within this archive (for the alien/bluestore thread) while crimson-osd's
+# own references resolve from crimson-common (for seastar threads).
 add_library(crimson-alienstore STATIC
-  ${alien_store_srcs})
+  ${alien_store_srcs}
+  ${crimson_alien_common_srcs})
 if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
+if(WITH_BREAKPAD)
+  target_link_libraries(crimson-alienstore PRIVATE Breakpad::client)
+endif()
 
-# For crimson-alienstore WITH_CRIMSON is not defined
 target_link_libraries(crimson-alienstore
   PRIVATE
     seastar
     ${FMT_LIB}
     kv
     heap_profiler
-    crimson-alien-common
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     blk)
+
+# Mold duplicate-symbol handling is done at the crimson-osd link step
+# (see src/crimson/osd/CMakeLists.txt) by ordering crimson-alienstore
+# before crimson-common with --allow-multiple-definition.

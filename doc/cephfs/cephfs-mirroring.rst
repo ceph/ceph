@@ -173,8 +173,9 @@ and the user key. However, bootstrapping a peer is the recommended way to add a
 peer.
 
 .. note:: Only a single peer is currently supported.
-          The ``peer_add`` command is deprecated and will be removed in a future release.
-          Use the ``peer_bootstrap`` command instead.
+          The ``peer_add`` command is deprecated and will be removed in a future
+          release. Use the ``peer_bootstrap create`` command instead. See the
+          :ref:`Bootstrap Peers<cephfs_mirroring_bootstrap_peers>` section.
 
 To remove a peer, run a command of the following form:
 
@@ -229,8 +230,8 @@ subdirectories or ancestor directories is disallowed::
   Error EINVAL: /d0/d1/d2/d3 is a subtree of tracked path /d0/d1/d2
 
 The :ref:`Mirroring Status<cephfs_mirroring_mirroring_status>` section contains
-information about the commands for checking the directory mapping (to mirror
-daemons) and for checking the directory distribution. 
+information about checking directory synchronization metrics, directory mapping
+(to mirror daemons), and directory distribution.
 
 .. _cephfs_mirroring_bootstrap_peers:
 
@@ -307,8 +308,300 @@ CephFS mirroring module provides ``mirror daemon status`` interface to check mir
 
 An entry per mirror daemon instance is displayed along with information such as configured
 peers and basic stats. The peer information includes the remote file system name (``fs_name``),
-cluster's Monitor addresses (``mon_host``) and cluster FSID (``fsid``). For more detailed
-stats, use the admin socket interface as detailed below.
+cluster's Monitor addresses (``mon_host``) and cluster FSID (``fsid``).
+
+.. _cephfs_mirroring_sync_metric_fields:
+
+Snapshot sync metric fields
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Both ``ceph fs snapshot mirror status`` and ``fs mirror peer status`` report the
+same core per-directory sync fields. The ``cephfs-mirror`` daemon writes these
+fields (and omap metadata described below) to the metadata pool omap (on the
+``cephfs_mirror`` RADOS object) so that the mirroring Manager module can read
+them and serve ``ceph fs snapshot mirror status`` without requiring access to a
+mirror daemon host or admin socket. On daemon restart, only a subset of fields
+is loaded back into daemon memory; the rest are rebuilt or reset for the new
+session.
+
+``ceph fs snapshot mirror status`` additionally exposes ``metrics_updated_at``,
+the wall-clock time of the last omap write for that directory and peer. This
+field is not present in ``fs mirror peer status``, which reads live in-memory
+state from the daemon and does not need a separate persist timestamp. In the
+mgr command it helps operators judge how fresh omap-backed metrics are, given
+the omap persist interval (``cephfs_mirror_tick_interval``) and Manager response
+caching (``snapshot_mirror_metrics_cache_enabled`` and
+``snapshot_mirror_metrics_cache_ttl``).
+
+**Per-session counters**
+
+``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed`` are written to omap
+but count activity in the **current daemon session** only. They are not loaded
+from omap when a ``cephfs-mirror`` daemon starts or when a directory is reassigned
+to another mirror daemon instance. Counters therefore reset to zero in daemon
+memory on restart and on directory reshuffle (in multi-daemon deployments). The
+admin socket reflects this immediately; omap may still hold the previous session's
+values until the new owning daemon writes an updated entry.
+
+**Omap persistence and restore on restart**
+
+.. list-table::
+   :widths: 30 20 25 25
+   :header-rows: 1
+
+   * - Field
+     - Written to omap
+     - Loaded on daemon restart
+     - Notes
+   * - ``last_synced_snap`` (and its subfields)
+     - Yes
+     - Yes
+     - Survives daemon restart; reconciled against the remote snap map on load
+   * - ``current_syncing_snap``
+     - Yes (while syncing)
+     - No
+     - Rebuilt when synchronization resumes
+   * - ``snaps_synced``, ``snaps_deleted``, ``snaps_renamed``
+     - Yes
+     - No
+     - Written to omap but per-session; not loaded on restart (see above)
+   * - ``state``, ``failure_reason``
+     - Yes
+     - No
+     - Reflect the last writer's view until omap is updated again
+   * - ``_instance_id``
+     - Yes
+     - No
+     - Internal; used by the Manager for stale detection and omitted from CLI output
+   * - ``metrics_updated_at``
+     - Yes
+     - No
+     - Wall-clock time of the last omap write; exposed only by
+       ``ceph fs snapshot mirror status`` (not ``fs mirror peer status``)
+
+**Omap cleanup**
+
+When a directory is removed from mirroring, the ``cephfs-mirror`` daemon deletes
+the corresponding omap entry from the ``cephfs_mirror`` object.
+
+.. _cephfs_mirroring_mgr_snapshot_status:
+
+Directory snapshot sync metrics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The mirroring module provides the ``fs snapshot mirror status`` command to query
+per-directory snapshot synchronization metrics for a mirrored file system. This is
+the recommended way to inspect mirroring progress from the Ceph CLI without using
+the ``cephfs-mirror`` admin socket.
+
+Unlike ``fs mirror peer status``, which reads in-memory state from a running mirror
+daemon on the local host, this command is implemented in the mirroring Manager
+module and reads metrics that ``cephfs-mirror`` has written to the metadata pool
+omap. That persistence is what makes cluster-wide status available from any node
+that can run ``ceph`` commands. While a sync is in progress, the daemon updates
+these omap entries periodically (see ``cephfs_mirror_tick_interval``).
+The Manager formats the omap data and returns JSON in the same nested structure
+as the admin socket ``fs mirror peer status`` command, including
+``metrics_updated_at`` when metrics are read from omap.
+
+**Syntax**
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror status <fs_name> [<mirrored_dir_path>] [--peer_uuid=<peer_uuid>]
+
+``<fs_name>``
+  File system on the primary cluster for which mirroring is enabled.
+
+``<mirrored_dir_path>`` (optional)
+  Absolute path of a directory configured for mirroring (for example ``/d0``).
+  When omitted, metrics for all mirrored directories (subject to
+  ``--peer_uuid``) are returned.
+
+``--peer_uuid=<peer_uuid>`` (optional)
+  UUID of a mirror peer (from ``ceph fs snapshot mirror peer_list``). When
+  omitted, metrics for all configured peers are returned. When both
+  ``<mirrored_dir_path>`` and ``--peer_uuid`` are specified, only that
+  directory/peer pair is reported.
+
+Examples::
+
+  # All directories and peers
+  $ ceph fs snapshot mirror status cephfs
+
+  # One mirrored directory, all peers
+  $ ceph fs snapshot mirror status cephfs /d0
+
+  # All directories for one peer
+  $ ceph fs snapshot mirror status cephfs --peer_uuid=a2dc7784-e7a1-4723-b103-03ee8d8768f8
+
+  # One directory and one peer
+  $ ceph fs snapshot mirror status cephfs /d0 --peer_uuid=a2dc7784-e7a1-4723-b103-03ee8d8768f8
+
+**Output format**
+
+The command returns a JSON object with a top-level ``metrics`` key. Per-directory
+statistics are nested under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>`` so the
+same directory path can be reported for multiple peers without key collisions.
+
+When mirroring is enabled but no peers are configured, the command succeeds and
+returns an empty metrics object::
+
+  $ ceph fs snapshot mirror status cephfs
+  {
+      "metrics": {}
+  }
+
+When a directory has been added for mirroring but no snapshot has been synchronized
+yet, the Manager reports the same default idle statistics as the admin socket
+interface (``state`` is ``idle`` with zero snap counters and no ``last_synced_snap``).
+Full-file-system queries include every directory in the mirror policy, using these
+defaults for any directory or peer that does not yet have an omap entry.
+
+A minimal idle example (one directory, one peer)::
+
+  $ ceph fs snapshot mirror status cephfs /d0
+  {
+      "metrics": {
+          "/d0": {
+              "peer": {
+                  "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                      "state": "idle",
+                      "snaps_synced": 0,
+                      "snaps_deleted": 0,
+                      "snaps_renamed": 0
+                  }
+              }
+          }
+      }
+  }
+
+After snapshots are synchronized, fields such as ``last_synced_snap``,
+``current_syncing_snap``, ``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed``
+match the admin socket output while the owning daemon is actively persisting omap
+updates. The mgr command also includes ``metrics_updated_at`` (see above).
+Durations and byte counts are formatted for display (for example ``33s``,
+``149.94 MiB``). See :ref:`Snapshot sync metric fields<cephfs_mirroring_sync_metric_fields>`
+for persistence and per-session counter behavior.
+
+**Directory states**
+
+A directory can be in one of the following states (under each peer):
+
+- ``idle``: The directory is not currently being synchronized.
+- ``syncing``: The directory is currently being synchronized. The
+  ``current_syncing_snap`` object describes in-progress snapshot sync (see field
+  tables below).
+- ``stale``: Reported by the Manager when persisted omap data is no longer owned
+  by a live mirror daemon instance (see :ref:`Stale progress detection<cephfs_mirroring_stale_metrics>`).
+  ``current_syncing_snap`` is omitted.
+- ``failed``: The directory has hit the upper limit of consecutive synchronization
+  failures. A ``failure_reason`` string may be present.
+
+.. _cephfs_mirroring_stale_metrics:
+
+**Stale progress detection**
+
+Each omap entry records an internal ``_instance_id`` (the RADOS client instance
+of the ``cephfs-mirror`` daemon that last wrote the entry). The Manager compares
+this value against the set of live mirror daemon instances and against the instance
+currently assigned to the directory in the mirroring module's directory map:
+
+- If the persisted ``_instance_id`` is **not** among the live mirror instances,
+  the entry is reported as ``stale`` (regardless of the persisted ``state``).
+- If the directory's tracked instance differs from the persisted ``_instance_id``
+  and the persisted ``state`` is not ``idle``, the entry is reported as ``stale``
+  (for example after a directory is reshuffled to another daemon mid-sync).
+
+In both cases ``current_syncing_snap`` is omitted from the output. The ``stale``
+state is reported only by ``ceph fs snapshot mirror status``, which can read omap
+even when no mirror daemon is running. The admin socket requires an active
+``cephfs-mirror`` daemon; ``ceph --admin-daemon`` commands fail when the mirror
+daemon is not running.
+
+**After a daemon restart**
+
+Immediately after a ``cephfs-mirror`` restart, omap may still contain metrics
+written by the previous session (including a stale ``_instance_id``). The Manager
+may report ``stale`` until the new daemon instance writes an updated omap entry.
+Per-session counters in omap can likewise reflect the previous session until the
+new daemon persists; the admin socket on the restarted daemon already shows zero
+for those counters. See :ref:`Snapshot sync metric fields<cephfs_mirroring_sync_metric_fields>`.
+
+**Caching**
+
+To reduce load on the metadata pool, the Manager keeps two short-lived in-memory
+caches of formatted metrics returned by ``fs snapshot mirror status``:
+
+- **Complete cache** — one entry per file system with all mirrored directories
+  and peers (a full omap snapshot). Used for ``ceph fs snapshot mirror status
+  <fs_name>`` and for optional ``--peer_uuid`` filtering.
+- **Partial cache** — per-directory omap reads keyed by file system, directory
+  path, and peer set. Single-directory queries (``<fs_name> <mirrored_dir_path>``)
+  peek the complete cache first; on miss they use the partial cache so a cold
+  complete cache does not trigger a full omap scan.
+
+Caching is enabled by default (``snapshot_mirror_metrics_cache_enabled``). When
+disabled, each query reads omap directly. When enabled, the default time-to-live
+is 15 seconds (``snapshot_mirror_metrics_cache_ttl``) for both caches. Repeated
+queries within the TTL may be served without reading omap again. After the cache
+expires, the next query reloads metrics from omap.
+
+**Comparison with the admin socket**
+
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - ``ceph fs snapshot mirror status``
+     - ``fs mirror peer status`` (admin socket)
+   * - Invoked via the Ceph CLI through the Manager
+     - Invoked with ``ceph --admin-daemon`` on a mirror daemon host
+   * - Reads metrics persisted in the metadata pool omap
+     - Reads in-memory state from the mirror daemon
+   * - ``last_synced_snap`` survives daemon restart (from omap)
+     - ``last_synced_snap`` restored from omap on daemon start
+   * - Per-session counters may lag omap until the owning daemon re-persists
+     - Per-session counters reset to zero on daemon restart
+   * - Can report ``stale`` when the omap writer is no longer live
+     - Requires a running mirror daemon (unavailable when none is active)
+   * - Includes ``metrics_updated_at`` (time of last omap write)
+     - Not present; reads live in-memory state only
+   * - Optional filters by mirrored directory path and peer UUID
+     - Reports all mirrored directories for the given peer
+
+For interactive debugging on a specific mirror daemon host, the admin socket
+remains useful. For operators and monitoring integrations that prefer a standard
+``ceph`` subcommand, use ``fs snapshot mirror status``.
+
+**Configuration**
+
+- ``cephfs_mirror_tick_interval`` (``cephfs-mirror`` daemon,
+  default: ``5`` seconds) — tick interval for periodic mirroring work,
+  including how often live sync progress is written to omap while a snapshot
+  is synchronizing.
+
+- ``snapshot_mirror_metrics_cache_enabled`` (``mgr/mirroring`` module, default:
+  ``true``) — whether the Manager caches ``fs snapshot mirror status`` responses.
+  When ``false``, each query reads omap directly::
+
+     ceph config set mgr mgr/mirroring/snapshot_mirror_metrics_cache_enabled false
+
+- ``snapshot_mirror_metrics_cache_ttl`` (``mgr/mirroring`` module, default:
+  ``15`` seconds) — when caching is enabled, how long the Manager caches
+  formatted ``fs snapshot mirror status`` responses before reading omap again::
+
+     ceph config set mgr mgr/mirroring/snapshot_mirror_metrics_cache_ttl 15
+
+**Errors**
+
+The command fails with a non-zero exit code and an error message when:
+
+- ``<fs_name>`` does not exist
+- Mirroring is not enabled for the file system
+- ``<mirrored_dir_path>`` is not an absolute path, is not configured for mirroring,
+  or is not found in the mirror policy
+- ``<peer_uuid>`` is not configured for the file system
 
 CephFS mirror daemons provide admin socket commands for querying mirror status. To check
 available commands for mirror status use::
@@ -356,29 +649,128 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
-            "sync_bytes": 52428800
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
-Synchronization stats including ``snaps_synced``, ``snaps_deleted`` and ``snaps_renamed`` are reset
-on daemon restart and/or when a directory is reassigned to another mirror daemon (when
-multiple mirror daemons are deployed).
+The per-directory fields are nested under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>`` so
+the same directory path can be reported for multiple peers without key collisions.
+
+.. _cephfs_mirror_peer_status_formatting:
+
+Value formatting
+----------------
+
+Several fields in the status output are formatted for readability rather than reported as raw
+numbers. The subsections below describe each format; field tables later in this section refer
+back to them.
+
+.. _cephfs_mirror_status_durations:
+
+Durations
+---------
+
+Fields: ``crawl_duration``, ``datasync_queue_wait_duration``, ``sync_duration``,
+``crawl.duration``, ``datasync_queue_wait.duration``, and ``eta``.
+
+Elapsed time is rounded to the nearest whole second and displayed as a combination of days,
+hours, minutes, and seconds. The format adapts to the magnitude:
+
+- ``<SS>s`` — seconds only, when less than one minute (for example, ``2s`` or ``33s``)
+- ``<M>m <SS>s`` — minutes and seconds, when less than one hour (for example, ``5m 12s``)
+- ``<H>h <MM>m <SS>s`` — hours, minutes, and seconds, when less than one day
+  (for example, ``1h 05m 30s``)
+- ``<D>d <HH>h <MM>m <SS>s`` — days, hours, minutes, and seconds, when one day or longer
+  (for example, ``1d 02h 30m 45s``)
+
+.. _cephfs_mirror_status_data_sizes:
+
+Data sizes
+----------
+
+Fields: ``sync_bytes``, ``bytes.sync_bytes``, ``bytes.total_bytes``, and the byte counts in
+``last_synced_snap``.
+
+Byte counts use binary (IEC) units with two decimal places. The unit is chosen automatically
+from ``B``, ``KiB``, ``MiB``, ``GiB``, ``TiB``, or ``PiB`` (powers of 1024). For example,
+``149.94 MiB``.
+
+.. _cephfs_mirror_status_throughput:
+
+Throughput
+----------
+
+Fields: ``avg_read_throughput_bytes`` and ``avg_write_throughput_bytes``.
+
+Average transfer rate in bytes per second, using the same binary units as :ref:`data sizes
+<cephfs_mirror_status_data_sizes>` with a ``/s`` suffix. For example, ``13.03 MiB/s`` means
+13.03 mebibytes per second.
+
+.. _cephfs_mirror_status_percentages:
+
+Percentages
+-----------
+
+Fields: ``bytes.sync_percent`` and ``files.sync_percent``.
+
+Percentage complete with two decimal places and a ``%`` suffix (for example, ``40.29%``).
+
+.. _cephfs_mirror_status_counts:
+
+Counts
+------
+
+Fields: ``sync_files``, ``total_files``, ``snaps_synced``, ``snaps_deleted``, ``snaps_renamed``,
+and snapshot ``id``.
+
+Plain unsigned integers with no unit suffix.
+
+.. _cephfs_mirror_status_timestamp:
+
+Timestamp
+---------
+
+Field: ``sync_time_stamp``.
+
+Monotonic clock time in seconds (since daemon startup) when the snapshot sync finished,
+printed with sub-second precision and an ``s`` suffix (for example, ``274900.558797s``). This
+is not a wall-clock or epoch timestamp.
+
+``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed`` are
+:ref:`per-session counters<cephfs_mirroring_sync_metric_fields>`: they count
+activity in the current ``cephfs-mirror`` daemon session only and are not restored
+from omap on restart. They reset to zero on daemon restart and when a directory is
+reassigned to another mirror daemon (in multi-daemon deployments).
 
 A directory can be in one of the following states:
 
 - ``idle``: The directory is currently not being synchronized.
 - ``syncing``: The directory is currently being synchronized.
+- ``stale``: Reported only by ``ceph fs snapshot mirror status`` when persisted
+  omap data is no longer owned by a live mirror daemon instance (see
+  :ref:`Stale progress detection<cephfs_mirroring_stale_metrics>`). The admin
+  socket does not use this state; ``fs mirror peer status`` requires a running
+  ``cephfs-mirror`` daemon and fails when none is active.
 - ``failed``: The directory has hit upper limit of consecutive failures.
 
 When a directory is currently being synchronized, the mirror daemon marks it as ``syncing`` and
@@ -386,26 +778,127 @@ When a directory is currently being synchronized, the mirror daemon marks it as 
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "syncing",
-        "current_syncing_snap": {
-            "id": 121,
-            "name": "snap2"
-        },
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
-            "sync_bytes": 52428800
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "syncing",
+                    "current_syncing_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "sync-mode": "full",
+                        "avg_read_throughput_bytes": "13.03 MiB/s",
+                        "avg_write_throughput_bytes": "24.24 MiB/s",
+                        "crawl": {
+                            "state": "completed",
+                            "duration": "2s"
+                        },
+                        "datasync_queue_wait": {
+                            "state": "complete",
+                            "duration": "1s"
+                        },
+                        "bytes": {
+                            "sync_bytes": "60.40 MiB",
+                            "total_bytes": "149.94 MiB",
+                            "sync_percent": "40.29%"
+                        },
+                        "files": {
+                            "sync_files": 2013,
+                            "total_files": 5000,
+                            "sync_percent": "40.26%"
+                        },
+                        "eta": "7s"
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
 The mirror daemon marks it back to ``idle``, when the syncing completes.
+
+When ``state`` is ``syncing``, ``current_syncing_snap`` includes the following
+progress fields (see :ref:`cephfs_mirror_peer_status_formatting` for how values are
+displayed):
+
+.. list-table::
+   :widths: 35 65
+   :header-rows: 1
+
+   * - Field
+     - Description
+   * - ``sync-mode``
+     - Whether the snapshot is synchronized with a full tree copy (``full``) or incremental snapdiff/blockdiff (``delta``).
+   * - ``avg_read_throughput_bytes``
+     - Average read rate from the primary filesystem for this snapshot sync. See
+       :ref:`Throughput <cephfs_mirror_status_throughput>`.
+   * - ``avg_write_throughput_bytes``
+     - Average write rate to the remote peer for this snapshot sync. See
+       :ref:`Throughput <cephfs_mirror_status_throughput>`.
+   * - ``crawl.state``
+     - Whether the directory tree walk is ``in-progress`` or ``completed``. While
+       ``in-progress``, ``bytes.total_bytes`` and ``files.total_files`` reflect only what
+       has been discovered so far and may keep increasing; once ``completed``, those totals
+       are fully discovered for this snapshot sync.
+   * - ``crawl.duration``
+     - Elapsed crawl time so far, or total crawl time once ``crawl.state`` is ``completed``.
+       See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``datasync_queue_wait.state``
+     - Whether the snapshot is still ``waiting`` in the data-sync queue or has started transfer (``complete``).
+   * - ``datasync_queue_wait.duration``
+     - Elapsed queue wait time so far, or total queue wait time once transfer has started.
+       See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``bytes.sync_bytes``
+     - Amount of file data synchronized so far for this snapshot. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`.
+   * - ``bytes.total_bytes``
+     - Total file data discovered for this snapshot sync. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`. Increases during the crawl while
+       ``crawl.state`` is ``in-progress``; final once ``crawl.state`` is ``completed``.
+   * - ``bytes.sync_percent``
+     - Percentage of ``total_bytes`` synchronized so far. See
+       :ref:`Percentages <cephfs_mirror_status_percentages>`.
+   * - ``files.sync_files``
+     - Number of files synchronized so far for this snapshot. See
+       :ref:`Counts <cephfs_mirror_status_counts>`.
+   * - ``files.total_files``
+     - Total number of files discovered for this snapshot sync. See
+       :ref:`Counts <cephfs_mirror_status_counts>`. Increases during the crawl while
+       ``crawl.state`` is ``in-progress``; final once ``crawl.state`` is ``completed``.
+   * - ``files.sync_percent``
+     - Percentage of ``total_files`` synchronized so far. See
+       :ref:`Percentages <cephfs_mirror_status_percentages>`.
+   * - ``eta``
+     - Estimated time remaining to finish the snapshot sync, or ``calculating...`` until enough
+       samples are collected. See :ref:`Durations <cephfs_mirror_status_durations>`.
+
+``last_synced_snap`` includes these additional fields for the last completed snapshot sync
+(see :ref:`cephfs_mirror_peer_status_formatting` for how values are displayed):
+
+.. list-table::
+   :widths: 35 65
+   :header-rows: 1
+
+   * - Field
+     - Description
+   * - ``crawl_duration``
+     - Total time spent walking the directory tree for that snapshot sync. See
+       :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``datasync_queue_wait_duration``
+     - Total time the snapshot waited in the data-sync queue before file transfer began. See
+       :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``sync_duration``
+     - Total elapsed time for the snapshot sync. See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``sync_time_stamp``
+     - When the sync finished. See :ref:`Timestamp <cephfs_mirror_status_timestamp>`.
+   * - ``sync_bytes``
+     - Total file data synchronized for that snapshot. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`.
+   * - ``sync_files``
+     - Number of files synchronized for that snapshot. See :ref:`Counts <cephfs_mirror_status_counts>`.
 
 When a directory experiences a configured number of consecutive synchronization failures, the
 mirror daemon marks it as ``failed``. Synchronization for these directories is retried.
@@ -419,24 +912,37 @@ E.g., adding a regular file for synchronization would result in failed status::
   $ ceph fs snapshot mirror add cephfs /f0
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 121,
-            "name": "snap2",
-            "sync_duration": 5,
-            "sync_time_stamp": "500900.600797s",
-            "sync_bytes": 78643200
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "44s",
+                        "sync_time_stamp": "500900.600797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 3,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 3,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
@@ -454,24 +960,38 @@ In the remote filesystem::
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "failed",
-        "failure_reason": "snapshot 'snap2' has invalid metadata",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s"
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "failure_reason": "snapshot 'snap2' has invalid metadata",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
@@ -491,9 +1011,39 @@ will not show up in command help.
 Metrics
 -------
 
-CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be consumed by the OCP/ODF Dashboard to provide monitoring of the Geo Replication. These metrics can be used to measure the progress of cephfs-mirror syncing and thus provide the monitoring capability. CephFS exports the following mirroring metrics, which are displayed using the ``counter dump`` command.
+CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` for scraping by
+monitoring tools (for example Prometheus via ``ceph-exporter``). Operators can inspect
+them with the mirror daemon admin socket ``counter dump`` command (see
+:ref:`cephfs_mirror_counter_dump`).
 
-.. list-table:: Mirror Status Metrics
+Three labeled counter groups are relevant for snapshot mirroring:
+
+- ``cephfs_mirror_mirrored_filesystems`` — per primary file system on a mirror daemon
+  (for example ``directory_count``, ``mirroring_peers``).
+- ``cephfs_mirror_peers`` — aggregated across all mirrored directories for one peer
+  on a file system.
+- ``cephfs_mirror_directory`` — per mirrored directory path and peer (new; see
+  :ref:`cephfs_mirror_directory_perf_counters`).
+
+The JSON returned by ``fs mirror peer status`` and ``ceph fs snapshot mirror status``
+describes the same synchronization state in human-readable form. The
+``cephfs_mirror_directory`` counters expose that state as numeric gauges for monitoring
+systems.
+
+.. _cephfs_mirror_counter_dump:
+
+Accessing perf counters
+~~~~~~~~~~~~~~~~~~~~~~~
+
+On a host running ``cephfs-mirror``::
+
+  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok counter dump
+
+Labeled groups appear as top-level JSON arrays (for example ``"cephfs_mirror_directory": [ ... ]``).
+Each array element has a ``labels`` object and a ``counters`` object. Use
+``counter schema`` on the same admin socket to list counter names and types.
+
+.. list-table:: Mirror filesystem metrics (``cephfs_mirror_mirrored_filesystems``)
    :widths: 25 25 75
    :header-rows: 1
 
@@ -513,7 +1063,7 @@ CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be c
      - Counter
      - Enable mirroring failures
 
-.. list-table:: Replication Metrics
+.. list-table:: Peer replication metrics (``cephfs_mirror_peers``)
    :widths: 25 25 75
    :header-rows: 1
 
@@ -522,7 +1072,7 @@ CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be c
      - Description
    * - snaps_synced
      - Counter
-     - The total number of snapshots successfully synchronized
+     - Total snapshots synchronized for this peer on this file system (all directories combined)
    * - sync_bytes
      - Counter
      - The total bytes being synchronized
@@ -551,6 +1101,290 @@ CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be c
      - Counter
      - The total bytes being synchronized for the last synced snapshot
 
+Peer-level counters are labeled with ``source_fscid``, ``source_filesystem``,
+``peer_cluster_name``, and ``peer_cluster_filesystem``. They do not include
+``peer_uuid`` or ``directory``; use ``cephfs_mirror_directory`` for per-path detail.
+
+.. _cephfs_mirror_directory_perf_counters:
+
+Per-directory replication metrics (``cephfs_mirror_directory``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``cephfs_mirror_directory`` labeled counter group reports snapshot mirror
+progress for a single mirrored directory path toward a single peer. One perf counter
+instance is created when a directory is added for mirroring (``fs snapshot mirror add``)
+and removed when the directory is removed from the policy.
+
+This matches the per-directory fields under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>``
+in ``fs mirror peer status`` (see :ref:`cephfs_mirroring_mgr_snapshot_status`), but uses
+raw numeric values suitable for graphs and alerts (bytes per second, seconds, basis points).
+
+**Labels**
+
+Each ``cephfs_mirror_directory`` entry in ``counter dump`` includes:
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Label
+     - Description
+   * - ``source_fscid``
+     - File system cluster ID on the primary cluster
+   * - ``source_filesystem``
+     - File system name on the primary cluster
+   * - ``peer_uuid``
+     - Mirror peer UUID (disambiguates the same directory path mirrored to multiple peers)
+   * - ``peer_cluster_name``
+     - Remote cluster name of the peer
+   * - ``peer_cluster_filesystem``
+     - Remote file system name on the peer
+   * - ``directory``
+     - Mirrored directory path (for example ``/parent/d1``)
+
+Example (one directory, one peer)::
+
+  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok counter dump
+  {
+      "cephfs_mirror_directory": [
+          {
+              "labels": {
+                  "source_fscid": "360",
+                  "source_filesystem": "cephfs",
+                  "peer_uuid": "8a85ab25-70f9-48e9-b82d-56324e75209b",
+                  "peer_cluster_name": "site-a",
+                  "peer_cluster_filesystem": "backup_fs",
+                  "directory": "/parent/d1"
+              },
+              "counters": {
+                  "dir_state": 0,
+                  "current_snap_id": 0,
+                  "snaps_synced": 1,
+                  "last_snap_id": 3,
+                  "last_sync_bytes": 157286400,
+                  "last_sync_files": 5000,
+                  ...
+              }
+          }
+      ]
+  }
+
+When exported through ``ceph-exporter``, counter names are prefixed (for example
+``ceph_cephfs_mirror_directory_current_sync_bytes``) with label dimensions attached.
+
+**Update frequency**
+
+Counters are not updated on every file read or write. Behavior differs by field group:
+
+- **Current sync gauges** (``current_*``, ``crawl_*``, ``datasync_wait_*``, ``dir_state``
+  while syncing): refreshed by the :ref:`per-peer tick thread <cephfs_mirror_tick_thread>`
+  for each registered directory, on the interval configured by
+  ``cephfs_mirror_tick_interval`` (default ``5`` seconds). Only directories that are
+  actively registered for synchronization on this daemon are updated.
+- **Last synced gauges** (``last_*``): updated when a snapshot sync completes and when
+  a directory is added for mirroring.
+- **Summary gauges** (``snaps_synced``, ``snaps_deleted``, ``snaps_renamed``): updated when
+  the corresponding per-directory counters change (sync complete, snap delete, snap rename).
+
+**Mapping to ``fs mirror peer status``**
+
+.. list-table::
+   :widths: 35 35 30
+   :header-rows: 1
+
+   * - Perf counter
+     - Admin socket / mgr JSON field
+     - Notes
+   * - ``dir_state``
+     - ``state``
+     - ``0`` = idle, ``1`` = syncing, ``2`` = failed (not ``stale``; stale is mgr-only)
+   * - ``current_snap_id``
+     - ``current_syncing_snap.id``
+     - ``0`` when idle or failed
+   * - ``current_sync_mode``
+     - ``current_syncing_snap.sync-mode``
+     - ``0`` = full, ``1`` = delta
+   * - ``current_read_bps`` / ``current_write_bps``
+     - ``avg_read_throughput_bytes`` / ``avg_write_throughput_bytes``
+     - Raw bytes per second (not human-readable strings)
+   * - ``crawl_state`` / ``crawl_duration_seconds``
+     - ``current_syncing_snap.crawl``
+     - See crawl state table below
+   * - ``datasync_wait_state`` / ``datasync_wait_duration_seconds``
+     - ``current_syncing_snap.datasync_queue_wait``
+     - See datasync wait state table below
+   * - ``current_sync_bytes`` / ``current_total_bytes`` / ``current_sync_bytes_percent``
+     - ``current_syncing_snap.bytes``
+     - Percent is basis points (``4029`` = 40.29%)
+   * - ``current_sync_files`` / ``current_total_files`` / ``current_sync_files_percent``
+     - ``current_syncing_snap.files``
+     - Percent is basis points
+   * - ``current_eta_valid`` / ``current_eta_seconds``
+     - ``current_syncing_snap.eta``
+     - ``current_eta_valid``: ``0`` = calculating, ``1`` = ETA available
+   * - ``last_snap_id`` and ``last_*_duration_seconds``, ``last_sync_bytes``, ``last_sync_files``
+     - ``last_synced_snap``
+     - Durations in seconds; bytes are raw counts
+   * - ``last_sync_timestamp``
+     - ``last_synced_snap.sync_time_stamp``
+     - ``utime_t`` (seconds since epoch), not the monotonic string shown in admin JSON
+   * - ``snaps_synced`` / ``snaps_deleted`` / ``snaps_renamed``
+     - Same field names at directory level
+     - Reset on daemon restart or directory reassignment (same as admin socket)
+
+**Directory state (``dir_state``)**
+
+.. list-table::
+   :widths: 15 85
+   :header-rows: 1
+
+   * - Value
+     - Meaning
+   * - ``0``
+     - Idle — no snapshot is currently being synchronized for this directory
+   * - ``1``
+     - Syncing — ``current_*`` gauges reflect in-progress snapshot sync
+   * - ``2``
+     - Failed — directory hit the consecutive failure limit; ``current_*`` gauges are cleared
+
+When ``dir_state`` is ``0`` or ``2``, all ``current_*``, ``crawl_*``, and ``datasync_wait_*``
+counters are set to zero.
+
+**Current syncing snapshot counters**
+
+Present while ``dir_state`` is ``1``. Corresponds to ``current_syncing_snap`` in
+``fs mirror peer status``.
+
+.. list-table::
+   :widths: 30 15 55
+   :header-rows: 1
+
+   * - Counter
+     - Type
+     - Description
+   * - ``current_snap_id``
+     - Gauge
+     - Snapshot ID being synchronized
+   * - ``current_sync_mode``
+     - Gauge
+     - ``0`` = full sync, ``1`` = delta (snapdiff/blockdiff)
+   * - ``current_read_bps``
+     - Gauge
+     - Average primary read throughput in bytes per second for this sync
+   * - ``current_write_bps``
+     - Gauge
+     - Average remote write throughput in bytes per second for this sync
+   * - ``crawl_state``
+     - Gauge
+     - ``0`` = not applicable, ``1`` = in progress, ``2`` = completed
+   * - ``crawl_duration_seconds``
+     - Gauge
+     - Crawl duration in seconds (elapsed while in progress, total when completed)
+   * - ``datasync_wait_state``
+     - Gauge
+     - ``0`` = none, ``1`` = waiting in data-sync queue, ``2`` = transfer started
+   * - ``datasync_wait_duration_seconds``
+     - Gauge
+     - Time in the data-sync queue in seconds
+   * - ``current_sync_bytes``
+     - Gauge
+     - Bytes synchronized so far for this snapshot
+   * - ``current_total_bytes``
+     - Gauge
+     - Total bytes discovered for this snapshot sync
+   * - ``current_sync_bytes_percent``
+     - Gauge
+     - Sync progress in **basis points** (``10000`` = 100.00%)
+   * - ``current_sync_files``
+     - Gauge
+     - Files synchronized so far
+   * - ``current_total_files``
+     - Gauge
+     - Total files discovered for this snapshot sync
+   * - ``current_sync_files_percent``
+     - Gauge
+     - File progress in **basis points**
+   * - ``current_eta_valid``
+     - Gauge
+     - ``0`` = ETA not yet available (``calculating...`` in admin socket), ``1`` = ETA available
+   * - ``current_eta_seconds``
+     - Gauge
+     - Estimated seconds remaining when ``current_eta_valid`` is ``1``
+
+**Last synced snapshot counters**
+
+Updated after each successful snapshot synchronization. Corresponds to
+``last_synced_snap`` in ``fs mirror peer status``.
+
+.. list-table::
+   :widths: 35 15 50
+   :header-rows: 1
+
+   * - Counter
+     - Type
+     - Description
+   * - ``last_snap_id``
+     - Gauge
+     - Snapshot ID of the last successfully synchronized snapshot
+   * - ``last_crawl_duration_seconds``
+     - Gauge
+     - Directory crawl duration for that sync
+   * - ``last_datasync_wait_duration_seconds``
+     - Gauge
+     - Data-sync queue wait duration for that sync
+   * - ``last_sync_duration_seconds``
+     - Gauge
+     - Total time to synchronize that snapshot
+   * - ``last_sync_timestamp``
+     - Time
+     - Wall-clock time when that sync finished (``utime_t``)
+   * - ``last_sync_bytes``
+     - Gauge
+     - Bytes synchronized for that snapshot
+   * - ``last_sync_files``
+     - Gauge
+     - Files synchronized for that snapshot
+
+**Per-directory snapshot summary counters**
+
+.. list-table::
+   :widths: 25 15 60
+   :header-rows: 1
+
+   * - Counter
+     - Type
+     - Description
+   * - ``snaps_synced``
+     - Gauge
+     - Snapshots successfully synchronized since the last counter reset
+   * - ``snaps_deleted``
+     - Gauge
+     - Snapshot deletes propagated to the peer since the last reset
+   * - ``snaps_renamed``
+     - Gauge
+     - Snapshot renames propagated to the peer since the last reset
+
+These counters reset when the mirror daemon restarts or when a directory is reassigned to
+another mirror daemon, consistent with ``fs mirror peer status``.
+
+.. _cephfs_mirror_tick_thread:
+
+Per-peer tick thread
+~~~~~~~~~~~~~~~~~~~~
+
+Each mirror peer handled by a ``cephfs-mirror`` daemon runs a dedicated tick thread in its
+``PeerReplayer``. The thread wakes every :confval:`cephfs_mirror_tick_interval` seconds
+(default ``5``), re-reads that option on each iteration so configuration changes take effect
+without restarting the daemon, and runs periodic mirroring work.
+
+Currently, the tick thread refreshes the ``current_*``, ``crawl_*``, ``datasync_wait_*``, and
+``dir_state`` fields of :ref:`cephfs_mirror_directory_perf_counters` for each directory that
+is actively registered for synchronization on the daemon.
+
+Example — set the tick interval to 10 seconds for the mirror daemon user::
+
+  ceph config set client.mirror cephfs_mirror_tick_interval 10
+
 Configuration Options
 ---------------------
 
@@ -567,6 +1401,7 @@ Configuration Options
 .. confval:: cephfs_mirror_restart_mirror_on_failure_interval
 .. confval:: cephfs_mirror_mount_timeout
 .. confval:: cephfs_mirror_perf_stats_prio
+.. confval:: cephfs_mirror_tick_interval
 .. confval:: cephfs_mirror_blockdiff_min_file_size
 
 Re-adding Peers
@@ -590,3 +1425,36 @@ transfers. Users can fine-tune these operations using configuration parameters:
 - ``cephfs_mirror_max_concurrent_directory_syncs``: controls the number of concurrent snapshots being crawled.
 - ``cephfs_mirror_max_datasync_threads``: controls the total threads available for data sync.
 For more information, see https://tracker.ceph.com/issues/73452
+
+
+Snapshot Mirroring Checkpoints
+-------------------------------
+
+CephFS mirroring supports checkpoints to track the replication status of specific snapshots.
+Checkpoints allow you to mark important snapshots and monitor whether they have been successfully
+synchronized to the remote site, providing visibility into disaster recovery readiness.
+
+**Key Features:**
+
+- Mark snapshots as checkpoints to track their replication status
+- Automatic status detection (created/complete/failed)
+- Per-directory tracking with persistent metadata
+
+**Basic Usage:**
+
+.. code-block:: bash
+
+    # Add a checkpoint to a snapshot
+    ceph fs snapshot mirror checkpoint add <fs_name> <dir_path> <snap_name>
+
+    # List all checkpoints for a directory
+    ceph fs snapshot mirror checkpoint ls <fs_name> <dir_path>
+
+    # Remove a checkpoint
+    ceph fs snapshot mirror checkpoint remove <fs_name> <dir_path> <snap_name>
+
+    # Create checkpoint on latest snapshot
+    ceph fs snapshot mirror checkpoint now <fs_name> <dir_path>
+
+For detailed information about checkpoint commands, lifecycle, and best practices, see
+:doc:`cephfs-mirroring-checkpoints`.

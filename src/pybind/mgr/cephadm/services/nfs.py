@@ -173,13 +173,16 @@ class NFSService(CephService):
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         bind_addr = ''
+
         if spec.virtual_ip and not spec.enable_haproxy_protocol:
+            # keepalive_only mode: prioritize virtual_ip
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
             # update daemon spec ip for prometheus, as monitoring will happen on this
             # ip, if no monitor ip specified
             daemon_spec.ip = bind_addr
         elif daemon_spec.ip:
+            # daemon_spec.ip is already set by scheduler from ip_addrs if specified
             bind_addr = daemon_spec.ip
             daemon_spec.port_ips = {str(port): daemon_spec.ip}
         if not bind_addr:
@@ -262,7 +265,8 @@ class NFSService(CephService):
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
-                "ceph_nodes": ceph_nodes
+                "ceph_nodes": ceph_nodes,
+                "protocols": "3, 4" if spec.enable_nfsv3 else "4"
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -562,9 +566,26 @@ class NFSService(CephService):
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
-        if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
-            logger.debug(f"Monitoring IP {monitoring_addr} is not configured on host {host}.")
-            monitoring_addr = None
+
+        if monitoring_addr:
+            try:
+                ip = ipaddress.ip_address(monitoring_addr)
+
+                # Fetch host IPs once and normalize to strings
+                host_ips = set(self.mgr.cache.get_host_network_ips(host))
+
+                # Allow loopback addresses without requiring them on an interface
+                if not ip.is_loopback and str(ip) not in host_ips:
+                    logger.debug(
+                        f"Monitoring IP {monitoring_addr} is not configured on host {host}."
+                    )
+                    monitoring_addr = None
+
+            except ValueError:
+                logger.warning(
+                    f"Invalid monitoring IP address {monitoring_addr} for host {host}."
+                )
+                monitoring_addr = None
         if not monitoring_addr and spec.monitoring_networks:
             monitoring_addr = self.mgr.get_first_matching_network_ip(host, spec, spec.monitoring_networks)
             if not monitoring_addr:
@@ -578,13 +599,14 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
         if curr_deps == last_deps:
-            return scheduled_action
+            return utils.NextDaemonStep(scheduled_action)
         sym_diff = set(curr_deps).symmetric_difference(last_deps)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
@@ -598,4 +620,4 @@ class NFSService(CephService):
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
-        return action
+        return utils.NextDaemonStep(action)

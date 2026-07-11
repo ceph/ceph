@@ -1371,6 +1371,47 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();
 
+  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
+  binfo_cache->init(svc.cache);
+
+  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  topic_cache->init(svc.cache);
+
+  lc = new RGWLC();
+  lc->initialize(cct, this->driver);
+
+  restore = make_unique<rgw::restore::Restore>();
+  ret = restore->initialize(cct, this->driver);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;
+    return ret;
+  }
+
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+
+  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+                             zone.bucket_index_max_shards);
+  if (bucket_index_max_shards > get_max_bucket_shards()) {
+    bucket_index_max_shards = get_max_bucket_shards();
+    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << get_max_bucket_shards() << dendl;
+  }
+  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+
+  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
+
+  reshard_wait = std::make_shared<RGWReshardWait>();
+
+  reshard = new RGWReshard(this->driver);
+
+  // disable reshard thread based on zone/zonegroup support
+  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
+
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
   if (!svc.zone->need_to_sync()) {
@@ -1449,52 +1490,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     data_notifier->start();
   }
 
-  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
-  binfo_cache->init(svc.cache);
-
-  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
-  topic_cache->init(svc.cache);
-
-  lc = new RGWLC();
-  lc->initialize(cct, this->driver);
-
   if (use_lc_thread)
     lc->start_processor();
 
-  restore = make_unique<rgw::restore::Restore>();
-  ret = restore->initialize(cct, this->driver);
-
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;
-    return ret;
-  }
-
   if (use_restore_thread)
     restore->start_processor();
-
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
-
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone.bucket_index_max_shards);
-  if (bucket_index_max_shards > get_max_bucket_shards()) {
-    bucket_index_max_shards = get_max_bucket_shards();
-    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << get_max_bucket_shards() << dendl;
-  }
-  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
-  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
-
-  if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
-  }
-
-  reshard_wait = std::make_shared<RGWReshardWait>();
-
-  reshard = new RGWReshard(this->driver);
-
-  // disable reshard thread based on zone/zonegroup support
-  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
   if (run_reshard_thread)  {
     reshard->start_processor();
@@ -6553,43 +6553,6 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RGWRados::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y)
-{
-  std::string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
-  if (!octx)
-    return 0;
-
-  RGWObjState *state = NULL;
-  RGWObjManifest *manifest = nullptr;
-
-  int r = get_obj_state(dpp, octx, bucket_info, obj, &state, &manifest, false, y);
-  if (r < 0)
-    return r;
-
-  if (!state->is_atomic) {
-    ldpp_dout(dpp, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
-    return -EINVAL;
-  }
-
-  string tag;
-
-  if (state->tail_tag.length() > 0) {
-    tag = state->tail_tag.c_str();
-  } else if (state->obj_tag.length() > 0) {
-    tag = state->obj_tag.c_str();
-  } else {
-    ldpp_dout(dpp, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
-    return -EINVAL;
-  }
-
-  ldpp_dout(dpp, 0) << "defer chain tag=" << tag << dendl;
-
-  cls_rgw_obj_chain chain;
-  update_gc_chain(dpp, state->obj, *manifest, &chain);
-  return gc->async_defer_chain(tag, chain);
-}
-
 void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
 {
   list<string> prefixes;
@@ -8006,16 +7969,14 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     }
 
     for (auto& iter : src_attrset) {
-      /**
-       * Skip object-level encryption attributes when reading individual parts.
-       * These attrs describe the complete multipart object, not this part:
-       *   - ORIGINAL_SIZE: would cause Content-Length mismatch
-       *   - PARTS: contains sizes of all parts, not applicable to single part
-       *   - PART_NUMS: maps part indices to S3 part numbers for the full object
+      /*
+       * Skip object-level crypt attrs (ORIGINAL_SIZE, PARTS) that describe the
+       * whole object and would break a single-part read. PART_NUMS passes
+       * through; it carries the per-part (num, salt) needed to derive this
+       * part's key.
        */
       if (iter.first == RGW_ATTR_CRYPT_ORIGINAL_SIZE ||
-          iter.first == RGW_ATTR_CRYPT_PARTS ||
-          iter.first == RGW_ATTR_CRYPT_PART_NUMS) {
+          iter.first == RGW_ATTR_CRYPT_PARTS) {
         ldpp_dout(dpp, 4) << "skip crypt attr for part read: " << iter.first << dendl;
         continue;
       }

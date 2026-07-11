@@ -468,6 +468,10 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
           }
         }
       });
+      // "me" is the actual prev of mextent, so before mextent enters
+      // the "prepare" pipeline phase, its last_committed_crc should be
+      // that of "me"'s
+      mextent.set_last_committed_crc(me.get_last_committed_crc());
     } else {
       auto &mextent = static_cast<CachedExtent&>(mext);
       TRACE("{} -> {}", extent, mextent);
@@ -475,6 +479,7 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
         0, extent.get_length(), mextent.get_bptr().c_str());
       mextent.on_data_commit();
       mextent.reapply_delta();
+      mextent.set_last_committed_crc(extent.get_last_committed_crc());
     }
   }
 }

@@ -498,8 +498,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
         )
         .subscribe({
           error: (error) => {
-            const fsalDescr = this.nfsService.nfsFsal.find((f) => f.value === this.storageBackend)
-              .descr;
+            const fsalDescr = this.nfsService.nfsFsal.find(
+              (f) => f.value === this.storageBackend
+            ).descr;
             this.storageBackendError = $localize`${fsalDescr} backend is not available. ${error}`;
           }
         });

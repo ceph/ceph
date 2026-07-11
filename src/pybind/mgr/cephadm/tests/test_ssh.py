@@ -21,6 +21,7 @@ from ceph.deployment.hostspec import HostSpec
 from cephadm import CephadmOrchestrator
 from cephadm.serve import CephadmServe
 from cephadm.tests.fixtures import with_host, wait, async_side_effect
+from cephadm.utils import cephadmNoImage
 from orchestrator import OrchestratorError
 
 
@@ -79,15 +80,12 @@ class TestWithSSH:
                     with with_host(cephadm_module, host):
                         CephadmServe(cephadm_module)._check_host(host)
 
-        # Test case 1: command failure
-        run_test('test1', FakeConn(returncode=1), "Command .+ failed")
+        # Test case 1: connection error
+        run_test('test1', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test1")
 
-        # Test case 2: connection error
-        run_test('test2', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test2.")
-
-        # Test case 3: asyncssh ProcessError
+        # Test case 2: asyncssh ProcessError
         stderr = "my-process-stderr"
-        run_test('test3', FakeConn(exception=asyncssh.ProcessError(returncode=3,
+        run_test('test2', FakeConn(exception=asyncssh.ProcessError(returncode=3,
                                                                    env="",
                                                                    command="",
                                                                    subsystem="",
@@ -114,3 +112,17 @@ def test_remote_command():
         '-rf',
         '/tmp/blat',
     ]
+
+
+@mock.patch("cephadm.offline_watcher.CephadmServe._run_cephadm")
+def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
+    run_cephadm.side_effect = async_side_effect(([''], [''], 0))
+
+    with with_host(cephadm_module, 'test'):
+        run_cephadm.reset_mock()
+        cephadm_module.offline_watcher.check_host('test')
+
+    run_cephadm.assert_called_once_with(
+        'test', cephadmNoImage, ['_orch', 'check-online'], [],
+        no_fsid=True, log_output=cephadm_module.log_refresh_metadata
+    )

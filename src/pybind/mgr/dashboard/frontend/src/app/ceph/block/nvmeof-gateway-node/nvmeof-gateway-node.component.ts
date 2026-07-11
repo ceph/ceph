@@ -2,9 +2,11 @@ import {
   Component,
   EventEmitter,
   Input,
+  OnChanges,
   OnDestroy,
   OnInit,
   Output,
+  SimpleChanges,
   TemplateRef,
   ViewChild
 } from '@angular/core';
@@ -17,7 +19,6 @@ import _ from 'lodash';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -26,6 +27,7 @@ import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 
 import { Host } from '~/app/shared/models/host.interface';
+import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec, CephServiceSpecUpdate } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -38,6 +40,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -45,7 +48,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
   styleUrls: ['./nvmeof-gateway-node.component.scss'],
   standalone: false
 })
-export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
+export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges {
   @ViewChild(TableComponent, { static: true })
   table!: TableComponent;
 
@@ -66,10 +69,12 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @Input() groupName: string | undefined;
   @Input() mode: 'selector' | 'details' = NvmeofGatewayNodeMode.SELECTOR;
+  @Input() preSelectedHostnames: string[] = [];
 
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
   hasAvailableHosts = false;
+  gatewayDetails: DetailItem[] = [];
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -140,6 +145,43 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         cellTemplate: this.labelsTpl
       }
     ];
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (
+      changes['preSelectedHostnames'] &&
+      !changes['preSelectedHostnames'].firstChange &&
+      changes['preSelectedHostnames'].currentValue?.length > 0
+    ) {
+      this.table.refreshBtn();
+    }
+  }
+
+  private applyPreSelection(): void {
+    if (!this.preSelectedHostnames?.length || !this.table) {
+      return;
+    }
+
+    const hostsToSelect = this.hosts.filter((host) =>
+      this.preSelectedHostnames.includes(host.hostname)
+    );
+
+    if (hostsToSelect.length > 0) {
+      this.selection.selected = hostsToSelect;
+      this.selectionChange.emit(this.selection);
+
+      setTimeout(() => {
+        hostsToSelect.forEach((host) => {
+          const rowIndex = this.table.model?.data?.findIndex(
+            (row: any) => _.get(row, [0, 'selected', 'hostname']) === host.hostname
+          );
+          if (rowIndex > -1) {
+            this.table.model.selectRow(rowIndex, true);
+          }
+        });
+        this.table.updateSelection.emit(this.selection);
+      });
+    }
   }
 
   private setTableActions() {
@@ -271,8 +313,11 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       this.sub.unsubscribe();
     }
 
+    const useEditMode =
+      this.mode === NvmeofGatewayNodeMode.SELECTOR && this.preSelectedHostnames?.length > 0;
+
     const fetchData$: Observable<any> =
-      this.mode === NvmeofGatewayNodeMode.DETAILS
+      this.mode === NvmeofGatewayNodeMode.DETAILS || useEditMode
         ? this.nvmeofService.fetchHostsAndGroups()
         : this.nvmeofService.getAvailableHosts(this.tableContext?.toParams());
 
@@ -286,6 +331,8 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         next: (result: any) => {
           if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
             this.processDetailsData(result.groups, result.hosts);
+          } else if (useEditMode) {
+            this.processEditModeData(result.groups, result.hosts);
           } else {
             this.hosts = result;
             this.count = this.hosts.length;
@@ -294,6 +341,41 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         },
         error: () => context?.error()
       });
+  }
+
+  private processEditModeData(groups: any[][], hostList: Host[]) {
+    const groupList = groups?.[0] ?? [];
+    const preSelectedSet = new Set(this.preSelectedHostnames);
+
+    const usedByOtherGroups = new Set<string>();
+    groupList.forEach((group: CephServiceSpec) => {
+      const hosts = group.placement?.hosts || [];
+      const isCurrentGroup =
+        hosts.every((h: string) => preSelectedSet.has(h)) && hosts.length === preSelectedSet.size;
+
+      if (!isCurrentGroup) {
+        hosts.forEach((hostname: string) => usedByOtherGroups.add(hostname));
+
+        const label = group.placement?.label;
+        if (label) {
+          (hostList || []).forEach((host: Host) => {
+            if (host.labels?.includes(label as string)) {
+              usedByOtherGroups.add(host.hostname);
+            }
+          });
+        }
+      }
+    });
+
+    this.hosts = (hostList || []).filter((host: Host) => {
+      const isPreSelected = preSelectedSet.has(host.hostname);
+      const isAvailable = !usedByOtherGroups.has(host.hostname);
+      return isPreSelected || isAvailable;
+    });
+
+    this.count = this.hosts.length;
+    this.hostsLoaded.emit(this.count);
+    this.applyPreSelection();
   }
 
   private processDetailsData(groups: any[][], hostList: Host[]) {
@@ -349,9 +431,39 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       } else {
         this.hosts = [];
       }
+
+      this.gatewayDetails = this.buildGatewayDetails(this.serviceSpec, this.hosts.length);
     }
 
     this.count = this.hosts.length;
     this.hostsLoaded.emit(this.count);
+  }
+
+  private buildGatewayDetails(
+    serviceSpec: CephServiceSpec,
+    gatewayNodeCount: number
+  ): DetailItem[] {
+    return [
+      {
+        label: $localize`Gateway name`,
+        value: serviceSpec.spec?.group || this.groupName || '-'
+      },
+      {
+        label: $localize`Gateway nodes`,
+        value: gatewayNodeCount
+      },
+      {
+        label: $localize`Encryption`,
+        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status',
+        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+      },
+      {
+        label: $localize`mTLS`,
+        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status',
+        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+      }
+    ];
   }
 }

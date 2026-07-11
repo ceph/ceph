@@ -176,7 +176,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
 
  protected:
   CephContext *cct;
-  Infiniband::QueuePair *qp;
+  Infiniband::QueuePair *qp = nullptr;
   uint32_t peer_qpn = 0;
   uint32_t local_qpn = 0;
   int connected;

@@ -593,6 +593,8 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         struct spdk_pci_addr addr;
         int r;
 
+        spdk_env_opts_init(&opts);
+
         bool local_pci_device = false;
         int rc = spdk_pci_addr_parse(&addr, trid.traddr);
         if (!rc) {
@@ -605,7 +607,6 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
           opts.num_pci_addr = 1;
         }
 
-	spdk_env_opts_init(&opts);
         opts.name = "nvme-device-manager";
         opts.core_mask = coremask_arg.c_str();
 #if SPDK_VERSION >= SPDK_VERSION_NUM(21, 1, 0)
