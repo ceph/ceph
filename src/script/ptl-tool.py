@@ -785,67 +785,59 @@ class CommitParityCheck(BaseAuditCheck):
             visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR <picture><img width=\"120\" height=\"1\"></picture> | SOURCE STATUS |")
             visualizer_md_lines.append("|---|---|---|")
 
-            bp_to_source = {}
-            for pr_name, commit_list in pr_mapping.items():
-                for item in commit_list:
-                    if item['bp_commit']:
-                        bp_to_source[item['bp_commit'].hexsha] = (pr_name, item)
-                        
-            unprinted_missing = {}
-            for pr_name, o_sha, o_summary, m_sha in missing_commits:
-                if pr_name not in unprinted_missing:
-                    unprinted_missing[pr_name] = []
-                unprinted_missing[pr_name].append((o_sha, o_summary))
-            
             visualizer_lines.append(f"BACKPORT PR #{pr}".ljust(47) + "SOURCE PR / STATUS")
             visualizer_lines.append("-" * 80)
             
-            current_pr = None
+            bp_commits_mapped = set()
+            bp_to_source = {}
+            for pr_name, commit_list in pr_mapping.items():
+                for item in commit_list:
+                    if item.get('bp_commit'):
+                        bp_to_source[item['bp_commit'].hexsha] = (str(pr_name), item)
+                        bp_commits_mapped.add(item['bp_commit'].hexsha)
+
+            ordered_prs = []
             for bp_c in pr_commits:
                 if bp_c.hexsha in bp_to_source:
-                    pr_name, item = bp_to_source[bp_c.hexsha]
-                    if current_pr is not None and pr_name != current_pr:
-                        if current_pr in unprinted_missing:
-                            for m_sha, m_summary in unprinted_missing[current_pr]:
-                                prefix = " " * (len(current_pr) + 1)
-                                visualizer_lines.append(format_parity_row(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                                visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                            del unprinted_missing[current_pr]
-                        visualizer_lines.append("")
-                        
-                    prefix = f"{pr_name} " if pr_name != current_pr else " " * (len(pr_name) + 1)
-                    current_pr = pr_name
-                    visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                    visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                else:
-                    if current_pr is not None:
-                        if current_pr in unprinted_missing:
-                            for m_sha, m_summary in unprinted_missing[current_pr]:
-                                prefix = " " * (len(current_pr) + 1)
-                                visualizer_lines.append(format_parity_row(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                                visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                            del unprinted_missing[current_pr]
-                        visualizer_lines.append("")
-                    current_pr = None
+                    p_name = bp_to_source[bp_c.hexsha]
+                    if p_name not in ordered_prs:
+                        ordered_prs.append(p_name)
+            for pr_name in sorted(list(pr_mapping.keys()), key=lambda x: str(x)):
+                p_name = str(pr_name)
+                if p_name not in ordered_prs:
+                    ordered_prs.append(p_name)
+            
+            first_pr_block = True
+            for pr_name_str in ordered_prs:
+                dict_key = next((k for k in pr_mapping.keys() if str(k) == pr_name_str), None)
+                if dict_key is None:
+                    continue
+                
+                if not first_pr_block:
+                    visualizer_lines.append("")
+                first_pr_block = False
+
+                first_commit_in_pr = True
+                for item in pr_mapping[dict_key]:
+                    prefix = f"{pr_name_str} " if first_commit_in_pr else " " * (len(pr_name_str) + 1)
+                    first_commit_in_pr = False
+
+                    bp_c = item.get('bp_commit')
+                    if bp_c:
+                        visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
+                        visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
+                    else:
+                        visualizer_lines.append(format_parity_row(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
+                        visualizer_md_lines.append(format_parity_row_md(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
+
+            extra_commits = [c for c in pr_commits if c.hexsha not in bp_commits_mapped]
+            if extra_commits:
+                if not first_pr_block:
+                    visualizer_lines.append("")
+                for bp_c in extra_commits:
                     visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, None, None, is_extra=True))
                     visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, None, None, is_extra=True))
-            
-            if current_pr is not None and current_pr in unprinted_missing:
-                for m_sha, m_summary in unprinted_missing[current_pr]:
-                    prefix = " " * (len(current_pr) + 1)
-                    visualizer_lines.append(format_parity_row(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                    visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                del unprinted_missing[current_pr]
-                
-            for pr_name, missing_list in unprinted_missing.items():
-                visualizer_lines.append("")
-                first = True
-                for m_sha, m_summary in missing_list:
-                    prefix = f"{pr_name} " if first else " " * (len(pr_name) + 1)
-                    visualizer_lines.append(format_parity_row(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                    visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
-                    first = False
-    
+
             visualizer_lines.append("=" * 80)
             
             visualizer_text = "\n".join(visualizer_lines)
@@ -1009,6 +1001,69 @@ class CommitParityCheck(BaseAuditCheck):
             print(vis_text)
         if vis_md:
             ctx.report.set_visualizer(vis_md)
+
+        # Check for scrambled commits relative to the original PR chronological sequences
+        bp_to_source = {}
+        for pr_name, commit_list in mapping['pr_mapping'].items():
+            for item in commit_list:
+                if item['bp_commit']:
+                    bp_to_source[item['bp_commit'].hexsha] = (str(pr_name), item)
+
+        mapped_sequence = []
+        for bp_c in ctx.pr_commits:
+            if bp_c.hexsha in bp_to_source:
+                pr_name_str, item = bp_to_source[bp_c.hexsha]
+                dict_key = next((k for k in mapping['pr_mapping'].keys() if str(k) == pr_name_str), None)
+                if dict_key is not None:
+                    orig_commits = [x['o_sha'] for x in mapping['pr_mapping'][dict_key]]
+                    if item['o_sha'] in orig_commits:
+                        idx = orig_commits.index(item['o_sha'])
+                        mapped_sequence.append((pr_name_str, idx))
+
+        is_scrambled = False
+        scramble_reasons = []
+        if mapped_sequence:
+            pr_blocks = [k for k, _ in itertools.groupby([x[0] for x in mapped_sequence])]
+            if len(pr_blocks) != len(set(pr_blocks)):
+                is_scrambled = True
+                scramble_reasons.append("Commits from different original PRs are interleaved/scrambled together.")
+
+            for pr_name in mapping['pr_mapping']:
+                pr_name_str = str(pr_name)
+                pr_bp_indices = [idx for name, idx in mapped_sequence if name == pr_name_str]
+                if pr_bp_indices != sorted(pr_bp_indices):
+                    is_scrambled = True
+                    scramble_reasons.append(f"Commits from {pr_name_str} are applied out of their original chronological order.")
+
+        if is_scrambled:
+            scramble_msg = "### Automated Backport Parity Review - Scrambled Commits Detected\n\n"
+            scramble_msg += "The backport contains commits that are scrambled or out of order relative to the original PR(s).\n\n"
+            for reason in scramble_reasons:
+                scramble_msg += f"* {reason}\n"
+            scramble_msg += "\nBackports should apply cherry-picks in the exact same chronological order as they were merged into the main branch to ensure clean history and avoid subtle regression risks.\n"
+
+            if ctx.args.ci_mode:
+                ctx.report.add("Scrambled Commits", scramble_msg)
+            else:
+                print("\033[91m" + "="*80)
+                print("WARNING: Scrambled commits detected in the backport!")
+                for reason in scramble_reasons:
+                    print(f"  - {reason}")
+                print("="*80 + "\033[0m")
+                while True:
+                    ans = input("Do you want to request changes for scrambled commits? [p/r/m/q] (p=proceed anyway, r=add to review, m=skip to merge, q=quit): ").strip().lower()
+                    if ans == 'm':
+                        raise SkipToMerge()
+                    elif ans == 'r':
+                        ctx.report.add("Scrambled Commits", scramble_msg)
+                        ctx.report.record_failure()
+                        break
+                    elif ans == 'q':
+                        sys.exit(1)
+                    elif ans == 'p':
+                        break
+                    else:
+                        print("Invalid choice. Please enter p, r, m, or q.")
 
         if invalid_format_commits:
             self._handle_invalid_formats(ctx, invalid_format_commits)
