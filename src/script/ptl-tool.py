@@ -123,6 +123,18 @@ except FileNotFoundError:
     pass
 REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
 SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
+SUPPORTED_QA_TAGS = {
+    'cephadm',
+    'cephfs',
+    'core',
+    'dashboard',
+    'libcephsqlite',
+    'nvme',
+    'orch',
+    'rbd',
+    'rgw',
+    'upgrades',
+}
 TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
 USER = os.getenv("PTL_TOOL_USER", getuser())
 
@@ -379,7 +391,15 @@ def get_pr_info(session, pr):
 def get_pr_tracker_string(session, pr, response=None):
     if not response:
         response = get_pr_info(session, pr)
-    return f'* "PR #{pr}":{response["html_url"]} -- {response["title"].strip()}'
+
+    pr_tags = []
+    for lbl in response.get('labels', []):
+        lbl_name = lbl.get('name', '')
+        if lbl_name.lower() in SUPPORTED_QA_TAGS:
+            pr_tags.append(lbl_name.lower())
+
+    tag_str = f" (tags: {', '.join(sorted(pr_tags))})" if pr_tags else ""
+    return f'* "PR #{pr}":{response["html_url"]} -- {response["title"].strip()}{tag_str}'
 
 def get(session, url, params=None, paging=True):
     if params is None:
@@ -1696,6 +1716,18 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
     if args.qa_private:
         issue_kwargs['is_private'] = True
 
+    pr_tags = set()
+    for pr in prs:
+        pr_info = get_pr_info(session, pr)
+        for lbl in pr_info.get('labels', []):
+            lbl_name = lbl.get('name', '')
+            if lbl_name.lower() in SUPPORTED_QA_TAGS:
+                pr_tags.add(lbl_name.lower())
+
+    if pr_tags:
+        log.info(f"Adding supported Redmine tags from PR labels: {', '.join(sorted(list(pr_tags)))}")
+        issue_kwargs['tag_list'] = sorted(list(pr_tags))
+
     if args.update_qa:
         issue = R.issue.get(args.update_qa)
         if issue.project.id != project.id:
@@ -1704,6 +1736,20 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
         if issue.tracker.id != tracker.id:
             log.error(f"issue {issue.url} tracker {issue.tracker} does not match {tracker}")
             sys.exit(1)
+
+        if hasattr(issue, 'tag_list') and issue.tag_list:
+            if isinstance(issue.tag_list, (list, tuple)):
+                pr_tags.update(str(t) for t in issue.tag_list)
+            elif isinstance(issue.tag_list, str):
+                pr_tags.update(t.strip() for t in issue.tag_list.split(',') if t.strip())
+        elif hasattr(issue, 'tags') and issue.tags:
+            if isinstance(issue.tags, (list, tuple)):
+                pr_tags.update(str(t) for t in issue.tags)
+            elif isinstance(issue.tags, str):
+                pr_tags.update(t.strip() for t in issue.tags.split(',') if t.strip())
+
+        if pr_tags:
+            issue_kwargs['tag_list'] = sorted(list(pr_tags))
 
         old_branch = "unknown"
         for cf in issue.custom_fields:
