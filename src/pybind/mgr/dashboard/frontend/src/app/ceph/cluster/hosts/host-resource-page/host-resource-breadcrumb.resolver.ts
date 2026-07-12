@@ -6,7 +6,7 @@ import { BreadcrumbsResolver, IBreadcrumb } from '~/app/shared/models/breadcrumb
 @Injectable({
   providedIn: 'root'
 })
-export class HostDetailsBreadcrumbResolver extends BreadcrumbsResolver {
+export class HostResourceBreadcrumbResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot): IBreadcrumb[] {
     const hostname = route.parent?.params?.hostname || route.params?.hostname || '';
     return [

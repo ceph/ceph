@@ -1,6 +1,9 @@
 @if (title) {
   <header class="sidebar-header">
-    <h2 class="cds--type-heading-05">{{ title }}</h2>
+    <div class="sidebar-header-content">
+      <h2 class="cds--type-heading-05">{{ title }}</h2>
+      <ng-content select="[sidebar-header-extra]"></ng-content>
+    </div>
   </header>
 }
 <div class="sidebar-layout-container sidebar-layout--full">

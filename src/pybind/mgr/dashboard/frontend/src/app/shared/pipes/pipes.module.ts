@@ -42,6 +42,8 @@ import { PipeFunctionPipe } from './pipe-function.pipe';
 import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
 import { RedirectLinkResolverPipe } from './redirect-link-resolver.pipe';
 import { CephVersionPipe } from './ceph-version.pipe';
+import { OverviewStatusPipe } from './overview-status.pipe';
+import { OverviewGridColumnNumbersPipe } from './overview-grid-column-numbers.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -86,7 +88,9 @@ import { CephVersionPipe } from './ceph-version.pipe';
     PipeFunctionPipe,
     DimlessBinaryPerMinutePipe,
     RedirectLinkResolverPipe,
-    CephVersionPipe
+    CephVersionPipe,
+    OverviewStatusPipe,
+    OverviewGridColumnNumbersPipe
   ],
   exports: [
     ArrayPipe,
@@ -129,7 +133,9 @@ import { CephVersionPipe } from './ceph-version.pipe';
     PipeFunctionPipe,
     DimlessBinaryPerMinutePipe,
     RedirectLinkResolverPipe,
-    CephVersionPipe
+    CephVersionPipe,
+    OverviewStatusPipe,
+    OverviewGridColumnNumbersPipe
   ],
   providers: [
     ArrayPipe,
@@ -163,7 +169,9 @@ import { CephVersionPipe } from './ceph-version.pipe';
     MbpersecondPipe,
     DimlessBinaryPerMinutePipe,
     RedirectLinkResolverPipe,
-    CephVersionPipe
+    CephVersionPipe,
+    OverviewStatusPipe,
+    OverviewGridColumnNumbersPipe
   ]
 })
 export class PipesModule {}
