@@ -61,6 +61,30 @@ jobs:
               return authorized;
             }
 
+            async function triggerAuditRun(description) {
+              try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
+              try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
+              try {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number
+                });
+                await github.rest.repos.createCommitStatus({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  sha: pr.head.sha,
+                  state: 'pending',
+                  context: 'Backport Audit',
+                  description: description
+                });
+                core.info(`[Router] Set pending commit status on SHA: ${pr.head.sha}`);
+              } catch (e) {
+                core.info(`[Router] Failed to set commit status: ${e.message}`);
+              }
+              core.setOutput('run_audit', 'true');
+            }
+
             core.info(`[Router] Evaluating event: ${eventName}, action: ${payload.action || 'N/A'}`);
 
             // ==========================================
@@ -78,11 +102,9 @@ jobs:
               
               if (commentBody.startsWith('/audit retest')) {
                 core.info('[Router] Detected /audit retest command. Triggering audit.');
-                core.setOutput('run_audit', 'true');
+                await triggerAuditRun('Running backport audit retest...');
                 return;
-              } 
-              
-              if (commentBody.startsWith('/audit test-branch')) {
+              } else if (commentBody.startsWith('/audit test-branch')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to activate test branch.`);
                 const isAuthorized = await checkAuthorization(actor);
                 
@@ -109,17 +131,15 @@ jobs:
                     owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
                     body: `🧪 **Audit Test Mode Activated** by @${actor}.\n\nExecuting audit using tooling checked out from branch \`${testBranch}\`.`
                   });
-                  core.setOutput('run_audit', 'true');
                   core.setOutput('checkout_ref', testBranch);
+                  await triggerAuditRun(`Running audit using branch ${testBranch}...`);
                 } else {
                   core.info(`[Router] User @${actor} NOT authorized to use test branches.`);
                   core.setFailed(`User @${actor} is not authorized to invoke test branches.`);
                   core.setOutput('run_audit', 'false');
                 }
                 return;
-              }
-
-              if (commentBody.startsWith('/audit override')) {
+              } else if (commentBody.startsWith('/audit override')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
                 const isAuthorized = await checkAuthorization(actor);
                 
