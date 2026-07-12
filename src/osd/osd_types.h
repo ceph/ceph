@@ -28,6 +28,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <variant>
 
 #ifdef WITH_CRIMSON
@@ -240,12 +241,10 @@ inline bool operator!=(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name != r.name) || (l.inc != r.inc) || (l.tid != r.tid);
 }
 inline bool operator<(const osd_reqid_t& l, const osd_reqid_t& r) {
-  return (l.name < r.name) || (l.inc < r.inc) || 
-    (l.name == r.name && l.inc == r.inc && l.tid < r.tid);
+  return std::tie(l.name, l.inc, l.tid) < std::tie(r.name, r.inc, r.tid);
 }
 inline bool operator<=(const osd_reqid_t& l, const osd_reqid_t& r) {
-  return (l.name < r.name) || (l.inc < r.inc) ||
-    (l.name == r.name && l.inc == r.inc && l.tid <= r.tid);
+  return std::tie(l.name, l.inc, l.tid) <= std::tie(r.name, r.inc, r.tid);
 }
 inline bool operator>(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l <= r); }
 inline bool operator>=(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l < r); }
