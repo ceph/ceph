@@ -8450,18 +8450,15 @@ int OSDMonitor::prepare_new_pool(string& name,
   // For Crimson - only EC-optimized pools are supported.
   if (pi->is_erasure()) {
     if (crimson) {
-      stringstream err_msg;
-      if (int r = enable_pool_ec_optimizations(*pi, &err_msg, true); r < 0) {
+      if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
         // for Crimson - failure is not an option
-        if (ss) {
-          *ss << err_msg.str();
-        }
-        return r;
+        *ss << r.error().message;
+        return r.error().error;
       }
     } else {
       if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
         // Silently fail if the pool cannot support ec optimizations.
-        enable_pool_ec_optimizations(*pi, nullptr, true);
+        std::ignore = enable_pool_ec_optimizations(*pi, true);
       }
     }
   }
@@ -8498,20 +8495,19 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   return true;
 }
 
-int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
-    stringstream *ss, bool enable) {
+tl::expected<void, ErrorNMessage>
+OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
+{
   if (!p.is_erasure()) {
-    if (ss) {
-      *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
-    }
-    return -EINVAL;
+    return tl::unexpected(ErrorNMessage{
+	-EINVAL,
+	"allow_ec_optimizations can only be enabled for an erasure coded pool"});
   }
   if (osdmap.require_osd_release < ceph_release_t::tentacle) {
-    if (ss) {
-      *ss << "All OSDs must be upgraded to tentacle or "
-           << "later before setting allow_ec_optimizations";
-    }
-    return -EINVAL;
+    return tl::unexpected(ErrorNMessage{
+	-EINVAL,
+	"All OSDs must be upgraded to tentacle or "
+	"later before setting allow_ec_optimizations"});
   }
   if (enable) {
     ErasureCodeInterfaceRef erasure_code;
@@ -8523,27 +8519,23 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       m = erasure_code->get_coding_chunk_count();
       chunk_size = erasure_code->get_chunk_size(p.get_stripe_width());
     } else {
-      if (ss) {
-        *ss << "get_erasure_code failed: " << tmp.str();
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL, "get_erasure_code failed: " + tmp.str()});
     }
     if ((erasure_code->get_supported_optimizations() &
-        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
-      if (ss) {
-        *ss << "ec optimizations not currently supported for pool profile.";
-      }
-      return -EINVAL;
+	ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "ec optimizations not currently supported for pool profile."});
     }
 
     if ((chunk_size % 4096) != 0) {
-      if (ss) {
-        *ss << "stripe_unit must be divisible by 4096 to enable ec optimizations";
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "stripe_unit must be divisible by 4096 to enable ec optimizations"});
     }
     // Restrict the set of shards that can be a primary to the 1st data
-    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because
     // the other shards (including local parity for LRC) may not have
     // up to date copies of xattrs including OI
     p.nonprimary_shards.clear();
@@ -8555,19 +8547,18 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
 	} else {
 	  shard = shard_id_t(int(raw_shard));
 	}
-        p.nonprimary_shards.insert(shard);
+	p.nonprimary_shards.insert(shard);
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
   } else {
     if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
-      if (ss) {
-        *ss << "allow_ec_optimizations cannot be disabled once enabled";
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "allow_ec_optimizations cannot be disabled once enabled"});
     }
   }
-  return 0;
+  return {};
 }
 
 void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t &p) {
@@ -9126,9 +9117,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, &ss, enable);
-    if (r != 0) {
-      return r;
+    if (auto r = enable_pool_ec_optimizations(p, enable); !r) {
+      ss << r.error().message;
+      return r.error().error;
     }
     maybe_enable_pool_split_ops(p);
     if (!was_enabled && p.allows_ecoptimizations()) {
