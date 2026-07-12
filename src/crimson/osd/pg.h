@@ -186,6 +186,11 @@ public:
     return get_acting_recovery_backfill();
   }
 
+  std::optional<backfill_osd_space_usage_t> get_local_osd_space_usage() override {
+    // TODO
+    return std::nullopt;
+  }
+
   spg_t primary_spg_t() const override {
     return spg_t(get_info().pgid.pgid, get_primary().shard);
   }
@@ -680,7 +685,9 @@ public:
 
 
   bool try_reserve_recovery_space(
-    int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    int64_t primary_num_bytes,
+    int64_t local_num_bytes,
+    backfill_reservation_space_info_t *space_info = nullptr) final {
     // TODO
     return true;
   }
