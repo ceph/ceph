@@ -173,6 +173,36 @@ TEST(SharedClient, one)
   EXPECT_FALSE(*ceptr);
 }
 
+TEST(Client, resolve_http)
+{
+  const std::string url = "http://ceph.io";
+
+  asio::io_context ctx;
+  auto client = Client{ctx.get_executor()};
+
+  std::optional<std::exception_ptr> ceptr;
+  asio::co_spawn(ctx, perform(client, url.c_str()), capture(ceptr));
+
+  ctx.run();
+  ASSERT_TRUE(ceptr);
+  EXPECT_FALSE(*ceptr);
+}
+
+TEST(Client, resolve_https)
+{
+  const std::string url = "https://ceph.io";
+
+  asio::io_context ctx;
+  auto client = Client{ctx.get_executor()};
+
+  std::optional<std::exception_ptr> ceptr;
+  asio::co_spawn(ctx, perform(client, url.c_str()), capture(ceptr));
+
+  ctx.run();
+  ASSERT_TRUE(ceptr);
+  EXPECT_FALSE(*ceptr);
+}
+
 TEST(Client, cancel_destroy)
 {
   asio::io_context sctx;
