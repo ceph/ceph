@@ -602,6 +602,9 @@ struct transaction_manager_test_t :
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
+      [](const crimson::ct_error::enoent &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
       crimson::ct_error::assert_all(
 	"get_extent got invalid error"
       )
@@ -630,6 +633,9 @@ struct transaction_manager_test_t :
       return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      [](const crimson::ct_error::enoent &e) {
 	return seastar::make_ready_future<TestBlockRef>();
       },
       crimson::ct_error::assert_all(
@@ -758,6 +764,9 @@ struct transaction_manager_test_t :
       return ertr::make_ready_future<std::optional<LBAMapping>>(std::move(pin));
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
+	return seastar::make_ready_future<std::optional<LBAMapping>>();
+      },
+      [](const crimson::ct_error::enoent &e) {
 	return seastar::make_ready_future<std::optional<LBAMapping>>();
       },
       crimson::ct_error::assert_all(
