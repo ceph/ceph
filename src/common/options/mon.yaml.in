@@ -1038,6 +1038,25 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_osd_down_out_action
+  type: str
+  level: advanced
+  desc: action to take when an OSD has been down longer than mon_osd_down_out_interval
+  long_desc: If set to ``mark_out``, Ceph will mark the OSD out by setting its
+    OSDMap override weight to zero. If set to ``crush_reweight_zero``, Ceph will
+    instead set the OSD's CRUSH weight to zero, which also updates the containing
+    CRUSH bucket weights. The latter action changes the CRUSH map and does not
+    automatically restore the previous CRUSH weight when the OSD returns.
+  default: mark_out
+  enum_values:
+  - mark_out
+  - crush_reweight_zero
+  services:
+  - mon
+  see_also:
+  - mon_osd_down_out_interval
+  - osd_crush_update_weight_set
+  with_legacy: true
 - name: mon_osd_down_out_subtree_limit
   type: str
   level: advanced
