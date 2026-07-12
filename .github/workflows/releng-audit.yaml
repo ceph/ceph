@@ -156,8 +156,9 @@ jobs:
             const hasFailLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-fail');
             const hasPassLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-pass');
             const hasOverrideLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-override');
+            const hasQueueLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-queue');
 
-            core.info(`[Router] Current labels - Fail: ${hasFailLabel}, Pass: ${hasPassLabel}, Override: ${hasOverrideLabel}`);
+            core.info(`[Router] Current labels - Fail: ${hasFailLabel}, Pass: ${hasPassLabel}, Override: ${hasOverrideLabel}, Queue: ${hasQueueLabel}`);
 
             // --- SYNCHRONIZE (New Commits) ---
             if (eventName === 'pull_request_target' && payload.action === 'synchronize') {
@@ -225,6 +226,20 @@ jobs:
               const labelName = payload.label.name;
               core.info(`[Router] Processing labeled event for label: ${labelName} by actor: ${actor}`);
               
+              if (labelName === 'releng-audit-queue') {
+                core.info(`[Router] Detected releng-audit-queue label. Removing label and triggering audit.`);
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    name: 'releng-audit-queue'
+                  });
+                } catch (e) {}
+                core.setOutput('run_audit', 'true');
+                return;
+              }
+
               // Block humans from applying machine labels
               if (!isBot && (labelName === 'releng-audit-pass' || labelName === 'releng-audit-fail')) {
                 core.warning(`[Router] User @${actor} cannot manually apply ${labelName}.`);
