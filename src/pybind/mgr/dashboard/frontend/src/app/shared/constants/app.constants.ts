@@ -89,7 +89,11 @@ export enum ActionLabels {
   /* Multi-cluster */
   CONNECT = 'connect',
   RECONNECT = 'reconnect',
-  VIEW = 'View'
+  VIEW = 'View',
+
+  /* Hosts */
+  MAINTENANCE = 'Maintenance',
+  DRAIN = 'Drain'
 }
 
 @Injectable({

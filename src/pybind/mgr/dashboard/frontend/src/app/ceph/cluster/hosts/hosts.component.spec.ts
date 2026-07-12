@@ -239,8 +239,8 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
-    expect(component.hosts[0]['memory_total_bytes']).toEqual('N/A');
-    expect(component.hosts[0]['raw_capacity']).toEqual('N/A');
+    expect(component.hosts[0]['memory_total_bytes']).toEqual('-');
+    expect(component.hosts[0]['raw_capacity']).toEqual('-');
   });
 
   it('should show force maintenance modal when it is safe to stop host', () => {
