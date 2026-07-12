@@ -1,0 +1,66 @@
+<cd-sidebar-layout
+  class="host-details-layout"
+  [title]="hostname"
+  [items]="sidebarItems"
+>
+  @if (hostStatus || hostLabels.length || hostActions.length) {
+    <div
+      sidebar-header-extra
+      class="host-header-extra cds-mb-3"
+    >
+      <div class="host-header-tags">
+        @if (hostStatus) {
+          <span
+            class="host-status-badge cds-mr-3"
+            [ngClass]="'host-status-badge--' + hostStatusMap?.icon"
+          >
+            <cd-icon [type]="hostStatusMap?.icon"></cd-icon>
+            <span>{{ hostStatusMap?.label ?? hostStatus }}</span>
+          </span>
+        }
+        @for (label of hostLabels; track label) {
+          <cds-tag
+            class="cds-mr-2"
+            type="blue"
+            >{{ label }}</cds-tag
+          >
+        }
+      </div>
+      @if (hostActions.length) {
+        <div class="host-header-actions">
+          <cds-menu-button
+            kind="tertiary"
+            size="lg"
+            menuId="host-actions-menu"
+            menuAlignment="bottom-end"
+            label="Actions"
+            i18n-label
+          >
+            @for (action of getVisibleHostActions(); track action.name) {
+              <cds-menu-item
+                label="{{ action.name }}"
+                [disabled]="isHostActionDisabled(action)"
+                (click)="runHostAction(action)"
+                title="{{ action.name }}"
+              >
+              </cds-menu-item>
+            }
+          </cds-menu-button>
+        </div>
+      }
+    </div>
+  }
+</cd-sidebar-layout>
+
+<ng-template #maintenanceConfirmTpl>
+  @for (msg of errorMessage; track $index; let last = $last) {
+    <div>
+      @if (!last || errorMessage.length === 1) {
+        <ul>
+          <li i18n>{{ msg }}</li>
+        </ul>
+      }
+    </div>
+  }
+  <ng-container i18n>Are you sure you want to continue?</ng-container>
+</ng-template>

@@ -10,13 +10,14 @@ import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { HostService } from '~/app/shared/api/host.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { HostDetailsComponent } from './host-details.component';
+import { HostSidebarComponent } from './host-resource-sidebar.component';
 
-describe('HostDetailsComponent', () => {
-  let component: HostDetailsComponent;
-  let fixture: ComponentFixture<HostDetailsComponent>;
+describe('HostSidebarComponent', () => {
+  let component: HostSidebarComponent;
+  let fixture: ComponentFixture<HostSidebarComponent>;
 
   configureTestBed({
     imports: [
@@ -40,12 +41,26 @@ describe('HostDetailsComponent', () => {
         useValue: {
           getPermissions: () => new Permissions({ hosts: ['read'], grafana: ['read'] })
         }
+      },
+      {
+        provide: HostService,
+        useValue: {
+          getDisable: () => false,
+          getAllHosts: () =>
+            of([
+              {
+                hostname: 'localhost',
+                labels: ['_admin'],
+                status: 'available'
+              }
+            ])
+        }
       }
     ]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(HostDetailsComponent);
+    fixture = TestBed.createComponent(HostSidebarComponent);
     component = fixture.componentInstance;
   });
 
@@ -65,11 +80,10 @@ describe('HostDetailsComponent', () => {
 
     it('should build the sidebar items', () => {
       expect(component.sidebarItems.map((item) => item.label)).toEqual([
-        'Devices',
-        'Physical Disks',
+        'Overview',
+        'Storage Devices',
         'Daemons',
-        'Performance Details',
-        'Device health'
+        'Performance'
       ]);
     });
 

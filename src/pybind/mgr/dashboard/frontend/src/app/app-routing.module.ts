@@ -8,10 +8,10 @@ import { ConfigurationFormComponent } from './ceph/cluster/configuration/configu
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
-import { HostDetailsComponent } from './ceph/cluster/hosts/host-details/host-details.component';
+import { HostSidebarComponent } from './ceph/cluster/hosts/host-resource-sidebar/host-resource-sidebar.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
-import { HostDetailsBreadcrumbResolver } from './ceph/cluster/hosts/host-details/host-details-breadcrumb.resolver';
-import { HostDetailsSectionComponent } from './ceph/cluster/hosts/host-details/host-details-section.component';
+import { HostResourceBreadcrumbResolver } from './ceph/cluster/hosts/host-resource-page/host-resource-breadcrumb.resolver';
+import { HostResourcePageComponent } from './ceph/cluster/hosts/host-resource-page/host-resource-page.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
@@ -158,34 +158,29 @@ const routes: Routes = [
       },
       {
         path: 'hosts/:hostname',
-        component: HostDetailsComponent,
-        data: { breadcrumbs: HostDetailsBreadcrumbResolver },
+        component: HostSidebarComponent,
+        data: { breadcrumbs: HostResourceBreadcrumbResolver },
         children: [
-          { path: '', redirectTo: 'devices', pathMatch: 'full' },
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
-            path: 'devices',
-            component: HostDetailsSectionComponent,
-            data: { breadcrumbs: 'Devices', section: 'devices' }
+            path: 'overview',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
           },
           {
-            path: 'physical-disks',
-            component: HostDetailsSectionComponent,
-            data: { breadcrumbs: 'Physical Disks', section: 'physical-disks' }
+            path: 'storage-devices',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Storage Devices', section: 'storage-devices' }
           },
           {
             path: 'daemons',
-            component: HostDetailsSectionComponent,
+            component: HostResourcePageComponent,
             data: { breadcrumbs: 'Daemons', section: 'daemons' }
           },
           {
-            path: 'performance-details',
-            component: HostDetailsSectionComponent,
-            data: { breadcrumbs: 'Performance Details', section: 'performance-details' }
-          },
-          {
-            path: 'device-health',
-            component: HostDetailsSectionComponent,
-            data: { breadcrumbs: 'Device health', section: 'device-health' }
+            path: 'performance',
+            component: HostResourcePageComponent,
+            data: { breadcrumbs: 'Performance', section: 'performance' }
           }
         ]
       },

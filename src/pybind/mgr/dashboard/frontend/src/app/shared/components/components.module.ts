@@ -137,6 +137,7 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
 import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
+import { OverviewComponent } from './resource-overview-card/resource-overview-card.component';
 
 @NgModule({
   imports: [
@@ -233,7 +234,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TearsheetStepComponent,
     PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent
+    NumberWithUnitComponent,
+    OverviewComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -279,7 +281,8 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     TearsheetStepComponent,
     PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent
+    NumberWithUnitComponent,
+    OverviewComponent
   ]
 })
 export class ComponentsModule {
