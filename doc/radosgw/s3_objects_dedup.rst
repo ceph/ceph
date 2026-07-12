@@ -4,8 +4,8 @@
 Full RGW Object Dedup
 =====================
 
-Full RGW object deduplication adds ``radosgw-admin`` commands to remove
-duplicated RGW tail objects and to collect and report dedup statistics.
+Full RGW object deduplication adds ``radosgw-admin`` commands to deduplicate
+RGW tail RADOS objects and to collect and report statistics.
 
 These operations are also available through the `Admin Ops API <../radosgw/adminops/#dedup>`_
 under ``/{admin}/dedup``.
@@ -15,15 +15,20 @@ Admin Commands
 ==============
 
 - ``radosgw-admin dedup estimate``:
-   Starts a new dedup estimate session (aborting first any existing session).
-   No changes are made to the existing system. Only statistics will be
+   Starts a new dedup estimate session, first ending any existing session.
+   No changes are made to the existing system; statistics will be
    collected and reported.
 - ``radosgw-admin dedup exec --yes-i-really-mean-it``:
-   Starts a new dedup session (aborting first any existing session).
-   Performs a full dedup, finding duplicated tail objects and removing them.
+   Starts a new dedup session, first cancelling any existing session.
+   Performs a full pass, finding and deduplicating identical RADOS tail objects.
 
-   This command can lead to **data loss** and should not be used on production
-   data!!
+   This is an experimental feature under active development.
+   As of this documentation's release, This command can lead to **data loss**
+   and should not be used on production data as of the release containing
+   this documentation. Note the URL of this page: if you are running a
+   newer release, consult that release's updated documentation. Running
+   this command on a Ceph release in which it is not yet production-ready
+   may irreversibly lose precious data.
 - ``radosgw-admin dedup pause``:
    Pauses an active dedup session (dedup resources are not released).
 - ``radosgw-admin dedup resume``:
@@ -31,10 +36,10 @@ Admin Commands
 - ``radosgw-admin dedup abort``:
    Aborts an active dedup session, releasing all resources used by it.
 - ``radosgw-admin dedup stats``:
-   Collects and displays last dedup statistics.
+   Collects and displays dedup statistics.
 - ``radosgw-admin dedup throttle --max-bucket-index-ops=<count>``:
-   Specifies maximum allowed bucket index read requests per second for a single
-   RGW server during dedup, ``0`` means unlimited.
+   Specifies maximum allowed bucket index read requests per second per
+   RGW daemon during dedup, ``0`` means unlimited.
 - ``radosgw-admin dedup throttle --stat``:
    Displays dedup throttle setting.
 
@@ -66,18 +71,18 @@ one valid name; an empty or all-comment file is rejected.
 Skipped Objects
 ===============
 
-Dedup estimate process skips the following objects:
+The dedup estimate process skips the following RGW objects:
 
 - Objects smaller than :confval:`rgw_dedup_min_obj_size_for_dedup` (unless they
   are multipart).
 - Objects with different placement rules.
-- Objects with different pools.
-- Objects with different storage classes.
+- Objects in different RADOS pools.
+- Objects with different RGW storage classes.
 
 The full dedup process skips all of the above and additionally skips
 **compressed** and **user-encrypted** objects.
 
-The minimum size object for dedup is controlled by the following
+The minimum RGW object size to be deduplicated is controlled by the following
 configuration option:
 
 .. confval:: rgw_dedup_min_obj_size_for_dedup
@@ -86,32 +91,32 @@ configuration option:
 Estimate Processing
 ===================
 
-The dedup estimate process collects all the needed information directly from
-the bucket indices, reading one full bucket index object a thousand entries at
+The dedup estimate process collects all needed information directly from
+the bucket indexes, reading one full bucket index object a thousand entries at
 a time.
 
-The bucket index objects are sharded between the participating members so each
-bucket index object is read exactly one time. The sharding allows processing to
-scale almost linearly, splitting the load evenly between the participating
-members.
+Bucket index objects are sharded between the participating members so each
+is read exactly one time. The sharding allows processing to
+scale almost linearly, splitting the load evenly among participating
+daemons.
 
-The dedup estimate process does not access the objects themselves
-(data/metadata), which means its processing time won't be affected by the
-underlying media (SSD/HDD) storing the objects. The bucket indices are
-virtually always accessed from a fast medium: placement on SSD
-:ref:`is recommended <hardware-recommendations>` and they are cached heavily
+The dedup estimate process does not access the object payload
+data, which means that processing time won't be significantly affected by the
+underlying media (SSD/HDD) storing the objects. Best practice places bucket index pools
+on fast storage: SSDs
+:ref:`are recommended <hardware-recommendations>` and they are cached heavily
 in memory.
 
-The administrator can throttle the estimate process by setting a limit on the
-number of bucket index reads per second per an RGW server (each read brings
-1000 object entries) using:
+Administrators can throttle the estimate process by setting a limit on the
+number of bucket index reads per second per RGW daemon. Each operation
+reads 1000 object entries:
 
 .. prompt:: bash #
 
    radosgw-admin dedup throttle --max-bucket-index-ops=<count>
 
-A typical RGW server performs about 100 bucket index reads per second (i.e.
-100,000 object entries). For example, setting ``count`` to 50 would then
+A typical RGW server performs about 100 bucket index reads per second and thus
+100,000 object entries. For example, setting ``count`` to 50 would then
 typically slow down the estimate process by half.
 
 
@@ -119,19 +124,20 @@ Full Dedup Processing
 =====================
 
 The full dedup process begins by constructing a dedup table from the bucket
-indices, similar to the estimate process above.
+indexes in a fashion similar to the estimate process described above.
 
-This table is then scanned linearly to purge objects without duplicates,
+This table is then scanned linearly to exclude RADOS objects without duplicates,
 leaving only dedup candidates.
 
-Next, we iterate through these dedup candidate objects, reading their complete
-information from the object metadata (a per-object RADOS operation). During
-this step, we filter out **compressed** and **user-encrypted** objects.
+Next, it iterates through these dedup candidate objects, reading their complete
+information from the object metadata, a per-object RADOS operation. During
+this step, **compressed** and **user-encrypted** objects are removed from
+consideration.
 
-Following this, we calculate a cryptographically strong hash of the candidate
-object data. This involves a full-object read which is a resource-intensive
-operation. The hash ensures that the dedup candidates are indeed perfect
-matches. If they are, we proceed with the deduplication:
+Following this, we calculate a cryptographically strong hash of candidate
+object data. This involves a full-object read, which is a resource-intensive
+operation. The hash ensures that dedup candidates are indeed perfect
+matches. If they are, we proceed with deduplication:
 
 - Increment the reference count on the source tail objects one by one.
 - Copy the manifest from the source to the target.
@@ -140,12 +146,12 @@ matches. If they are, we proceed with the deduplication:
 Split Head Mode
 ===============
 
-The dedup code can split a head object into 2 objects:
+The dedup code can split a head object into two objects:
 
 - one with attributes and no data, and
 - a new tail object with only data.
 
-The new tail object will be deduped, unlike head objects, which cannot
+The new tail object will be deduplicated, unlike head objects, which cannot
 be deduplicated.
 
 :confval:`rgw_dedup_split_obj_head` (default: true). Setting
