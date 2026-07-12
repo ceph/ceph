@@ -83,9 +83,9 @@
                     "shape":"Long",
                     "documentation":"<p>Number of rows that have not yet been indexed.</p>"
                 },
-                "numIndices":{
+                "numIndexSegments":{
                     "shape":"Integer",
-                    "documentation":"<p>Number of indices built.</p>"
+                    "documentation":"<p>Number of index segments (parts) that make up the vector index.</p>"
                 }
             }
         },
