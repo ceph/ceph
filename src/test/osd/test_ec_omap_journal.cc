@@ -519,6 +519,32 @@ TEST(ecomapjournal, ClearOmap) {
   EXPECT_TRUE(ranges.at("") == std::nullopt);
 }
 
+TEST(ecomapjournal, ClearOmapTombstonesCachedKeys) {
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("obj_clear_cached", CEPH_NOSNAP, 1, 0, "nspace");
+
+  // Process an insert first so the keys land in the cached key_map.
+  journal.add_entry(hoid, create_insert_entry(eversion_t(1, 1), 1, 3));
+  {
+    auto [updates, ranges] = journal.get_value_updates(hoid);
+    ASSERT_TRUE(updates.at(make_key(1)).value.has_value());
+    ASSERT_TRUE(updates.at(make_key(2)).value.has_value());
+    ASSERT_TRUE(updates.at(make_key(3)).value.has_value());
+  }
+
+  // A later clear_omap must mark the already-cached keys as tombstones.
+  journal.add_entry(hoid, ECOmapJournalEntry(eversion_t(1, 2), true, std::nullopt, {}));
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_TRUE(updates.contains(make_key(1)));
+  ASSERT_TRUE(updates.contains(make_key(2)));
+  ASSERT_TRUE(updates.contains(make_key(3)));
+  EXPECT_FALSE(updates.at(make_key(1)).value.has_value());
+  EXPECT_FALSE(updates.at(make_key(2)).value.has_value());
+  EXPECT_FALSE(updates.at(make_key(3)).value.has_value());
+}
+
 TEST(ecomapjournal, append_delete_clears_maps)
 {
   MockDoutPrefixProvider dpp;

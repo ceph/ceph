@@ -234,7 +234,7 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
     // Clear omap if specified
     if (entry_iter->clear_omap) {
       // Mark all keys as removed
-      for (auto [_, value] : key_map[hoid]) {
+      for (auto &[_, value] : key_map[hoid]) {
         value.update_value(entry_iter->version, std::nullopt);
       }
 
