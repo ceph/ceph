@@ -1492,6 +1492,110 @@ TEST_F(PeeringStateTest, UpdateStats) {
   EXPECT_EQ(ps->get_info().stats.stats.sum.num_objects, 10u);
 }
 
+TEST_F(PeeringStateTest, SpaceAwareRemoteBackfillReservationPriority) {
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  backfill_reservation_space_info_t high_relief;
+  high_relief.relieved_usage_before = 0.9;
+  high_relief.relieved_usage_after = 0.7;
+  high_relief.target_usage_before = 0.5;
+  high_relief.target_usage_after = 0.7;
+
+  backfill_reservation_space_info_t low_relief;
+  low_relief.relieved_usage_before = 0.8;
+  low_relief.relieved_usage_after = 0.75;
+  low_relief.target_usage_before = 0.6;
+  low_relief.target_usage_after = 0.7;
+
+  auto request_backfill = [this](
+      int osd,
+      std::optional<backfill_reservation_space_info_t> space_info) {
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      RequestBackfillPrio(
+	OSD_BACKFILL_PRIORITY_BASE,
+	200,
+	0,
+	std::move(space_info)));
+    get_ps(osd)->handle_event(evt, get_ctx(osd));
+  };
+
+  request_backfill(acting[1], high_relief);
+  request_backfill(acting[2], low_relief);
+  request_backfill(acting[3], std::nullopt);
+
+  const auto high_priority =
+    get_listener(acting[1])->last_remote_recovery_reservation_priority;
+  const auto low_priority =
+    get_listener(acting[2])->last_remote_recovery_reservation_priority;
+  const auto priority_without_space_info =
+    get_listener(acting[3])->last_remote_recovery_reservation_priority;
+
+  ASSERT_TRUE(high_priority);
+  ASSERT_TRUE(low_priority);
+  ASSERT_TRUE(priority_without_space_info);
+  EXPECT_EQ(
+    *high_priority,
+    OSD_BACKFILL_PRIORITY_BASE + high_relief.priority_boost(39));
+  EXPECT_EQ(
+    *low_priority,
+    OSD_BACKFILL_PRIORITY_BASE + low_relief.priority_boost(39));
+  EXPECT_EQ(*priority_without_space_info, OSD_BACKFILL_PRIORITY_BASE);
+  EXPECT_GT(*high_priority, *low_priority);
+  EXPECT_GT(*low_priority, *priority_without_space_info);
+}
+
+TEST_F(PeeringStateTest, SpaceAwareBackfillPriorityFromOsdUsage) {
+  test_create_peering_state();
+  for (auto osd : acting) {
+    get_listener(osd)->local_osd_space_usage =
+      backfill_osd_space_usage_t{500, 1000};
+  }
+  get_listener(acting[1])->local_osd_space_usage =
+    backfill_osd_space_usage_t{900, 1000};
+
+  test_init();
+  for (auto osd : acting) {
+    get_ps(osd)->update_stats(
+      [](pg_history_t&, pg_stat_t& stats) {
+	stats.stats.sum.num_bytes = 200;
+	return true;
+      });
+  }
+  test_event_initialize();
+
+  test_append_log_entry();
+  test_append_log_entry();
+  test_append_log_entry(
+    shard_id_set(),
+    shard_id_set(),
+    false,
+    true);
+  test_peering();
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  get_listener(9)->local_osd_space_usage =
+    backfill_osd_space_usage_t{500, 1000};
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  const auto local_priority =
+    get_listener(acting[0])->last_io_reservation_priority;
+  const auto remote_priority =
+    get_listener(9)->last_remote_recovery_reservation_priority;
+
+  ASSERT_TRUE(local_priority);
+  ASSERT_TRUE(remote_priority);
+  EXPECT_EQ(*local_priority, 115u);
+  EXPECT_EQ(*remote_priority, *local_priority);
+}
+
 // ============================================================================
 // Test Stubs - Deletion
 // ============================================================================

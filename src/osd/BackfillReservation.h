@@ -113,5 +113,5 @@ inline std::ostream& operator<<(
 	     << "->" << info.relieved_usage_after
 	     << " target " << info.target_usage_before
 	     << "->" << info.target_usage_after
-	     << " ppm";
+	     << " ratio";
 }
