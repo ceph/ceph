@@ -121,13 +121,17 @@ struct BufferedRecoveryMessages {
   void send_osd_message(int target, MsgT&& m) {
     message_map[target].emplace_back(std::forward<MsgT>(m));
   }
-  void send_notify(int to, const pg_notify_t &n);
+  void send_notify(
+    int to,
+    const pg_notify_t &n,
+    std::optional<backfill_osd_space_usage_t> osd_space_usage = {});
   void send_query(int to, spg_t spgid, const pg_query_t &q);
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
 		 const pg_info_t &info,
 		 std::optional<pg_lease_t> lease = {},
-		 std::optional<pg_lease_ack_t> lease_ack = {});
+		 std::optional<pg_lease_ack_t> lease_ack = {},
+		 std::optional<backfill_osd_space_usage_t> osd_space_usage = {});
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -275,8 +279,11 @@ struct PeeringCtxWrapper {
   void send_osd_message(int target, MsgT&& m) {
     msgs.send_osd_message(target, std::forward<MsgT>(m));
   }
-  void send_notify(int to, const pg_notify_t &n) {
-    msgs.send_notify(to, n);
+  void send_notify(
+    int to,
+    const pg_notify_t &n,
+    std::optional<backfill_osd_space_usage_t> osd_space_usage = {}) {
+    msgs.send_notify(to, n, osd_space_usage);
   }
   void send_query(int to, spg_t spgid, const pg_query_t &q) {
     msgs.send_query(to, spgid, q);
@@ -285,9 +292,10 @@ struct PeeringCtxWrapper {
 		 epoch_t min_epoch, epoch_t cur_epoch,
 		 const pg_info_t &info,
 		 std::optional<pg_lease_t> lease = {},
-		 std::optional<pg_lease_ack_t> lease_ack = {}) {
+		 std::optional<pg_lease_ack_t> lease_ack = {},
+		 std::optional<backfill_osd_space_usage_t> osd_space_usage = {}) {
     msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info,
-		   lease, lease_ack);
+		   lease, lease_ack, osd_space_usage);
   }
 };
 
@@ -370,6 +378,15 @@ public:
     virtual void pool_migration_request_target_reservation() = 0;
     /// Send a reservation release from source PG to target PG for pool migration
     virtual void pool_migration_release_target_reservation() = 0;
+
+    /**
+     * Get the actual data size of the current PG.
+     *
+     * For replicated PGs, the returned size is the same as
+     * the passed `num_bytes`, while, for ec PGs, the returned
+     * size is `num_bytes` / `data_chunks`.
+     */
+    virtual int64_t to_shard_bytes(int64_t num_bytes) = 0;
 
     /**
      * request_remote_background_io_reservation
@@ -460,10 +477,13 @@ public:
     virtual void on_pool_migration_target_suspended(bool toofull) = 0;
 
     // ================recovery space accounting ================
+    virtual std::optional<backfill_osd_space_usage_t>
+    get_local_osd_space_usage() = 0;
     virtual bool try_reserve_recovery_space(
       int64_t primary_num_bytes,
       int64_t local_num_bytes,
-      int64_t num_objects = 0) = 0;
+      int64_t num_objects,
+      backfill_reservation_space_info_t *space_info = nullptr) = 0;
     virtual void unreserve_recovery_space() = 0;
 
     // ================== Peering log events ====================
@@ -694,7 +714,7 @@ public:
 
     void send_notify(int to, const pg_notify_t &n) {
       ceph_assert(state->rctx);
-      state->rctx->send_notify(to, n);
+      state->rctx->send_notify(to, n, state->pl->get_local_osd_space_usage());
     }
     void send_query(int to, const pg_query_t &query) {
       state->rctx->send_query(
@@ -1791,6 +1811,7 @@ public:
   std::set<pg_shard_t>    stray_set; ///< non-acting osds that have PG data.
   std::map<pg_shard_t, pg_info_t>    peer_info; ///< info from peers (stray or prior)
   std::map<pg_shard_t, int64_t>    peer_bytes; ///< Peer's num_bytes from peer_info
+  std::map<pg_shard_t, backfill_osd_space_usage_t> peer_osd_space_usage;
   std::set<pg_shard_t> peer_purged; ///< peers purged
   std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
   std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
@@ -1879,7 +1900,10 @@ public:
     apply_pwlc(pwlc, shard, info, nullptr, log);
   }
   void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
-  bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
+  bool proc_replica_notify(
+    const pg_shard_t &from,
+    const pg_notify_t &notify,
+    const std::optional<backfill_osd_space_usage_t> &osd_space_usage);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();
@@ -1911,6 +1935,13 @@ public:
   unsigned get_backfill_priority();
   /// get pool migration reservation priority
   unsigned get_pool_migration_priority();
+  unsigned apply_backfill_space_priority(
+    unsigned base_priority,
+    const std::optional<backfill_reservation_space_info_t> &space_info);
+  unsigned get_space_aware_local_backfill_priority();
+  std::optional<backfill_reservation_space_info_t>
+  get_backfill_reservation_space_info(
+    bool require_target_usage = false);
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
