@@ -80,9 +80,7 @@ jobs:
                 core.info('[Router] Detected /audit retest command. Triggering audit.');
                 core.setOutput('run_audit', 'true');
                 return;
-              } 
-              
-              if (commentBody.startsWith('/audit test-branch')) {
+              } else if (commentBody.startsWith('/audit test-branch')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to activate test branch.`);
                 const isAuthorized = await checkAuthorization(actor);
                 
@@ -117,9 +115,7 @@ jobs:
                   core.setOutput('run_audit', 'false');
                 }
                 return;
-              }
-
-              if (commentBody.startsWith('/audit override')) {
+              } else if (commentBody.startsWith('/audit override')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
                 const isAuthorized = await checkAuthorization(actor);
                 
