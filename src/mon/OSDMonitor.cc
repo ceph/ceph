@@ -5371,23 +5371,59 @@ void OSDMonitor::tick()
         // complexity for now.
           down.sec() >= g_conf()->mon_osd_destroyed_out_interval;
         if (down_out || destroyed_out) {
-	  dout(10) << "tick marking osd." << o << " OUT after " << down
-		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
-	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
+	  auto crush_reweight_zero = (g_conf().get_val<bool>(
+	    "mon_crush_reweight_zero_on_down_out") && !destroyed_out);
 
-	  // set the AUTOOUT bit.
-	  if (pending_inc.new_state.count(o) == 0)
-	    pending_inc.new_state[o] = 0;
-	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+	  if (crush_reweight_zero) {
+	    CrushWrapper newcrush = _get_pending_crush();
+	    int old_weight = newcrush.get_item_weight(o);
+	    if (old_weight < 0) {
+	      derr << "failed to get CRUSH weight for osd." << o
+		   << " after " << down << " sec: "
+		   << cpp_strerror(old_weight)
+		   << "; falling back to marking out" << dendl;
+	    } else if (old_weight > 0) {
+	      int r = newcrush.adjust_item_weightf(
+		cct, o, 0.0, g_conf()->osd_crush_update_weight_set);
+	      if (r < 0) {
+		derr << "failed to CRUSH reweight osd." << o
+		     << " to 0 after " << down << " sec: "
+		     << cpp_strerror(r) << dendl;
+		continue;
+	      }
+	      pending_inc.crush.clear();
+	      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+	      do_propose = true;
 
-	  // remember previous weight
-	  if (pending_inc.new_xinfo.count(o) == 0)
-	    pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
-	  pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+	      mon.clog->info() << "CRUSH reweighting osd." << o
+				<< " to 0 (has been down for "
+				<< int(down.sec()) << " seconds)";
+	    } else {
+	      dout(10) << "tick osd." << o
+		       << " already has CRUSH weight 0 after " << down
+		       << " sec" << dendl;
+	    }
+	  }
 
-	  do_propose = true;
+          dout(10) << "tick marking osd." << o << " OUT after " << down
+                   << " sec (target " << grace << " = " << orig_grace
+                   << " + " << my_grace << ")" << dendl;
+          pending_inc.new_weight[o] = CEPH_OSD_OUT;
 
-	  mon.clog->info() << "Marking osd." << o << " out (has been down for "
+          // set the AUTOOUT bit.
+          if (pending_inc.new_state.count(o) == 0)
+            pending_inc.new_state[o] = 0;
+          pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+          // remember previous weight
+          if (pending_inc.new_xinfo.count(o) == 0)
+            pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
+          pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+
+          do_propose = true;
+
+          mon.clog->info() << "Marking osd." << o
+                            << " out (has been down for "
                             << int(down.sec()) << " seconds)";
 	} else
 	  continue;

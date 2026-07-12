@@ -1038,6 +1038,12 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_crush_reweight_zero_on_down_out
+  type: bool
+  level: advanced
+  desc: also reweight OSDs crush weight to zero if they are down_out
+  default: false
+  with_legacy: true
 - name: mon_osd_down_out_subtree_limit
   type: str
   level: advanced
