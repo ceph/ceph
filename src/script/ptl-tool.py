@@ -398,8 +398,11 @@ def get_pr_tracker_string(session, pr, response=None):
         if lbl_name.lower() in SUPPORTED_QA_TAGS:
             pr_tags.append(lbl_name.lower())
 
-    tag_str = f" (tags: {', '.join(sorted(pr_tags))})" if pr_tags else ""
-    return f'* "PR #{pr}":{response["html_url"]} -- {response["title"].strip()}{tag_str}'
+    labels_str = ", ".join(sorted(pr_tags))
+    author = response.get('user', {}).get('login', '')
+    title = response["title"].strip().replace('|', '&#124;')
+    pr_link = f'"PR #{pr}":{response["html_url"]}'
+    return f'| {pr_link} | {author} | {labels_str} | {title} |'
 
 def get(session, url, params=None, paging=True):
     if params is None:
@@ -1760,7 +1763,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
 
         old_prs = set()
         if hasattr(issue, 'description') and issue.description:
-            for match in re.finditer(r'\* "PR #(\d+)":', issue.description):
+            for match in re.finditer(r'"PR #(\d+)":', issue.description):
                 old_prs.add(int(match.group(1)))
 
         new_prs = set(int(p) for p in prs)
@@ -1781,6 +1784,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
         notes = textwrap.dedent(notes)
         if old_prs:
             notes += "**Previous PRs included in that run:**\n"
+            notes += "|_. PR |_. Author |_. Labels |_. Title |\n"
             for old_pr in sorted(old_prs):
                 notes += get_pr_tracker_string(session, old_pr) + "\n"
         else:
@@ -2030,7 +2034,7 @@ def build_branch(args):
         # So we know that we're not on an old test branch, detach HEAD onto ref:
         assert G.head.is_detached
 
-    qa_tracker_description = []
+    qa_tracker_description = ["|_. PR |_. Author |_. Labels |_. Title |"] if prs else []
     all_audits_passed = True
 
     for pr in prs:
@@ -2170,6 +2174,8 @@ def build_branch(args):
         log.warning("Resuming execution.")
         new_head = G.head.commit
         if old_head != new_head:
+            if qa_tracker_description:
+                qa_tracker_description.append("")
             rev = f'{old_head}..{new_head}'
             for commit in G.iter_commits(rev=rev):
                 qa_tracker_description.append(f'* "commit {commit}":{CI_REMOTE_URL}/commit/{commit} -- {commit.summary}')
