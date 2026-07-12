@@ -4105,7 +4105,7 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
     p.last_change = pending_inc.epoch;
   } else {
     // back off the merge attempt!
-    if (!m->ready && !p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    if (!m->ready && p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       mon.clog->warn() << "osd." << m->get_orig_source().num()
                        << " reported pg " << m->pgid
                        << " not ready to merge; backing off pg_num decrease"
