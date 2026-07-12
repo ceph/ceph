@@ -108,9 +108,10 @@ def get_dashboard_endpoints(svc: 'CephadmService') -> Tuple[List[str], Optional[
             if not port:
                 continue
             assert dd.hostname is not None
-            # fqdn may already be a name or numeric address; ensure IPv6
-            # literals are bracketed.
-            addr = svc.mgr.get_fqdn(dd.hostname)
+            # Use daemon/inventory IPs (same as other mgmt-gateway upstreams),
+            # not FQDNs, so nginx can reach the dashboard on the Ceph network
+            # when DNS resolves elsewhere. IPv6 literals are bracketed.
+            addr = dd.ip if dd.ip else svc.mgr.inventory.get_addr(dd.hostname)
             dashboard_endpoints.append(f'{wrap_ipv6(addr)}:{port}')
 
     return dashboard_endpoints, protocol
