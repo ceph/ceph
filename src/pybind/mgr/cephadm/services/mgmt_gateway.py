@@ -1,11 +1,12 @@
 import logging
 from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
+from urllib.parse import urlparse
 
 from ceph.deployment.utils import wrap_ipv6
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -30,6 +31,33 @@ class MgmtGatewayService(CephadmService):
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
+
+    def get_dashboard_endpoints(self) -> Tuple[List[str], Optional[str]]:
+        """Build nginx upstream entries for the dashboard.
+
+        Scheme and port come from the active dashboard URL in mgr_map.
+        Addresses use daemon/inventory IPs (same as other mgmt-gateway
+        upstreams), not FQDNs, so nginx can reach the dashboard on the
+        Ceph network when DNS resolves elsewhere.
+        """
+        dashboard_endpoints: List[str] = []
+        port = None
+        protocol = None
+        mgr_map = self.mgr.get('mgr_map')
+        url = mgr_map.get('services', {}).get('dashboard', None)
+        if url:
+            p_result = urlparse(url.rstrip('/'))
+            protocol = p_result.scheme
+            port = p_result.port
+            # assume that they are all dashboards on the same port as the active mgr.
+            for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+                if not port:
+                    continue
+                assert dd.hostname is not None
+                addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+                dashboard_endpoints.append(f'{wrap_ipv6(addr)}:{port}')
+
+        return dashboard_endpoints, protocol
 
     def get_service_endpoints(self, service_name: str) -> List[str]:
         # return host:port strings for every daemon of the given service
@@ -93,7 +121,7 @@ class MgmtGatewayService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         scheme = 'https'
-        dashboard_endpoints, dashboard_scheme = get_dashboard_endpoints(self)
+        dashboard_endpoints, dashboard_scheme = self.get_dashboard_endpoints()
         prometheus_endpoints = self.get_service_endpoints('prometheus')
         alertmanager_endpoints = self.get_service_endpoints('alertmanager')
         grafana_endpoints = self.get_service_endpoints('grafana')

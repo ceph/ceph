@@ -44,6 +44,25 @@ class TestMgmtGateway:
         cephadm_module.cache.get_daemons_by_service = lambda name: foo_daemons if name == 'foo' else []
         assert svc.get_service_endpoints('foo') == ['[fe80::2]:8080']
 
+    def test_dashboard_endpoints_use_inventory_ips(self, cephadm_module: CephadmOrchestrator):
+        # nginx dashboard upstreams must use daemon/inventory IPs, not FQDNs,
+        # so mgmt-gateway can reach the dashboard when DNS points elsewhere.
+        svc = service_registry.get_service('mgmt-gateway')
+        mgr_daemons = [
+            DaemonDescription(daemon_type='mgr', daemon_id='a', hostname='h1', ip='10.0.0.1'),
+            DaemonDescription(daemon_type='mgr', daemon_id='b', hostname='h2', ip='fe80::1'),
+            DaemonDescription(daemon_type='mgr', daemon_id='c', hostname='h3'),
+        ]
+        cephadm_module.cache.get_daemons_by_service = lambda name: mgr_daemons if name == 'mgr' else []
+        cephadm_module.inventory.get_addr = lambda hostname: '10.0.0.3' if hostname == 'h3' else hostname
+        cephadm_module.get = lambda key: {
+            'services': {'dashboard': 'https://active.example:8443/'}
+        } if key == 'mgr_map' else {}
+
+        endpoints, scheme = svc.get_dashboard_endpoints()
+        assert scheme == 'https'
+        assert endpoints == ['10.0.0.1:8443', '[fe80::1]:8443', '10.0.0.3:8443']
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
@@ -53,7 +72,7 @@ class TestMgmtGateway:
            lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
     def test_mgmt_gateway_config_no_auth(self,
                                          get_service_discovery_endpoints_mock: List[str],
                                          get_service_endpoints_mock: List[str],
@@ -299,7 +318,7 @@ class TestMgmtGateway:
            lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
     def test_mgmt_gateway_config_with_auth(self,
                                            get_service_discovery_endpoints_mock: List[str],
                                            get_service_endpoints_mock: List[str],
@@ -642,7 +661,7 @@ class TestMgmtGateway:
            lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints",
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_dashboard_endpoints",
            lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
     def test_mgmt_gateway_internal_cert_san_includes_vip(
         self,
@@ -696,7 +715,7 @@ class TestMgmtGateway:
            lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
     def test_oauth2_proxy_service(self, get_service_endpoints_mock, _run_cephadm, cephadm_module):
         self.oauth2_proxy_service_common(get_service_endpoints_mock, _run_cephadm, cephadm_module, virtual_ip=None)
 
@@ -710,7 +729,7 @@ class TestMgmtGateway:
            lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
     def test_oauth2_proxy_service_with_ha(self, get_service_endpoints_mock, _run_cephadm, cephadm_module):
         self.oauth2_proxy_service_common(get_service_endpoints_mock, _run_cephadm, cephadm_module, virtual_ip="192.168.100.200")
 

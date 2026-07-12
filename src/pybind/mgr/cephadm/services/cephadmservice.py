@@ -93,29 +93,6 @@ def simplified_keyring(entity: str, contents: str) -> str:
     return keyring
 
 
-def get_dashboard_endpoints(svc: 'CephadmService') -> Tuple[List[str], Optional[str]]:
-    dashboard_endpoints: List[str] = []
-    port = None
-    protocol = None
-    mgr_map = svc.mgr.get('mgr_map')
-    url = mgr_map.get('services', {}).get('dashboard', None)
-    if url:
-        p_result = urlparse(url.rstrip('/'))
-        protocol = p_result.scheme
-        port = p_result.port
-        # assume that they are all dashboards on the same port as the active mgr.
-        for dd in svc.mgr.cache.get_daemons_by_service('mgr'):
-            if not port:
-                continue
-            assert dd.hostname is not None
-            # fqdn may already be a name or numeric address; ensure IPv6
-            # literals are bracketed.
-            addr = svc.mgr.get_fqdn(dd.hostname)
-            dashboard_endpoints.append(f'{wrap_ipv6(addr)}:{port}')
-
-    return dashboard_endpoints, protocol
-
-
 def get_dashboard_urls(svc: 'CephadmService') -> List[str]:
     # dashboard(s)
     dashboard_urls: List[str] = []
