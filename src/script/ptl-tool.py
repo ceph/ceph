@@ -698,7 +698,8 @@ class CommitParityCheck(BaseAuditCheck):
             visualizer_lines.append("COMMIT PARITY VISUALIZER")
             visualizer_lines.append("=" * 80)
             
-            visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR | SOURCE STATUS |")
+            # Add <img> to make sure the column is shrunk down.
+            visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR <picture><img width=\"120\" height=\"1\"></picture> | SOURCE STATUS |")
             visualizer_md_lines.append("|---|---|---|")
 
             bp_to_source = {}
