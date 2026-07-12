@@ -30,6 +30,7 @@
 #  - PTL_TOOL_GITHUB_TOKEN (your github Personal access token, or what is stored in ~/.github_token)
 #  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
 #  - PTL_TOOL_USER (your desired username embedded in test branch names)
+#  - PTL_TOOL_PR_NUMBER (the PR number to audit/merge when running in CI mode)
 
 import argparse
 from dataclasses import dataclass, field
@@ -162,12 +163,6 @@ NEW_CONTRIBUTORS = {}
 BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
-@dataclass
-class AuditLabels:
-    queue: str = None
-    passed: str = None
-    failed: str = None
-
 
 class SkipToMerge(Exception):
     """Raised to bypass remaining verification checks and proceed directly to merge."""
@@ -277,8 +272,9 @@ class AuditReport:
 
     def _hide_previous_bot_reviews(self, session: requests.Session, pr: int, dry_run: bool = False):
         """
-        Fetches previous reviews on the PR and hides older audit reports by dismissing
-        REQUEST_CHANGES reviews and minimizing comment threads as OUTDATED via GraphQL.
+        Fetches previous reviews on the PR and cleans up older automated audit reports.
+        To maintain clean review threads during iterative backport work, older reports are
+        dismissed via REST API and minimized as OUTDATED via GraphQL.
         """
         endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
         try:
@@ -331,47 +327,34 @@ class AuditReport:
 
     def post_consolidated_review(self, session: requests.Session, pr: int, dry_run: bool = False, ci_mode: bool = False):
         """
-        Combines all collected md_text in self.issues into a single 
-        GitHub review payload and posts it via the API.
+        Combines all collected md_text in self.issues into a single GitHub review payload
+        and posts it via the API.
+
+        In CI mode, we post review findings as COMMENT events rather than REQUEST_CHANGES.
+        The GitHub commit status and state labels (managed by the workflow router)
+        serve as the formal gating mechanisms, avoiding redundant review blocking states.
         """
         consolidated_text = self.get_consolidated_text()
         if consolidated_text:
             if ci_mode:
                 footer = "\n\n---\n\n⚠️ **Note**: Automated audit checks will be suspended on future pushes to prevent comment spam while you work.\n\nWhen you are ready for a new audit, please **remove the `releng-audit-fail` label** or comment `/audit retest`."
-                
-                if os.getenv("GITHUB_ACTIONS") == "true":
-                    gh_server = os.getenv("GITHUB_SERVER_URL", "https://github.com")
-                    gh_repo = os.getenv("GITHUB_REPOSITORY", f"{BASE_PROJECT}/{BASE_REPO}")
-                    gh_run_id = os.getenv("GITHUB_RUN_ID", "nil")
-                    footer += f"\n\n**CI Run Log**: [View Workflow Details]({gh_server}/{gh_repo}/actions/runs/{gh_run_id})"
-
                 consolidated_text += footer
 
                 self._hide_previous_bot_reviews(session, pr, dry_run=dry_run)
+
+            consolidated_text = append_workflow_link(consolidated_text)
 
             if dry_run:
                 log.info(f"[DRY RUN] Would post consolidated review to PR #{pr}:\n{consolidated_text}")
             else:
                 payload = {'body': consolidated_text, 'event': 'REQUEST_CHANGES'}
                 if ci_mode:
-                    # The CI check failure is sufficient to block merge.
+                    # In CI mode, the GitHub commit status failure is sufficient to block branch merging.
+                    # Posting as COMMENT prevents stale REQUEST_CHANGES reviews from blocking after override.
                     payload['event'] = 'COMMENT'
 
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
                 session.post(endpoint, auth=GithubBearerAuth(), json=payload)
-
-
-def parse_audit_labels(value):
-    if not value:
-        return None
-    parts = [p.strip() for p in value.split(',')]
-    if len(parts) == 1:
-        return AuditLabels(queue=parts[0])
-    if len(parts) == 2:
-        return AuditLabels(passed=parts[0], failed=parts[1])
-    if len(parts) == 3:
-        return AuditLabels(queue=parts[0], passed=parts[1], failed=parts[2])
-    raise argparse.ArgumentTypeError("Audit labels must be 'queue', 'passed,failed', or 'queue,passed,failed'")
 
 class GithubBearerAuth(requests.auth.AuthBase):
     def __call__(self, r):
@@ -379,6 +362,16 @@ class GithubBearerAuth(requests.auth.AuthBase):
             r.headers['Authorization'] = f'Bearer {GITHUB_TOKEN}'
         r.headers['Accept'] = 'application/vnd.github.v3+json'
         return r
+
+def append_workflow_link(text: str) -> str:
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        gh_server = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+        gh_repo = os.getenv("GITHUB_REPOSITORY", f"{BASE_PROJECT}/{BASE_REPO}")
+        gh_run_id = os.getenv("GITHUB_RUN_ID", "nil")
+        link_str = f"\n\n[View workflow run]({gh_server}/{gh_repo}/actions/runs/{gh_run_id})"
+        if link_str not in text and "[View workflow run]" not in text and "[View Workflow Details]" not in text:
+            return text + link_str
+    return text
 
 _PR_CACHE = {}
 def get_pr_info(session, pr):
@@ -1138,7 +1131,12 @@ class ConflictSimulationCheck(BaseAuditCheck):
             for commit in pr_commits:
                 if len(commit.parents) > 1:
                     log.error(f"Commit {commit.hexsha[:8]} is a merge commit. Not allowed.")
-                    sys.exit(1)
+                    if args.ci_mode:
+                        report.add("Invalid Commit Format", f"### Automated PR Review - Merge Commit Not Allowed\n\nCommit `{commit.hexsha[:8]}` is a merge commit. Merge commits are not allowed in backports.")
+                        report.record_failure()
+                        break
+                    else:
+                        sys.exit(1)
                 
                 m = cp_regex.search(commit.message)
                 is_cherry_pick = bool(m)
@@ -1633,6 +1631,28 @@ class MergeConflictCheck(BaseAuditCheck):
                     else:
                         print("Invalid choice. Please enter p, r, m, q, or o.")
 
+def write_ci_summary(pr: int, passed: bool, exit_code: int = 1):
+    if not passed:
+        print(f"::error title=Backport Audit Failed::PTL tool detected parity or conflict issues (exit code {exit_code}). See PR review comments or check this step's logs for details.", file=sys.stderr)
+
+    summary_file = os.getenv("GITHUB_STEP_SUMMARY")
+    if not summary_file:
+        return
+
+    try:
+        with open(summary_file, "a", encoding="utf-8") as f:
+            if passed:
+                f.write("### ✅ Backport Audit Passed\n")
+                f.write(f"All parity and conflict checks completed successfully for PR #{pr}.\n")
+            else:
+                f.write("### ❌ Backport Audit Failed\n")
+                f.write(f"The backport audit script detected issues with PR #{pr} (exit code `{exit_code}`).\n\n")
+                f.write("**How to proceed:**\n")
+                f.write(f"- 💬 **Review Comments:** Check the automated review feedback posted directly to PR #{pr}.\n")
+                f.write("- 📜 **Detailed Logs:** Expand the **Run PTL Audit** step in the job logs below to view full debug output and parity visualization.\n")
+    except Exception as e:
+        log.warning(f"Failed to write to GITHUB_STEP_SUMMARY: {e}")
+
 def verify_pr_readiness(G, session, R, pr, pr_commits, tip, base, args):
     report = AuditReport()
     ctx = AuditContext(G, session, R, pr, pr_commits, tip, base, args, report)
@@ -1654,21 +1674,31 @@ def verify_pr_readiness(G, session, R, pr, pr_commits, tip, base, args):
             except SkipToMerge:
                 log.info(f"Skipping remaining checks for PR #{pr}.")
                 break
-    except SystemExit:
+    except SystemExit as e:
+        if args.ci_mode:
+            write_ci_summary(pr, passed=False, exit_code=e.code if isinstance(e.code, int) else 1)
         if not args.audit:
             raise
         return False
+    except Exception:
+        if args.ci_mode:
+            write_ci_summary(pr, passed=False, exit_code=1)
+        raise
 
     if report.has_errors():
         log.error(f"Audit failed for PR #{pr}.")
         if args.ci_mode:
             report.post_consolidated_review(session, pr, dry_run=args.dry_run, ci_mode=args.ci_mode)
+            write_ci_summary(pr, passed=False, exit_code=1)
         else:
             consolidated_text = report.get_consolidated_text()
             if consolidated_text:
                 post_draft_review(session, pr, consolidated_text, base=base)
         return False
-        
+
+    if args.ci_mode:
+        report._hide_previous_bot_reviews(session, pr, dry_run=args.dry_run)
+        write_ci_summary(pr, passed=True)
     return True
 
 def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description, base, created_branch):
@@ -1808,7 +1838,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             log.info(f"QA ticket {issue.url} is private. Skipping GitHub PR updates for added/removed PRs.")
         else:
             for pr in added_prs:
-                body = f"This PR has been added to [{issue.subject}]({issue_url})."
+                body = append_workflow_link(f"This PR has been added to [{issue.subject}]({issue_url}).")
                 if args.dry_run:
                     log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
                 else:
@@ -1820,7 +1850,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                         log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
             for pr in removed_prs:
-                body = f"This PR has been removed from [{issue.subject}]({issue_url})."
+                body = append_workflow_link(f"This PR has been removed from [{issue.subject}]({issue_url}).")
                 if args.dry_run:
                     log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
                 else:
@@ -1851,7 +1881,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             for pr in prs:
                 log.debug(f"Posting QA Run in comment for ={pr}")
                 subject = issue_kwargs['subject']
-                body = f"This PR has been added to [{subject}]({issue_url})."
+                body = append_workflow_link(f"This PR has been added to [{subject}]({issue_url}).")
                 if args.dry_run:
                     log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
                 else:
@@ -2074,29 +2104,6 @@ def build_branch(args):
 
         if args.audit:
             log.info(f"Audit of PR #{pr} {'passed' if audit_passed else 'failed'}. Skipping merge.")
-            audit = args.audit_label
-            if audit:
-                if audit.queue:
-                    if args.dry_run:
-                        log.info(f"[DRY RUN] Would remove label {audit.queue} from PR #{pr}")
-                    else:
-                        req = session.delete(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels/{audit.queue}", auth=GithubBearerAuth())
-                        if req.status_code in (200, 204):
-                            log.info(f"Removed label {audit.queue} from PR #{pr}")
-                        else:
-                            log.warning(f"Failed to remove label {audit.queue} from PR #{pr}: {req.status_code}")
-
-                target_label = audit.passed if audit_passed else audit.failed
-                if target_label:
-                    if args.dry_run:
-                        log.info(f"[DRY RUN] Would add label {target_label} to PR #{pr}")
-                    else:
-                        req = session.post(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels", data=json.dumps([target_label]), auth=GithubBearerAuth())
-                        if req.status_code == 200:
-                            log.info(f"Added label {target_label} to PR #{pr}")
-                        else:
-                            raise SystemExit(f"Failed to add label {target_label} to PR #{pr}: {req.status_code}")
-
             # Skip merge
             continue
 
@@ -2310,7 +2317,6 @@ def main():
 
     group = parser.add_argument_group('Backport Verification')
     group.add_argument('--audit', dest='audit', action='store_true', help='run parity and conflict simulations')
-    group.add_argument('--audit-label', dest='audit_label', type=parse_audit_labels, help='swap labels on success/failure. Format: "queue", "passed,failed", or "queue,passed,failed"')
     group.add_argument('--skip-conflict-check', dest='skip_conflict_check', action='store_true', help='skip conflict resolution simulation')
     group.add_argument('--ci-mode', dest='ci_mode', action='store_true', help='run non-interactively and post multiple separate reviews for failures')
 
@@ -2328,16 +2334,24 @@ def main():
 
     args = parser.parse_args(argv)
 
+    if not args.prs and (args.audit or args.ci_mode):
+        pr_env = os.getenv("PTL_TOOL_PR_NUMBER")
+        if pr_env:
+            try:
+                args.prs.append(int(pr_env))
+                log.info(f"Pulled PR #{args.prs[0]} from PTL_TOOL_PR_NUMBER environment variable.")
+            except ValueError:
+                log.error(f"Invalid PR number in PTL_TOOL_PR_NUMBER: {pr_env}")
+                sys.exit(1)
+        else:
+            parser.error("At least one PR number must be specified via CLI arguments or PTL_TOOL_PR_NUMBER when running with --audit or --ci-mode.")
+
     if args.qe_label:
         if args.ci_mode:
             log.error("--qe-label cannot be used with --ci-mode at this time.")
             sys.exit(1)
         args.integration = True
         args.pr_label = args.qe_label
-
-    # Make --audit-label redundant when --ci-mode is invoked
-    if args.ci_mode and not args.audit_label:
-        args.audit_label = parse_audit_labels("releng-audit-pass,releng-audit-fail")
 
     if args.examples:
         examples_text = textwrap.dedent("""
@@ -2370,12 +2384,6 @@ def main():
         """)
         print(examples_text.strip())
         sys.exit(0)
-
-    if args.audit_label and args.audit_label.queue:
-        if args.pr_label:
-            log.error("--audit-label with a queue label and --pr-label are mutually exclusive")
-            sys.exit(1)
-        args.pr_label = args.audit_label.queue
 
     if args.create_qa and args.update_qa:
         log.error("--create-qa and --update-qa are mutually exclusive switches")
