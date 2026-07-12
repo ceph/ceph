@@ -2114,7 +2114,7 @@ TEST_F(PeeringStateTest, BackfillTooFullInRepWaitBackfillReserved) {
   auto evt1 = std::make_shared<PGPeeringEvent>(
     osdmap->get_epoch(),
     osdmap->get_epoch(),
-    RequestBackfillPrio(OSD_BACKFILL_PRIORITY_BASE, 0, 0));
+    RequestBackfillPrio(OSD_BACKFILL_PRIORITY_BASE, 0, 0, std::nullopt));
   get_ps(acting[1])->handle_event(evt1, get_ctx(acting[1]));
 
   // Verify OSD 9 is in RepWaitBackfillReserved

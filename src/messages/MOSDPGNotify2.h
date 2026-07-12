@@ -8,12 +8,13 @@
 
 class MOSDPGNotify2 final : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   spg_t spgid;
   pg_notify_t notify;
+  std::optional<backfill_osd_space_usage_t> osd_space_usage;
 
   spg_t get_spg() const override {
     return spgid;
@@ -38,6 +39,8 @@ public:
 #else
 	get_connection()->get_features()
 #endif
+	,
+	osd_space_usage
       ),
       true,
       new PGCreateInfo(
@@ -54,10 +57,12 @@ public:
   }
   MOSDPGNotify2(
     spg_t s,
-    pg_notify_t n)
+    pg_notify_t n,
+    std::optional<backfill_osd_space_usage_t> osd_space_usage = {})
     : MOSDPeeringOp{MSG_OSD_PG_NOTIFY2, HEAD_VERSION, COMPAT_VERSION},
       spgid(s),
-      notify(n) {
+      notify(n),
+      osd_space_usage(osd_space_usage) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 
@@ -76,12 +81,18 @@ public:
     using ceph::encode;
     encode(spgid, payload);
     encode(notify, payload);
+    encode(osd_space_usage, payload);
   }
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(spgid, p);
     decode(notify, p);
+    if (header.version >= 2) {
+      decode(osd_space_usage, p);
+    } else {
+      osd_space_usage = std::nullopt;
+    }
   }
 private:
   template<class T, typename... Args>

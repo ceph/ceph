@@ -599,6 +599,13 @@ public:
     unsigned priority) override;
   void cancel_local_background_io_reservation() override;
 
+  int64_t to_shard_bytes(int64_t num_bytes) final {
+    if (pool.info.is_erasure()) {
+      return num_bytes / (int)get_pgbackend()->get_ec_data_chunk_count();
+    }
+    return num_bytes;
+  }
+
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
@@ -911,7 +918,12 @@ public:
     return primary_num_bytes.load() > 0;
   }
 
-  bool try_reserve_recovery_space(int64_t primary, int64_t local) override;
+  std::optional<backfill_osd_space_usage_t>
+  get_local_osd_space_usage() override;
+  bool try_reserve_recovery_space(
+    int64_t primary,
+    int64_t local,
+    backfill_reservation_space_info_t *space_info = nullptr) override;
   void unreserve_recovery_space() override;
 
   // If num_bytes are inconsistent and local_num- goes negative
