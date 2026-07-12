@@ -106,6 +106,7 @@ REDMINE_CUSTOM_FIELD_ID_QA_RUNS = 27
 REDMINE_CUSTOM_FIELD_ID_QA_RELEASE = 28
 REDMINE_CUSTOM_FIELD_ID_QA_TAGS = 3
 REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH = 29
+REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL = 45
 REDMINE_ENDPOINT = "https://tracker.ceph.com"
 REDMINE_TRACKER_ID_BACKPORT = 9
 REDMINE_STATUS_ID_REJECTED = 6
@@ -1528,6 +1529,8 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
     if args.qa_tags:
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_TAGS, 'value': args.qa_tags})
+    if args.pr_label:
+        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL, 'value': args.pr_label})
 
     if not args.no_tag and tag:
         origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
