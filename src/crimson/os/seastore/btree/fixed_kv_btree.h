@@ -1,6 +1,32 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab expandtab
 
+/**
+ * FixedKVBtree - a generic, persistent, copy-on-write B+tree for Seastore.
+ *
+ * This template is the shared implementation for both the LBA tree (logical ->
+ * physical address mapping) and the Backref tree (physical -> logical reverse
+ * mapping).  It is parameterized on:
+ *   - node_key_t   : key type stored in nodes (laddr_t for LBA, paddr_t for backref)
+ *   - node_val_t   : value type in leaf nodes (lba_map_val_t / backref_map_val_t)
+ *   - internal_node_t / leaf_node_t : concrete extent types for inner/leaf nodes
+ *   - cursor_t     : type-erased handle returned to callers (LBACursor / BackrefCursor)
+ *   - node_size    : on-disk node size (typically 4096)
+ *
+ * The tree is "wandering": writes never update nodes in place.  Instead, nodes
+ * are duplicated (CoW) via cache.duplicate_for_write(), and parent pointers are
+ * updated up to the root.  All operations are transaction-scoped - mutations
+ * are visible only within the transaction until commit.
+ *
+ * Key concepts:
+ *   - iterator     : a stack of (node, position) pairs from root to leaf that
+ *                    represents a position in the tree.  Can be "full" (every
+ *                    level populated) or "partial" (only leaf + some parents).
+ *   - cursor_t     : a lightweight, type-erased reference to a leaf entry,
+ *                    created from an iterator via get_cursor().
+ *   - op_context_t : bundles {Cache&, Transaction&} for passing through the tree.
+ */
+
 #pragma once
 
 #include <boost/container/static_vector.hpp>
@@ -30,6 +56,12 @@ enum modification_t {
                 // TRANS_SYNC is used.
 };
 
+/**
+ * Forward declarations - specialized per tree type (LBA or Backref) in
+ * their respective .cc files.  These extract the tree-specific root pointer,
+ * root node, and per-transaction stats from the global root_t / Transaction.
+ */
+
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t& r);
 
@@ -46,9 +78,26 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node(
   const RootBlockRef &root_block,
   op_context_t c);
 
+/**
+ * Returns this tree type's stats accumulator within the transaction (e.g.
+ * Transaction::lba_tree_stats or backref_tree_stats).
+ */
 template <typename T>
 Transaction::tree_stats_t& get_tree_stats(Transaction &t);
 
+/**
+ * =============================================================================
+ * FixedKVBtree<...> - the B+tree implementation.
+ *
+ * Template parameters:
+ *   node_key_t       - key type (laddr_t or paddr_t)
+ *   node_val_t       - leaf value type (lba_map_val_t or backref_map_val_t)
+ *   internal_node_t  - CachedExtent subclass for internal nodes
+ *   leaf_node_t      - CachedExtent subclass for leaf nodes
+ *   cursor_t         - type-erased leaf position handle (LBACursor / BackrefCursor)
+ *   node_size        - on-disk extent size (4096)
+ * =============================================================================
+ */
 template <
   typename node_key_t,
   typename node_val_t,
@@ -71,12 +120,35 @@ public:
 
   class iterator;
   using iterator_fut = base_iertr::future<iterator>;
+  /**
+   * True when leaf nodes can have child extents (LBA tree leaves point to
+   * data extents; backref leaves do not).
+   */
   static constexpr bool leaf_has_children =
     std::is_base_of_v<ParentNode<leaf_node_t, node_key_t>, leaf_node_t>;
 
+  /**
+   * Callback invoked during tree traversal to visit every node/leaf encountered.
+   */
   using mapped_space_visitor_t = std::function<
     void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t, iterator&)>;
 
+  // =========================================================================
+
+  /**
+   * iterator - a root-to-leaf path through the tree.
+   *
+   * Holds a node_position_t<leaf_node_t> for the leaf level and a stack of
+   * node_position_t<internal_node_t> for depths 2..N (depth 1 is the leaf).
+   *
+   * An iterator can be "full" (all levels populated) or "partial" (only the
+   * leaf is known; internal entries are lazily filled via ensure_internal()
+   * when needed - e.g. for prev(), handle_boundary(), or split/merge).
+   *
+   * "at_boundary()" means the leaf position is past the end of the current
+   * leaf node.  This happens naturally during forward iteration (next());
+   * handle_boundary() advances to the next leaf via the internal stack.
+   */
   class iterator {
   public:
 #ifndef NDEBUG
@@ -110,6 +182,11 @@ public:
     }
 #endif
 
+    /**
+     * Advance to the next entry.  Increments leaf.pos; if that moves past
+     * the end of the current leaf, handle_boundary() walks up the internal
+     * stack to find the next leaf (or reaches tree-end).
+     */
     iterator_fut next(
       op_context_t c,
       mapped_space_visitor_t *visitor=nullptr) const
@@ -139,6 +216,12 @@ public:
 
     }
 
+    /**
+     * Move to the previous entry.  If already at position 0 in the current
+     * leaf, walks up the internal stack (ensure_internal_bottom_up) to find
+     * an ancestor with room to move left, then descends to the rightmost
+     * entry of the preceding subtree.
+     */
     iterator_fut prev(op_context_t c) const
     {
 #ifndef NDEBUG
@@ -148,6 +231,7 @@ public:
 
       auto ret = *this;
 
+      // Fast path: still within the same leaf node.
       if (ret.leaf.pos > 0) {
         ret.leaf.pos--;
         return iterator_fut(
@@ -155,6 +239,10 @@ public:
           ret);
       }
 
+      // Slow path: need to move to the previous leaf.
+      // Walk up from depth 2 until we find a level where pos > 0 (has a
+      // left sibling), decrement there, then descend to the last entry at
+      // each level below.
       return seastar::do_with(
         (depth_t)2,
         std::move(ret),
@@ -168,11 +256,13 @@ public:
           return ret.get_internal(depth_with_space).pos > 0;
         }).si_then([&ret, c, &li, &ll](auto depth_with_space) {
           assert(depth_with_space <= ret.get_depth()); // must not be begin()
+          // Clear intermediate levels that will be re-populated by the descent.
           for (depth_t depth = 2; depth < depth_with_space; ++depth) {
             ret.get_internal(depth).reset();
           }
           ret.leaf.reset();
           ret.get_internal(depth_with_space).pos--;
+          // Descend using "last entry" lambdas (li, ll) at each level.
           // note, cannot result in at_boundary() by construction
           return lookup_depth_range(
             c, ret, depth_with_space - 1, 0, li, ll, nullptr
@@ -219,6 +309,13 @@ public:
       return internal[depth - 2];
     }
 
+    /**
+     * Lazily populate a specific internal level of a partial iterator.
+     * A partial iterator knows its leaf but may not have references to
+     * all ancestor nodes.  This method navigates from a known child up
+     * to its parent (via get_parent_node()), fills in the internal entry
+     * at 'depth', and sets the correct position within that parent.
+     */
     using ensure_internal_iertr = get_child_iertr;
     using ensure_internal_ret = ensure_internal_iertr::template future<>;
     ensure_internal_ret ensure_internal(op_context_t c, depth_t depth) {
@@ -271,10 +368,20 @@ public:
       });
     }
 
+    /**
+     * Return the key at the current leaf position.
+     */
     node_key_t get_key() const {
       assert(!is_end());
       return leaf.node->iter_idx(leaf.pos).get_key();
     }
+
+    /**
+     * Return the value at the current leaf position.  For the LBA tree,
+     * relative physical addresses stored in the leaf are resolved against
+     * the leaf's own paddr (they may be stored as offsets within the same
+     * segment to save space).
+     */
     node_val_t get_val() const {
       assert(!is_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
@@ -328,6 +435,11 @@ public:
 
     friend class FixedKVBtree;
     static constexpr uint16_t INVALID = std::numeric_limits<uint16_t>::max();
+    /**
+     * A (node-ref, position-within-node) pair.  One of these exists for
+     * each level in the iterator's path: one leaf entry + up to MAX_DEPTH-1
+     * internal entries.
+     */
     template <typename NodeType>
     struct node_position_t {
       typename NodeType::Ref node;
@@ -349,6 +461,13 @@ public:
 	return node->iter_idx(pos);
       }
     };
+
+    /**
+     * Stack of internal node positions, indexed by (depth - 2).  Depth 1 is
+     * the leaf; depth 2 is the lowest internal node, etc.  For a partial
+     * iterator, entries may be null (node == nullptr) for levels not yet
+     * resolved.
+     */
     boost::container::static_vector<
       node_position_t<internal_node_t>, MAX_DEPTH> internal;
     node_position_t<leaf_node_t> leaf;
@@ -361,6 +480,12 @@ public:
       return leaf.pos == leaf.node->get_size();
     }
 
+    /**
+     * Walk up from 'start_from' toward the root, calling ensure_internal()
+     * at each level, until stop_f(depth) returns true.  Returns the depth
+     * at which stop_f was satisfied.  Used by prev() and handle_boundary()
+     * to find the nearest ancestor that has room to move laterally.
+     */
     using ensure_internal_bottom_up_ret =
       ensure_internal_iertr::template future<depth_t>;
     template <typename Func>
@@ -395,6 +520,14 @@ public:
       });
     }
 
+    /**
+     * Called when leaf.pos has advanced past the end of the current leaf
+     * (at_boundary() == true).  Walks up the internal stack to find the
+     * first ancestor whose position can be incremented (i.e. has a right
+     * sibling), then descends back down to the leftmost entry of the next
+     * subtree, populating internal and leaf positions along the way.
+     * If no ancestor has a right sibling, the iterator becomes end().
+     */
     using handle_boundary_ertr = base_iertr;
     using handle_boundary_ret = handle_boundary_ertr::future<>;
     handle_boundary_ret handle_boundary(
@@ -435,6 +568,13 @@ public:
       });
     }
 
+    /**
+     * Pre-insertion check: scan upward from the leaf to find the first
+     * level that is not at max capacity.  Returns the depth from which
+     * splitting must begin (0 = no split needed, get_depth() = need a
+     * new root).  Used by handle_split() to know how far up the split
+     * cascade must go.
+     */
     using check_split_iertr = ensure_internal_iertr;
     using check_split_ret = check_split_iertr::template future<depth_t>;
     check_split_ret check_split(op_context_t c) {
@@ -462,8 +602,16 @@ public:
     }
   };
 
+  /**
+   * Construct a tree handle rooted at the given RootBlock.  The RootBlock
+   * stores the physical address and depth of this tree's root node.
+   */
   FixedKVBtree(RootBlockRef &root_block) : root_block(root_block) {}
 
+  /**
+   * Access the tree-specific root descriptor (paddr + depth) from the
+   * global root_t stored in the RootBlock.
+   */
   auto& get_root() {
     return get_phy_tree_root<self_type>(root_block->get_root());
   }
@@ -472,21 +620,35 @@ public:
     return get_phy_tree_root<self_type>(root_block->get_root());
   }
 
+  /**
+   * Link a new root node into the RootBlock's parent-tracking system.
+   */
   template <typename T>
   void set_root_node(const TCachedExtentRef<T> &root_node) {
     static_assert(std::is_base_of_v<typename internal_node_t::base_t, T>);
     TreeRootLinker<RootBlock, T>::link_root(root_block, root_node.get());
   }
 
+  /**
+   * Retrieve the root node extent (may trigger async I/O if not cached).
+   */
   auto get_root_node(op_context_t c) const {
     return get_phy_tree_root_node<self_type>(root_block, c);
   }
 
+  /**
+   * Synchronous variant - asserts the root node is already in cache.
+   */
   auto get_root_node_sync(op_context_t c) const {
     return get_phy_tree_root_node_sync<self_type>(root_block, c);
   }
 
-  /// mkfs
+  /**
+   * mkfs
+   * Create the initial (empty) tree during mkfs.  Allocates a single empty
+   * leaf node as the root, links it to the RootBlock, and returns the
+   * tree's root descriptor.
+   */
   using mkfs_ret = phy_tree_root_t;
   static mkfs_ret mkfs(RootBlockRef &root_block, op_context_t c) {
     assert(root_block->is_mutation_pending());
@@ -505,6 +667,11 @@ public:
     return phy_tree_root_t{root_leaf->get_paddr(), 1u};
   }
 
+  /**
+   * Build a partial iterator from an existing cursor.  The cursor already
+   * holds a leaf node reference and position; the internal levels are left
+   * unpopulated (they'll be lazily filled by ensure_internal() if needed).
+   */
   iterator make_partial_iter(
     op_context_t c,
     cursor_t &cursor)
@@ -540,6 +707,11 @@ public:
     return new cursor_t(c, leaf, leaf->modifications, key, it.get_val(), pos);
   }
 
+  /**
+   * Synchronous lower_bound - requires all nodes along the path to already
+   * be in cache.  Used on hot paths where blocking is unacceptable (e.g.
+   * transaction commit).  Walks from root to leaf using get_child_sync().
+   */
   iterator lower_bound_sync(
     op_context_t c,
     node_key_t addr)
@@ -601,7 +773,19 @@ public:
   }
 
   /**
-   * lower_bound
+   * lower_bound (async) - the primary tree lookup.
+   *
+   * Returns the first iterator whose key >= addr.  Internally, this calls
+   * lookup() which: (1) resolves the root node, (2) at each internal level
+   * calls upper_bound(addr) and backs up one to find the child that could
+   * contain addr, (3) at the leaf calls lower_bound(addr) to land on the
+   * exact position.
+   *
+   * min_depth > 1 is used by update_internal_mapping() to stop the descent
+   * early and land on an internal node rather than a leaf.
+   *
+   * The optional visitor callback is invoked at each node visited during
+   * the descent (used for space accounting / scanning).
    *
    * @param c [in] context
    * @param addr [in] ddr
@@ -657,6 +841,8 @@ public:
   /**
    * upper_bound
    *
+   * Implemented as lower_bound + skip-if-exact-match.
+   *
    * @param c [in] context
    * @param addr [in] ddr
    * @return least iterator > key
@@ -679,7 +865,16 @@ public:
   }
 
   /**
-   * upper_bound_right
+   * upper_bound_right - find the entry whose range *contains* addr.
+   *
+   * Returns the least iterator i such that i.key + i.val.len > addr.
+   * This is the key lookup for range-based queries: given an address that
+   * may fall in the middle of a mapping, find the mapping that contains it.
+   *
+   * Algorithm: lower_bound(addr), then check whether the *previous* entry's
+   * range (key..key+len) spans addr.  If so, return that previous entry.
+   * Used by BtreeLBAManager::get_cursors() to find the first mapping that
+   * overlaps a query range.
    *
    * @param c [in] context
    * @param addr [in] addr
@@ -721,6 +916,19 @@ public:
     return upper_bound(c, min_max_t<node_key_t>::max);
   }
 
+  /**
+   * =========================================================================
+   * Unit-test-only validation helpers.
+   *
+   * check_node(): for every entry in 'node', verifies that the child pointer
+   * tracking (parent->child and child->parent) is consistent - the child
+   * extent references its parent correctly, and the parent's children[]
+   * array points back.  Handles stable, pending, and mutation_pending states.
+   *
+   * check_child_trackers(): full-tree validation - iterates every node via
+   * lower_bound + iterate_repeat and calls check_node() at each level.
+   * =========================================================================
+   */
 #ifdef UNIT_TESTS_BUILT
   template <typename child_node_t, typename node_t, bool lhc = leaf_has_children,
            typename std::enable_if<lhc, int>::type = 0>
@@ -897,6 +1105,13 @@ public:
   }
 #endif
 
+  /**
+   * Generic forward iteration helper.  Calls f(iter) repeatedly; if 'f'
+   * returns stop_iteration::no, advances iter via next() and repeats.
+   * Continues until 'f' returns stop_iteration::yes (typically when iter
+   * reaches end()).  Used by check_child_trackers and callers that need
+   * to scan a range of entries.
+   */
   using iterate_repeat_ret_inner = base_iertr::future<
     seastar::stop_iteration>;
   template <typename F>
@@ -944,7 +1159,19 @@ public:
    * Inserts val at laddr with iter as a hint.  If element at laddr already
    * exists returns iterator to that element unchanged and returns false.
    *
-   * Invalidates all outstanding iterators for this tree on this transaction.
+   * Implementation steps:
+   *   1. find_insertion() adjusts iter to the correct insertion point.
+   *   2. If the key already exists, return (iter, false) without modifying.
+   *   3. handle_split() splits any full nodes along the path (CoW).
+   *   4. duplicate_for_write() the leaf if not already mutable.
+   *   5. Insert the entry at the correct position within the leaf.
+   *   6. If the leaf tracks child pointers (LBA tree), insert the child ptr.
+   *
+   * Returns (iterator-to-entry, true) on success, or (iterator-to-existing, false)
+   * if the key was already present.
+   *
+   * IMPORTANT: invalidates all outstanding iterators for this tree within
+   * the transaction, because splits may reallocate nodes.
    *
    * @param c [in] op context
    * @param iter [in] hint, insertion constant if immediately prior to iter
@@ -1020,8 +1247,8 @@ public:
    * copy
    *
    * Copy is pretty similar as Insert, the difference is that it's
-   * inserting the val copied from src_iter into the position cor-
-   * responding to laddr.
+   * inserting the val copied from src_iter into the position
+   * corresponding to laddr.
    *
    * The reason we are introducing this method is that, since rewrite
    * transactions are not invalidating other ones, we can't allow
@@ -1092,6 +1319,9 @@ public:
       });
   }
 
+  /**
+   * Convenience overload: perform a lower_bound lookup first, then insert.
+   */
   insert_ret insert(
     op_context_t c,
     node_key_t laddr,
@@ -1106,6 +1336,11 @@ public:
 
   /**
    * update
+   *
+   * CoWs the leaf node if needed (duplicate_for_write), then overwrites the
+   * value at iter's position.  Does NOT change the key.  For the LBA tree
+   * this is used to update the physical address or refcount of a mapping
+   * without changing the logical address.
    *
    * Invalidates all outstanding iterators for this tree on this transaction.
    *
@@ -1155,6 +1390,11 @@ public:
    *
    * Replace the entry pointed by iter with the key and val. key
    * must be within the range iter.get_key()~iter.get_length()
+   *
+   * If the new key still belongs to the same leaf node, a simple in-place
+   * replace is done.  If the new key falls beyond the current leaf's key
+   * range (rare edge case during extent splits/remaps), the entry is
+   * inserted into the next leaf and the original is removed.
    *
    * @param c [in] op context
    * @param iter [in] iterator to element to update, must not be end
@@ -1237,6 +1477,16 @@ public:
   /**
    * remove
    *
+   * Steps:
+   *   1. CoW the leaf (duplicate_for_write) if not already mutable.
+   *   2. Remove the entry from the leaf.
+   *   3. handle_merge() rebalances or merges underflowing nodes up the tree.
+   *   4. If the iterator lands at a boundary after removal, handle_boundary()
+   *      advances it to the next valid position (or end).
+   *
+   * Returns an iterator pointing to the entry that now occupies the removed
+   * entry's position (or end if it was the last entry).
+   *
    * Invalidates all outstanding iterators for this tree on this transaction.
    *
    * @param c [in] op context
@@ -1287,14 +1537,19 @@ public:
         });
       });
   }
-    
+
   /**
    * init_cached_extent
    *
    * Checks whether e is live (reachable from fixed kv tree) and drops or initializes
-   * accordingly. 
+   * accordingly.
    *
-   * Returns if e is live.
+   * Called during cache warm-up or replay to determine if a cached extent
+   * is still part of the tree (hasn't been replaced by a CoW copy).
+   * Performs a lower_bound on the extent's begin key and checks whether the
+   * node found at the appropriate depth is the same object as e.
+   *
+   * Returns true if live (still reachable from the root), false otherwise.
    */
   using init_cached_extent_iertr = base_iertr;
   using init_cached_extent_ret = init_cached_extent_iertr::future<bool>;
@@ -1366,7 +1621,11 @@ public:
     }
   }
 
-  /// get_leaf_if_live: get leaf node at laddr/addr if still live
+  /**
+   * get_leaf_if_live: get leaf node at laddr/addr if still live
+   * Used by GC/cleaner to check if an on-disk leaf extent is still
+   * reachable before deciding to rewrite it.
+   */
   using get_leaf_if_live_iertr = base_iertr;
   using get_leaf_if_live_ret = get_leaf_if_live_iertr::future<CachedExtentRef>;
   get_leaf_if_live_ret get_leaf_if_live(
@@ -1404,7 +1663,10 @@ public:
   }
 
 
-  /// get_internal_if_live: get internal node at laddr/addr if still live
+  /**
+   * get_internal_if_live: get internal node at laddr/addr if still live
+   * Walks the iterator's internal stack to find a node at the matching paddr.
+   */
   using get_internal_if_live_iertr = base_iertr;
   using get_internal_if_live_ret = get_internal_if_live_iertr::future<CachedExtentRef>;
   get_internal_if_live_ret get_internal_if_live(
@@ -1446,10 +1708,19 @@ public:
 
 
   /**
-   * rewrite_extent
+   * rewrite_extent - GC/cleaner entry point for relocating a tree node.
    *
    * Rewrites a fresh copy of extent into transaction and updates internal
    * references.
+   *
+   * Process:
+   * Allocates a fresh copy of the extent (at a new physical address with
+   * the target rewrite generation), copies the content via rewrite(),
+   * then calls update_internal_mapping() to patch the parent's pointer
+   * from old_paddr -> new_paddr.  Finally retires the old extent.
+   *
+   * This is how the "wandering tree" handles segment cleaning: stale nodes
+   * are rewritten to new segments without changing the logical tree structure.
    */
   using rewrite_extent_iertr = base_iertr;
   using rewrite_extent_ret = rewrite_extent_iertr::future<>;
@@ -1458,7 +1729,7 @@ public:
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
     assert(is_lba_backref_node(e->get_type()));
-    
+
     auto do_rewrite = [&](auto &fixed_kv_extent) {
       auto n_fixed_kv_extent = c.cache.template alloc_new_non_data_extent<
         std::remove_reference_t<decltype(fixed_kv_extent)>
@@ -1469,14 +1740,14 @@ public:
         // get target rewrite generation
         fixed_kv_extent.get_rewrite_generation());
       n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0);
-      
+
       SUBTRACET(
         seastore_fixedkv_tree,
         "rewriting {} into {}",
         c.trans,
         fixed_kv_extent,
         *n_fixed_kv_extent);
-      
+
       return update_internal_mapping(
         c,
         n_fixed_kv_extent->get_node_meta().depth,
@@ -1488,7 +1759,7 @@ public:
         c.cache.retire_extent(c.trans, e);
       });
     };
-    
+
     if (e->get_type() == internal_node_t::TYPE) {
       auto lint = e->cast<internal_node_t>();
       return do_rewrite(*lint);
@@ -1499,6 +1770,19 @@ public:
     }
   }
 
+  /**
+   * update_internal_mapping - patch a parent pointer after a child is rewritten.
+   *
+   * After rewrite_extent() creates a new copy of a node at a different
+   * physical address, this method finds the parent that points to the old
+   * address and updates it to point to the new address.
+   *
+   * Uses lower_bound() with min_depth = depth+1 to land on the parent node,
+   * then validates that the parent's entry matches old_addr before patching.
+   *
+   * If the rewritten node is the root, updates the RootBlock directly.
+   * Otherwise, CoWs the parent and updates the child pointer in place.
+   */
   using update_internal_mapping_iertr = base_iertr;
   using update_internal_mapping_ret = update_internal_mapping_iertr::future<>;
   template <typename T>
@@ -1619,8 +1903,12 @@ public:
 
 
 private:
-  RootBlockRef root_block;
+  RootBlockRef root_block;  // handle to the global root; stores this tree's root paddr + depth
 
+  /**
+   * Build a partial iterator from a known leaf, key, and position.
+   * Internal levels are left empty (state = PARTIAL if depth > 1).
+   */
   iterator make_partial_iter(
     op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
@@ -1651,6 +1939,18 @@ private:
   template <typename T>
   using node_position_t = typename iterator::template node_position_t<T>;
 
+  /**
+   * get_internal_node - read or retrieve an internal node extent from cache.
+   *
+   * Calls cache.maybe_get_absent_extent() which either returns the node
+   * from the transaction/cache (cache hit) or reads it from disk (cache
+   * miss).  On first load, init_internal links the node into the parent
+   * tracking system (either as a child of parent_pos, or as the tree root).
+   *
+   * After loading, validates the in-extent checksum against the committed
+   * CRC and asserts that the node metadata (depth, begin, end) matches
+   * expectations.
+   */
   using get_internal_node_iertr = base_iertr;
   using get_internal_node_ret = get_internal_node_iertr::future<InternalNodeRef>;
   static get_internal_node_ret get_internal_node(
@@ -1738,6 +2038,10 @@ private:
   }
 
 
+  /**
+   * Analogous to get_internal_node, but for leaf extents.  Same cache-or-disk
+   * fetch, parent linking, checksum validation, and metadata assertion logic.
+   */
   using get_leaf_node_iertr = base_iertr;
   using get_leaf_node_ret = get_leaf_node_iertr::future<LeafNodeRef>;
   static get_leaf_node_ret get_leaf_node(
@@ -1820,6 +2124,14 @@ private:
     });
   }
 
+  /**
+   * lookup_root - resolve the root node and populate the top of the iterator.
+   *
+   * First tries get_root_node() which checks if the root is already cached
+   * in the transaction.  If not, falls back to get_internal_node() or
+   * get_leaf_node() to fetch it from disk.  Sets the root's position in
+   * the iterator and optionally invokes the visitor callback.
+   */
   using lookup_root_iertr = base_iertr;
   using lookup_root_ret = lookup_root_iertr::future<>;
   lookup_root_ret lookup_root(
@@ -1907,6 +2219,18 @@ private:
     }
   }
 
+  /**
+   * lookup_internal_level - descend one internal level during a lookup.
+   *
+   * Given an iterator with the parent level (depth+1) already populated,
+   * fetches the child internal node at the parent's current position.
+   * First checks if the child is already tracked via get_child() (in-memory
+   * parent->child link); if so, uses it directly.  Otherwise, reads from
+   * disk via get_internal_node().
+   *
+   * After fetching, calls the lookup function f() on the child to determine
+   * which entry to descend into next, and stores the result in iter.
+   */
   using lookup_internal_level_iertr = base_iertr;
   using lookup_internal_level_ret = lookup_internal_level_iertr::future<>;
   template <typename F>
@@ -1982,6 +2306,11 @@ private:
     });
   }
 
+  /**
+   * Analogous to lookup_internal_level but for the final descent to a
+   * leaf node.  Reads the leaf from the depth-2 parent's child pointer,
+   * calls the leaf lookup function f() to set the leaf position in iter.
+   */
   using lookup_leaf_iertr = base_iertr;
   using lookup_leaf_ret = lookup_leaf_iertr::future<>;
   template <typename F>
@@ -2055,12 +2384,17 @@ private:
   }
 
   /**
-   * lookup_depth_range
+   * lookup_depth_range - descend from depth 'from' down to depth 'to'
+   * (exclusive), calling lookup_internal_level at each internal level and
+   * lookup_leaf at depth 1.
    *
-   * Performs node lookups on depths [from, to) using li and ll to
-   * specific target at each level.  Note, may leave the iterator
-   * at_boundary(), call handle_boundary() prior to returning out
-   * lf FixedKVBtree.
+   * li: function(internal_node) -> iterator  - selects position at internal levels
+   * ll: function(leaf_node) -> iterator      - selects position at leaf level
+   *
+   * This is the inner descent loop used by both lookup() and
+   * handle_boundary().  NOTE: may leave the iterator at_boundary()
+   * (past the end of a leaf); callers must call handle_boundary() before
+   * exposing the iterator externally.
    */
   using lookup_depth_range_iertr = base_iertr;
   using lookup_depth_range_ret = lookup_depth_range_iertr::future<>;
@@ -2113,6 +2447,21 @@ private:
       });
   }
 
+  /**
+   * lookup - the core top-to-bottom tree traversal.
+   *
+   * This is the backbone of lower_bound() and all read operations.
+   * Steps:
+   *   1. lookup_root() - fetch and position at the root node.
+   *   2. Apply the internal lookup function (li) at the root if internal,
+   *      or the leaf lookup function (ll) if root is a leaf.
+   *   3. lookup_depth_range() - descend through remaining levels.
+   *   4. If the descent lands at_boundary(), call handle_boundary() to
+   *      advance to the next leaf (unless this is a min_depth > 1 lookup
+   *      for update_internal_mapping, which stops at an internal level).
+   *
+   * Returns a fully-populated iterator pointing at the result.
+   */
   using lookup_iertr = base_iertr;
   using lookup_ret = lookup_iertr::future<iterator>;
   template <typename LI, typename LL>
@@ -2172,7 +2521,9 @@ private:
   }
 
   /**
-   * find_insertion
+   * find_insertion - adjust an iterator (from lower_bound) to the exact
+   * insertion point for a new key.
+   *
    *
    * Prepare iter for insertion.  iter should begin pointing at
    * the valid insertion point (lower_bound(laddr)).
@@ -2181,6 +2532,14 @@ private:
    * position at which laddr should be inserted.  iter may, upon completion,
    * point at the end of a leaf other than the end leaf if that's the correct
    * insertion point.
+   *
+   * Three cases:
+   *   1. Exact match (key exists): return immediately (insert will detect dup).
+   *   2. Key is within the current leaf's range: already at the right spot.
+   *   3. Key is before the current leaf's begin: the insertion point is at
+   *      the end of the *previous* leaf.  Call prev() and advance one past
+   *      it.  This is the only case where the iterator intentionally points
+   *      at the boundary (end) of a non-end leaf.
    */
   using find_insertion_iertr = base_iertr;
   using find_insertion_ret = find_insertion_iertr::future<>;
@@ -2229,6 +2588,10 @@ private:
    * Upon completion, iter will point at the newly split insertion point.  As
    * with find_insertion, iter's leaf pointer may be end without iter being
    * end.
+   *
+   * All splits are CoW: new nodes are allocated, the old ones are retired.
+   * The tree_stats extents_num_delta is incremented for each split (net +1
+   * node per split, since one node becomes two).
    */
   using handle_split_iertr = base_iertr;
   using handle_split_ret = handle_split_iertr::future<>;
@@ -2361,6 +2724,20 @@ private:
   }
 
 
+  /**
+   * handle_merge - rebalance or merge underflowing nodes after a remove.
+   *
+   * Starting from the leaf, checks if below_min_capacity().  If so:
+   *   1. ensure_internal() populates the parent level.
+   *   2. merge_level() either merges with a sibling (if sibling is also at
+   *      minimum) or rebalances entries between the two nodes.
+   *   3. Walks upward: if the parent also became under-capacity after losing
+   *      a child entry, repeat at the next level.
+   *   4. At the root: if the root has only one child after a merge, collapse
+   *      the root (reduce tree depth by 1).
+   *
+   * All merges/rebalances are CoW: new nodes replace old ones.
+   */
   using handle_merge_iertr = base_iertr;
   using handle_merge_ret = handle_merge_iertr::future<>;
   handle_merge_ret handle_merge(
@@ -2479,6 +2856,20 @@ private:
     return get_internal_node(c, depth, addr, begin, end, std::move(parent_pos));
   }
 
+  /**
+   * merge_level - merge or rebalance a single under-capacity node with a
+   * sibling at the given depth.
+   *
+   * Picks the adjacent sibling (preferring left if pos is the rightmost
+   * child).  Then:
+   *   - If sibling is also at minimum capacity: make_full_merge() combines
+   *     both into one node; the parent loses an entry (extents_num_delta--).
+   *   - Otherwise: make_balanced() redistributes entries between the two
+   *     nodes around a new pivot; the parent's key is updated.
+   *
+   * In both cases, old nodes are retired and new CoW copies replace them.
+   * The iterator (parent_pos, pos) is updated to reflect the new structure.
+   */
   template <typename NodeType>
   handle_merge_ret merge_level(
     op_context_t c,
@@ -2622,9 +3013,20 @@ private:
   }
 };
 
+
+// =============================================================================
+// Type trait and free-function helpers for working with FixedKVBtree instances.
+// =============================================================================
+
+/**
+ * is_fixed_kv_tree<T>::value is true for FixedKVBtree instantiations.
+ */
 template <typename T>
 struct is_fixed_kv_tree : std::false_type {};
 
+/**
+ * Synchronous btree construction - asserts root is already cached.
+ */
 template <typename tree_type_t>
 tree_type_t get_btree_sync(op_context_t c) {
   assert(!c.trans.peek_root()->is_pending_io());
@@ -2632,6 +3034,9 @@ tree_type_t get_btree_sync(op_context_t c) {
   return tree_type_t(root);
 }
 
+/**
+ * Async btree construction - fetches the root block from cache (may do I/O).
+ */
 template <typename tree_type_t>
 Cache::get_root_iertr::future<tree_type_t>
 get_btree(op_context_t c) {
@@ -2664,6 +3069,10 @@ get_btree(Cache &cache, op_context_t c)
   co_return tree_type_t{croot};
 }
 
+/**
+ * Convenience: fetch the btree and invoke f(btree) with the tree held in a
+ * do_with scope (so it stays alive across continuations).
+ */
 template <
   typename tree_type_t,
   typename F,
@@ -2683,6 +3092,12 @@ auto with_btree(
   });
 }
 
+/**
+ * Like with_btree, but also holds a State object across the operation.
+ * f(btree, state) can accumulate results into state; the final state is
+ * returned as the future's value.  Two overloads: one takes an initial
+ * state, the other default-constructs it.
+ */
 template <
   typename tree_type_t,
   typename State,

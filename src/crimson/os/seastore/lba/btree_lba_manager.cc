@@ -19,6 +19,12 @@ SET_SUBSYS(seastore_lba);
  * - TRACE: read operations, DEBUG details
  */
 
+/**
+ * \file
+ * This file implements BtreeLBAManager - the LBA (logical → physical) address
+ * translation layer.
+ */
+
 template <> struct fmt::formatter<
   crimson::os::seastore::lba::LBABtree::iterator>
     : public fmt::formatter<std::string_view>
@@ -35,8 +41,15 @@ template <> struct fmt::formatter<
   }
 };
 
+// -------------------------------------------------------------------------
+// Template specializations for the LBA tree.
+// These wire the generic FixedKVBtree infrastructure to the LBA-specific
+// root, stats, and node types.
+// -------------------------------------------------------------------------
+
 namespace crimson::os::seastore {
 
+/** get_tree_stats<LBABtree> → Transaction::lba_tree_stats */
 template <typename T>
 Transaction::tree_stats_t& get_tree_stats(Transaction &t)
 {
@@ -48,6 +61,7 @@ get_tree_stats<
   crimson::os::seastore::lba::LBABtree>(
   Transaction &t);
 
+/** get_phy_tree_root<LBABtree> → root_t::lba_root (paddr + depth of tree root) */
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t &r)
 {
@@ -58,6 +72,11 @@ template phy_tree_root_t&
 get_phy_tree_root<
   crimson::os::seastore::lba::LBABtree>(root_t &r);
 
+/**
+ * Synchronous root-node fetch: returns the LBA root node extent from cache.
+ * If the root_block is pending (being mutated), the root node is fetched
+ * from the prior (stable) instance.  Asserts the node is in cache.
+ */
 template <>
 CachedExtentRef get_phy_tree_root_node_sync<
   crimson::os::seastore::lba::LBABtree>(
@@ -77,6 +96,13 @@ CachedExtentRef get_phy_tree_root_node_sync<
   return ret;
 }
 
+/**
+ * Async root-node fetch: returns (found, future<node>).  If the root node
+ * pointer is known (lba_root_node != null), returns {true, future} that
+ * resolves via get_extent_viewable_by_trans (may block if not yet readable).
+ * Otherwise returns {false, ready-future} signaling the caller should fall
+ * back to reading from disk via get_internal_node/get_leaf_node.
+ */
 template <>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
   crimson::os::seastore::lba::LBABtree>(
@@ -104,6 +130,12 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
   }
 }
 
+/**
+ * TreeRootLinker specialization for LBA tree.  Bidirectionally links the
+ * RootBlock and the LBA root node (internal or leaf) so that the tree can
+ * be traversed from the root, and the root node can find its way back to
+ * the RootBlock.
+ */
 template <typename RootT>
 class TreeRootLinker<RootBlock, RootT> {
 public:
@@ -124,6 +156,13 @@ template class TreeRootLinker<RootBlock, lba::LBALeafNode>;
 
 namespace crimson::os::seastore::lba {
 
+// ---------------------------------------------------------------------------
+// Public API implementations
+// ---------------------------------------------------------------------------
+
+/**
+ * mkfs: create the initial empty LBA tree (single empty leaf root).
+ */
 BtreeLBAManager::mkfs_ret
 BtreeLBAManager::mkfs(
   Transaction &t)
@@ -136,6 +175,10 @@ BtreeLBAManager::mkfs(
   croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
 }
 
+/**
+ * get_cursors (public): fetch the btree, then delegate to the internal
+ * overload that takes an op_context + btree reference.
+ */
 BtreeLBAManager::get_cursors_ret
 BtreeLBAManager::get_cursors(
   Transaction &t,
@@ -150,6 +193,9 @@ BtreeLBAManager::get_cursors(
   co_return co_await get_cursors(c, btree, laddr, length);
 }
 
+/**
+ * get_cursor (by laddr): exact match or containing-range match.
+ */
 BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_cursor(
   Transaction &t,
@@ -172,6 +218,11 @@ BtreeLBAManager::get_cursor(
   }
 }
 
+/**
+ * get_cursor (by extent): navigates from the data extent up to its parent
+ * leaf node via get_parent_node(), then constructs a cursor at the extent's
+ * laddr.  Avoids a full root-to-leaf tree traversal.
+ */
 BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_cursor(
   Transaction &t,
@@ -204,6 +255,11 @@ BtreeLBAManager::get_cursor(
   co_return btree.get_cursor(c, leaf, extent.get_laddr());
 }
 
+/**
+ * get_cursors (internal): range query.  Starts with upper_bound_right(laddr)
+ * to find the first entry whose range overlaps the query, then iterates
+ * forward collecting cursors until key >= laddr + length.
+ */
 BtreeLBAManager::get_cursors_ret
 BtreeLBAManager::get_cursors(
   op_context_t c,
@@ -232,6 +288,11 @@ BtreeLBAManager::get_cursors(
   co_return ret;
 }
 
+/**
+ * resolve_indirect_cursor: given an indirect mapping (laddr → local_clone_id),
+ * reconstruct the intermediate key and look up the direct mapping that owns
+ * the physical data.  Asserts exactly one direct cursor is found.
+ */
 BtreeLBAManager::resolve_indirect_cursor_ret
 BtreeLBAManager::resolve_indirect_cursor(
   op_context_t c,
@@ -256,6 +317,7 @@ BtreeLBAManager::resolve_indirect_cursor(
   });
 }
 
+/** lower_bound: simple btree lower_bound, returns cursor at first entry >= laddr. */
 BtreeLBAManager::lower_bound_ret
 BtreeLBAManager::lower_bound(
   Transaction &t,
@@ -267,6 +329,11 @@ BtreeLBAManager::lower_bound(
   co_return iter.get_cursor(c);
 }
 
+/**
+ * reserve_region: insert a zero-mapping (P_ADDR_ZERO) at the specified laddr.
+ * Uses the cursor as a btree insertion hint.  The reserved_ptr child pointer
+ * marks this leaf entry as a placeholder (no real data extent yet).
+ */
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::reserve_region(
   Transaction &t,
@@ -296,6 +363,12 @@ BtreeLBAManager::reserve_region(
   co_return iter.get_cursor(c);
 }
 
+/**
+ * alloc_extents (with cursor hint): insert mappings for extents that already
+ * have assigned laddrs, using 'cursor' as a btree hint.  Processes extents
+ * in reverse order so each insertion stays near the hint position (since the
+ * hint is at the end of the target range).
+ */
 BtreeLBAManager::alloc_extents_ret
 BtreeLBAManager::alloc_extents(
   Transaction &t,
@@ -340,6 +413,12 @@ BtreeLBAManager::alloc_extents(
   co_return ret;
 }
 
+/**
+ * clone_mapping: create an indirect mapping at 'laddr' that references the
+ * direct mapping 'mapping' via inter_key.  The indirect entry stores
+ * inter_key.get_local_clone_id() as its pladdr.  If updateref is true,
+ * the target direct mapping's refcount is incremented first.
+ */
 BtreeLBAManager::clone_mapping_ret
 BtreeLBAManager::clone_mapping(
   Transaction &t,
@@ -383,6 +462,14 @@ BtreeLBAManager::clone_mapping(
     mapping};
 }
 
+// ---------------------------------------------------------------------------
+// Internal lookup helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * get_cursor (internal, exact): lower_bound + check for exact key match.
+ * Returns enoent if laddr is not found.
+ */
 BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_cursor(
   op_context_t c,
@@ -405,6 +492,26 @@ BtreeLBAManager::get_cursor(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Address allocation internals
+// ---------------------------------------------------------------------------
+
+/**
+ * search_insert_position: find a free laddr near 'hint' that can accommodate
+ * 'length' bytes without overlapping existing mappings.
+ *
+ * Algorithm:
+ *   1. Start at upper_bound_right(hint.lower_boundary()) - first entry that
+ *      could conflict with the hint range.
+ *   2. While there is a conflict (overlap or hint-policy violation):
+ *      a. gen_random policy: pick a new random hint and re-search.
+ *      b. linear policy: advance hint past the conflicting entry and try
+ *         the next position.  May loop back to the beginning of the
+ *         address space if the hint wraps past the object boundary.
+ *   3. Return the chosen laddr and the btree iterator at the insertion point.
+ *
+ * Warns if > 32 attempts (possible fragmentation or misconfigured hints).
+ */
 BtreeLBAManager::search_insert_position_ret
 BtreeLBAManager::search_insert_position(
   op_context_t c,
@@ -500,6 +607,12 @@ BtreeLBAManager::search_insert_position(
   co_return insert_position_t{hint.addr, iter};
 }
 
+/**
+ * alloc_contiguous_mappings: allocate a contiguous block of laddrs for
+ * multiple mappings.  search_insert_position finds a single starting laddr
+ * for the total length; each info's key is then set sequentially from that
+ * base.  All entries are inserted via insert_mappings.
+ */
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
@@ -532,6 +645,12 @@ BtreeLBAManager::alloc_contiguous_mappings(
   });
 }
 
+/**
+ * alloc_sparse_mappings: allocate mappings at pre-assigned, non-contiguous
+ * laddrs.  Each info already has a key; the base offset is adjusted by the
+ * difference between hint.addr and the allocated starting laddr.  The
+ * entries must be sorted and non-overlapping.
+ */
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_sparse_mappings(
   Transaction &t,
@@ -570,6 +689,18 @@ BtreeLBAManager::alloc_sparse_mappings(
   });
 }
 
+/**
+ * insert_mappings: the inner loop that inserts all alloc_infos into the btree.
+ *
+ * Phase 1 (forward): for each info, call btree.insert() at 'iter', advance
+ *   iter to next.  For direct mappings, sets the extent's laddr if not yet
+ *   assigned.  Uses reserved_ptr for indirect/zero mappings (no real child).
+ *
+ * Phase 2 (backward): walk iter backward alloc_infos.size() times to collect
+ *   cursors for all inserted entries.  This is necessary because forward
+ *   insertions can invalidate previously-created cursors (splits reallocate
+ *   leaf nodes), so cursors are only safe to create after all inserts complete.
+ */
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::insert_mappings(
   op_context_t c,
@@ -634,11 +765,21 @@ BtreeLBAManager::insert_mappings(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Extent lifecycle - cache warm-up, GC, rewrite
+// ---------------------------------------------------------------------------
+
 static bool is_lba_node(const CachedExtent &e)
 {
   return is_lba_node(e.get_type());
 }
 
+/**
+ * _init_cached_extent: determine if extent 'e' is live in the LBA tree.
+ * For logical (data) extents: lower_bound(laddr), check paddr match, and
+ *   if live, link the extent into the leaf's children[] array.
+ * For tree nodes (internal/leaf): delegate to btree.init_cached_extent.
+ */
 base_iertr::template future<>
 _init_cached_extent(
   op_context_t c,
@@ -709,6 +850,10 @@ BtreeLBAManager::check_child_trackers(
 }
 #endif
 
+/**
+ * scan_mappings: iterate all direct mappings in [begin, end), calling f
+ * for each.  Indirect mappings (pladdr.is_laddr()) are skipped.
+ */
 BtreeLBAManager::scan_mappings_ret
 BtreeLBAManager::scan_mappings(
   Transaction &t,
@@ -744,6 +889,12 @@ BtreeLBAManager::scan_mappings(
     });
 }
 
+/**
+ * rewrite_extent: GC entry point - relocate an LBA tree node to a new
+ * segment.  Only processes LBA internal/leaf nodes; skips non-LBA extents.
+ * Delegates to LBABtree::rewrite_extent which allocates a fresh copy and
+ * patches the parent pointer.
+ */
 BtreeLBAManager::rewrite_extent_ret
 BtreeLBAManager::rewrite_extent(
   Transaction &t,
@@ -771,6 +922,15 @@ BtreeLBAManager::rewrite_extent(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Update operations
+// ---------------------------------------------------------------------------
+
+/**
+ * update_mapping: update a single mapping's paddr, length, and checksum.
+ * Called during commit when a data extent has been relocated.  Validates
+ * old paddr/length match before patching.  Returns the new refcount.
+ */
 BtreeLBAManager::update_mapping_ret
 BtreeLBAManager::update_mapping(
   Transaction& t,
@@ -816,6 +976,12 @@ BtreeLBAManager::update_mapping(
   co_return res->get_refcount();
 }
 
+/**
+ * update_mappings: batch version - for each extent, navigate from the data
+ * extent up to its parent leaf (via get_parent_node), construct a cursor,
+ * then call _update_mapping to patch paddr + checksum.  The nullptr child
+ * argument means the child pointer is already correct in the leaf.
+ */
 BtreeLBAManager::update_mappings_ret
 BtreeLBAManager::update_mappings(
   Transaction& t,
@@ -882,6 +1048,12 @@ BtreeLBAManager::update_mappings(
   });
 }
 
+/**
+ * get_physical_extent_if_live: check if an LBA tree node at (type, paddr,
+ * laddr) is still reachable from the tree root.  Used by the cleaner/GC
+ * to decide whether an on-disk node needs to be rewritten or can be
+ * reclaimed.  Delegates to btree.get_internal_if_live or get_leaf_if_live.
+ */
 BtreeLBAManager::get_physical_extent_if_live_ret
 BtreeLBAManager::get_physical_extent_if_live(
   Transaction &t,
@@ -909,6 +1081,10 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
+/**
+ * Register Seastar metrics under the "LBA" group: alloc_extents (bytes)
+ * and alloc_extents_iter_nexts (search iterations).
+ */
 void BtreeLBAManager::register_metrics(store_index_t store_index)
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
@@ -934,6 +1110,14 @@ void BtreeLBAManager::register_metrics(store_index_t store_index)
   );
 }
 
+/**
+ * _update_mapping: core update primitive.
+ * Creates a partial iterator from the cursor, applies f(old_val) to compute
+ * the new value.  If refcount drops to 0 → btree.remove (entry is deleted).
+ * Otherwise → btree.update (in-place value change with CoW).
+ * The LogicalChildNode* is linked as the leaf's child pointer when non-null
+ * and not already tracked.
+ */
 BtreeLBAManager::_update_mapping_ret
 BtreeLBAManager::_update_mapping(
   Transaction &t,
@@ -972,6 +1156,17 @@ BtreeLBAManager::_update_mapping(
   }
 }
 
+/**
+ * scan_mapped_space: two-pass full tree scan for space accounting.
+ *
+ * Pass 1 (data): iterate all leaf entries from L_ADDR_MIN; for each direct
+ *   mapping (non-indirect, non-zero paddr), invoke scan_visitor with the
+ *   physical address, length, type, and laddr.
+ *
+ * Pass 2 (tree nodes): re-traverse from L_ADDR_MIN with a tree_visitor
+ *   callback that fires for every internal and leaf node visited during
+ *   the descent.  This captures the tree's own metadata space usage.
+ */
 BtreeLBAManager::scan_mapped_space_ret
 BtreeLBAManager::scan_mapped_space(
   Transaction &t,
@@ -1026,6 +1221,11 @@ BtreeLBAManager::scan_mapped_space(
   }
 }
 
+/**
+ * get_containing_cursor: find the mapping whose range [key, key+len)
+ * contains laddr.  Uses upper_bound_right(laddr) and checks bounds.
+ * Returns enoent if no mapping spans laddr.
+ */
 BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_containing_cursor(
   op_context_t c,
@@ -1064,6 +1264,17 @@ BtreeLBAManager::get_end_mapping(
 }
 #endif
 
+/**
+ * remap_mappings: split/shrink an existing mapping into multiple pieces
+ * according to the remap entries.  Each remap specifies an (offset, length)
+ * sub-range of the original mapping.
+ *
+ * The first remap replaces the original entry (via btree.replace); subsequent
+ * remaps are inserted as new entries (via btree.insert).  For indirect
+ * mappings, the local_clone_id is preserved; for direct mappings, the paddr
+ * is adjusted by the sub-range offset.  After all modifications, cursors are
+ * refreshed in parallel since inserts may have invalidated earlier ones.
+ */
 BtreeLBAManager::remap_ret
 BtreeLBAManager::remap_mappings(
   Transaction &t,
@@ -1143,6 +1354,12 @@ BtreeLBAManager::remap_mappings(
   co_return ret;
 }
 
+/**
+ * update_paddr_sync: synchronous paddr update for a mapping already in cache.
+ * Used when a background rewrite transaction has relocated an extent --
+ * the current transaction's pending leaf already has the entry, and we
+ * just need to patch its paddr.  Uses lower_bound_sync (no I/O).
+ */
 void BtreeLBAManager::update_paddr_sync(
   Transaction &t,
   laddr_t laddr,
@@ -1177,6 +1394,21 @@ void BtreeLBAManager::update_paddr_sync(
     modification_t::TRANS_SYNC);
 }
 
+// ---------------------------------------------------------------------------
+// Move / clone operations
+// ---------------------------------------------------------------------------
+
+/**
+ * _copy_mapping: copy the mapping at 'src' to 'dest_laddr' without removing
+ * src.  Steps:
+ *   1. Build partial iterators for both src and dest cursors.
+ *   2. Determine the pladdr: for indirect → local_clone_id, for direct → paddr.
+ *   3. Register the key copy with the transaction (new_lba_key_copied) so
+ *      that if a background rewrite changes src's paddr before commit, the
+ *      dest copy gets patched too (via update_paddr_sync callback).
+ *   4. btree.copy() inserts the new entry using src's value.
+ *   5. Refresh src (may have been invalidated by the insert's splits).
+ */
 BtreeLBAManager::move_mapping_ret
 BtreeLBAManager::_copy_mapping(
   op_context_t c,
@@ -1228,6 +1460,12 @@ BtreeLBAManager::_copy_mapping(
   co_return ret;
 }
 
+/**
+ * _move_mapping: copy src to dest_laddr, then remove src by decrementing
+ * its refcount to 0 (which triggers _update_mapping → btree.remove).
+ * After removal, refreshes dest and advances dest's cursor to the next
+ * entry (so the caller gets the position after the moved mapping).
+ */
 BtreeLBAManager::move_mapping_ret
 BtreeLBAManager::_move_mapping(
   Transaction &t,
@@ -1261,6 +1499,16 @@ BtreeLBAManager::_move_mapping(
   co_return ret;
 }
 
+/**
+ * move_and_clone_direct_mapping: copy src to dest_laddr (transferring the
+ * data extent), then convert the original src mapping into an indirect one
+ * that points to the new dest mapping.  This is used during snapshot
+ * operations: the data extent lives at the new location, and the old laddr
+ * becomes a clone reference to it.
+ *
+ * After converting src to indirect, its child pointer is reset (the data
+ * extent is now owned by dest, not src).
+ */
 BtreeLBAManager::move_mapping_ret
 BtreeLBAManager::move_and_clone_direct_mapping(
   Transaction &t,
