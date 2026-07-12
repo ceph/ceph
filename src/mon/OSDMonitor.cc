@@ -8516,9 +8516,7 @@ int OSDMonitor::prepare_new_pool(string& name,
         pi->ec_data_shard_count = erasure_code->get_data_chunk_count();
         pi->ec_coding_shard_count = erasure_code->get_coding_chunk_count();
       } else {
-        if (ss) {
-          *ss << "get_erasure_code failed: " << tmp.str();
-        }
+        *ss << "get_erasure_code failed: " << tmp.str();
         return -EINVAL;
       }
       pi->erasure_code_profile = erasure_code_profile;
@@ -8548,9 +8546,24 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
 
-  if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
-    // This will fail if the pool cannot support ec optimizations.
-    enable_pool_ec_optimizations(*pi, nullptr, true);
+  // for 'Classic' - we support both EC-optimized and non-optimized EC pools.
+  // For Crimson - only EC-optimized pools are supported.
+  if (pi->is_erasure()) {
+    if (crimson) {
+      stringstream err_msg;
+      if (int r = enable_pool_ec_optimizations(*pi, &err_msg, true); r < 0) {
+        // for Crimson - failure is not an option
+        if (ss) {
+          *ss << err_msg.str();
+        }
+        return r;
+      }
+    } else {
+      if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+        // Silently fail if the pool cannot support ec optimizations.
+        enable_pool_ec_optimizations(*pi, nullptr, true);
+      }
+    }
   }
 
   maybe_enable_pool_split_ops(*pi);
