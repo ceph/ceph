@@ -300,17 +300,22 @@ PyObject* PyModule::init_ceph_logger()
 }
 
 // module-independent sink for the Python root-logger fallback; the Python
-// side filters and formats, this just emits like PyModuleRunner::log()
+// side maps the record's level to a ceph debug level, so the usual
+// subsystem gating applies per record
 static PyObject*
 ceph_mgr_log(PyObject *self, PyObject *args)
 {
+  int level = 0;
   char *record = nullptr;
-  if (!PyArg_ParseTuple(args, "s:mgr_log", &record)) {
+  if (!PyArg_ParseTuple(args, "is:mgr_log", &level, &record)) {
     return nullptr;
+  }
+  if (level < 0) {
+    level = 0;
   }
 #undef dout_prefix
 #define dout_prefix *_dout
-  dout(0) << record << dendl;
+  dout(ceph::dout::need_dynamic(level)) << record << dendl;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
   Py_RETURN_NONE;
@@ -320,7 +325,7 @@ PyObject* PyModule::init_ceph_module()
 {
   static PyMethodDef module_methods[] = {
     {"mgr_log", ceph_mgr_log, METH_VARARGS,
-     "log a preformatted record to the mgr daemon log"},
+     "log a preformatted record to the mgr daemon log at a debug level"},
     {nullptr, nullptr, 0, nullptr}
   };
   static PyModuleDef ceph_module_def = {

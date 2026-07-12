@@ -10,7 +10,7 @@ except ImportError:
         pass
 
 
-def mgr_log(record: str) -> None: ...
+def mgr_log(level: int, record: str) -> None: ...
 
 
 class BasePyOSDMap(object):
