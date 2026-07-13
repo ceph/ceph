@@ -1,5 +1,6 @@
 import logging
 import random
+import re
 import time
 import threading
 import subprocess
@@ -2843,4 +2844,201 @@ def test_below_threshold_no_rebuild():
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
+
+def get_rgw_log_path():
+    """Determine the RGW daemon log file path for log parsing."""
+    if 'RGW_LOG_FILE' in os.environ:
+        return os.environ['RGW_LOG_FILE']
+    port = get_config_port()
+    source_root = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.realpath(__file__)),
+        '..', '..', '..', '..'))
+    return os.path.join(source_root, 'build', 'out', f'radosgw.{port}.log')
+
+
+SPAWN_RE = re.compile(
+    r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4})\s+\S+\s+[\s\d]+\s*'
+    r's3vectors manager: INFO: spawning rebuild coroutine for '
+    r'(\S+)\.(\S+)\s+\(active_rebuilds=(\d+)/(\d+)')
+
+FINISH_RE = re.compile(
+    r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4})\s+\S+\s+[\s\d]+\s*'
+    r's3vectors manager: INFO: rebuild coroutine finished for '
+    r'(\S+)\.(\S+)\s+\(active_rebuilds=(\d+)')
+
+LIMIT_RE = re.compile(
+    r's3vectors manager: INFO: rebuild concurrency limit reached')
+
+
+def parse_rebuild_log_events(log_path, start_offset, bucket_name):
+    """Parse the RGW log from start_offset, extracting rebuild events
+    for the given bucket_name. Returns (spawn_events, finish_events, limit_count)."""
+    spawn_events = []
+    finish_events = []
+    limit_count = 0
+
+    with open(log_path, 'r') as f:
+        f.seek(start_offset)
+        for line in f:
+            if LIMIT_RE.search(line):
+                limit_count += 1
+            if bucket_name not in line:
+                continue
+
+            m = SPAWN_RE.search(line)
+            if m:
+                spawn_events.append({
+                    'timestamp': m.group(1),
+                    'bucket': m.group(2),
+                    'index': m.group(3),
+                    'active_rebuilds': int(m.group(4)),
+                    'max_concurrent': int(m.group(5)),
+                })
+                continue
+
+            m = FINISH_RE.search(line)
+            if m:
+                finish_events.append({
+                    'timestamp': m.group(1),
+                    'bucket': m.group(2),
+                    'index': m.group(3),
+                    'active_rebuilds': int(m.group(4)),
+                })
+
+    return spawn_events, finish_events, limit_count
+
+
+def verify_max_concurrency(spawn_events, finish_events, max_concurrent):
+    """Walk event timeline and verify peak concurrent active rebuilds
+    never exceeds max_concurrent. Returns observed peak."""
+    events = []
+    for e in spawn_events:
+        events.append((e['timestamp'], +1, e['index']))
+    for e in finish_events:
+        events.append((e['timestamp'], -1, e['index']))
+
+    events.sort(key=lambda x: x[0])
+
+    active = 0
+    peak = 0
+    for ts, delta, index in events:
+        active += delta
+        assert active >= 0, (
+            f'active rebuild count went negative at {ts} '
+            f'(index={index}), indicates mismatched spawn/finish')
+        peak = max(peak, active)
+
+    assert active == 0, (
+        f'active rebuild count is {active} at end of log, '
+        f'indicates {active} unmatched spawn events')
+
+    assert peak <= max_concurrent, (
+        f'peak concurrent rebuilds ({peak}) exceeded configured '
+        f'limit ({max_concurrent})')
+
+    return peak
+
+
+def test_concurrent_rebuild_limit():
+    """Test that the background rebuild system respects the max_concurrent_rebuilds limit.
+    Creates multiple indexes, inserts vectors concurrently, then verifies from the RGW log
+    that at most max_concurrent_rebuilds were in-flight simultaneously."""
+    max_concurrent = 2
+    num_indexes = 5
+    dimension = 32
+    vectors_per_index = 500
+
+    log_path = get_rgw_log_path()
+    assert os.path.exists(log_path), f'RGW log file not found: {log_path}'
+
+    # configure concurrency limit and disable cooldown
+    set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', max_concurrent)
+    set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 0)
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    index_names = [f'idx-{i}' for i in range(num_indexes)]
+
+    try:
+        # record log position before test
+        log_start_offset = os.path.getsize(log_path)
+
+        # create bucket and indexes
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        for idx_name in index_names:
+            result = conn.create_index(vectorBucketName=bucket_name, indexName=idx_name,
+                                       dataType='float32', dimension=dimension,
+                                       distanceMetric='euclidean')
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # insert vectors concurrently using threads
+        errors = []
+        def insert_vectors(idx_name):
+            try:
+                t_conn = connection()
+                vectors = generate_vectors(vectors_per_index, dimension)
+                for i, v in enumerate(vectors):
+                    v['key'] = f'{idx_name}-vec-{i}'
+                batch_size = 100
+                for batch_start in range(0, vectors_per_index, batch_size):
+                    batch = vectors[batch_start:batch_start + batch_size]
+                    result = t_conn.put_vectors(vectorBucketName=bucket_name,
+                                                indexName=idx_name, vectors=batch)
+                    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            except Exception as e:
+                errors.append((idx_name, e))
+
+        threads = []
+        for idx_name in index_names:
+            t = threading.Thread(target=insert_vectors, args=(idx_name,))
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f'insert errors: {errors}'
+        log.info('all %d indexes populated with %d vectors each', num_indexes, vectors_per_index)
+
+        # wait for all rebuilds to complete
+        for idx_name in index_names:
+            wait_for_index_rebuild(conn, bucket_name, idx_name, timeout=120)
+
+        log.info('all %d indexes rebuilt successfully', num_indexes)
+
+        # parse the log and verify concurrency
+        spawn_events, finish_events, limit_count = parse_rebuild_log_events(
+            log_path, log_start_offset, bucket_name)
+
+        log.info('log events: %d spawns, %d finishes, %d limit-reached',
+                 len(spawn_events), len(finish_events), limit_count)
+        for e in spawn_events:
+            log.info('  spawn: %s.%s active_rebuilds=%d/%d',
+                     e['bucket'], e['index'], e['active_rebuilds'], e['max_concurrent'])
+        for e in finish_events:
+            log.info('  finish: %s.%s active_rebuilds=%d',
+                     e['bucket'], e['index'], e['active_rebuilds'])
+
+        assert len(spawn_events) >= num_indexes, (
+            f'expected at least {num_indexes} spawn events, got {len(spawn_events)}')
+        assert len(finish_events) >= num_indexes, (
+            f'expected at least {num_indexes} finish events, got {len(finish_events)}')
+        assert len(spawn_events) == len(finish_events), (
+            f'spawn/finish count mismatch: {len(spawn_events)} spawns vs {len(finish_events)} finishes')
+        assert limit_count >= 1, (
+            f'expected concurrency limit reached at least once, got {limit_count}')
+
+        peak = verify_max_concurrency(spawn_events, finish_events, max_concurrent)
+        log.info('peak concurrent rebuilds: %d (limit: %d)', peak, max_concurrent)
+
+        for e in spawn_events:
+            assert e['active_rebuilds'] <= max_concurrent, (
+                f'active_rebuilds={e["active_rebuilds"]} in spawn message '
+                f'for {e["index"]} exceeds max_concurrent={max_concurrent}')
+
+    finally:
+        _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+        set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
+        set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
 

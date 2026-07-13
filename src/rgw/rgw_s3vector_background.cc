@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <atomic>
 #include <memory>
+#include <shared_mutex>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -15,7 +17,6 @@
 #include <chrono>
 #include <charconv>
 #include <fmt/format.h>
-#include "common/async/yield_waiter.h"
 #include <future>
 #include <string>
 #include <unordered_map>
@@ -45,12 +46,14 @@ struct build_state_t {
   int64_t build_started_at = 0;
   int64_t build_lease_seconds = 600;
   std::string builder_id;
+  uint64_t global_delete_count = 0;
 
   void dump(ceph::Formatter *f) const {
     encode_json("build_in_progress", build_in_progress, f);
     encode_json("build_started_at", build_started_at, f);
     encode_json("build_lease_seconds", build_lease_seconds, f);
     encode_json("builder_id", builder_id, f);
+    encode_json("global_delete_count", global_delete_count, f);
   }
 
   void decode_json(JSONObj *obj) {
@@ -58,6 +61,7 @@ struct build_state_t {
     JSONDecoder::decode_json("build_started_at", build_started_at, obj);
     JSONDecoder::decode_json("build_lease_seconds", build_lease_seconds, obj);
     JSONDecoder::decode_json("builder_id", builder_id, obj);
+    JSONDecoder::decode_json("global_delete_count", global_delete_count, obj);
   }
 
   std::string to_json_str() const {
@@ -121,61 +125,29 @@ private:
     }
   };
   using SessionPtr = std::shared_ptr<LanceDBSession>;
-  ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex"); 
+  ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex");
   std::unordered_map<std::string, SessionPtr> sessions;
-  std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
+
+  struct table_state_t {
+    std::atomic<uint64_t> insert_count{0};
+    std::atomic<uint64_t> delete_count{0};
+    ceph::coarse_real_time last_rebuild_time;
+    table_state_t() = default;
+    table_state_t(table_state_t&& o) noexcept
+      : insert_count(o.insert_count.load()),
+        delete_count(o.delete_count.load()),
+        last_rebuild_time(o.last_rebuild_time) {}
+  };
+  std::shared_mutex tables_mutex;
+  std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
   std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;
+  std::atomic<int> active_rebuild_count{0};
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
   std::ostream& gen_prefix(std::ostream& out) const override { return out << "s3vectors manager: "; }
-
-  class tokens_waiter {
-    size_t pending_tokens = 0;
-    DoutPrefixProvider* const dpp;
-    ceph::async::yield_waiter<void> waiter;
-
-  public:
-    class token{
-      tokens_waiter* tw;
-    public:
-      token(const token& other) = delete;
-      token(token&& other) : tw(other.tw) {
-        other.tw = nullptr; // mark as moved
-      }
-      token& operator=(const token& other) = delete;
-      token(tokens_waiter* _tw) : tw(_tw) {
-        ++tw->pending_tokens;
-      }
-
-      ~token() {
-        if (!tw) {
-          return; // already moved
-        }
-        --tw->pending_tokens;
-        if (tw->pending_tokens == 0 && tw->waiter) {
-          tw->waiter.complete(boost::system::error_code{});
-        }
-      }
-    };
-
-    tokens_waiter(DoutPrefixProvider* _dpp) : dpp(_dpp) {}
-    tokens_waiter(const tokens_waiter& other) = delete;
-    tokens_waiter& operator=(const tokens_waiter& other) = delete;
-
-    void async_wait(boost::asio::yield_context yield) {
-      if (pending_tokens == 0) {
-        return;
-      }
-      ldpp_dout(dpp, 20) << "INFO: tokens waiter is waiting on " <<
-        pending_tokens << " tokens" << dendl;
-      boost::system::error_code ec;
-      waiter.async_wait(yield[ec]);
-      ldpp_dout(dpp, 20) << "INFO: tokens waiter finished waiting for all tokens" << dendl;
-    }
-  };
 
   void async_sleep(boost::asio::yield_context yield, const std::chrono::milliseconds& duration) {
     using Clock = ceph::coarse_mono_clock;
@@ -648,25 +620,26 @@ private:
   // Core table processing: stats check → lock → build → cleanup
   // ============================================================================
 
-  int process_table(const table_name_t& table_name, boost::asio::yield_context yield) {
+  int process_table(const table_name_t& table_name,
+                    uint64_t local_inserts, uint64_t local_deletes,
+                    boost::asio::yield_context yield) {
     const auto& bucket_name = table_name.first;
     const auto& index_name = table_name.second;
 
     // step 1: check if this RGW is already building this table (cheapest check).
-    // prevents the local background loop from seeing its own lock as stale
-    // and reclaiming it when the build takes longer than the lock TTL.
     if (active_builds.count(table_name)) {
       ldpp_dout(this, 5) << "INFO: this RGW is already building "
           << bucket_name << "." << index_name << ", skipping" << dendl;
-      return 0;
+      return 1;
     }
 
-    // step 2: read config
-    const uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_unindexed_threshold");
-    if (threshold == 0) {
+    // step 2: read ratio-based config
+    const double insert_ratio_threshold = cct->_conf.get_val<double>("rgw_s3vector_index_insert_rebuild_ratio");
+    const double delete_ratio_threshold = cct->_conf.get_val<double>("rgw_s3vector_index_delete_rebuild_ratio");
+    if (insert_ratio_threshold <= 0.0 && delete_ratio_threshold <= 0.0) {
       ldpp_dout(this, 20) << "INFO: automatic index rebuild disabled for "
           << bucket_name << "." << index_name << dendl;
-      return 0;
+      return 1;
     }
 
     // step 3: open table
@@ -674,17 +647,16 @@ private:
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
           << bucket_name << ", skipping" << dendl;
-      return 0;
+      return -EIO;
     }
     LanceDBTable* table = lancedb_connection_open_table(conn, index_name.c_str());
     if (!table) {
       ldpp_dout(this, 5) << "WARNING: cannot open table "
           << bucket_name << "." << index_name << ", may have been deleted" << dendl;
       lancedb_connection_free(conn);
-      return 0;
+      return -ENOENT;
     }
 
-    // scope guard for cleanup
     struct table_guard_t {
       LanceDBTable* table;
       LanceDBConnection* conn;
@@ -706,28 +678,57 @@ private:
     ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
         << ": indexed=" << stats.num_indexed_rows
         << " unindexed=" << stats.num_unindexed_rows
-        << " num_indices=" << stats.num_indices << dendl;
+        << " num_indices=" << stats.num_indices
+        << " local_inserts=" << local_inserts
+        << " local_deletes=" << local_deletes << dendl;
 
-    if (stats.num_unindexed_rows < threshold) {
-      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
-          << " below threshold (" << stats.num_unindexed_rows
-          << " < " << threshold << "), skipping rebuild" << dendl;
-      return 1; // below threshold — recheck on next notification
+    // step 5: read build state for the global delete counter
+    build_state_t prev_state;
+    read_build_state(table, prev_state);
+    const uint64_t global_delete_count = prev_state.global_delete_count + local_deletes;
+
+    // step 6: ratio-based rebuild decision
+    const double total_rows = static_cast<double>(stats.num_indexed_rows + stats.num_unindexed_rows);
+    bool insert_rebuild = false;
+    if (total_rows > 0 && insert_ratio_threshold > 0.0) {
+      const double insert_ratio = static_cast<double>(stats.num_unindexed_rows) / total_rows;
+      insert_rebuild = (insert_ratio >= insert_ratio_threshold);
+      ldpp_dout(this, 5) << "INFO: insert ratio for " << bucket_name << "." << index_name
+          << ": " << insert_ratio << " (threshold=" << insert_ratio_threshold << ")" << dendl;
     }
 
-    // step 5: try to acquire distributed lock (S3 conditional write)
+    bool delete_rebuild = false;
+    if (stats.num_indexed_rows > 0 && delete_ratio_threshold > 0.0 && global_delete_count > 0) {
+      const double delete_ratio = static_cast<double>(global_delete_count)
+          / (static_cast<double>(stats.num_indexed_rows) + global_delete_count);
+      delete_rebuild = (delete_ratio >= delete_ratio_threshold);
+      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
+          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
+          << ", global_delete_count=" << global_delete_count << ")" << dendl;
+    }
+
+    if (!insert_rebuild && !delete_rebuild) {
+      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
+          << " below rebuild thresholds, skipping" << dendl;
+      // still persist the updated global delete count even if no rebuild is needed
+      if (local_deletes > 0 && global_delete_count != prev_state.global_delete_count) {
+        prev_state.global_delete_count = global_delete_count;
+        write_build_state(table, prev_state);
+      }
+      return 1;
+    }
+
+    // step 7: try to acquire distributed lock (S3 conditional write)
     optional_yield y(yield);
     std::string lock_token = try_acquire_lock(bucket_name, index_name, y);
     if (lock_token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping rebuild" << dendl;
-      return 0;
+      return 1;
     }
 
-    // track locally that this RGW is building this table
     active_builds.insert(table_name);
 
-    // scope guard: release the distributed lock and remove from active builds
     struct lock_guard_t {
       Manager* mgr;
       const table_name_t& table_name;
@@ -741,15 +742,14 @@ private:
       }
     } lock_guard{this, table_name, bucket_name, index_name, lock_token, y};
 
-    // step 6: record build state in table metadata (observability, not a decision gate).
-    // the distributed lock (step 5) controls mutual exclusion.
-    // metadata records who is building and when, for diagnostics and monitoring.
+    // step 8: record build state
     build_state_t state;
     state.build_in_progress = true;
     state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     state.build_lease_seconds = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_build_lease_seconds");
     state.builder_id = lock_token;
+    state.global_delete_count = global_delete_count;
     if (int ret = write_build_state(table, state); ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to record build state for "
           << bucket_name << "." << index_name
@@ -757,19 +757,20 @@ private:
       return ret;
     }
 
-    // step 7: get distance metric for index config
+    // step 9: get distance metric for index config
     DistanceMetric metric = s3vector::get_distance_metric(table, this);
     LanceDBDistanceType distance_type = to_lancedb_distance(metric);
 
-    // step 8: run the vector index build
+    // step 10: run the vector index build
     ldpp_dout(this, 1) << "INFO: starting vector index build for "
         << bucket_name << "." << index_name
         << " (unindexed=" << stats.num_unindexed_rows
-        << ", threshold=" << threshold << ")" << dendl;
+        << ", insert_rebuild=" << insert_rebuild
+        << ", delete_rebuild=" << delete_rebuild << ")" << dendl;
 
     int build_ret = run_vector_index_build(table, distance_type);
 
-    // step 9: mark build complete in table metadata
+    // step 11: mark build complete in table metadata
     build_state_t post_state;
     if (int ret = read_build_state(table, post_state); ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
@@ -777,6 +778,9 @@ private:
     }
     post_state.build_in_progress = false;
     post_state.build_started_at = 0;
+    if (build_ret == 0 && delete_rebuild) {
+      post_state.global_delete_count = 0;
+    }
     if (int ret = write_build_state(table, post_state); ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
           << bucket_name << "." << index_name << dendl;
@@ -808,53 +812,32 @@ private:
   void process_tables(boost::asio::yield_context yield) {
     ldpp_dout(this, 5) << "INFO: start processing tables" << dendl;
     while (!shutdown) {
-      const uint64_t stats_interval_ms =
-          cct->_conf.get_val<uint64_t>("rgw_s3vector_index_stats_interval") * 1000;
+      const int max_concurrent = cct->_conf.get_val<int64_t>("rgw_s3vector_max_concurrent_rebuilds");
+      const auto cooldown = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_s3vector_index_rebuild_cooldown"));
 
-      std::vector<table_name_t> tables_to_process;
-      const auto message_count = messages.consume_all([&tables_to_process, stats_interval_ms, this](auto message) {
+      // 1. consume control messages (REMOVE / SESSION_CREATE / SESSION_DELETE)
+      messages.consume_all([this](auto message) {
         std::unique_ptr<message_t> message_guard(message);
         const auto table_name = std::move(message->table_name);
         switch(message->type) {
           case message_t::Op::REMOVE:
-            ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
-            tables.erase(table_name);
-            return;
-          case message_t::Op::UPDATE:
             {
-              ldpp_dout(this, 20) << "INFO: received update message for table: " << table_name.first << "." << table_name.second << dendl;
-              auto [it, inserted] = tables.emplace(table_name, ceph::coarse_real_clock::now());
-              if (inserted) {
-                ldpp_dout(this, 20) << "INFO: will try to process new table: " << table_name.first << "." << table_name.second << dendl;
-                tables_to_process.push_back(table_name);
-                return;
-              }
-              const auto now = ceph::coarse_real_clock::now();
-              const auto time_since_last_process = now - it->second;
-              if (time_since_last_process > std::chrono::milliseconds(5000)) {
-                ldpp_dout(this, 20) << "INFO: will try to process table: " << table_name.first << "." << table_name.second <<
-                ". " << time_since_last_process << " passed since last processing" << dendl;
-                it->second = now;
-                tables_to_process.push_back(table_name);
-              } else {
-                ldpp_dout(this, 20) << "INFO: will skip processing table: " << table_name.first << "." << table_name.second <<
-                ". only " << time_since_last_process << " passed since last processing" << dendl;
-              }
+              ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
+              std::unique_lock ul(tables_mutex);
+              tables.erase(table_name);
               return;
-            }            
+            }
           case message_t::Op::SESSION_CREATE:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
               if (sessions.find(table_name.first) == sessions.end()) {
-                //create session if not exist, otherwise just ignore
-                //Can define session options in the future if needed, for now just create with default options for cache sizes
                 LanceDBSession* session = lancedb_session_new(nullptr);
                 if (session) {
                   sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
                   ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
-                }
-                else {
+                } else {
                   ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
                 }
                 return;
@@ -864,7 +847,7 @@ private:
             }
           case message_t::Op::SESSION_DELETE:
             {
-              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << table_name.first << dendl; 
+              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
               if (sessions.erase(table_name.first) > 0) {
                 ldpp_dout(this, 20) << "INFO: deleted session for bucket: " << table_name.first << dendl;
@@ -874,40 +857,74 @@ private:
               return;
             }
           default:
-            ldpp_dout(this, 1) << "ERROR: received message with unknown type for bucket: " << table_name.first << " index: " << table_name.second << dendl;
-            return; 
-
+            return;
         }
       });
 
-      tokens_waiter tw(this);
-      for (const auto& table_name : tables_to_process) {
-        // start processing a table
-        tokens_waiter::token token(&tw);
-        boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
-            [this, token = std::move(token), table_name](boost::asio::yield_context yield) {
-          const int rc = process_table(table_name, yield);
-          if (rc != 0) {
-            // rc < 0: error, rc > 0: below threshold — allow recheck on next notification
-            if (rc < 0) {
-              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first << "." << table_name.second << " with error code: " << rc << dendl;
-            }
-            const uint64_t stats_interval_ms =
-                cct->_conf.get_val<uint64_t>("rgw_s3vector_index_stats_interval") * 1000;
-            tables[table_name] = ceph::coarse_real_clock::now() - std::chrono::milliseconds(stats_interval_ms);
+      // 2. scan tables for pending mutations
+      bool spawned_any = false;
+      {
+        std::shared_lock sl(tables_mutex);
+        const auto now = ceph::coarse_real_clock::now();
+        for (auto& [name, state] : tables) {
+          if (active_rebuild_count.load(std::memory_order_relaxed) >= max_concurrent) {
+            ldpp_dout(this, 1) << "INFO: rebuild concurrency limit reached"
+                << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+                << ", max_concurrent=" << max_concurrent
+                << "), deferring remaining tables" << dendl;
+            break;
           }
-        }, [] (std::exception_ptr eptr) {
-          if (eptr) std::rethrow_exception(eptr);
-        });
-      }
-      if (!tables_to_process.empty()) {
-        // wait for all pending work to finish
-        tw.async_wait(yield);
+
+          const uint64_t inserts = state.insert_count.load(std::memory_order_relaxed);
+          const uint64_t deletes = state.delete_count.load(std::memory_order_relaxed);
+          if (inserts == 0 && deletes == 0) {
+            continue;
+          }
+          if (now - state.last_rebuild_time < cooldown) {
+            ldpp_dout(this, 20) << "INFO: table " << name.first << "." << name.second
+                << " under cooldown, deferring (inserts=" << inserts
+                << ", deletes=" << deletes << ")" << dendl;
+            continue;
+          }
+
+          state.insert_count.fetch_sub(inserts, std::memory_order_relaxed);
+          state.delete_count.fetch_sub(deletes, std::memory_order_relaxed);
+          active_rebuild_count.fetch_add(1, std::memory_order_relaxed);
+          spawned_any = true;
+
+          ldpp_dout(this, 1) << "INFO: spawning rebuild coroutine for "
+              << name.first << "." << name.second
+              << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+              << "/" << max_concurrent
+              << ", inserts=" << inserts
+              << ", deletes=" << deletes << ")" << dendl;
+
+          boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+              [this, table_name = name, inserts, deletes](boost::asio::yield_context yield) {
+            const int rc = process_table(table_name, inserts, deletes, yield);
+            if (rc == 0) {
+              std::shared_lock sl(tables_mutex);
+              auto it = tables.find(table_name);
+              if (it != tables.end()) {
+                it->second.last_rebuild_time = ceph::coarse_real_clock::now();
+              }
+            } else if (rc < 0) {
+              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first
+                  << "." << table_name.second << " with error code: " << rc << dendl;
+            }
+            ldpp_dout(this, 1) << "INFO: rebuild coroutine finished for "
+                << table_name.first << "." << table_name.second
+                << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+                << ", rc=" << rc << ")" << dendl;
+            active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
+          });
+        }
       }
 
-      if (message_count == 0) {
-        // if no messages, sleep for a while before checking again
-        ldpp_dout(this, 20) << "INFO: no messages to process" << dendl;
+      if (!spawned_any) {
+        ldpp_dout(this, 20) << "INFO: no tables to process" << dendl;
         async_sleep(yield, idle_sleep);
       }
     }
@@ -982,6 +999,47 @@ public:
     return false;
   }
 
+  bool notify_index_mutation(const DoutPrefixProvider* dpp,
+                             const std::string& bucket_name,
+                             const std::string& index_name,
+                             uint64_t row_count,
+                             bool is_delete) {
+    if (shutdown) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index mutation: manager is shutting down" << dendl;
+      return false;
+    }
+    const table_name_t table_name(bucket_name, index_name);
+
+    {
+      std::shared_lock sl(tables_mutex);
+      auto it = tables.find(table_name);
+      if (it != tables.end()) {
+        if (is_delete) {
+          it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
+        } else {
+          it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
+        }
+        ldpp_dout(dpp, 20) << "INFO: incremented " << (is_delete ? "delete" : "insert")
+            << " counter by " << row_count << " for " << bucket_name << "." << index_name << dendl;
+        return true;
+      }
+    }
+
+    {
+      std::unique_lock ul(tables_mutex);
+      auto [it, inserted] = tables.emplace(table_name, table_state_t{});
+      if (is_delete) {
+        it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
+      } else {
+        it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
+      }
+      ldpp_dout(dpp, 20) << "INFO: " << (inserted ? "created entry and incremented" : "incremented")
+          << " " << (is_delete ? "delete" : "insert")
+          << " counter by " << row_count << " for " << bucket_name << "." << index_name << dendl;
+    }
+    return true;
+  }
+
   bool notify_session(const DoutPrefixProvider* dpp, const std::string& bucket_name, message_t::Op op) {
     if (shutdown) {
       ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session: manager is shutting down" << dendl;
@@ -1040,12 +1098,20 @@ void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
   init(dpp, driver);
 }
 
-bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::UPDATE);
+  return s_manager->notify_index_mutation(dpp, bucket_name, index_name, row_count, false);
+}
+
+bool notify_index_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table delete: manager is not initialized" << dendl;
+    return false;
+  }
+  return s_manager->notify_index_mutation(dpp, bucket_name, index_name, row_count, true);
 }
 
 bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {

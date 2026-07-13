@@ -4927,3 +4927,52 @@ options:
   - ivf_flat
   services:
   - rgw
+- name: rgw_s3vector_index_insert_rebuild_ratio
+  type: float
+  level: advanced
+  desc: Ratio of unindexed to total rows that triggers a background vector index rebuild
+  long_desc: When the fraction of unindexed rows in a LanceDB table exceeds this
+    ratio, the background manager will rebuild the vector index. For example, 0.10
+    means rebuild when more than 10% of rows are unindexed. Set to 0 to disable
+    insert-based rebuilds.
+  default: 0.10
+  min: 0.0
+  max: 1.0
+  services:
+  - rgw
+- name: rgw_s3vector_index_delete_rebuild_ratio
+  type: float
+  level: advanced
+  desc: Ratio of ghost (deleted) vectors to indexed rows that triggers index rebuild
+  long_desc: LanceDB deletes are tombstone-based. The index retains ghost vectors
+    that waste I/O and degrade search quality. When the fraction of ghost vectors
+    exceeds this ratio, the background manager rebuilds the index. For example,
+    0.20 means rebuild when more than 20% of the index entries are ghost vectors.
+    Set to 0 to disable delete-based rebuilds.
+  default: 0.20
+  min: 0.0
+  max: 1.0
+  services:
+  - rgw
+- name: rgw_s3vector_max_concurrent_rebuilds
+  type: int
+  level: advanced
+  desc: Maximum number of concurrent vector index rebuilds per RGW instance
+  long_desc: Controls how many tables can have their vector indexes rebuilt in
+    parallel by the background manager. Higher values increase rebuild throughput
+    but consume more CPU and memory.
+  default: 4
+  min: 1
+  services:
+  - rgw
+- name: rgw_s3vector_index_rebuild_cooldown
+  type: uint
+  level: advanced
+  desc: Minimum interval in seconds between successive rebuilds of the same table
+  long_desc: After a rebuild completes (or is evaluated) for a table, the
+    background manager waits this many seconds before considering the table for
+    another rebuild. Prevents thrashing under sustained write load.
+  default: 5
+  min: 0
+  services:
+  - rgw
