@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ranges>
+#include <type_traits>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
 #include "common/config.h"
@@ -47,13 +49,20 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
   // apply changes to all shards
   // @param func a functor which accepts @c "ConfigValues&"
   template<typename Func>
-  seastar::future<> do_change(Func&& func) {
+  auto do_change(Func&& func) {
+    using T = std::invoke_result_t<Func, ConfigValues&>;
     return container().invoke_on(values.get_owner_shard(),
                                  [func = std::move(func)](ConfigProxy& owner) {
       // apply the changes to a copy of the values
       auto new_values = seastar::make_lw_shared(*owner.values);
       new_values->changed.clear();
-      func(*new_values);
+      [[maybe_unused]] std::conditional_t<std::is_void_v<T>,
+                                          std::monostate, T> result{};
+      if constexpr (std::is_void_v<T>) {
+        func(*new_values);
+      } else {
+        result = func(*new_values);
+      }
 
       // always apply the new settings synchronously on the owner shard, to
       // avoid racings with other do_change() calls in parallel.
@@ -73,7 +82,7 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
         (*obs)->handle_conf_change(owner, keys);
       }
 
-      return seastar::parallel_for_each(std::views::iota(1u, seastar::smp::count),
+      auto done = seastar::parallel_for_each(std::views::iota(1u, seastar::smp::count),
                                         [&owner, new_values] (auto cpu) {
         return owner.container().invoke_on(cpu,
           [foreign_values = seastar::make_foreign(new_values)](ConfigProxy& proxy) mutable {
@@ -98,7 +107,15 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
         }).finally([new_values] {
           new_values->changed.clear();
         });
-      });
+
+      if constexpr (std::is_void_v<T>) {
+        return done;
+      } else {
+        return done.then([result = std::move(result)]() mutable {
+          return std::move(result);
+        });
+      }
+    });
   }
 public:
   ConfigProxy(const EntityName& name, std::string_view cluster);
@@ -192,17 +209,14 @@ public:
   }
   void show_config(ceph::Formatter* f) const;
 
-  seastar::future<> parse_argv(std::vector<const char*>& argv) {
-    // we could pass whatever is unparsed to seastar, but seastar::app_template
-    // is used for driving the seastar application, and
-    // crimson::common::ConfigProxy is not available until seastar engine is up
-    // and running, so we have to feed the command line args to app_template
-    // first, then pass them to ConfigProxy.
-    return do_change([&argv, this](ConfigValues& values) {
-      get_config().parse_argv(values,
-			      obs_mgr,
-			      argv,
-			      CONF_CMDLINE);
+  seastar::future<std::vector<std::string>>
+  parse_argv(std::vector<std::string> args) {
+    // Take args by value so the lambda can safely be invoked on another shard
+    return do_change([args = std::move(args), this](ConfigValues& values) {
+      auto argv_view = args | std::views::transform(&std::string::c_str);
+      std::vector<const char*> argv(argv_view.begin(), argv_view.end());
+      get_config().parse_argv(values, obs_mgr, argv, CONF_CMDLINE);
+      return std::vector<std::string>(argv.begin(), argv.end());
     });
   }
 
