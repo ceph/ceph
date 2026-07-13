@@ -434,20 +434,12 @@ class Client::Impl :
     auto impl = static_cast<Impl*>(user);
 
     // libcurl may OR SOCK_CLOEXEC/SOCK_NONBLOCK into socktype
-    int socktype = address->socktype;
-#ifdef SOCK_CLOEXEC
-    socktype &= ~SOCK_CLOEXEC;
-#endif
-#ifdef SOCK_NONBLOCK
-    socktype &= ~SOCK_NONBLOCK;
-#endif
-
-    if (socktype == SOCK_STREAM) {
+    if (address->socktype & SOCK_STREAM) {
       using protocol_type = boost::asio::generic::stream_protocol;
       return impl->open_socket(protocol_type{address->family,
                                              address->protocol});
     }
-    if (socktype == SOCK_DGRAM) {
+    if (address->socktype & SOCK_DGRAM) {
       using protocol_type = boost::asio::generic::datagram_protocol;
       return impl->open_socket(protocol_type{address->family,
                                              address->protocol});
