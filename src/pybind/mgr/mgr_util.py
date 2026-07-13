@@ -4,8 +4,6 @@ from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
     EarmarkContents,
     EarmarkException,
-    EarmarkParseError,
-    EarmarkTopScope,
 )
 
 if 'UNITTEST' in os.environ:
@@ -459,22 +457,6 @@ class CephFSEarmarkResolver:
         """
         with self._manager(path, volume, raises=False) as emgr:
             emgr.set_earmark(earmark)
-
-    def check_earmark(self, earmark: str, top_level_scope: EarmarkTopScope) -> bool:
-        """
-        Check if the earmark belongs to the mentioned top level scope.
-
-        :param earmark: The earmark string to check.
-        :param top_level_scope: The expected top level scope.
-        :return: True if the earmark matches the top level scope, False otherwise.
-        """
-        try:
-            parsed = CephFSVolumeEarmarking.parse_earmark(earmark)
-            if parsed is None:
-                return False
-            return parsed.top == top_level_scope
-        except EarmarkParseError:
-            return False
 
     def test_and_set_earmark(
         self, path: str, volume: str, earmark: EarmarkContents
