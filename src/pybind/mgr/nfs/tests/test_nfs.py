@@ -11,7 +11,7 @@ from mgr_module import MgrModule, NFS_POOL_NAME
 
 from rados import ObjectNotFound
 
-from ceph.deployment.service_spec import NFSServiceSpec
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 from ceph.utils import with_units_to_int, bytes_to_human
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
@@ -1796,6 +1796,30 @@ EXPORT {
         ])
     def test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
         self._do_mock_test(self._do_test_export_qos_bw_ops, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params)
+
+
+class TestNFSClusterIngressPlacement:
+    cluster_id = 'mynfs'
+    virtual_ip = '192.168.1.100/24'
+    nfs_placement = '2 host1 host2'
+    ingress_placement = '3 host3 host4 host5'
+
+    def test_create_nfs_cluster_passes_ingress_placement(self):
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch.object(cluster, '_call_orch_apply_nfs') as mock_apply:
+            cluster.create_nfs_cluster(
+                cluster_id=self.cluster_id,
+                placement='host1',
+                virtual_ip=self.virtual_ip,
+                ingress=True,
+                ingress_placement=self.ingress_placement,
+            )
+            mock_apply.assert_called_once()
+            assert mock_apply.call_args.kwargs['ingress_placement'] == self.ingress_placement
 
 
 @pytest.mark.parametrize(

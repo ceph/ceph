@@ -31,7 +31,7 @@ Create NFS Ganesha Cluster
 
 .. prompt:: bash #
 
-   ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] [--port <int>] [--enable-rdma] [--rdma_port <int>] [-i <spec_file>] [--enable-nfsv3]
+   ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] [--ingress-placement <placement>] [--port <int>] [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] [-i <spec_file>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
@@ -110,6 +110,18 @@ NFS endpoint that all clients can use to mount.  Ceph will take care
 of the details of NFS redirecting traffic on the virtual IP to the
 appropriate backend NFS servers, and redeploying NFS servers when they
 fail.
+
+By default, the *ingress* service follows the same placement as the NFS
+Ganesha daemons (the optional ``<placement>`` argument).  To schedule
+keepalived and HAProxy on a different set of hosts, pass
+``--ingress-placement`` with a separate placement string.  For example,
+to run three NFS daemons on ``host1`` and ``host2`` while colocating
+ingress on three dedicated nodes::
+
+    ceph nfs cluster create mynfs "2 host1 host2" --ingress --virtual_ip 192.168.1.100/24 --ingress-placement "3 host3 host4 host5"
+
+If ``--ingress-placement`` is omitted, both services share the NFS
+placement.
 
 An optional ``--ingress-mode`` parameter can be provided to choose
 how the *ingress* service is configured:

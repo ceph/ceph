@@ -175,6 +175,7 @@ class NFSCluster:
             monitoring_port: Optional[int] = None,
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -185,9 +186,12 @@ class NFSCluster:
                 ingress_mode = IngressType.default
             ingress_mode = ingress_mode.canonicalize()
             pspec = PlacementSpec.from_string(placement)
+            ingress_pspec = PlacementSpec.from_string(ingress_placement) if ingress_placement else None
             if ingress_mode == IngressType.keepalive_only:
                 # enforce count=1 for nfs over keepalive only
                 pspec.count = 1
+                if ingress_pspec:
+                    ingress_pspec.count = 1
 
             ganesha_port = 10000 + port  # semi-arbitrary, fix me someday
             frontend_port: Optional[int] = port
@@ -229,7 +233,7 @@ class NFSCluster:
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                placement=pspec,
+                                placement=ingress_pspec or pspec,
                                 frontend_port=frontend_port,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
                                 virtual_ip=virtual_ip,
@@ -295,6 +299,7 @@ class NFSCluster:
             monitoring_port: Optional[int] = None,
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -338,7 +343,8 @@ class NFSCluster:
                     monitoring_ip_addrs=monitoring_ip_addrs,
                     monitoring_port=monitoring_port,
                     enable_rdma=enable_rdma,
-                    rdma_port=rdma_port
+                    rdma_port=rdma_port,
+                    ingress_placement=ingress_placement
                 )
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
