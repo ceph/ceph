@@ -768,9 +768,6 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   if ((ca = createAccountTable(dpp, &params)))
     goto out;
 
-  if ((ca = createAccountTable(dpp, &params)))
-    goto out;
-
   if ((cu = createUserTable(dpp, &params)))
     goto out;
 
