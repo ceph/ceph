@@ -1463,6 +1463,7 @@ def test_bucket_list_return_data():
 
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_bucket_list_return_data_versioning():
     bucket_name = get_new_bucket()
     check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
@@ -1497,6 +1498,7 @@ def test_bucket_list_return_data_versioning():
         assert obj['Size'] == key_data['ContentLength']
         assert obj['Owner']['ID'] == key_data['ID']
         assert obj['VersionId'] == key_data['VersionId']
+        assert obj['IsLatest'] == True
         _compare_dates(obj['LastModified'],key_data['LastModified'])
 
 def test_bucket_list_objects_anonymous():
@@ -1689,6 +1691,7 @@ def _make_objs_dict(key_names):
     objs_dict = {'Objects': objs_list}
     return objs_dict
 
+@pytest.mark.versioning
 def test_versioning_concurrent_multi_object_delete():
     num_objects = 5
     num_versions_per_object = 3
@@ -3432,6 +3435,7 @@ def test_object_raw_get_object_acl():
     assert status == 403
     assert error_code == 'AccessDenied'
 
+@pytest.mark.versioning
 def test_object_put_acl_mtime():
     key = 'foo'
     bucket_name = get_new_bucket()
@@ -5758,6 +5762,7 @@ def test_object_copy_key_not_found():
     assert status == 404
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_object_copy_versioned_bucket():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -5822,6 +5827,7 @@ def test_object_copy_versioned_bucket():
     assert size == response['ContentLength']
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_object_copy_versioned_url_encoding():
     bucket = get_new_bucket_resource()
     check_configure_versioning_retry(bucket.name, "Enabled", "Enabled")
@@ -5926,6 +5932,7 @@ def _multipart_upload_checksum(bucket_name, key, size, part_size=5*1024*1024, cl
     return (upload_id, s, parts, part_checksums)
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_object_copy_versioning_multipart_upload():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -6293,6 +6300,7 @@ def check_configure_versioning_retry(bucket_name, status, expected_string):
     assert expected_string == read_status
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_multipart_copy_versioned():
     src_bucket_name = get_new_bucket()
     dest_bucket_name = get_new_bucket()
@@ -7647,6 +7655,7 @@ def test_ranged_request_empty_object():
     assert status == 416
     assert error_code == 'InvalidRange'
 
+@pytest.mark.versioning
 def test_versioning_bucket_create_suspend():
     bucket_name = get_new_bucket()
     check_versioning(bucket_name, None)
@@ -7754,6 +7763,14 @@ def test_versioning_obj_create_read_remove_head():
 
     (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
 
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert len(response['Versions']) == num_versions
+    assert response['Versions'][0]['IsLatest'] == True
+    assert response['Versions'][0]['VersionId'] == version_ids[-1]
+
+    for i in range(1, 4):
+      assert response['Versions'][i]['IsLatest'] == False
+
     # removes old head object, checks new one
     removed_version_id = version_ids.pop()
     contents.pop()
@@ -7775,11 +7792,32 @@ def test_versioning_obj_create_read_remove_head():
     assert len(response['Versions']) == num_versions
     assert len(response['DeleteMarkers']) == 1
     assert response['DeleteMarkers'][0]['VersionId'] == delete_marker_version_id
+    assert response['DeleteMarkers'][0]['IsLatest'] == True
+
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+    assert error_code == 'NoSuchKey'
+
+    # Remove the delete marker
+
+    response = client.delete_object(Bucket=bucket_name, Key=key, VersionId=delete_marker_version_id)
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert len(response['Versions']) == num_versions
+    assert response['Versions'][0]['IsLatest'] == True
+    assert not 'DeleteMarkers' in response
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    body = _get_body(response)
+    assert body == contents[-1]
 
     clean_up_bucket(client, bucket_name, key, version_ids)
 
+
 @pytest.mark.fails_on_dbstore
-def test_versioning_stack_delete_merkers():
+@pytest.mark.versioning
+def test_versioning_stack_delete_markers():
     bucket_name = get_new_bucket()
     client = get_client()
     check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
@@ -7794,6 +7832,7 @@ def test_versioning_stack_delete_merkers():
     assert len(versions) == 1
     assert len(delete_markers) == 3
 
+@pytest.mark.versioning
 def test_versioning_obj_plain_null_version_removal():
     bucket_name = get_new_bucket()
     check_versioning(bucket_name, None)
@@ -7814,6 +7853,7 @@ def test_versioning_obj_plain_null_version_removal():
     response = client.list_object_versions(Bucket=bucket_name)
     assert not 'Versions' in response
 
+@pytest.mark.versioning
 def test_versioning_obj_plain_null_version_overwrite():
     bucket_name = get_new_bucket()
     check_versioning(bucket_name, None)
@@ -7847,6 +7887,7 @@ def test_versioning_obj_plain_null_version_overwrite():
     response = client.list_object_versions(Bucket=bucket_name)
     assert not 'Versions' in response
 
+@pytest.mark.versioning
 def test_versioning_obj_plain_null_version_overwrite_suspended():
     bucket_name = get_new_bucket()
     check_versioning(bucket_name, None)
@@ -7912,6 +7953,7 @@ def overwrite_suspended_versioning_obj(client, bucket_name, key, version_ids, co
     return (version_ids, contents)
 
 
+@pytest.mark.versioning
 def test_versioning_obj_suspend_versions():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -7945,6 +7987,7 @@ def test_versioning_obj_suspend_versions():
     assert len(version_ids) == len(contents)
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_obj_suspended_copy():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -7991,6 +8034,7 @@ def test_versioning_obj_suspended_copy():
     client.delete_object(Bucket=bucket_name2, Key=key1)
     client.delete_bucket(Bucket=bucket_name2)
 
+@pytest.mark.versioning
 def test_versioning_obj_create_versions_remove_all():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8007,6 +8051,7 @@ def test_versioning_obj_create_versions_remove_all():
     assert len(version_ids) == 0
     assert len(version_ids) == len(contents)
 
+@pytest.mark.versioning
 def test_versioning_obj_create_versions_remove_special_names():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8025,6 +8070,7 @@ def test_versioning_obj_create_versions_remove_special_names():
         assert len(version_ids) == len(contents)
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_obj_create_overwrite_multipart():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8053,6 +8099,7 @@ def test_versioning_obj_create_overwrite_multipart():
     assert len(version_ids) == 0
     assert len(version_ids) == len(contents)
 
+@pytest.mark.versioning
 def test_versioning_obj_list_marker():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8109,6 +8156,7 @@ def test_versioning_obj_list_marker():
         i += 1
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_copy_obj_version():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8146,6 +8194,7 @@ def test_versioning_copy_obj_version():
     body = _get_body(response)
     assert body == contents[-1]
 
+@pytest.mark.versioning
 def test_versioning_multi_object_delete():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8171,6 +8220,7 @@ def test_versioning_multi_object_delete():
     response = client.list_object_versions(Bucket=bucket_name)
     assert not 'Versions' in response
 
+@pytest.mark.versioning
 def test_versioning_multi_object_delete_with_marker():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8204,6 +8254,7 @@ def test_versioning_multi_object_delete_with_marker():
     assert not 'DeleteMarkers' in response
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_multi_object_delete_with_marker_create():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8225,6 +8276,7 @@ def test_versioning_multi_object_delete_with_marker_create():
     assert delete_marker_version_id == delete_markers[0]['VersionId']
     assert key == delete_markers[0]['Key']
 
+@pytest.mark.versioning
 def test_versioned_object_acl():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8293,6 +8345,7 @@ def test_versioned_object_acl():
     check_grants(grants, default_policy)
 
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioned_object_acl_no_version_specified():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8379,6 +8432,7 @@ def _do_clear_versioned_bucket_concurrent(client, bucket_name):
         t.append(thr)
     return t
 
+@pytest.mark.versioning
 def test_versioned_concurrent_object_create_concurrent_remove():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8403,6 +8457,7 @@ def test_versioned_concurrent_object_create_concurrent_remove():
         response = client.list_object_versions(Bucket=bucket_name)
         assert not 'Versions' in response
 
+@pytest.mark.versioning
 def test_versioned_concurrent_object_create_and_remove():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8587,6 +8642,7 @@ def test_lifecyclev2_expiration():
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
+@pytest.mark.versioning
 def test_lifecycle_expiration_versioning_enabled():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8738,6 +8794,7 @@ def test_lifecycle_expiration_tags2():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_expiration_versioned_tags2():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8808,6 +8865,7 @@ def verify_lifecycle_expiration_noncur_tags(client, bucket_name, secs):
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_expiration_noncur_tags1():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8845,6 +8903,7 @@ def wait_interval_list_object_versions(client, bucket_name, secs):
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_expiration_newer_noncurrent():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8900,6 +8959,7 @@ def get_byte_buffer(nbytes):
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_expiration_size_gt():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8953,6 +9013,7 @@ def test_lifecycle_expiration_size_gt():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_expiration_size_lt():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -9296,6 +9357,7 @@ def test_lifecycle_set_noncurrent():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_noncur_expiration():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -9352,6 +9414,7 @@ def test_lifecycle_set_empty_filter():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_deletemarker_expiration():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -9387,6 +9450,7 @@ def test_lifecycle_deletemarker_expiration():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_deletemarker_expiration_with_days_tag():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -9631,6 +9695,7 @@ def test_lifecycle_set_noncurrent_transition():
 @pytest.mark.lifecycle_expiration
 @pytest.mark.lifecycle_transition
 @pytest.mark.fails_on_aws
+@pytest.mark.versioning
 def test_lifecycle_noncur_transition():
     sc = configured_storage_classes()
     if len(sc) < 3:
@@ -9700,6 +9765,7 @@ def test_lifecycle_noncur_transition():
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_expiration
 @pytest.mark.lifecycle_transition
+@pytest.mark.versioning
 def test_lifecycle_plain_null_version_current_transition():
     sc = configured_storage_classes()
     if len(sc) < 2:
@@ -9924,6 +9990,7 @@ def test_lifecycle_cloud_multiple_transition():
 @pytest.mark.cloud_transition
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_noncur_cloud_transition():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc == None:
@@ -10434,6 +10501,7 @@ def test_read_through():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_noncur_obj():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc == None:
@@ -10604,6 +10672,7 @@ def test_list_objects_restore_status():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_list_object_versions_restore_status():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -12373,6 +12442,7 @@ def test_delete_tags_obj_public():
     response = client.get_object_tagging(Bucket=bucket_name, Key=key)
     assert len(response['TagSet']) == 0
 
+@pytest.mark.versioning
 def test_versioning_bucket_atomic_upload_return_version_id():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -12402,6 +12472,7 @@ def test_versioning_bucket_atomic_upload_return_version_id():
     response = client.put_object(Bucket=bucket_name, Key=key)
     assert not 'VersionId' in response
 
+@pytest.mark.versioning
 def test_versioning_bucket_multipart_upload_return_version_id():
     content_type='text/bla'
     objlen = 30 * 1024 * 1024
@@ -13316,6 +13387,7 @@ def test_object_lock_put_obj_lock_invalid_bucket():
     assert status == 409
     assert error_code == 'InvalidBucketState'
 
+@pytest.mark.versioning
 def test_object_lock_put_obj_lock_enable_after_create():
     bucket_name = get_new_bucket_name()
     client = get_client()
@@ -19225,6 +19297,7 @@ def test_get_checksum_object_attributes():
     assert response['Checksum']['ChecksumSHA256'] == sha256sum
     assert 'ObjectParts' not in response
 
+@pytest.mark.versioning
 def test_get_versioned_object_attributes():
     bucket_name = get_new_bucket()
     check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
@@ -19398,6 +19471,7 @@ def test_delete_marker_nonversioned():
 
 @pytest.mark.delete_marker
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_marker_versioned():
     bucket = get_new_bucket()
     client = get_client()
@@ -19411,6 +19485,7 @@ def test_delete_marker_versioned():
 
 @pytest.mark.delete_marker
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_marker_suspended():
     bucket = get_new_bucket()
     client = get_client()
@@ -19426,6 +19501,7 @@ def test_delete_marker_suspended():
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_expiration
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_marker_expiration():
     bucket = get_new_bucket()
     client = get_client()
@@ -19550,6 +19626,7 @@ def test_multipart_put_object_if_match():
 
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_put_current_object_if_none_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19579,6 +19656,7 @@ def test_put_current_object_if_none_match():
 
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_multipart_put_current_object_if_none_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19606,6 +19684,7 @@ def test_multipart_put_current_object_if_none_match():
 
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_put_current_object_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19637,6 +19716,7 @@ def test_put_current_object_if_match():
 
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_multipart_put_current_object_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19664,6 +19744,7 @@ def test_multipart_put_current_object_if_match():
 
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_put_object_current_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19717,6 +19798,7 @@ def test_delete_object_if_match():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_current_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19752,6 +19834,7 @@ def test_delete_object_current_if_match():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_version_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19802,6 +19885,7 @@ def test_delete_object_if_match_last_modified_time():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_current_if_match_last_modified_time():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19826,6 +19910,7 @@ def test_delete_object_current_if_match_last_modified_time():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_version_if_match_last_modified_time():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19870,6 +19955,7 @@ def test_delete_object_if_match_size():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_current_if_match_size():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19893,6 +19979,7 @@ def test_delete_object_current_if_match_size():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_object_version_if_match_size():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19936,6 +20023,7 @@ def test_delete_objects_if_match():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_current_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -19958,6 +20046,7 @@ def test_delete_objects_current_if_match():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_version_if_match():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -20003,6 +20092,7 @@ def test_delete_objects_if_match_last_modified_time():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_current_if_match_last_modified_time():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -20028,6 +20118,7 @@ def test_delete_objects_current_if_match_last_modified_time():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_version_if_match_last_modified_time():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -20076,6 +20167,7 @@ def test_delete_objects_if_match_size():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_current_if_match_size():
     client = get_client()
     bucket = get_new_bucket(client)
@@ -20101,6 +20193,7 @@ def test_delete_objects_current_if_match_size():
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_delete_objects_version_if_match_size():
     client = get_client()
     bucket = get_new_bucket(client)
