@@ -2,6 +2,7 @@ import os
 
 from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
+    EarmarkContents,
     EarmarkException,
     EarmarkParseError,
     EarmarkTopScope,
@@ -474,6 +475,24 @@ class CephFSEarmarkResolver:
             return parsed.top == top_level_scope
         except EarmarkParseError:
             return False
+
+    def test_and_set_earmark(
+        self, path: str, volume: str, earmark: EarmarkContents
+    ) -> Tuple[bool, Optional[EarmarkContents]]:
+        """Perform a test-and-set of an earmark given the a path, a cephfs
+        volume, and an earmark object.
+        If the path has no earmark or is upgradable to the given earmark the
+        function will return (True, <new earmark>) otherwise the function may
+        return (False, <old earmark>) or raise an EarmarkConflictError
+        exception.
+        """
+        with self._manager(path, volume) as emgr:
+            changed, current = emgr.test_and_set(earmark)
+        if changed:
+            logger.debug(
+                'Set earmark [%s] on %s in volume %s', current, path, volume
+            )
+        return changed, current
 
 
 class NvmeofMetadataPoolHelper:
