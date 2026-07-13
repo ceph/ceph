@@ -40,8 +40,7 @@ import {
   CephServiceSpec,
   CertificateType,
   QatOptions,
-  QatSepcs,
-  CERTIFICATE_STATUS_ICON_MAP
+  QatSepcs
 } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -129,7 +128,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   hostsAndLabels$: Observable<{ hosts: { content: string }[]; labels: { content: string }[] }>;
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource: string = null;
-  statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
