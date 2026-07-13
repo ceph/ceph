@@ -351,10 +351,52 @@ class NodeExtentAccessorT {
     }
   }
 
+  // Returns false if the underlying extent has been invalidated by GC or conflict.
+  bool is_extent_valid() const {
+    return !is_retired() && extent->is_valid();
+  }
+
+  NodeExtentRef get_extent_ref() const {
+    assert(!is_retired());
+    return extent;
+  }
+
+  // A node that is tracked across transaction keeps the same NodeExtentAccessorT
+  // instance after the transaction that wrote it commits.
+  void reset_after_commit(context_t c) {
+    assert(!is_retired());
+    if (state == nextent_state_t::READ_ONLY) {
+      // nothing carried over, or already reset
+      return;
+    }
+    if (!extent->is_stable()) {
+      // in-flight mutation, do not reset
+      return;
+    }
+    assert(state == nextent_state_t::MUTATION_PENDING ||
+           state == nextent_state_t::FRESH);
+    // a *stable* extent has been fully committed, the prior recorder is gone
+    assert(extent->is_stable_ready());
+    assert(extent->get_recorder() == nullptr ||
+           extent->get_recorder()->is_empty());
+    LOG_PREFIX(OTree::Extent::reset_after_commit);
+    SUBDEBUGT(seastore_onode,
+        "reused extent {} carried stale state={} from a committed txn, "
+        "resetting to READ_ONLY",
+        c.t, extent->get_laddr(), static_cast<int>(state));
+    state = nextent_state_t::READ_ONLY;
+    mut.reset();
+    recorder = nullptr;
+  }
+
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
     assert(!is_retired());
+    // TODO: lazily re-sync the accessor state to the already-committed extent
+    // for the next (onoderef) re-use. Logically, this should happen at the extent's commit.
+    // A reused accessor carrying stale MUTATION_PENDING/FRESH might be worth removing.
+    reset_after_commit(c);
     if (state == nextent_state_t::READ_ONLY) {
       assert(extent->is_stable());
       assert(extent->is_stable_ready());

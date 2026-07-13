@@ -130,6 +130,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   node_offset_t free_size() const override { return extent.read().free_size(); }
   extent_len_t total_size() const override { return extent.read().total_size(); }
   bool is_extent_retired() const override { return extent.is_retired(); }
+  bool is_node_extent_valid() const override { return extent.is_extent_valid(); }
+  void add_to_transaction(Transaction& t) const override {
+    auto ref = extent.get_extent_ref();
+    if (!t.is_in_read_set(ref)) {
+      t.add_to_read_set(ref);
+    }
+  }
 
   std::optional<key_view_t> get_pivot_index() const override {
     if (is_level_tail()) {

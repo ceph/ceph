@@ -462,6 +462,7 @@ public:
     ObjectState os;
     crimson::osd::SnapSetContextRef ssc;
     crimson::os::FuturizedStore::Shard::attrs_t attr_cache;
+    std::shared_ptr<void> cached_onode;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
 

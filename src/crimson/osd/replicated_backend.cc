@@ -180,6 +180,15 @@ ReplicatedBackend::submit_transaction(
     txn,
     false);
 
+  // Populate the per-oid onode cache so SeaStore can skip fltree lookups.
+  // See: get_attrs_with_onode
+  if (obc->cached_onode) {
+    txn.onode_cache[ghobject_t{hoid}] = obc->cached_onode;
+  }
+  if (_new_clone && _new_clone->cached_onode) {
+    txn.onode_cache[ghobject_t{_new_clone->obs.oi.soid}] = _new_clone->cached_onode;
+  }
+
   auto all_completed = interruptor::make_interruptible(
     crimson::os::with_store_do_transaction(
       shard_services.get_store(pg.get_store_index()),

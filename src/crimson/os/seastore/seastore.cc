@@ -123,6 +123,8 @@ SeaStore::Shard::Shard(
   :root(root),
    max_object_size(
      get_conf<uint64_t>("seastore_default_max_object_size")),
+   onode_cache_bypass(
+     get_conf<bool>("seastore_onode_cache_bypass")),
    is_test(is_test),
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
@@ -1479,7 +1481,10 @@ SeaStore::Shard::get_attrs(
   assert(store_active);
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
-
+  auto _ = seastar::defer([this] noexcept {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
   return repeat_with_onode<attrs_t>(
     ch,
     oid,
@@ -1493,10 +1498,37 @@ SeaStore::Shard::get_attrs(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
+  );
+}
+
+SeaStore::Shard::get_attrs_ertr::future<
+    std::pair<SeaStore::Shard::attrs_t, std::shared_ptr<void>>>
+SeaStore::Shard::get_attrs_with_onode(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  uint32_t op_flags)
+{
+  assert(store_active);
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+  std::shared_ptr<void> onode_handle;
+  auto attrs = co_await repeat_with_onode<attrs_t>(
+    ch, oid, Transaction::src_t::READ, "get_attrs",
+    op_type_t::GET_ATTRS, op_flags,
+    [this, &onode_handle](auto& t, auto& onode) {
+      onode_handle = std::static_pointer_cast<void>(
+        std::make_shared<OnodeRef>(&onode));
+      return _get_attrs(t, onode);
+    }
+  ).handle_error(
+    crimson::ct_error::input_output_error::assert_failure{
+      "EIO when getting attrs"},
+    crimson::ct_error::pass_further_all{}
   ).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
+  co_return std::make_pair(std::move(attrs), std::move(onode_handle));
 }
 
 seastar::future<struct stat> SeaStore::Shard::_stat(
@@ -1933,17 +1965,45 @@ SeaStore::Shard::_do_transaction_step(
       op->op == Transaction::OP_ZERO) {
     create = true;
   }
+
+  if (onodes[op->oid] && !onodes[op->oid]->is_reusable()) {
+    DEBUGT("[onode_cache] stale onodes[] entry (extent invalidated), re-fetch oid={}",
+           *ctx.transaction, i.get_oid(op->oid));
+    onodes[op->oid].reset();
+  }
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
     auto t0 = std::chrono::steady_clock::now();
-    if (!create) {
-      DEBUGT("op {}, get oid={} ...",
-             *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_onode(*ctx.transaction, oid);
+    auto& cache = ctx.ext_transaction.onode_cache;
+
+    // Fast path: cache hit — assign directly and skip the fltree lookup below.
+    auto it = cache.find(oid);
+    if (it != cache.end() && onode_cache_bypass) {
+      auto sp = std::static_pointer_cast<OnodeRef>(it->second);
+      if ((*sp)->is_reusable()) {
+        DEBUGT("[onode_cache] hit oid={}", *ctx.transaction, oid);
+        onodes[op->oid] = *sp;
+        onodes[op->oid]->register_with_transaction(*ctx.transaction);
+      } else {
+        DEBUGT("[onode_cache] stale (cursor invalidated) oid={}", *ctx.transaction, oid);
+      }
     } else {
-      DEBUGT("op {}, get_or_create oid={} ...",
-             *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      DEBUGT("[onode_cache] miss oid={}", *ctx.transaction, oid);
+    }
+
+    if (!onodes[op->oid]) {
+      if (!create) {
+        DEBUGT("op {}, get oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        fut = onode_manager->get_onode(*ctx.transaction, oid);
+      } else {
+        DEBUGT("op {}, get_or_create oid={} ...",
+               *ctx.transaction, (uint32_t)op->op, oid);
+        fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      }
+      fut = std::move(fut).si_then([&ctx](auto onode) {
+        return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
+      });
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
       ctx.get_onode_time += std::chrono::steady_clock::now() - t0;

@@ -370,6 +370,9 @@ public:
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
+      if (!static_cast<ChildT*>(child)->is_valid()) {
+        return child_pos_t<T>(&me, pos);
+      }
       return etvr.get_extent_viewable_by_trans<ChildT>(
         t, static_cast<ChildT*>(child));
     } else if (me.is_pending()) {
@@ -377,6 +380,9 @@ public:
       auto spos = sparent.lower_bound(key).get_offset();
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
+        if (!static_cast<ChildT*>(child)->is_valid()) {
+          return child_pos_t<T>(&sparent, spos);
+        }
         return etvr.get_extent_viewable_by_trans<ChildT>(
           t, static_cast<ChildT*>(child));
       } else {

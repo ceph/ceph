@@ -100,6 +100,13 @@ class tree_cursor_t final
    */
   bool is_tracked() const { return !!ref_leaf_node && !position.is_end(); }
 
+  // Returns false if the leaf extent has been invalidated by GC or conflict.
+  bool is_leaf_extent_valid() const;
+
+  // Registers the leaf node extent with t's read_set so that prepare_mutate
+  // can find it via read_set.count().
+  void add_leaf_to_read_set(Transaction& t) const;
+
   /**
    * is_invalid
    *
@@ -211,7 +218,10 @@ class tree_cursor_t final
    public:
     Cache(Ref<LeafNode>&);
     void validate_is_latest(const search_position_t&) const;
-    void invalidate() { needs_update_all = true; }
+    void invalidate() {
+      needs_update_all = true;
+      value_payload_mut.reset();
+    }
     void update_all(const node_version_t&, const key_view_t&, const value_header_t*);
     const key_view_t& get_key_view(
         value_magic_t magic, const search_position_t& pos) {
@@ -242,7 +252,6 @@ class tree_cursor_t final
 
     // cached data-structures to update value payload
     std::optional<NodeExtentMutable> value_payload_mut;
-    ValueDeltaRecorder* p_value_recorder = nullptr;
   };
   mutable Cache cache;
 
@@ -392,6 +401,10 @@ class Node
   virtual bool is_tracking() const = 0;
 
   virtual void track_merge(Ref<Node>, match_stage_t, search_position_t&) = 0;
+
+public:
+  bool is_node_extent_valid() const;
+  void add_node_extent_to_read_set(Transaction& t) const;
 
  protected:
   Node(NodeImplURef&&);

@@ -252,6 +252,9 @@ private:
   std::list<Context *> on_applied_sync;
 
 public:
+#ifdef WITH_CRIMSON
+  std::map<ghobject_t, std::shared_ptr<void>> onode_cache;
+#endif
   Transaction() = default;
   explicit Transaction(uint64_t data_features)
     : data_features(data_features) {
@@ -270,7 +273,11 @@ public:
     op_bl(std::move(other.op_bl)),
     on_applied(std::move(other.on_applied)),
     on_commit(std::move(other.on_commit)),
-    on_applied_sync(std::move(other.on_applied_sync)) {
+    on_applied_sync(std::move(other.on_applied_sync))
+#ifdef WITH_CRIMSON
+    , onode_cache(std::move(other.onode_cache))
+#endif
+    {
     other.coll_id = 0;
     other.object_id = 0;
   }
@@ -288,6 +295,9 @@ public:
     on_applied = std::move(other.on_applied);
     on_commit = std::move(other.on_commit);
     on_applied_sync = std::move(other.on_applied_sync);
+#ifdef WITH_CRIMSON
+    onode_cache = std::move(other.onode_cache);
+#endif
     other.coll_id = 0;
     other.object_id = 0;
     return *this;

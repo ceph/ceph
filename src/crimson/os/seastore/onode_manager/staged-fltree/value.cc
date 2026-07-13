@@ -37,6 +37,23 @@ bool Value::is_tracked() const
   return p_cursor->is_tracked();
 }
 
+bool Value::is_cursor_tracked() const
+{
+  return p_cursor && p_cursor->is_tracked();
+}
+
+bool Value::is_cursor_leaf_extent_valid() const
+{
+  return p_cursor && p_cursor->is_leaf_extent_valid();
+}
+
+void Value::add_cursor_leaf_to_read_set(Transaction& t) const
+{
+  if (p_cursor) {
+    p_cursor->add_leaf_to_read_set(t);
+  }
+}
+
 void Value::invalidate()
 {
   p_cursor.reset();

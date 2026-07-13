@@ -189,6 +189,18 @@ void tree_cursor_t::invalidate()
   // I must be removed from LeafNode
 }
 
+bool tree_cursor_t::is_leaf_extent_valid() const
+{
+  return is_tracked() && ref_leaf_node->is_node_extent_valid();
+}
+
+void tree_cursor_t::add_leaf_to_read_set(Transaction& t) const
+{
+  if (is_tracked()) {
+    ref_leaf_node->add_node_extent_to_read_set(t);
+  }
+}
+
 /*
  * tree_cursor_t::Cache
  */
@@ -213,7 +225,6 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
          (int)ref_leaf_node->get_node_size());
 
   value_payload_mut.reset();
-  p_value_recorder = nullptr;
 }
 
 void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version)
@@ -221,7 +232,22 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
   assert(!needs_update_all);
   assert(version.layout == current_version.layout);
   if (version.state == current_version.state) {
-    // cache is already latest.
+    // Normally the cache is already latest
+    // On FLTreeOnode cursor reuse reset the state changes from MUTATION_PENDING to
+    // READ_ONLY back to MUTATION_PENDING, making the before/after states identical
+    // even though the buffer was changed. Instead detect this by comparing buffer pointers.
+    if (p_node_base != nullptr) {
+      auto current_p_node_base = ref_leaf_node->read();
+      if (current_p_node_base != p_node_base) {
+        assert(key_view.has_value());
+        assert(p_value_header != nullptr);
+        auto node_size = ref_leaf_node->get_node_size();
+        reset_ptr(p_value_header, p_node_base, current_p_node_base, node_size);
+        key_view->reset_to(p_node_base, current_p_node_base, node_size);
+        value_payload_mut.reset();
+        p_node_base = current_p_node_base;
+      }
+    }
   } else if (version.state < current_version.state) {
     // the extent has been copied but the layout has not been changed.
     assert(p_node_base != nullptr);
@@ -237,7 +263,6 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
               current_p_node_base, node_size);
     key_view->reset_to(p_node_base, current_p_node_base, node_size);
     value_payload_mut.reset();
-    p_value_recorder = nullptr;
 
     p_node_base = current_p_node_base;
   } else {
@@ -278,16 +303,12 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(
     context_t c, const search_position_t& pos)
 {
   make_latest(c.vb.get_header_magic(), pos);
-  if (!value_payload_mut.has_value()) {
-    assert(!p_value_recorder);
-    auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
-    auto current_version = ref_leaf_node->get_version();
-    maybe_duplicate(current_version);
-    value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
-    p_value_recorder = value_mutable.second;
-    validate_is_latest(pos);
-  }
-  return {*value_payload_mut, p_value_recorder};
+  auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
+  auto current_version = ref_leaf_node->get_version();
+  maybe_duplicate(current_version);
+  value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
+  validate_is_latest(pos);
+  return {*value_payload_mut, value_mutable.second};
 }
 
 /*
@@ -295,6 +316,16 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(
  */
 
 Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
+
+bool Node::is_node_extent_valid() const
+{
+  return impl->is_node_extent_valid();
+}
+
+void Node::add_node_extent_to_read_set(Transaction& t) const
+{
+  impl->add_to_transaction(t);
+}
 
 Node::~Node()
 {
@@ -1596,12 +1627,18 @@ eagain_ifuture<Ref<Node>> InternalNode::get_or_track_child(
       child->as_child(position, this);
       return child;
     });
-  }().si_then([this_ref, this, position, child_addr] (auto child) {
+  }().si_then([this_ref, this, position, child_addr, c, FNAME] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
     std::ignore = position;
     std::ignore = child_addr;
     validate_child_tracked(*child);
+    if (unlikely(!child->is_node_extent_valid())) {
+      DEBUGT("loaded child at pos({}) addr={} became invalid, conflicting",
+             c.t, position, child_addr);
+      child->deref_parent();
+      c.t.test_set_conflict();
+    }
     return child;
   });
 }

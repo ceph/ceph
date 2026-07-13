@@ -130,6 +130,12 @@ struct FLTreeOnode final : Onode, Value {
   bool is_alive() const {
     return status != status_t::DELETED;
   }
+  bool is_reusable() const final {
+    return is_alive() && is_cursor_leaf_extent_valid();
+  }
+  void register_with_transaction(Transaction& t) const final {
+    add_cursor_leaf_to_read_set(t);
+  }
   const onode_layout_t &get_layout() const final {
     assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
