@@ -63,7 +63,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_VERSION "POSIX-version"
 #define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
-#define RGW_POSIX_ATTR_MULTIPART_PART_SIZES "POSIX-Multipart-Part-Sizes"
+#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "POSIX-Multipart-Total-Size"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -3457,7 +3457,59 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    bool* truncated, list_parts_each_t&& each_func,
 			    optional_yield y)
 {
-  return -EOPNOTSUPP;
+  if (ent->get_type() != ObjectType::MULTIPART) {
+    return 0;
+  }
+
+  uint16_t pc = 0;
+  if (!decode_raw_attr(state.attrset, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc) || pc == 0) {
+    return 0;
+  }
+
+  auto* mpdir = static_cast<posix::MPDirectory*>(ent.get());
+  int start = marker + 1;
+  int end = std::min((int)pc, marker + max_parts);
+  int count = 0;
+
+  for (int pn = start; pn <= end; ++pn) {
+    auto part_file = mpdir->get_part_file(pn);
+    int ret = part_file->open(dpp);
+    if (ret < 0) {
+      continue;
+    }
+
+    Object::Part obj_part;
+    obj_part.part_number = pn;
+
+    Attrs part_attrs;
+    ret = part_file->read_attrs(dpp, y, part_attrs);
+    if (ret == 0) {
+      POSIXUploadPartInfo info;
+      if (decode_raw_attr(part_attrs, RGW_POSIX_ATTR_MPUPLOAD, info)) {
+        obj_part.part_size = info.size;
+        if (info.cksum) {
+          obj_part.cksum = *info.cksum;
+        }
+      }
+    }
+
+    if (obj_part.part_size == 0) {
+      ret = part_file->stat(dpp);
+      if (ret == 0) {
+        obj_part.part_size = part_file->get_size();
+      }
+    }
+
+    ret = each_func(obj_part);
+    if (ret < 0) {
+      return ret;
+    }
+    ++count;
+  }
+
+  *next_marker = marker + count;
+  *truncated = (*next_marker < (int)pc);
+  return 0;
 }
 
 bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
@@ -3929,23 +3981,30 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
 
   if (params.part_num) {
     int pn = *params.part_num;
-    std::vector<uint64_t> part_sizes;
-    if (!decode_raw_attr(source->get_attrs(), RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes)) {
+    if (source->ent->get_type() != ObjectType::MULTIPART) {
       if (pn == 1) {
         params.parts_count = 1;
       } else {
         return -ERR_INVALID_PART;
       }
     } else {
-      if (pn < 1 || pn > (int)part_sizes.size()) {
+      auto* mpdir = static_cast<posix::MPDirectory*>(source->ent.get());
+      const auto& pmap = mpdir->get_parts();
+      std::string pname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", pn);
+      auto it = pmap.find(pname);
+      if (it == pmap.end()) {
         return -ERR_INVALID_PART;
       }
       int64_t ofs = 0;
-      for (int i = 0; i < pn - 1; ++i) {
-        ofs += part_sizes[i];
+      for (int i = 1; i < pn; ++i) {
+        std::string prev = MP_OBJ_PART_PFX + fmt::format("{:0>5}", i);
+        auto pit = pmap.find(prev);
+        if (pit != pmap.end()) {
+          ofs += pit->second;
+        }
       }
       part_ofs = ofs;
-      source->set_obj_size(part_sizes[pn - 1]);
+      source->set_obj_size(it->second);
     }
   }
 
@@ -4442,7 +4501,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
-  std::vector<uint64_t> part_sizes;
 
   ofs = accounted_size = 0;
 
@@ -4526,7 +4584,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 #endif
 
-      part_sizes.push_back(part->get_size());
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
@@ -4552,7 +4609,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   {
     uint16_t pc = total_parts;
     encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_COUNT, pc);
-    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_PART_SIZES, part_sizes);
+    encode_attr(attrs, RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE, accounted_size);
 
     ret = shadow->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
@@ -4726,6 +4783,7 @@ int POSIXMultipartWriter::complete(
   }
 
   info.num = part_num;
+  info.size = part_file->get_size();
   info.etag = etag;
   info.cksum = cksum;
   info.mtime = set_mtime;

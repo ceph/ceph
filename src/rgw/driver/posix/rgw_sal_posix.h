@@ -286,6 +286,7 @@ public:
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
+  const std::map<std::string, int64_t>& get_parts() const { return parts; }
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<MPDirectory>(*this);
   }
@@ -999,7 +1000,6 @@ private:
   POSIXDriver* driver;
   RGWAccessControlPolicy acls;
   std::unique_ptr<posix::FSEnt> ent;
-  std::map<std::string, int64_t> parts;
   DeleteResult del_result;
 
 public:
@@ -1231,25 +1231,30 @@ WRITE_CLASS_ENCODER(POSIXMPObj)
 
 struct POSIXUploadPartInfo {
   uint32_t num{0};
+  uint64_t size{0};
   std::string etag;
   ceph::real_time mtime;
   std::optional<rgw::cksum::Cksum> cksum;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
     encode(cksum, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
     if (struct_v > 1) {
       decode(cksum, bl);
+    }
+    if (struct_v > 2) {
+      decode(size, bl);
     }
     DECODE_FINISH(bl);
   }
