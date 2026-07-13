@@ -424,37 +424,6 @@ class CephFSEarmarkResolver:
         self._mgr = mgr
         self._cephfs_client = client or CephfsClient(mgr)
 
-    def _extract_path_component(self, path: str, index: int) -> Optional[str]:
-        """
-        Extracts a specific component from the path based on the given index.
-
-        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
-        :param index: The index of the component to extract (1 for subvolumegroup, 2 for subvolume)
-        :return: The component at the specified index
-        """
-        parts = path.strip('/').split('/')
-        if len(parts) >= 3 and parts[0] == "volumes":
-            return parts[index]
-        return None
-
-    def _fetch_subvolumegroup_from_path(self, path: str) -> Optional[str]:
-        """
-        Extracts and returns the subvolume group name from the given path.
-
-        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
-        :return: The subvolume group name
-        """
-        return self._extract_path_component(path, 1)
-
-    def _fetch_subvolume_from_path(self, path: str) -> Optional[str]:
-        """
-        Extracts and returns the subvolume name from the given path.
-
-        :param path: The path in the format '/volumes/{subvolumegroup}/{subvolume}/..'
-        :return: The subvolume name
-        """
-        return self._extract_path_component(path, 2)
-
     def _manage_earmark(self, path: str, volume: str, operation: str, earmark: Optional[str] = None) -> Optional[str]:
         """
         Manages (get or set) the earmark for a subvolume based on the provided parameters.
