@@ -60,6 +60,52 @@
         },
         "PostFiltering":{
             "type":"boolean"
+        },
+        "GetIndexStatsOutput":{
+            "type":"structure",
+            "required":[],
+            "members":{
+                "indexStats":{
+                    "shape":"IndexStatsData",
+                    "documentation":"<p>Statistics about the vector index.</p>"
+                }
+            }
+        },
+        "IndexStatsData":{
+            "type":"structure",
+            "required":[],
+            "members":{
+                "numIndexedRows":{
+                    "shape":"Long",
+                    "documentation":"<p>Number of rows that have been indexed.</p>"
+                },
+                "numUnindexedRows":{
+                    "shape":"Long",
+                    "documentation":"<p>Number of rows that have not yet been indexed.</p>"
+                },
+                "numIndexSegments":{
+                    "shape":"Integer",
+                    "documentation":"<p>Number of index segments (parts) that make up the vector index.</p>"
+                }
+            }
+        },
+        "Long":{
+            "type":"long"
+        },
+        "Integer":{
+            "type":"integer"
+        }
+    },
+    "operations": {
+        "GetIndexStats":{
+            "name":"GetIndexStats",
+            "http":{
+                "method":"POST",
+                "requestUri":"/GetIndexStats"
+            },
+            "input":{"shape":"GetIndexInput"},
+            "output":{"shape":"GetIndexStatsOutput"},
+            "documentation":"<p>Returns statistics about a vector index, including the number of indexed rows, unindexed rows, and indices.</p>"
         }
     }
 }

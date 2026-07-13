@@ -2645,7 +2645,9 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
                             const rgw_placement_rule& placement_rule,
+                            const RGWZonePlacementInfo* zone_placement,
                             const std::map<std::string, bufferlist>& attrs,
+                            std::optional<rgw::BucketIndexType> index_type,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
                             obj_version* pep_objv,
@@ -2669,6 +2671,14 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.owner = owner;
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
+
+    if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
+      init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                                 index_type, std::nullopt);
+    }
 
     if (creation_time) {
       info.creation_time = *creation_time;
