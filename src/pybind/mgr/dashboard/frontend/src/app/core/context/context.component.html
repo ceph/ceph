@@ -11,7 +11,8 @@
                 i18n-title
                 title="Object gateway">
           {{ data.selectedDaemon.id }}
-          <cds-tag type="blue" size="sm">{{ data.selectedDaemon.zonegroup_name }}</cds-tag>
+          <cds-tag type="blue"
+                   size="sm">{{ data.selectedDaemon.zonegroup_name }}</cds-tag>
         </button>
         <div ngbDropdownMenu>
           <ng-container *ngFor="let daemon of data.daemons">
@@ -19,7 +20,8 @@
                     class="ctx-bar-available-rgw-daemon"
                     (click)="onDaemonSelection(daemon)">
               {{ daemon.id }}
-              <cds-tag type="blue" size="sm">{{ daemon.zonegroup_name }}</cds-tag>
+              <cds-tag type="blue"
+                       size="sm">{{ daemon.zonegroup_name }}</cds-tag>
             </button>
           </ng-container>
         </div>

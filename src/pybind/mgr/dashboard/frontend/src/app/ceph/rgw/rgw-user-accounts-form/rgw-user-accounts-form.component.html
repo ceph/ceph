@@ -10,7 +10,9 @@
            class="form-header cds--type-heading-04 cds-mb-5">{{ action | titlecase }} {{ resource | lowercase }}
       </div>
 
-      <h4 class="cds--type-heading-03 cds-mb-4" i18n>Account details</h4>
+      <h4
+        class="cds--type-heading-03 cds-mb-4"
+        i18n>Account details</h4>
 
       <!-- Account Name -->
       <div class="form-item">
@@ -75,22 +77,43 @@
       </div>
 
       <div class="form-item cds-mt-5 cds-mb-3">
-        <h4 class="cds--type-heading-03" i18n>Advanced settings</h4>
-        <p class="cds--type-body-01" i18n>Configure resource limits and quota for this account</p>
+        <h4
+          class="cds--type-heading-03"
+          i18n>Advanced settings</h4>
+        <p
+          class="cds--type-body-01"
+          i18n>Configure resource limits and quota for this account</p>
         <div class="cds-mt-3">
-          <button type="button" class="cds--btn cds--btn--ghost advanced-settings-btn" (click)="showAdvanced = !showAdvanced">
+          <button
+            type="button"
+            class="cds--btn cds--btn--ghost advanced-settings-btn"
+            (click)="showAdvanced = !showAdvanced">
             {{ showAdvanced ? 'Hide advanced settings' : 'Show advanced settings' }}
-            <svg cdsIcon="chevron--down" *ngIf="!showAdvanced" size="16" class="cds--btn__icon"></svg>
-            <svg cdsIcon="chevron--up" *ngIf="showAdvanced" size="16" class="cds--btn__icon"></svg>
+            <svg
+              cdsIcon="chevron--down"
+              *ngIf="!showAdvanced"
+              size="16"
+              class="cds--btn__icon"></svg>
+            <svg
+              cdsIcon="chevron--up"
+              *ngIf="showAdvanced"
+              size="16"
+              class="cds--btn__icon"></svg>
           </button>
         </div>
       </div>
 
       <div *ngIf="showAdvanced">
-        <h5 class="cds--type-heading-02 cds-mb-2" i18n>Resource limits</h5>
-        <p class="cds--type-body-01 cds-mb-4" i18n>Set the mode and maximum allowed values for each resource type. Select Custom to specify a limit.</p>
+        <h5
+          class="cds--type-heading-02 cds-mb-2"
+          i18n>Resource limits</h5>
+        <p
+          class="cds--type-body-01 cds-mb-4"
+          i18n>Set the mode and maximum allowed values for each resource type. Select Custom to specify a limit.</p>
 
-        <div class="form-item form-item-append" cdsRow>
+        <div
+          class="form-item form-item-append"
+          cdsRow>
           <div cdsCol>
             <!-- Max. bucket mode -->
             <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_buckets_mode' }"></ng-container>
@@ -101,7 +124,9 @@
           </div>
         </div>
 
-        <div class="form-item form-item-append" cdsRow>
+        <div
+          class="form-item form-item-append"
+          cdsRow>
           <div cdsCol>
             <!-- Max. users mode -->
             <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_users_mode' }"></ng-container>
@@ -112,7 +137,9 @@
           </div>
         </div>
 
-        <div class="form-item form-item-append" cdsRow>
+        <div
+          class="form-item form-item-append"
+          cdsRow>
           <div cdsCol>
             <!-- Max. roles mode -->
             <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_roles_mode' }"></ng-container>
@@ -123,7 +150,9 @@
           </div>
         </div>
 
-        <div class="form-item form-item-append" cdsRow>
+        <div
+          class="form-item form-item-append"
+          cdsRow>
           <div cdsCol>
             <!-- Max. group mode -->
             <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_groups_mode' }"></ng-container>
@@ -134,7 +163,9 @@
           </div>
         </div>
 
-        <div class="form-item form-item-append" cdsRow>
+        <div
+          class="form-item form-item-append"
+          cdsRow>
           <div cdsCol>
             <!-- Max. access keys mode -->
             <ng-container *ngTemplateOutlet="selectModeTemplate;context: { formControl: 'max_access_keys_mode' }"></ng-container>
@@ -145,8 +176,12 @@
           </div>
         </div>
 
-        <h5 class="cds--type-heading-02 cds-mb-2 cds-mt-5" i18n>Quotas</h5>
-        <p class="cds--type-body-01 cds-mb-4" i18n>Define storage usage limits for the account and the buckets it owns. Quotas help control capacity consumption and enforce resource allocation policies.</p>
+        <h5
+          class="cds--type-heading-02 cds-mb-2 cds-mt-5"
+          i18n>Quotas</h5>
+        <p
+          class="cds--type-body-01 cds-mb-4"
+          i18n>Define storage usage limits for the account and the buckets it owns. Quotas help control capacity consumption and enforce resource allocation policies.</p>
 
         <!-- Account Quota -->
         <div class="form-item">
@@ -213,7 +248,7 @@
               [min]="1"
               [invalid]="!accountForm.controls[formControl].valid && accountForm.controls[formControl].dirty"
               [invalidText]="maxValError"></cds-number>
-  
+
   <cds-text-label *ngIf="accountForm.get(formControl + '_mode').value != '1'"
                   label="Maximum {{formControl.replace('max_', '').replace('_', ' ')}}"
                   for="{{formControl}}_disabled">
@@ -244,16 +279,26 @@
   <fieldset class="cds--fieldset cds-mb-4">
     <legend class="cds--label">{{quotaType | upperFirst}} quota</legend>
     <!-- Enabled -->
-    <cds-checkbox *ngIf="quotaType == 'account'" [formControlName]="formControl.enabled"
-                  [id]="quotaType+'_checkbox'" class="cds-mb-3">
+    <cds-checkbox
+      *ngIf="quotaType == 'account'"
+      [formControlName]="formControl.enabled"
+      [id]="quotaType+'_checkbox'"
+      class="cds-mb-3">
       Enable account quota
-    </cds-checkbox >
-    <cds-checkbox *ngIf="quotaType == 'bucket'" [formControlName]="formControl.enabled"
-                  [id]="quotaType+'_checkbox'" class="cds-mb-3">
+    </cds-checkbox>
+    <cds-checkbox
+      *ngIf="quotaType == 'bucket'"
+      [formControlName]="formControl.enabled"
+      [id]="quotaType+'_checkbox'"
+      class="cds-mb-3">
       Enable bucket quota
-    </cds-checkbox >
-    <p class="cds--type-body-01 cds-mb-4" *ngIf="quotaType == 'account'">Applies a storage quota to each user account.</p>
-    <p class="cds--type-body-01 cds-mb-4" *ngIf="quotaType == 'bucket'">Limits the total storage available across all buckets in an account.</p>
+    </cds-checkbox>
+    <p
+      class="cds--type-body-01 cds-mb-4"
+      *ngIf="quotaType == 'account'">Applies a storage quota to each user account.</p>
+    <p
+      class="cds--type-body-01 cds-mb-4"
+      *ngIf="quotaType == 'bucket'">Limits the total storage available across all buckets in an account.</p>
     <div class="quota-sub-block"
          *ngIf="accountForm.controls[formControl.enabled].value">
       <!-- Unlimited size -->
