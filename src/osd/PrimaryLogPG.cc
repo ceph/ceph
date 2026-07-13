@@ -1675,21 +1675,19 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         dout(20) << __func__ << " target CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE" << dendl;
 
         hobject_t start_obj;
-        epoch_t source_last_peering_reset;
+        epoch_t source_epoch;
         int64_t source_num_bytes = p->op.pool_migration_reserve.num_bytes;
         int64_t source_num_objects = p->op.pool_migration_reserve.num_objects;
 
         try {
           decode(start_obj, bp);
+          decode(source_epoch, bp);
         }
         catch (const ceph::buffer::error& e) {
-          ceph_abort_msg("unable to decode PG_POOL_MIGRATION_RESERVE start_obj");
-        }
-        try {
-          decode(source_last_peering_reset, bp);
-        }
-        catch (const ceph::buffer::error& e) {
-          ceph_abort_msg("unable to decode PG_POOL_MIGRATION_RESERVE source_last_peering_reset");
+          dout(0) << __func__ << " unable to decode PG_POOL_MIGRATION_RESERVE payload in "
+                  << *m << dendl;
+          result = -EINVAL;
+          break;
         }
 
         if (!pool.info.is_migration_target()) {
@@ -1697,22 +1695,14 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           return;
         }
 
-        // Epoch for the current retry, not necessarily the source PG epoch at time of initial request
-        if (m->get_map_epoch() < get_osdmap_epoch()) {
-          dout(20) << __func__ << " ignoring stale reservation request from epoch "
-                   << m->get_map_epoch() << " (current epoch is "
-                   << get_osdmap_epoch() << ")" << dendl;
-          return;
-        }
-
-        // Now check last_peering_reset epoch from the message payload,
-        // which is the source PG epoch at time of initial request
-        if (source_last_peering_reset < get_last_peering_reset()) {
-          dout(20) << __func__ << " ignoring stale reservation request: "
-                   << "source_last_peering_reset=" << source_last_peering_reset
-                   << " < our last_peering_reset=" << get_last_peering_reset()
+        epoch_t current_epoch = get_osdmap_epoch();
+        if (source_epoch < current_epoch) {
+          dout(20) << __func__ << " source_epoch is stale"
+                   << " source_epoch=" << source_epoch
+                   << " current_epoch=" << current_epoch
                    << dendl;
-          return;
+          result = -EBUSY;
+          break;
         }
 
         if (pool_migration_reservations_granted_target) {
@@ -13864,7 +13854,9 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   pending_pool_migration_reservation_ops.clear();
   pool_migration_reservations_granted_source = false;
   if (pool_migration_reservation_tid != 0) {
-    osd->objecter->op_cancel(pool_migration_reservation_tid, -ECANCELED);
+    if (pool_migration_reservation_tid != std::numeric_limits<ceph_tid_t>::max()) {
+      osd->objecter->op_cancel(pool_migration_reservation_tid, -ECANCELED);
+    }
     pool_migration_reservation_tid = 0;
   }
 }
@@ -15463,9 +15455,9 @@ struct C_PoolMigrationReservationCallback : public Context {
     if (r == -ECANCELED) {
       return;
     }
-    std::scoped_lock l(*pg);
-    pg->pool_migration_reservation_tid = 0;
+    std::scoped_lock lock(*pg);
     if (last_peering_reset != pg->get_last_peering_reset()) {
+      pg->pool_migration_reservation_tid = 0;
       return;
     }
 
@@ -15484,14 +15476,29 @@ struct C_PoolMigrationReservationCallback : public Context {
     if (r != 0) {
       ldpp_dout(pg, 1) << "C_PoolMigrationReservationCallback::finish() ERROR: reservation failed with r=" << r << dendl;
 
-      if (r == -ENOSPC) {
+      if (r == -EBUSY) {
+        // Target PG epoch is ahead of ours, try again after a short delay
+        pg->pool_migration_reservations_granted_source = false;
+        pg->pool_migration_reservation_tid = std::numeric_limits<ceph_tid_t>::max();
+        PrimaryLogPGRef pgref = pg;
+        std::lock_guard timer_lock(pg->osd->recovery_request_lock);
+        pg->osd->recovery_request_timer.add_event_after(
+          1.0,
+          pgref->bless_context(new LambdaContext([pgref](int) {
+            pgref->pool_migration_reservation_tid = 0;
+            pgref->queue_recovery();
+          })));
+        return;
+      } else if (r == -ENOSPC) {
         pg->stop_pool_migration_toofull();
       } else {
         pg->stop_pool_migration_revoked();
       }
+      pg->pool_migration_reservation_tid = 0;
       return;
     }
 
+    pg->pool_migration_reservation_tid = 0;
     pg->pool_migration_reservations_granted_source = true;
     pg->queue_recovery();
   }
@@ -16297,6 +16304,7 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
   }
   int64_t num_objects = std::ceil(info.stats.stats.sum.num_objects / (double)total_target_pgs);
   int64_t num_bytes = std::ceil(info.stats.stats.sum.num_bytes / (double)total_target_pgs);
+  epoch_t epoch = get_osdmap_epoch();
 
   object_locator_t target_oloc(*pool.info.migration_target, pool_migration_target_pg->ps());
 
@@ -16305,11 +16313,11 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
     pool_migration_watermark,
     num_bytes,
     num_objects,
-    get_last_peering_reset());
+    epoch);
 
   C_PoolMigrationReservationCallback *fin = new C_PoolMigrationReservationCallback(this, get_last_peering_reset());
   SnapContext snapc;
-  ceph_tid_t tid = osd->objecter->mutate(
+  Objecter::Op *objecter_op = osd->objecter->prepare_mutate_op(
     object_t(fmt::format("pool_migration_reserve_{:x}", pool_migration_target_pg->ps())),
     target_oloc,
     op,
@@ -16318,14 +16326,34 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
     0,
     new C_OnFinisher(fin,
       osd->get_objecter_finisher(get_pg_shard())));
+  objecter_op->should_resend = false;
+  ceph_tid_t tid;
+  osd->objecter->op_submit(objecter_op, &tid);
   fin->tid = tid;
 
   pool_migration_reservation_tid = tid;
 
-  dout(20) << __func__ << " Sending reservation request to pg " << pool_migration_target_pg
+  {
+    PrimaryLogPGRef pgref = this;
+    ceph_tid_t this_tid = tid;
+    std::lock_guard timer_lock(osd->recovery_request_lock);
+    osd->recovery_request_timer.add_event_after(
+      30.0,
+      bless_context(new LambdaContext([pgref, this_tid](int) {
+        if (!pgref->pool_migration_reservations_granted_source &&
+            pgref->pool_migration_reservation_tid == this_tid) {
+          pgref->pool_migration_reservation_tid = 0;
+          pgref->queue_recovery();
+        }
+      })));
+  }
+
+  dout(20) << __func__ << " sending reservation request to pg " << pool_migration_target_pg
            << " watermark=" << pool_migration_watermark
            << " bytes=" << num_bytes
-           << " objects=" << num_objects << dendl;
+           << " objects=" << num_objects
+           << " epoch=" << epoch
+           << " tid=" << tid << dendl;
 }
 
 void PrimaryLogPG::pool_migration_release_target_reservation()
