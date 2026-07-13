@@ -33,6 +33,8 @@
 
 class RGWLC;
 
+class RGWLC;
+
 namespace rgw { namespace sal {
 
 class NSFSDriver;
