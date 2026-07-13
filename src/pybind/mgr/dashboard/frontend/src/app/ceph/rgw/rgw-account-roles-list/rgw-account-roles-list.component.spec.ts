@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { ToastrModule } from 'ngx-toastr';
 
 import { of } from 'rxjs';
 
@@ -19,7 +20,7 @@ describe('RgwAccountRolesListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
+      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ToastrModule.forRoot()],
       declarations: [RgwAccountRolesListComponent],
       providers: [
         {

@@ -1,6 +1,9 @@
 @if (selection) {
 <cds-tabs>
-  <cds-tab heading="Quotas" i18n-heading>
+  <cds-tab
+    heading="Quotas"
+    i18n-heading
+  >
     <div class="row">
       @if (selection.quota) {
       <div class="col-sm-6">
@@ -15,7 +18,10 @@
       }
     </div>
   </cds-tab>
-  <cds-tab heading="Roles" i18n-heading>
+  <cds-tab
+    heading="Roles"
+    i18n-heading
+  >
     <div class="mt-4">
       <cd-rgw-account-roles-list
         [accountId]="selection.id"

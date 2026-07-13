@@ -228,6 +228,9 @@
   `ceph dashboard unset-rgw-hostname <daemon>`. 
   With this dashboard no longer relies on `rgw_dns_name`.
 * Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
+* Dashboard: The global RGW Roles tab has been removed. Role management is now
+  scoped under RGW Accounts, where roles can be listed, created, edited, and
+  deleted for a selected account.
 
 * NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
   dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
