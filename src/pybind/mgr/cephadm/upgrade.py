@@ -1675,7 +1675,7 @@ class CephadmUpgrade:
             return False
         else:
             logger.info('OSD/mds daemons not all upgraded, delaying key rotation')
-            return False
+            return True
 
     def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
         if self.upgrade_state:
