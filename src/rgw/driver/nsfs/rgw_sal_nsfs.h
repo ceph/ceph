@@ -24,6 +24,8 @@
 #include "../posix/bucket_cache.h"
 #include "nsfsDB.h"
 
+class RGWLC;
+
 namespace rgw { namespace sal {
 
 class NSFSDriver;
@@ -394,6 +396,8 @@ protected:
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
+  RGWLC* lc{nullptr};
+  bool use_lc_thread;
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -402,7 +406,7 @@ public:
     const auto& db_path = g_conf().get_val<std::string>("rgw_nsfs_userdb_dir");
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
-    
+
     userDB = std::make_unique<rgw::store::NSFSUserDB>(db_full_path.string(), cct);
     accountDB = std::make_unique<rgw::store::NSFSAccountDB>(db_full_path.string(), cct);
   }
@@ -410,6 +414,11 @@ public:
 
   void set_context(CephContext *_cct) {
     cct = _cct;
+  }
+
+  NSFSDriver& set_run_lc_thread(bool _use_lc_thread) {
+    use_lc_thread = _use_lc_thread;
+    return *this;
   }
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
@@ -564,7 +573,7 @@ public:
   virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
   virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
-  virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override { return nullptr; } // TODO: implement
+  virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
   virtual std::unique_ptr<Restore> get_restore(void) { return nullptr; }
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override { return 0; }
 
@@ -594,7 +603,7 @@ public:
 				      optional_yield y,
 				      const std::string& topic_queue) override { return -ENOTSUP; }
 
-  virtual RGWLC* get_rgwlc(void) override { return NULL; } // TODO: Lifecycle not currently supported
+  virtual RGWLC* get_rgwlc(void) override { return lc; }
   virtual rgw::restore::Restore* get_rgwrestore(void) { return nullptr; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
@@ -1325,6 +1334,45 @@ public:
 
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+};
+
+class LCNSFSSerializer : public StoreLCSerializer {
+public:
+  LCNSFSSerializer(NSFSDriver* driver, const std::string& oid, const std::string& lock_name, const std::string& cookie) {}
+
+  virtual int try_lock(const DoutPrefixProvider* dpp, ceph::timespan dur, optional_yield y) override { return 0; }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+};
+
+class NSFSLifecycle : public Lifecycle {
+  NSFSDriver* driver;
+
+public:
+  NSFSLifecycle(NSFSDriver* _driver) : driver(_driver) {}
+  virtual ~NSFSLifecycle() = default;
+
+  virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, const std::string& marker,
+                        LCEntry& entry) override;
+  virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const std::string& marker,
+                             LCEntry& entry) override;
+  virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, const LCEntry& entry) override;
+  virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                           const std::string& oid, const std::string& marker,
+                           uint32_t max_entries,
+                           std::vector<LCEntry>& entries) override;
+  virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCEntry& entry) override;
+  virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, LCHead& head) override;
+  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCHead& head) override;
+
+  virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
+                                                       const std::string& oid,
+                                                       const std::string& cookie) override;
 };
 
 } } // namespace rgw::sal
