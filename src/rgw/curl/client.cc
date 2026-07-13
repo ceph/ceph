@@ -10,8 +10,8 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/generic/datagram_protocol.hpp>
 #include <boost/asio/generic/stream_protocol.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/post.hpp>
-#include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -270,14 +270,14 @@ class Client::Impl :
   boost::asio::steady_timer timer;
 
   // holds either a tcp or udp socket
-  using client_socket = std::variant<
-      boost::asio::generic::stream_protocol::socket,
-      boost::asio::generic::datagram_protocol::socket>;
+  using stream_socket = boost::asio::generic::stream_protocol::socket;
+  using datagram_socket = boost::asio::generic::datagram_protocol::socket;
+  using client_socket = std::variant<stream_socket, datagram_socket>;
   using client_socket_map = std::unordered_map<curl_socket_t, client_socket>;
   client_socket_map sockets;
 
   // libcurl-internal fds we wait on but never close
-  std::unordered_map<curl_socket_t, boost::asio::posix::stream_descriptor> ext_sockets;
+  std::unordered_map<curl_socket_t, stream_socket> ext_sockets;
 
   using handler_map = std::unordered_map<CURL*, handler_type>;
   handler_map handlers;
@@ -482,12 +482,12 @@ class Client::Impl :
 
     if (i == impl->ext_sockets.end()) {
       boost::system::error_code ec;
-      boost::asio::posix::stream_descriptor desc{impl->get_executor()};
-      desc.assign(fd, ec);
+      auto socket = stream_socket{impl->get_executor()};
+      socket.assign(boost::asio::ip::tcp::v4(), fd, ec);
       if (ec) {
         return -1;
       }
-      i = impl->ext_sockets.emplace(fd, std::move(desc)).first;
+      i = impl->ext_sockets.emplace(fd, std::move(socket)).first;
     }
     if (what & CURL_POLL_IN) {
       std::invoke(socket_wait_handler{impl, fd, CURL_CSELECT_IN}, i->second);
