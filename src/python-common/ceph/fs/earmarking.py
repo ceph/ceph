@@ -121,6 +121,9 @@ class NFSEarmark(NamedTuple):
 
     @classmethod
     def parse(cls, value: str) -> Self:
+        """Given an earmark string, return a new NFSEarmark object or raise an
+        EarmarkParseError if the string is not a valid nfs earmark.
+        """
         parts = value.split('.')
         if parts[0] != EarmarkTopScope.NFS.value:
             raise EarmarkParseError(
@@ -135,9 +138,11 @@ class NFSEarmark(NamedTuple):
 
     @classmethod
     def default(cls) -> Self:
+        """Return a new NFSEarmark with default values."""
         return cls(EarmarkTopScope.NFS, [])
 
     def __eq__(self, other: Any) -> bool:
+        """Equality check."""
         if isinstance(other, str):
             try:
                 _other = self.parse(other)
@@ -152,6 +157,9 @@ class NFSEarmark(NamedTuple):
         )
 
     def upgrades(self, current: EarmarkContents) -> bool:
+        """Returns true if this earmark can be used to upgrade the current
+        earmark value applied to some path.
+        """
         if self.top != current.top:
             raise EarmarkConflictError(
                 f'earmark has already been set by {current.top.value}',
@@ -168,6 +176,7 @@ class SMBEarmark(NamedTuple):
 
     @property
     def subsections(self) -> List[str]:
+        """Return earmark subsections as a list of strings."""
         return [] if not self.cluster_id else ['cluster', self.cluster_id]
 
     def __str__(self) -> str:
@@ -178,6 +187,9 @@ class SMBEarmark(NamedTuple):
 
     @classmethod
     def parse(cls, value: str) -> Self:
+        """Given an earmark string, return a new SMBEarmark object or raise an
+        EarmarkParseError if the string is not a valid smb earmark.
+        """
         cid = ''
         parts = value.split('.')
         if parts[0] != EarmarkTopScope.SMB.value:
@@ -202,9 +214,11 @@ class SMBEarmark(NamedTuple):
 
     @classmethod
     def from_cluster_id(cls, cluster_id: str) -> Self:
+        """Given an smb cluster_id, return a new SMBEarmark object."""
         return cls(EarmarkTopScope.SMB, cluster_id)
 
     def __eq__(self, other: Any) -> bool:
+        """Equality check."""
         if isinstance(other, str):
             try:
                 _other = self.parse(other)
@@ -217,6 +231,9 @@ class SMBEarmark(NamedTuple):
         return self.top is _other.top and self.cluster_id == _other.cluster_id
 
     def upgrades(self, current: EarmarkContents) -> bool:
+        """Returns true if this earmark can be used to upgrade the current
+        earmark value applied to some path.
+        """
         if self.top != current.top:
             raise EarmarkConflictError(
                 f'earmark has already been set by {current.top.value}',
@@ -299,6 +316,9 @@ class CephFSVolumeEarmarking:
         return True
 
     def get_earmark(self) -> Optional[str]:
+        """Get an earmark string or None if no earmark is set on the current
+        path.
+        """
         try:
             earmark_value = self.fs.getxattr(
                 self.path, XATTR_SUBVOLUME_EARMARK_NAME
@@ -308,12 +328,16 @@ class CephFSVolumeEarmarking:
             return self._handle_cephfs_error(e, "getting")
 
     def get_parsed_earmark(self) -> Optional[EarmarkContents]:
+        """Get a parsed earmark object or None if no earmark is set on the
+        current path.
+        """
         earmark_value = self.get_earmark()
         if earmark_value is None:
             return None
         return parse_earmark(earmark_value)
 
     def set_earmark(self, earmark: Union[str, EarmarkContents]) -> None:
+        """Set the given earmark value on the current path."""
         # Validate the earmark before attempting to set it
         if not self._validate_earmark(earmark):
             raise EarmarkException(
@@ -336,11 +360,18 @@ class CephFSVolumeEarmarking:
             self._handle_cephfs_error(e, "setting")
 
     def clear_earmark(self) -> None:
+        """Remove the earmark value from the current path."""
         self.set_earmark("")
 
     def test_and_set(
         self, earmark: EarmarkContents
     ) -> Tuple[bool, Optional[EarmarkContents]]:
+        """Perform a test-and-set operation on the earmark value for the given
+        path. If the new earmark is accepted the function returns (True, <new
+        earmark>), if the earmark does not need updating the function return
+        (False, <current earmark>). If the earmark is not compatible raise an
+        EarmarkConflictError exception.
+        """
         current = self.get_parsed_earmark()
         if not _upgrade_earmark(current, earmark):
             return False, current
