@@ -521,6 +521,8 @@ TransactionManager::update_lba_mappings(
   std::list<CachedExtentRef> &pre_allocated_extents)
 {
   LOG_PREFIX(TransactionManager::update_lba_mappings);
+  auto phase_latency =
+    t.record_phase_latency(phase_latency_bucket_t::mapping_management);
   SUBTRACET(seastore_t, "update extent lba mappings", t);
   return seastar::do_with(
     std::list<LogicalChildNodeRef>(),
@@ -658,6 +660,8 @@ TransactionManager::do_submit_transaction(
 
   SUBTRACET(seastore_t, "submitting record", tref);
   auto journal_start = std::chrono::steady_clock::now();
+  auto phase_latency =
+      tref.record_phase_latency(phase_latency_bucket_t::durability);
   co_await journal->submit_record(
     std::move(record),
     tref.get_handle(),
