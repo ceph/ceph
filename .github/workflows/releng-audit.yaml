@@ -61,9 +61,22 @@ jobs:
               return authorized;
             }
 
+            async function removeLabelIfPresent(name) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: name
+                });
+              } catch (e) {
+                core.info(`[Router] Label '${name}' removal skipped or already deleted: ${e.message}`);
+              }
+            }
+
             async function triggerAuditRun(description) {
-              try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
-              try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
+              await removeLabelIfPresent('releng-audit-fail');
+              await removeLabelIfPresent('releng-audit-pass');
               try {
                 const { data: pr } = await github.rest.pulls.get({
                   owner: context.repo.owner,
@@ -284,11 +297,7 @@ jobs:
 
                   if (!isAuthorized) {
                     core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
-                    try {
-                      await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
-                    } catch (e) {
-                      core.info(`[Router] Label removal skipped or already deleted: ${e.message}`);
-                    }
+                    await removeLabelIfPresent(labelName);
                     core.setFailed(`User @${actor} is not authorized to override audits.`);
                   } else {
                     core.info(`[Router] User @${actor} is authorized. Stripping fail/pass labels to visually unblock PR.`);
@@ -380,4 +389,3 @@ jobs:
           fi
 
           python src/script/ptl-tool.py --debug --ci-mode --audit $PR_NUMBER
-
