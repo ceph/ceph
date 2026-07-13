@@ -83,7 +83,6 @@ CEPH {
 
 {% endif %}
 {% if kmip_addrs %}
-
 %plugin ganesha/libkmip_fscrypt.so
 KMIP {
 {% for kmip_addr in kmip_addrs %}
@@ -125,6 +124,7 @@ TLS_CONFIG{
         Enable_debug = {{ tls_debug }};
 {% endif %}
 }
+
 {% endif %}
 
 %url    {{ url }}
