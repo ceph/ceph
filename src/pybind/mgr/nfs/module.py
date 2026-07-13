@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Tuple, Optional, List, Dict, Any, Union
+from typing import Tuple, Optional, List, Dict, Any
 import yaml
 
 from .cli import NFSCLICommand
@@ -86,7 +86,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             xprtsec: Optional[str] = None,
             transports: Optional[List[str]] = None,
             skip_notify_nfs_server: bool = False,
-            kmip_key_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
@@ -101,8 +100,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             addr=client_addr,
             sectype=sectype,
             xprtsec=xprtsec,
-            transports=transports,
-            kmip_key_id=kmip_key_id
+            transports=transports
         )
 
     @NFSCLICommand('nfs export rm', perm='rw')
@@ -191,10 +189,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 enable_nfsv3: bool = False,
                                 enable_nfs_metrics: bool = False,
                                 ingress_placement: Optional[str] = None,
-                                kmip_cert: Optional[str] = None,
-                                kmip_key: Optional[str] = None,
-                                kmip_ca_cert: Optional[str] = None,
-                                kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
                                 inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""

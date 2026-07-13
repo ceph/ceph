@@ -1444,7 +1444,6 @@ class NFSServiceSpec(ServiceSpec):
                  cephfs_client_log_level: Optional[int] = None,
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
-                 skip_nfs_notify_on_kmip_update: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1499,7 +1498,11 @@ class NFSServiceSpec(ServiceSpec):
         self.kmip_key = kmip_key
         self.kmip_ca_cert = kmip_ca_cert
         self.kmip_host_list: list[Dict[str, Union[str, int]]] = []
-        if kmip_host_list:
+        if kmip_host_list is not None:
+            if not isinstance(kmip_host_list, list):
+                raise SpecValidationError(
+                    f'kmip_host_list must be a list, got: {kmip_host_list}.'
+                )
             for host_obj in kmip_host_list:
                 if isinstance(host_obj, str):
                     self.kmip_host_list.append({'addr': host_obj})
@@ -1509,7 +1512,6 @@ class NFSServiceSpec(ServiceSpec):
                     raise SpecValidationError(
                         f'kmip_host_list contains an invalid element: {host_obj}.'
                     )
-        self.skip_nfs_notify_on_kmip_update = skip_nfs_notify_on_kmip_update
         # TLS fields
         self.tls_ciphers = tls_ciphers
         self.tls_ktls = tls_ktls
@@ -1603,7 +1605,7 @@ class NFSServiceSpec(ServiceSpec):
         kmip_fields = [getattr(self, kmip_field) for kmip_field in kmip_field_names]
         if any(kmip_fields) and not all(kmip_fields):
             raise SpecValidationError(
-                f'Either none or all of {kmip_field_names} attrbutes must be set'
+                f'Either none or all of {kmip_field_names} attributes must be set'
             )
         for kmip_host in self.kmip_host_list:
             if 'addr' not in kmip_host:
@@ -1611,10 +1613,14 @@ class NFSServiceSpec(ServiceSpec):
                     "Each dictionary in kmip_host_list must include the 'addr' key."
                     f"{kmip_host} is missing 'addr'."
                 )
-            if 'port' in kmip_host and not isinstance(kmip_host['port'], int):
-                raise SpecValidationError(
-                    f'Provided port is not valid for {kmip_host} in kmip_host_list.'
-                )
+            if 'port' in kmip_host:
+                port = kmip_host['port']
+                # bool is a subclass of int, so reject it explicitly
+                if isinstance(port, bool) or not isinstance(port, int):
+                    raise SpecValidationError(
+                        f'Provided port is not valid for {kmip_host} in kmip_host_list.'
+                    )
+                validate_port(port, f'port for {kmip_host} in kmip_host_list')
 
         verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
         verify_boolean(self.mem_stats_disable, "mem_stats_disable")

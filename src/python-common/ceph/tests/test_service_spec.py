@@ -658,6 +658,65 @@ def test_nfs_spec_rdma_default():
     assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
 
 
+def test_nfs_spec_kmip_host_list_normalization():
+    """kmip_host_list accepts strings and dicts, normalizing strings to {'addr': ...}."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        kmip_host_list=['kmip.example.com', {'addr': 'kmip2.example.com', 'port': 5696}],
+    )
+    assert spec.kmip_host_list == [
+        {'addr': 'kmip.example.com'},
+        {'addr': 'kmip2.example.com', 'port': 5696},
+    ]
+
+
+@pytest.mark.parametrize('kmip_host_list', [
+    {'addr': 'kmip.example.com'},  # mapping, not a list
+    'kmip.example.com',            # bare string
+    5696,                          # not iterable at all
+])
+def test_nfs_spec_kmip_host_list_must_be_a_list(kmip_host_list):
+    """Non-list kmip_host_list values are rejected instead of being mangled."""
+    with pytest.raises(SpecValidationError, match='kmip_host_list must be a list'):
+        NFSServiceSpec(service_id='mynfs', kmip_host_list=kmip_host_list)
+
+
+def test_nfs_spec_kmip_host_list_invalid_element():
+    """List elements that are neither a string nor a dict are rejected."""
+    with pytest.raises(SpecValidationError, match='kmip_host_list contains an invalid element'):
+        NFSServiceSpec(service_id='mynfs', kmip_host_list=[5696])
+
+
+def _kmip_spec(kmip_host):
+    return NFSServiceSpec(
+        service_id='mynfs',
+        kmip_cert='cert',
+        kmip_key='key',
+        kmip_ca_cert='ca',
+        kmip_host_list=[kmip_host],
+    )
+
+
+@pytest.mark.parametrize('port', [1, 5696, 65535])
+def test_nfs_spec_kmip_host_port_valid(port):
+    """Ports within the 1..65535 range are accepted."""
+    _kmip_spec({'addr': 'kmip.example.com', 'port': port}).validate()
+
+
+@pytest.mark.parametrize('port,error_match', [
+    (0, 'Must be between 1 and 65535'),
+    (-1, 'Must be between 1 and 65535'),
+    (65536, 'Must be between 1 and 65535'),
+    (True, 'Provided port is not valid'),
+    ('5696', 'Provided port is not valid'),
+    (5696.0, 'Provided port is not valid'),
+])
+def test_nfs_spec_kmip_host_port_invalid(port, error_match):
+    """Out of range ports, booleans and non-int ports are rejected."""
+    with pytest.raises(SpecValidationError, match=error_match):
+        _kmip_spec({'addr': 'kmip.example.com', 'port': port}).validate()
+
+
 def test_nfs_spec_rdma_enabled():
     """NFS spec with enable_rdma: get_port_start returns 3 ports, default rdma_port 20049."""
     spec = NFSServiceSpec(

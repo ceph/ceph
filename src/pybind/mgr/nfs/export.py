@@ -18,8 +18,8 @@ from ceph.fs.earmarking import EarmarkTopScope
 from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 import cephfs
 
-from mgr_util import CephFSEarmarkResolver, CephfsClient, open_filesystem
-from rados import TimedOut, ObjectNotFound, Rados
+from mgr_util import CephFSEarmarkResolver, open_filesystem
+from rados import TimedOut, ObjectNotFound
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
@@ -46,6 +46,7 @@ from .utils import (
     check_fs,
     get_nfs_spec_for_cluster,
     restart_nfs_service,
+    cephfs_client_for_mgr,
     cephfs_path_is_dir,
     normalize_auth_entity)
 from .rados_utils import NFSRados
@@ -94,7 +95,7 @@ def get_enctag_from_path(mgr: 'Module', fs_name: str, path: str) -> Optional[str
     Retrieve the encryption tag (enctag) from a CephFS path.
     """
     try:
-        cephfs_client = CephfsClient(mgr)
+        cephfs_client = cephfs_client_for_mgr(mgr)
         with open_filesystem(cephfs_client, fs_name) as fs_handle:
             fs_enctag = CephFSVolumeEncryptionTag(fs_handle, path)
             enctag = fs_enctag.get_tag()
@@ -768,6 +769,12 @@ class ExportMgr:
             if '/' in path and path != '/':
                 raise NFSInvalidOperation('"/" is not allowed in path with bucket name')
 
+            # BYOK encryption is only supported by the CEPH FSAL
+            if ex_dict.get("kmip_key_id"):
+                raise NFSInvalidOperation(
+                    "kmip_key_id is only supported for CephFS exports, "
+                    f"not for {NFS_GANESHA_SUPPORTED_FSALS[1]} exports")
+
         elif fsal_type == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs_name = fsal.get("fs_name")
             if not fs_name:
@@ -835,10 +842,6 @@ class ExportMgr:
         if cmount_path != "/":
             _validate_cmount_path(cmount_path, path)  # type: ignore
 
-        # Validate kmip_key_id against subvolume enctag
-        if kmip_key_id:
-            self._validate_kmip_key_id_with_enctag(kmip_key_id, fs_name, path)
-
         pseudo_path = normalize_path(pseudo_path)
         # Get the protocols based on cluster's enable_nfsv3 setting
         protocols = self._get_cluster_protocols(cluster_id)
@@ -892,8 +895,7 @@ class ExportMgr:
                           clients: list = [],
                           sectype: Optional[List[str]] = None,
                           xprtsec: Optional[str] = None,
-                          transports: Optional[List[str]] = None,
-                          kmip_key_id: Optional[str] = None) -> Dict[str, Any]:
+                          transports: Optional[List[str]] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
@@ -914,8 +916,7 @@ class ExportMgr:
             "clients": clients,
             "sectype": sectype,
             "XprtSec": xprtsec,
-            "protocols": protocols,
-            "kmip_key_id": kmip_key_id
+            "protocols": protocols
         }
         if transports is not None:
             export_dict["transports"] = transports
