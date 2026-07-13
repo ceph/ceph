@@ -8,7 +8,7 @@ embargo. This means the fix cannot be pushed to the public ``ceph/ceph``
 repository, built using the public build infrastructure, or discussed in
 public channels until the embargo is lifted. Instead, each CVE has its own
 private fork of ``ceph/ceph`` (for example,
-``ceph/ceph-ghsa-xrjv-7fcr-h485``) where the fix is developed. Builds and
+``ceph/ceph-ghsa-abcd-1234-beef``) where the fix is developed. Builds and
 tests use internal infrastructure in the `Sepia lab
 <https://wiki.sepia.ceph.com/doku.php>`_.
 
@@ -23,10 +23,39 @@ Gabriella Roman to add you as a collaborator to the parent advisory
 
 Private CVE forks can be built using the `cve-pipeline
 <https://jenkins.ceph.com/job/cve-pipeline>`_ (404s unless logged in and authorized)
-Jenkins job. Access to the this job is limited to Ceph GitHub organization
+Jenkins job. Access to this job is limited to Ceph GitHub organization
 admins and members of the `ceph/security <https://github.com/orgs/ceph/teams/security>`_
 GitHub Team. Again, if you do not have access to see the cve-pipeline
 job, ask Sage or Gabriella for access.
+
+A note about terminology
+------------------------
+
+Three separate git repositories will be used when developing a CVE fix.
+
+In this document, "private fork" and "ceph-private" will be referenced.
+
+For clarity,
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 60
+
+   * - Repository
+     - Git remote
+     - Purpose
+   * - ``ceph/ceph`` (the public repository)
+     - ``origin``
+     - Clone from here and base the fix on its target branch. **Never** push
+       the fix here until the embargo is lifted.
+   * - ``ceph/ceph-ghsa-*`` (the "advisory fork" or "private fork")
+     - ``advisory``
+     - Develop, build (via cve-pipeline), and test the fix under embargo. Open a
+       pull request here, but **do not merge** it.
+   * - ``ceph/ceph-private``
+     - ``private``
+     - Push the finished branch here so the Release Manager can build the
+       security release from it.
 
 Developing the Fix
 ------------------
@@ -37,31 +66,34 @@ Developing the Fix
 
       git clone https://github.com/ceph/ceph.git
 
-#. Add the CVE's private fork as a remote by adding the following to
-   ``.git/config`` in your local working copy, substituting the fork for your
-   CVE:
-
-   .. code-block:: ini
-
-      [remote "private"]
-              url = git@github.com:ceph/ceph-ghsa-xrjv-7fcr-h485.git
-              fetch = +refs/heads/*:refs/remotes/private/*
+#. Check out the target branch (probably ``main``)
 
 #. Create a branch and develop the fix as you would for any other bug. See
    :ref:`basic workflow dev guide` for the general development workflow.
 
+   .. prompt:: bash $
+
+      git checkout -b $BRANCH_NAME
+
+   .. warning::
+
+      Do **not** include any information pertaining to the CVE (for example, the
+      CVE ID or a description of the vulnerability) in the branch name. Branch
+      names are visible in public shaman build and repo metadata as well as in
+      teuthology job results in Paddles and Pulpito, even when the branch itself
+      is pushed only to the private repository.
+
+#. Add the CVE's private fork to your clone:
+
+   .. prompt:: bash $
+
+      git remote add advisory git@github.com:ceph/ceph-ghsa-abcd-1234-beef.git
+
 .. note::
 
-   A branch just needs to be pushed to the private fork in order to start a
-   package and container build.
-
-.. warning::
-
-   Do **not** include any information pertaining to the CVE (for example, the
-   CVE ID or a description of the vulnerability) in the branch name. Branch
-   names are visible in public shaman build and repo metadata as well as in
-   teuthology job results in paddles and Pulpito, even when the branch itself
-   is pushed only to the private repository.
+   Pushing a branch to the private fork or ceph-private.git will not
+   automatically trigger a build.  You must trigger the Jenkins job manually
+   below.
 
 Building the Fix
 ----------------
@@ -70,7 +102,7 @@ When the fix is ready to be built, push the branch to the private fork:
 
 .. prompt:: bash $
 
-   git push private $BRANCH_NAME
+   git push advisory $BRANCH_NAME
 
 Then manually trigger the `cve-pipeline
 <https://jenkins.ceph.com/job/cve-pipeline>`_
@@ -148,6 +180,18 @@ that was built:
 Merging the fix
 ---------------
 
-Once you have tested your changes and are happy with the fix, create a pull
-request in the private fork. It will eventually get merged into the ceph.git
-repo via the parent advisory.
+Once you have tested your changes and are happy with the fix,
+
+#. Open a pull request in the private fork but DO NOT MERGE it.
+
+#. Add the ceph-private repo to your remotes and push the same branch there:
+
+   .. prompt:: bash $
+
+      git remote add private git@github.com:ceph/ceph-private.git
+
+      git push private $BRANCH_NAME
+
+#. Notify the Release Manager. They will proceed with the Release process as
+   normal
+   https://docs.ceph.com/en/latest/dev/release-process/#security-release-process-deviation.
