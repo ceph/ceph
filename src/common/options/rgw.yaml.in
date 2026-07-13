@@ -97,7 +97,7 @@ options:
   type: size
   level: advanced
   desc: The minimum RGW object size for dedup (0 means no minimum size for dedup).
-  default: 8_K
+  default: 4_K
   services:
   - rgw
   with_legacy: true

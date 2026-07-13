@@ -182,7 +182,9 @@ namespace rgw::dedup {
     uint64_t ingress_obj = 0;
     uint64_t ingress_obj_bytes = 0;
     uint64_t egress_records = 0;
+    uint64_t egress_records_fanout = 0;
     uint64_t egress_blocks = 0;
+    uint64_t egress_coarse_blocks = 0;
     uint64_t egress_slabs = 0;
     uint64_t egress_coarse_slabs = 0;
     uint64_t write_slab_failure = 0;
@@ -216,7 +218,7 @@ namespace rgw::dedup {
 
   struct md5_stats_t {
     md5_stats_t& operator +=(const md5_stats_t& other);
-    void dump(Formatter *f) const;
+    void dump(Formatter *f, unsigned num_shards = 0) const;
 
     dedup_stats_t big_objs_stat;
     uint64_t ingress_slabs = 0;
@@ -397,7 +399,7 @@ namespace rgw::dedup {
   enum dedup_step_t {
     STEP_NONE,
     STEP_BUCKET_INDEX_INGRESS,
-    STEP_BUCKET_INDEX_EGRESS,
+    STEP_BUCKET_INDEX_INGRESS_FANOUT,
     STEP_BUILD_TABLE,
     STEP_READ_ATTRIBUTES,
     STEP_REMOVE_DUPLICATES,

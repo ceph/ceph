@@ -902,15 +902,13 @@ namespace rgw::dedup {
     if (!has_incomplete_shards) {
       return;
     }
-    //utime_t now = ceph_clock_now();
+
     Formatter::ArraySection array_section{*fmt, "incomplete_shards"};
-    for (unsigned shard = 0; shard < num_shards; shard++) {
+    for (uint32_t shard = 0; shard < num_shards; shard++) {
       if (sp_arr[shard].is_completed()) {
         continue;
       }
       if (sp_arr[shard].was_not_started() ) {
-        Formatter::ObjectSection object_section{*fmt, "pending shard:"};
-        fmt->dump_unsigned("shard_id", shard);
         continue;
       }
       Formatter::ObjectSection object_section{*fmt, "shard_progress"};
@@ -1097,7 +1095,7 @@ namespace rgw::dedup {
       }
       {
         Formatter::ObjectSection outer(*fmt, "md5_stats");
-        md5_stats_sum.dump(fmt);
+        md5_stats_sum.dump(fmt, num_md5_shards);
         show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr.data(), fmt);
         show_time_func_fmt(md5_start_time, show_time, owner_map, fmt);
       }

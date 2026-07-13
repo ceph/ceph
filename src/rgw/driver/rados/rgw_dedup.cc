@@ -58,6 +58,7 @@
 #include <climits>
 #include <cinttypes>
 #include <cstring>
+#include <cmath>
 #include <span>
 #include <mutex>
 #include <thread>
@@ -417,13 +418,11 @@ namespace rgw::dedup {
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
     d_split_head = cct->_conf->rgw_dedup_split_obj_head;
     d_min_mem_allocation_mb = cct->_conf->rgw_dedup_min_mem_allocation_mb;
-#if 0
-    // REMOVE-ME: debug mode to force B^2 ingress
-    // More than 1M objects will force B^2 ingress
-    // d_min_mem_allocation_mb = 8;
-#endif
+
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
+                       << "::cct->_conf->rgw_dedup_min_mem_allocation_mb="
+                       << cct->_conf->rgw_dedup_min_mem_allocation_mb
                        << "::d_split_head=" << d_split_head
                        << "::d_min_mem_allocation_mb=" << d_min_mem_allocation_mb
                        << dendl;
@@ -2115,7 +2114,7 @@ namespace rgw::dedup {
   {
     static const char* names[] = {"STEP_NONE",
                                   "STEP_BUCKET_INDEX_INGRESS",
-                                  "STEP_BUCKET_INDEX_EGRESS",
+                                  "STEP_BUCKET_INDEX_INGRESS_FANOUT",
                                   "STEP_BUILD_TABLE",
                                   "STEP_READ_ATTRIBUTES",
                                   "STEP_REMOVE_DUPLICATES",
@@ -2130,6 +2129,28 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static uint32_t calc_step_threshold(dedup_step_t step)
+  {
+    if (step == STEP_BUILD_TABLE) {
+      // check for heartbeat/pause/stop every 4096 records
+      // BUILD-TABLE process ~500K records per-second => check is done every ~10 msec
+      return 4096;
+    }
+#ifdef FULL_DEDUP_SUPPORT
+    else if (step == STEP_READ_ATTRIBUTES) {
+      return 16;
+    }
+    else if (step == STEP_REMOVE_DUPLICATES) {
+      return 8;
+    }
+#endif // #ifdef FULL_DEDUP_SUPPORT
+    else {
+      ceph_abort("unexpected step");
+      return 1;
+    }
+  }
+
+  //---------------------------------------------------------------------------
   int Background::process_all_slabs(dedup_table_t *p_table,
                                     dedup_step_t step,
                                     md5_shard_t md5_shard,
@@ -2139,9 +2160,10 @@ namespace rgw::dedup {
                                     disk_block_seq_t *p_disk_block_seq,
                                     remapper_t *remapper)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
+    ldpp_dout(dpp, 10) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
                        << worker_id << ", md5_shard=" << md5_shard << dendl;
-    uint64_t  rec_count = 0;
+    uint64_t rec_count = 0;
+    uint32_t step_threshold = calc_step_threshold(step);
     slab_record_iterator_t iter(dpp, d_dedup_cluster_ioctx, md5_shard, worker_id, false);
     while (iter.next()) {
       auto &ref = *iter;
@@ -2151,7 +2173,7 @@ namespace rgw::dedup {
         p_stats->failed_rec_load++;
         return ret;
       }
-      rec_count++;
+
       if (step == STEP_BUILD_TABLE) {
         add_record_to_dedup_table(p_table, &ref.rec, ref.rec_addr, p_stats, remapper);
       }
@@ -2169,7 +2191,13 @@ namespace rgw::dedup {
         ceph_abort("unexpected step");
       }
 
-      check_and_update_md5_heartbeat(md5_shard, p_stats, rec_count, step);
+      if (rec_count++ % step_threshold != 0) {
+        // check for heartbeat/pause/stop every N records
+        // aiming for one check every ~10 msec
+        continue;
+      }
+
+      check_and_update_md5_heartbeat(md5_shard, rec_count, step);
       if (unlikely(d_ctl.should_pause())) {
         handle_pause_req(__func__);
       }
@@ -2264,6 +2292,7 @@ namespace rgw::dedup {
       p_worker_stats->single_part_objs++;
     }
 
+    p_worker_stats->egress_records++;
     return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag,
                                         entry.key.name, entry.key.instance,
                                         entry.meta.size, storage_class);
@@ -2278,8 +2307,10 @@ namespace rgw::dedup {
     utime_t now = ceph_clock_now();
     utime_t time_elapsed = now - d_heart_beat_last_update;
     if (unlikely(time_elapsed.tv.tv_sec >= d_heart_beat_max_elapsed_sec)) {
-      ldpp_dout(dpp, 20) << __func__ << "::max_elapsed_sec="
-                         << d_heart_beat_max_elapsed_sec << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::(" << now.tv.tv_sec % 1000 << ")::"
+                         << prefix << "::shrd=" << shard_id << "::"
+                         << dedup_step_name(step)
+                         << "::obj_count=" << obj_count << dendl;
       d_heart_beat_last_update = now;
       d_cluster.update_shard_token_heartbeat(store, shard_id, obj_count, step,
                                              prefix);
@@ -2296,20 +2327,9 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   void Background::check_and_update_md5_heartbeat(md5_shard_t md5_id,
-                                                  md5_stats_t *p_stats,
-                                                  uint64_t rec_count,
+                                                  uint64_t obj_count,
                                                   dedup_step_t step)
   {
-    uint64_t obj_count = 0;
-    if (step == STEP_BUILD_TABLE) {
-      obj_count = p_stats->loaded_objects;
-    }
-    else if (step == STEP_READ_ATTRIBUTES) {
-      obj_count = p_stats->processed_objects;
-    }
-    else {
-      obj_count = rec_count;
-    }
     check_and_update_heartbeat(md5_id, obj_count, step, MD5_SHARD_PREFIX);
   }
 
@@ -2351,8 +2371,11 @@ namespace rgw::dedup {
     const bool list_versions = true;
     const int max_entries = 1000;
     uint32_t obj_count = 0;
-
+    ldpp_dout(dpp, 10) << __func__ << "::bucket=" << bucket->get_name()
+                       << "::shards-count=" << num_shards << dendl;
     while (current_shard < num_shards ) {
+      // Function lists/handle 1000 entries in each loop cycle
+      // Ingress process ~100K entries per-second => check is done every ~10 msec
       check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj,
                                         STEP_BUCKET_INDEX_INGRESS);
       if (unlikely(d_ctl.should_pause())) {
@@ -2738,24 +2761,22 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   // Phase 2: for each coarse group, read CS slabs back and re-fan-out into
   // final S slabs using disk_block_array_t in PHASE2_FINE mode.
-  int Background::phase2_fine_fan_out(work_shard_t worker_id,
-                                      md5_shard_t num_md5_shards,
-                                      worker_stats_t *p_worker_stats,
-                                      uint8_t *raw_mem,
-                                      uint64_t raw_mem_size)
+  int Background::phase2_fine_fanout(work_shard_t worker_id,
+                                     md5_shard_t num_md5_shards,
+                                     worker_stats_t *p_worker_stats,
+                                     uint8_t *raw_mem,
+                                     uint64_t raw_mem_size)
   {
-    uint32_t num_groups = DIV_ROUND_UP(num_md5_shards, d_fan_out_B);
-
-    for (uint32_t g = 0; g < num_groups; g++) {
+    for (uint32_t g = 0; g < d_num_groups; g++) {
       if (d_ctl.should_stop()) {
         return -ECANCELED;
       }
       ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
-                         << "::group=" << g << "/" << num_groups << dendl;
+                         << "::group=" << g << "/" << d_num_groups << dendl;
 
       disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
-                                  p_worker_stats, num_md5_shards,
-                                  d_fan_out_B, g,
+                                  p_worker_stats, num_md5_shards, d_num_groups,
+                                  d_shards_per_group, g,
                                   disk_block_array_t::mode_t::PHASE2_FINE);
 
       // Read CS Coarse slabs for this (worker_id, group g) and fan-out
@@ -2772,10 +2793,16 @@ namespace rgw::dedup {
           ldpp_dout(dpp, 1) << __func__ << "::ERR: add_record failed in phase2"
                             << "::group=" << g << dendl;
         }
-        p_worker_stats->egress_records++;
+        p_worker_stats->egress_records_fanout++;
+        if (p_worker_stats->egress_records_fanout % 4096 != 0) {
+          // check for heartbeat/pause/stop every 4096 records
+          // Fanout process ~400K records per-second => check is done every ~10 msec
+          continue;
+        }
 
-        check_and_update_worker_heartbeat(worker_id, p_worker_stats->egress_records,
-                                          STEP_BUCKET_INDEX_EGRESS);
+        check_and_update_worker_heartbeat(worker_id,
+                                          p_worker_stats->egress_records_fanout,
+                                          STEP_BUCKET_INDEX_INGRESS_FANOUT);
         if (unlikely(d_ctl.should_pause())) {
           handle_pause_req(__func__);
         }
@@ -2788,7 +2815,7 @@ namespace rgw::dedup {
       disk_arr.flush_output_buffers(dpp, d_dedup_cluster_ioctx);
 
       // Delete CS slabs for this (worker_id, group g)
-      for (uint32_t slab_id = 0; ; slab_id++) {
+      for (uint32_t slab_id = 0; slab_id < iter.slab_count(); slab_id++) {
         disk_rec_id_t rec_addr(worker_id, slab_id, 0);
         std::string oid(rec_addr.get_coarse_slab_name(g));
         int del_ret = d_dedup_cluster_ioctx.remove(oid);
@@ -2841,8 +2868,8 @@ namespace rgw::dedup {
                                        disk_block_array_t::mode_t::SINGLE_PASS :
                                        disk_block_array_t::mode_t::PHASE1_COARSE);
     disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
-                                &worker_stats, num_md5_shards,
-                                d_fan_out_B, 0 /*group_id unused*/, mode);
+                                &worker_stats, num_md5_shards, d_num_groups,
+                                d_shards_per_group, 0 /*group_id unused*/, mode);
 
 
     if (d_num_groups == 0) {
@@ -2859,8 +2886,8 @@ namespace rgw::dedup {
       ret = objects_ingress_single_work_shard(disk_arr, worker_id, num_work_shards,
                                               num_md5_shards, &worker_stats, raw_mem, raw_mem_size);
       if (ret == 0) {
-        ret = phase2_fine_fan_out(worker_id, num_md5_shards,
-                                  &worker_stats, raw_mem, raw_mem_size);
+        ret = phase2_fine_fanout(worker_id, num_md5_shards,
+                                 &worker_stats, raw_mem, raw_mem_size);
       }
     }
 
@@ -2913,8 +2940,11 @@ namespace rgw::dedup {
                                      work_shard_t num_work_shards,
                                      md5_shard_t num_md5_shards)
   {
+    d_heart_beat_last_update = ceph_clock_now();
+    ldpp_dout(dpp, 20) << "::check_and_update_heartbeat::("
+                       << ceph_clock_now().tv.tv_sec % 1000 << ") RESTART" << dendl;
+
     while (true) {
-      d_heart_beat_last_update = ceph_clock_now();
       uint32_t shard_id;
       if (ingress_work_shards) {
         shard_id = d_cluster.get_next_work_shard_token(store, num_work_shards);
@@ -2982,11 +3012,11 @@ namespace rgw::dedup {
 
   //-------------------------------------------------------------------------------
   //  32B per object-entry in the hashtable
-  //  2MB per shard-buffer (PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT * sizeof(disk_block_t))
+  //  2MB per shard-buffer (PER_SHARD_BUFF_SIZE = DISK_BLOCK_COUNT * DISK_BLOCK_SIZE
   //
-  // Scaling Table (power-of-2 units: Slots=MB/32, B=MB/2)
-  //       |        |      | single-pass |         | two-pass
-  //  MB   | Slots  |  B   | obj-raw     |  B²     | obj-raw
+  // Scaling Table (power-of-2 units: Slot-Size=32B, Buff-Size=2MB)
+  //       | Table  | Num  | single-pass |  Num    | two-pass
+  //  MB   | Slots  | Buff | obj-raw     |  Buff²  | obj-raw
   // ------|------- |------|-------------|---------|-----------
   //    8  |   256K |    4 |     1M      |      16 |        4M
   //   16  |   512K |    8 |     4M      |      64 |       32M
@@ -2998,11 +3028,12 @@ namespace rgw::dedup {
   // 1024  | 32M    |  512 | 16G         |  256K   |  8T
   // 2048  | 64M    | 1024 | 64G         | 1M      | 64T
 
-  struct fan_out_params_t {
+  struct fanout_params_t {
     uint64_t alloc_bytes;
     uint32_t num_md5_shards;
-    uint32_t fan_out_B;
+    uint32_t num_buffers;      // (alloc_bytes / PER_SHARD_BUFF_SIZE)
     uint32_t num_groups;       // 0 = single-pass
+    uint32_t shards_per_group; // ceil(num_md5_shards / num_groups)
   };
 
   //---------------------------------------------------------------------------
@@ -3010,12 +3041,12 @@ namespace rgw::dedup {
   // smallest allocation whose B² can handle obj_count. Then takes the max
   // of that and the configured minimum. Derives shards, B, and pass mode.
   // Returns -EOVERFLOW if even 2048 MB is insufficient.
-  static int calc_fan_out_params(uint64_t obj_count,
-                                 uint64_t min_alloc_mb,
-                                 fan_out_params_t *out)
+  static int calc_fanout_params(uint64_t obj_count,
+                                uint64_t min_alloc_mb,
+                                fanout_params_t *out)
   {
     static constexpr uint64_t Mi = 1024ULL * 1024;
-    static constexpr uint64_t PER_SHARD_BUFF = DISK_BLOCK_COUNT * DISK_BLOCK_SIZE;
+    static constexpr uint64_t PER_SHARD_BUFF_SIZE = DISK_BLOCK_COUNT * DISK_BLOCK_SIZE;
 
     // 1.25x headroom
     obj_count = obj_count + (obj_count / 4);
@@ -3026,15 +3057,23 @@ namespace rgw::dedup {
     //   2. shard count fits in B² model:      md5_shards <= B * B
     uint64_t needed_alloc = 0;
     for (uint64_t mb = 8; mb <= MAX_DEDUP_MEM_ALLOCATION_MB; mb *= 2) {
-      uint64_t alloc = mb * Mi;
-      uint64_t num_slots = alloc / HASH_ENTRY_SIZE;
+      uint64_t alloc_size = mb * Mi;
+      uint64_t num_slots  = alloc_size / HASH_ENTRY_SIZE;
       uint64_t md5_shards = DIV_ROUND_UP(obj_count, num_slots);
+
+      // Adjust md5_shards to comply with MIN_MD5_SHARD and MAX_MD5_SHARD
       if (md5_shards < MIN_MD5_SHARD) md5_shards = MIN_MD5_SHARD;
       if (md5_shards > MAX_MD5_SHARD) md5_shards = MAX_MD5_SHARD;
-      uint64_t per_shard_load = DIV_ROUND_UP(obj_count, md5_shards);
-      uint64_t B = alloc / PER_SHARD_BUFF;
-      if (per_shard_load <= num_slots && md5_shards <= B * B) {
-        needed_alloc = alloc;
+      // check if the imposed md5_shards is sufficient with alloc_size
+      if (DIV_ROUND_UP(obj_count, md5_shards) > num_slots) {
+        // We need more memory (translated into more table-slosts) to fit obj_count
+        continue;
+      }
+
+      // Find the number of buffers we can fit in alloc_size memory
+      uint64_t B = alloc_size / PER_SHARD_BUFF_SIZE;
+      if (md5_shards <= B * B) {
+        needed_alloc = alloc_size;
         break;
       }
     }
@@ -3050,18 +3089,29 @@ namespace rgw::dedup {
 
     // Recompute with actual allocation
     uint64_t num_slots = actual_alloc / HASH_ENTRY_SIZE;
-    uint64_t md5_shards = DIV_ROUND_UP(obj_count, num_slots);
-    if (md5_shards < MIN_MD5_SHARD) md5_shards = MIN_MD5_SHARD;
+    uint64_t num_md5_shards = DIV_ROUND_UP(obj_count, num_slots);
+    if (num_md5_shards < MIN_MD5_SHARD) num_md5_shards = MIN_MD5_SHARD;
 
-    ceph_assert(md5_shards <= MAX_MD5_SHARD);
-    ceph_assert(md5_shards <= MD5_SHARD_HARD_LIMIT);
+    ceph_assert(num_md5_shards <= MAX_MD5_SHARD);
+    ceph_assert(num_md5_shards <= MD5_SHARD_HARD_LIMIT);
 
-    uint32_t B = static_cast<uint32_t>(actual_alloc / PER_SHARD_BUFF);
+    uint32_t B = static_cast<uint32_t>(actual_alloc / PER_SHARD_BUFF_SIZE);
 
     out->alloc_bytes    = actual_alloc;
-    out->num_md5_shards = static_cast<uint32_t>(md5_shards);
-    out->fan_out_B      = B;
-    out->num_groups     = (md5_shards <= B) ? 0 : DIV_ROUND_UP(md5_shards, B);
+    out->num_md5_shards = static_cast<uint32_t>(num_md5_shards);
+    out->num_buffers    = B;
+
+    if (num_md5_shards <= B) {
+      out->num_groups = 0;  // single-pass
+      out->shards_per_group = out->num_buffers;
+    } else {
+      // Since (num_md5_shards <= B * B) num_groups should be SQRT(num_md5_shards)
+      out->num_groups       = ceil(sqrt(num_md5_shards));
+      out->shards_per_group = DIV_ROUND_UP(num_md5_shards, out->num_groups);
+    }
+
+    ceph_assert(out->num_groups <= B);
+    ceph_assert(out->shards_per_group <= B);
     return 0;
   }
 
@@ -3074,8 +3124,8 @@ namespace rgw::dedup {
     }
 
     // Unified computation: allocation, shards, B, and pass mode
-    fan_out_params_t fp;
-    ret = calc_fan_out_params(d_all_buckets_obj_count, d_min_mem_allocation_mb, &fp);
+    fanout_params_t fp;
+    ret = calc_fanout_params(d_all_buckets_obj_count, d_min_mem_allocation_mb, &fp);
     if (ret != 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: system too large for dedup. "
                         << "obj_count=" << d_all_buckets_obj_count
@@ -3083,9 +3133,9 @@ namespace rgw::dedup {
                         << MAX_DEDUP_MEM_ALLOCATION_MB << " MB)" << dendl;
       return ret;
     }
-    d_raw_mem_size = fp.alloc_bytes;
-    d_fan_out_B    = fp.fan_out_B;
-    d_num_groups   = fp.num_groups;
+    d_raw_mem_size     = fp.alloc_bytes;
+    d_num_groups       = fp.num_groups;
+    d_shards_per_group = fp.shards_per_group;
 
     md5_shard_t  num_md5_shards  = fp.num_md5_shards;
     work_shard_t num_work_shards = std::min(static_cast<work_shard_t>(num_md5_shards),
@@ -3094,9 +3144,11 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 5) << __func__ << "::obj_count=" << d_all_buckets_obj_count
                       << "::num_md5_shards=" << num_md5_shards
                       << "::num_work_shards=" << num_work_shards
+                      << "::d_min_mem_allocation_mb=" << d_min_mem_allocation_mb
                       << "::raw_mem_size=" << d_raw_mem_size
-                      << "::fan_out_B=" << d_fan_out_B
-                      << "::num_groups=" << d_num_groups << dendl;
+                      << "::num_buffers=" << fp.num_buffers
+                      << "::num_groups=" << d_num_groups
+                      << "::shards_per_group=" << d_shards_per_group << dendl;
     // init handles and create the dedup_pool
     ret = init_rados_access_handles(true);
     if (ret != 0) {
@@ -3565,8 +3617,8 @@ namespace rgw::dedup {
         ldpp_dout(dpp, 5) <<__func__ << "::raw_mem_size=" << d_raw_mem_size
                           << "::num_work_shards=" << num_work_shards
                           << "::num_md5_shards=" << num_md5_shards
-                          << "::fan_out_B=" << d_fan_out_B
-                          << "::num_groups=" << d_num_groups << dendl;
+                          << "::num_groups=" << d_num_groups
+                          << "::shards_per_group=" << d_shards_per_group << dendl;
         // DEDUP_DYN_ALLOC
         auto raw_mem = std::make_unique<uint8_t[]>(d_raw_mem_size);
         if (raw_mem == nullptr) {

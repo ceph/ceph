@@ -4351,9 +4351,9 @@ def test_dedup_filter_bucket_exec():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_gen_files():
-    min_size=4*KB
-    max_size=8*KB
-    num_files=256*KB
+    min_size=2*KB
+    max_size=4*KB
+    num_files=1024*KB
     files = []
 
     if not os.path.isdir(OUT_DIR):

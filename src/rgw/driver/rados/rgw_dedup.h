@@ -108,8 +108,7 @@ namespace rgw::dedup {
                                                   uint64_t obj_count,
                                                   dedup_step_t step);
     inline void check_and_update_md5_heartbeat(md5_shard_t md5_id,
-                                               md5_stats_t *p_stats,
-                                               uint64_t rec_count,
+                                               uint64_t obj_count,
                                                dedup_step_t step);
     int  ingress_bucket_idx_single_object(disk_block_array_t         &disk_arr,
                                           const rgw::sal::Bucket     *bucket,
@@ -135,11 +134,11 @@ namespace rgw::dedup {
                                            uint8_t *raw_mem,
                                            uint64_t raw_mem_size);
 
-    int  phase2_fine_fan_out(work_shard_t worker_id,
-                             md5_shard_t num_md5_shards,
-                             worker_stats_t *p_worker_stats,
-                             uint8_t *raw_mem,
-                             uint64_t raw_mem_size);
+    int  phase2_fine_fanout(work_shard_t worker_id,
+                            md5_shard_t num_md5_shards,
+                            worker_stats_t *p_worker_stats,
+                            uint8_t *raw_mem,
+                            uint64_t raw_mem_size);
     int  f_ingress_work_shard(unsigned shard_id,
                               uint8_t *raw_mem,
                               uint64_t raw_mem_size,
@@ -255,9 +254,9 @@ namespace rgw::dedup {
     uint64_t d_all_buckets_obj_size    = 0;
 
     // Fan-out parameters: computed in setup(), used in run()
-    uint32_t d_fan_out_B  = 0;    // B = concurrent output streams (buffers)
-    uint32_t d_num_groups = 0;    // G = ceil(num_md5_shards / B), 0 = single-pass
-    uint64_t d_raw_mem_size = 0;  // actual allocation in bytes (B * PER_SHARD_BUFFER_SIZE)
+    uint32_t d_num_groups       = 0;  // G = ceil(sqrt(N)), 0 = single-pass
+    uint32_t d_shards_per_group = 0;  // ceil(N / G), shards handled per group
+    uint64_t d_raw_mem_size     = 0;  // actual allocation in bytes (B * PER_SHARD_BUFFER_SIZE)
 
     uint64_t d_min_mem_allocation_mb = 64; // from yaml: rgw_dedup_min_mem_allocation_mb
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);

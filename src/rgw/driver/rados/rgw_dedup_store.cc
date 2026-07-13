@@ -830,7 +830,12 @@ namespace rgw::dedup {
     if (p_curr_block == &p_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
-    p_stats->egress_blocks++;
+    if (d_coarse) {
+      p_stats->egress_coarse_blocks++;
+    }
+    else {
+      p_stats->egress_blocks++;
+    }
     p_curr_block->close_block(dpp, false);
 
     int ret = flush(ioctx);
@@ -850,7 +855,6 @@ namespace rgw::dedup {
       return ret;
     }
 
-    p_stats->egress_records++;
     // first, try and add the record to the current open block
     record_id_t rec_id = p_curr_block->add_record(p_rec, dpp);
     if (rec_id < MAX_REC_IN_BLOCK) {
@@ -888,27 +892,43 @@ namespace rgw::dedup {
                                          work_shard_t worker_id,
                                          worker_stats_t *p_stats,
                                          md5_shard_t num_md5_shards,
-                                         uint32_t fan_out_B,
+                                         uint32_t num_groups,
+                                         uint32_t shards_per_group,
                                          uint32_t group_id,
                                          mode_t mode)
   {
-    d_num_md5_shards = num_md5_shards;
-    d_worker_id = worker_id;
-    d_fan_out_B = fan_out_B;
-    d_group_id  = group_id;
-    d_mode      = mode;
+    d_num_md5_shards   = num_md5_shards;
+    d_worker_id        = worker_id;
+    d_shards_per_group = shards_per_group;
+    d_group_id         = group_id;
+    d_mode             = mode;
 
     uint32_t num_buffers;
     if (mode == mode_t::SINGLE_PASS) {
       num_buffers = num_md5_shards;
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups == 0);
+      // group_id is only used when mode is mode_t::PHASE2_FINE
+      ceph_assert(group_id == 0);
     }
     else if (mode == mode_t::PHASE1_COARSE) {
-      // G = ceil(num_md5_shards / B) coarse group buffers
-      num_buffers = DIV_ROUND_UP(num_md5_shards, fan_out_B);
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups > 0);
+      // group_id is only used when mode is mode_t::PHASE2_FINE
+      ceph_assert(group_id == 0);
+
+      // In this mode we need one buffer per-group (G)
+      // G = ceil(sqrt(N)) coarse group buffers
+      num_buffers = num_groups;
     } else {
-      // Phase 2: B shards in this group (last group may be shorter)
-      uint32_t first_shard = group_id * fan_out_B;
-      uint32_t last_shard  = std::min(first_shard + fan_out_B, (uint32_t)num_md5_shards);
+      // Phase 2: shards_per_group shards in this group
+      // when num_groups == 0 we use mode_t::SINGLE_PASS
+      ceph_assert(num_groups > 0);
+
+      uint32_t first_shard = group_id * shards_per_group;
+      uint32_t last_shard =  first_shard + shards_per_group;
+      // last group may be shorter, make sure we don't use more than num_md5_shards
+      last_shard = std::min(last_shard, num_md5_shards);
       num_buffers = last_shard - first_shard;
     }
 
@@ -924,7 +944,7 @@ namespace rgw::dedup {
         // In fine mode, d_md5_shard stores the actual md5 shard for S slab naming.
         md5_shard_t shard_id = i;
         if (mode == mode_t::PHASE2_FINE) {
-          shard_id = (group_id * fan_out_B + i);
+          shard_id = (group_id * shards_per_group + i);
         }
         d_disk_arr[i].activate(dpp, p, d_worker_id, shard_id, p_stats, coarse);
         p += DISK_BLOCK_COUNT;

@@ -62,7 +62,10 @@ rgw_dedup_min_mem_allocation_mb:
 ```
 B = allocation / PER_SHARD_BUFFER_SIZE       (PER_SHARD_BUFFER_SIZE = 2 Mi)
 Single-pass:  num_md5_shards <= B            (one buffer per shard)
-Two-pass:     num_md5_shards <= B²           (B groups of B shards)
+Two-pass:     num_md5_shards <= B²           (balanced sqrt split)
+  G = ceil(sqrt(num_md5_shards))             (number of groups)
+  shards_per_group = ceil(N / G)             (shards per group)
+  Both G and shards_per_group <= B
 ```
 
 Starting from `rgw_dedup_min_mem_allocation_mb`:
@@ -154,16 +157,21 @@ allocation (B=4), which triggers the two-pass path even on small systems.
 
 ### Groups
 
-Groups are **contiguous ranges** of B shards:
+Groups use a **balanced sqrt split**: both the number of groups and the
+number of shards per group are approximately sqrt(N), giving symmetric
+buffer usage across both phases.
 
 ```
-G = ceil(num_md5_shards / B)
+S = shards_per_group = ceil(N / G)
+G = ceil(sqrt(N))
 
-group 0:  shards [0      .. B-1]
-group 1:  shards [B      .. 2B-1]
-group 2:  shards [2B     .. 3B-1]
+group 0:  shards [0      .. S-1]
+group 1:  shards [S      .. 2S-1]
+group 2:  shards [2S     .. 3S-1]
   ...
-group G-1: shards [(G-1)*B .. num_md5_shards-1]   (last group may be smaller)
+group G-1: shards [(G-1)*S .. num_md5_shards-1]   (last group may be smaller)
+
+Both G and S are <= B (guaranteed since N <= B²).
 ```
 
 ### Phase 1: Coarse Ingress (BI -> CS slabs)
@@ -174,7 +182,7 @@ coarse-group slabs (CS prefix):
 - Allocate **G output buffers** from raw_mem (G <= B, so fits)
 - For each record:
   `md5_shard = md5_low % num_md5_shards`
-  `group_id  = md5_shard / B`
+  `group_id  = md5_shard / shards_per_group`
 - Write record to `CS` slab for `group_id` via `get_coarse_slab_name(group_id)`
 - After scanning all BI entries, flush all G buffers
 
@@ -184,12 +192,12 @@ After phase 1 completes, the same worker iterates over each group and
 re-fans its CS slabs into final per-shard S slabs:
 
 For each group `g` in [0, G):
-1. Allocate **B output buffers** for the B md5 shards in group g
-   (buffer `i` maps to md5 shard `g*B + i`; last group may use fewer)
+1. Allocate **S output buffers** for the shards in group g
+   (buffer `i` maps to md5 shard `g*S + i`; last group may use fewer)
 2. Read back CS slabs for (worker_id, group g) from RADOS
 3. For each record:
    `md5_shard  = md5_low % num_md5_shards`
-   `buffer_idx = md5_shard - g * B`
+   `buffer_idx = md5_shard - g * shards_per_group`
 4. Write record to S slab via buffer at `buffer_idx`
 5. Flush output buffers (writes final S slabs)
 6. Delete CS slabs for this group

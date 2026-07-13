@@ -355,9 +355,11 @@ namespace rgw::dedup {
   public:
 
     // Single-pass: num_buffers = num_md5_shards, route by md5_low % N
-    // Phase 1 (coarse): num_buffers = G, route by md5_shard / B → group_id
-    // Phase 2 (fine):   num_buffers = B (or less for last group),
-    //                   route by md5_shard - group_id * B → buffer_idx
+
+    // Phase 1 (coarse): num_buffers = G = ceil(sqrt(N)),
+    //                   route by md5_shard / shards_per_group → group_id
+    // Phase 2 (fine):   num_buffers = shards_per_group = ceil(N/G),
+    //                   route by md5_shard - group_id * shards_per_group → buffer_idx
     enum class mode_t { SINGLE_PASS, PHASE1_COARSE, PHASE2_FINE };
     disk_block_array_t(const DoutPrefixProvider* _dpp,
                        uint8_t *raw_mem,
@@ -365,7 +367,8 @@ namespace rgw::dedup {
                        work_shard_t worker_id,
                        worker_stats_t *p_worker_stats,
                        md5_shard_t num_md5_shards,
-                       uint32_t fan_out_B = 0,
+                       uint32_t num_groups = 0,
+                       uint32_t shards_per_group = 0,
                        uint32_t group_id = 0,
                        mode_t mode = mode_t::SINGLE_PASS);
 
@@ -376,10 +379,10 @@ namespace rgw::dedup {
       uint32_t idx;
       switch (d_mode) {
       case mode_t::PHASE1_COARSE:
-        idx = md5_shard / d_fan_out_B;
+        idx = md5_shard / d_shards_per_group;
         break;
       case mode_t::PHASE2_FINE:
-        idx = md5_shard - d_group_id * d_fan_out_B;
+        idx = md5_shard - d_group_id * d_shards_per_group;
         break;
       default: // SINGLE_PASS
         idx = md5_shard;
@@ -393,8 +396,8 @@ namespace rgw::dedup {
     std::vector<disk_block_seq_t> d_disk_arr;
     work_shard_t      d_worker_id;
     md5_shard_t       d_num_md5_shards;
-    uint32_t          d_fan_out_B  = 0;
-    uint32_t          d_group_id   = 0;
-    mode_t            d_mode       = mode_t::SINGLE_PASS;
+    uint32_t          d_shards_per_group = 0;
+    uint32_t          d_group_id         = 0;
+    mode_t            d_mode             = mode_t::SINGLE_PASS;
   };
 } //namespace rgw::dedup
