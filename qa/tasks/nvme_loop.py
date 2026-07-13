@@ -24,6 +24,7 @@ def task(ctx, config):
             continue
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
+        existing_nvme_devs = set(discover_devs_via_sysfs(remote))
         base = '/sys/kernel/config/nvmet'
         remote.run(
             args=[
@@ -75,11 +76,6 @@ def task(ctx, config):
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
 
-        # nqn used for each scratch device when connecting it above; used
-        # as a fallback identifier if `nvme list -o json` is unreliable
-        # (see sysfs fallback below).
-        nqns_by_dev = {dev: dev.split('/')[-1] for dev in devs}
-
         new_devs = []
         json_failures = 0
         # after this many consecutive `nvme list -o json` crashes, stop
@@ -96,7 +92,10 @@ def task(ctx, config):
                         f'nvme list -o json crashed {json_failures} times '
                         'in a row; falling back to sysfs-based discovery'
                     )
-                    new_devs = discover_devs_via_sysfs(remote, nqns_by_dev)
+                    new_devs = sorted(
+                        set(discover_devs_via_sysfs(remote))
+                        - existing_nvme_devs
+                    )
                     for dev in new_devs:
                         bluestore_zap(remote, dev)
                     log.info(f'new_devs (sysfs fallback) {new_devs}')
@@ -281,61 +280,33 @@ def task(ctx, config):
             )
 
 
-def discover_devs_via_sysfs(remote, nqns_by_dev: dict) -> list:
+def discover_devs_via_sysfs(remote) -> list:
     """
-    Fallback nvme_loop device discovery that does not rely on
-    `nvme list -o json`, which has been observed to segfault on some
-    kernels (e.g. 6.8.0-* on ubuntu_24.04), exhausting safe_while retries
-    before any device discovery could succeed.
+    Return visible NVMe namespace block devices from /sys/class/block.
 
-    Each nvme_loop subsystem is created (see above) using the scratch
-    device's basename as both the subsystem directory name and the NQN
-    passed to `nvme connect -n <nqn>`. After connecting, the resulting
-    in-kernel NVMe controller exposes that NQN at
-    /sys/class/nvme/nvmeX/subsysnqn, and its namespace block device(s)
-    live in /sys/class/nvme/nvmeX/nvmeXnY. This walks sysfs directly to
-    map each expected NQN back to its /dev/nvmeXnY path, with no
-    dependency on nvme-cli's (crash-prone) JSON formatter.
-
-    :param nqns_by_dev: mapping of original scratch device path
-        (e.g. '/dev/sdb') -> nqn used to connect it (e.g. 'sdb')
-    :returns: list of discovered /dev/nvmeXnY paths, one per nqn found
+    Walking /sys/class/nvme/nvmeX/nvmeXnY is not reliable with native
+    NVMe multipath, where controller-path and namespace-head devices can
+    use different names. Only namespace-head devices (nvmeXnY) are
+    returned; partitions and controller-path devices are ignored.
     """
     out = StringIO()
     remote.run(
         args=[
             'bash', '-c',
-            'for d in /sys/class/nvme/nvme*/; do '
-            'c=$(basename "$d"); '
-            'n=$(cat "${d}subsysnqn" 2>/dev/null); '
-            'for ns in "${d}"${c}n*; do '
-            '[ -e "$ns" ] && echo "${c}|${n}|$(basename "$ns")"; '
-            'done; '
+            'for d in /sys/class/block/nvme*n*; do '
+            '[ -e "$d" ] || continue; '
+            'n=$(basename "$d"); '
+            '[[ "$n" =~ ^nvme[0-9]+n[0-9]+$ ]] && echo "/dev/$n"; '
             'done'
         ],
         stdout=out,
         check_status=False,
     )
-
-    nqn_to_dev = {}
-    for line in out.getvalue().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            _ctrl, nqn, ns = line.split('|', 2)
-        except ValueError:
-            continue
-        # first namespace seen for a given nqn wins; nvme_loop subsystems
-        # here are only ever set up with a single namespace (see above)
-        nqn_to_dev.setdefault(nqn, f'/dev/{ns}')
-
-    new_devs = []
-    for nqn in nqns_by_dev.values():
-        dev = nqn_to_dev.get(nqn)
-        if dev:
-            new_devs.append(dev)
-    return new_devs
+    return [
+        line.strip()
+        for line in out.getvalue().splitlines()
+        if line.strip()
+    ]
 
 
 def bluestore_zap(remote, device: str) -> None:
