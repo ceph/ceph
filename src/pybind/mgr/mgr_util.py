@@ -2,9 +2,9 @@ import os
 
 from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
+    EarmarkException,
     EarmarkParseError,
     EarmarkTopScope,
-    EarmarkException
 )
 
 if 'UNITTEST' in os.environ:
