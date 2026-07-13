@@ -86,6 +86,7 @@ Current Members
  * Adam King <adking@redhat.com>
  * Afreen Misbah <afreen@ibm.com>
  * Anthony D'Atri <anthony.datri@gmail.com>
+ * Aviv Caro <Aviv.Caro@ibm.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
