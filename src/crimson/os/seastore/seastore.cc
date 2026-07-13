@@ -11,6 +11,7 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
@@ -167,9 +168,9 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   };
 
   for (auto& hist : stats.op_lat) {
-    hist.buckets.resize(lat_hist_bounds_us.size());
-    for (std::size_t i = 0; i < lat_hist_bounds_us.size(); ++i) {
-      hist.buckets[i].upper_bound = lat_hist_bounds_us[i];
+    hist.buckets.resize(lat_hist_bounds_ms.size());
+    for (std::size_t i = 0; i < lat_hist_bounds_ms.size(); ++i) {
+      hist.buckets[i].upper_bound = lat_hist_bounds_ms[i];
       hist.buckets[i].count = 0;
     }
   }
@@ -215,6 +216,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
+    {txn_stage_t::COLLOCK_HOLD,          sm::label_instance("stage", "collock_hold")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
@@ -226,27 +228,38 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::SUBMIT_PREPARE_RECORD, sm::label_instance("stage", "submit_prepare_record")},
     {txn_stage_t::SUBMIT_JOURNAL,        sm::label_instance("stage", "submit_journal")},
   };
-  for (auto& [stage, label] : labels_by_stage) {
-    auto idx = static_cast<std::size_t>(stage);
-    auto& hist = stats.stage_lat[idx];
-    hist.buckets.resize(STAGE_LAT_BUCKETS_US.size());
-    for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_US.size(); ++i) {
-      hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_US[i];
-      hist.buckets[i].count = 0;
-    }
-    metrics.add_group(
-      "seastore",
-      {
-        sm::make_histogram(
-          "do_transaction_stage_lat",
-          [this, idx]() -> seastar::metrics::histogram& {
-            return stats.stage_lat[idx];
-          },
-          sm::description("per-stage latency (microseconds) of do_transaction"),
-          {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
-        )
+  // Three tiers of the same per-stage histograms
+  std::pair<std::array<seastar::metrics::histogram, STAGE_MAX>*, const char*>
+    tail_tiers[] = {
+      {&stats.stage_lat,           "all"},
+      {&stats.stage_lat_slow,      "slow"},
+      {&stats.stage_lat_very_slow, "very_slow"},
+    };
+  for (auto& [arr_ptr, tail] : tail_tiers) {
+    for (auto& [stage, label] : labels_by_stage) {
+      auto idx = static_cast<std::size_t>(stage);
+      auto& hist = (*arr_ptr)[idx];
+      hist.buckets.resize(STAGE_LAT_BUCKETS_MS.size());
+      for (std::size_t i = 0; i < STAGE_LAT_BUCKETS_MS.size(); ++i) {
+        hist.buckets[i].upper_bound = STAGE_LAT_BUCKETS_MS[i];
+        hist.buckets[i].count = 0;
       }
-    );
+      metrics.add_group(
+        "seastore",
+        {
+          sm::make_histogram(
+            "do_transaction_stage_lat",
+            [arr_ptr, idx]() -> seastar::metrics::histogram& {
+              return (*arr_ptr)[idx];
+            },
+            sm::description("per-stage latency (milliseconds) of do_transaction"),
+            {label,
+             sm::label_instance("tail", tail),
+             sm::label_instance("shard_store_index", std::to_string(store_index))}
+          )
+        }
+      );
+    }
   }
 
   metrics.add_group(
@@ -1739,19 +1752,21 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   --(shard_stats.starting_io_num);
   ++(shard_stats.waiting_collock_io_num);
 
-  auto t_pre_collock = std::chrono::steady_clock::now();
+  auto t_pre_collock = seastar::lowres_clock::now();
   co_await ctx.transaction->get_handle().take_collection_lock(
     static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
   );
-  auto collock_wait = std::chrono::steady_clock::now() - t_pre_collock;
+  auto t_post_collock = seastar::lowres_clock::now();
+  auto collock_wait = t_post_collock - t_pre_collock;
+  ctx.transaction->get_handle().set_lock_acquire_time(t_post_collock);
 
   assert(shard_stats.waiting_collock_io_num);
   --(shard_stats.waiting_collock_io_num);
   ++(shard_stats.waiting_throttler_io_num);
 
-  auto t_pre_throttler = std::chrono::steady_clock::now();
+  auto t_pre_throttler = seastar::lowres_clock::now();
   co_await throttler.get(1);
-  auto throttler_wait = std::chrono::steady_clock::now() - t_pre_throttler;
+  auto throttler_wait = seastar::lowres_clock::now() - t_pre_throttler;
 
   assert(shard_stats.waiting_throttler_io_num);
   --(shard_stats.waiting_throttler_io_num);
@@ -1790,7 +1805,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       const size_t total_ops = ctx.ext_transaction.get_num_ops();
       size_t current_op = 0;
 
-      auto build_start = std::chrono::steady_clock::now();
+      auto build_start = seastar::lowres_clock::now();
       while (ctx.iter.have_op()) {
         current_op++;
 
@@ -1799,13 +1814,13 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 	co_await _do_transaction_step(
 	  ctx, ctx.ch, onodes, ctx.iter);
       }
-      ctx.build_time += std::chrono::steady_clock::now() - build_start;
+      ctx.build_time += seastar::lowres_clock::now() - build_start;
 
       DEBUGT("completed all {} ops for cid={}",
              t, total_ops, ctx.ch->get_cid());
-      auto submit_start = std::chrono::steady_clock::now();
+      auto submit_start = seastar::lowres_clock::now();
       co_await transaction_manager->submit_transaction(*ctx.transaction);
-      ctx.submit_time += std::chrono::steady_clock::now() - submit_start;
+      ctx.submit_time += seastar::lowres_clock::now() - submit_start;
     })
   ).handle_error(
     crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
@@ -1817,23 +1832,41 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
   DEBUGT("done", *ctx.transaction);
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
-  add_stage_latency_sample(txn_stage_t::COLLOCK_WAIT, collock_wait);
-  add_stage_latency_sample(txn_stage_t::THROTTLER_WAIT, throttler_wait);
-  add_stage_latency_sample(txn_stage_t::BUILD, ctx.build_time);
-  add_stage_latency_sample(txn_stage_t::BUILD_GET_ONODE, ctx.get_onode_time);
-  add_stage_latency_sample(txn_stage_t::SUBMIT_TOTAL, ctx.submit_time);
   {
     auto& pd = ctx.transaction->get_phase_durations();
-    add_stage_latency_sample(txn_stage_t::SUBMIT_RESERVE, pd.reserve);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_OOL_WRITE, pd.ool_write);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_LBA_UPDATE, pd.lba_update);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_ENTER, pd.prepare_enter);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record);
-    add_stage_latency_sample(txn_stage_t::SUBMIT_JOURNAL, pd.journal);
+    auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
+    auto total_ms = std::chrono::duration_cast<
+      std::chrono::duration<double, std::milli>>(total).count();
+
+    const std::array<
+      std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
+      stage_samples = {{
+        {txn_stage_t::COLLOCK_WAIT,          collock_wait},
+        {txn_stage_t::COLLOCK_HOLD,          ctx.transaction->get_handle().get_lock_hold_time()},
+        {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
+        {txn_stage_t::BUILD,                 ctx.build_time},
+        {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
+        {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
+        {txn_stage_t::SUBMIT_RESERVE,        pd.reserve},
+        {txn_stage_t::SUBMIT_OOL_WRITE,      pd.ool_write},
+        {txn_stage_t::SUBMIT_LBA_UPDATE,     pd.lba_update},
+        {txn_stage_t::SUBMIT_PREPARE_ENTER,  pd.prepare_enter},
+        {txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record},
+        {txn_stage_t::SUBMIT_JOURNAL,        pd.journal},
+      }};
+
+    for (auto& [stage, dur] : stage_samples) {
+      add_stage_latency_sample(stats.stage_lat, stage, dur);
+      if (total_ms > TAIL_SLOW_MS) {
+        add_stage_latency_sample(stats.stage_lat_slow, stage, dur);
+      }
+      if (total_ms > TAIL_VERY_SLOW_MS) {
+        add_stage_latency_sample(stats.stage_lat_very_slow, stage, dur);
+      }
+    }
+    add_latency_sample(op_type_t::DO_TRANSACTION, total);
   }
-  add_latency_sample(
-    op_type_t::DO_TRANSACTION,
-    std::chrono::steady_clock::now() - ctx.begin_timestamp);
+
   add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
 
   throttler.put();
@@ -1935,7 +1968,7 @@ SeaStore::Shard::_do_transaction_step(
   }
   if (!onodes[op->oid]) {
     const ghobject_t& oid = i.get_oid(op->oid);
-    auto t0 = std::chrono::steady_clock::now();
+    auto t0 = seastar::lowres_clock::now();
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
@@ -1946,7 +1979,7 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
-      ctx.get_onode_time += std::chrono::steady_clock::now() - t0;
+      ctx.get_onode_time += seastar::lowres_clock::now() - t0;
       return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
     });
   }

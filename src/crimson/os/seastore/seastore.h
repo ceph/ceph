@@ -49,6 +49,7 @@ enum class op_type_t : uint8_t {
 
 enum class txn_stage_t : uint8_t {
     COLLOCK_WAIT = 0,  // waiting on the collection ordering_lock
+    COLLOCK_HOLD,      // collection ordering_lock held (acquire -> release at prepare_record)
     THROTTLER_WAIT,    // waiting for a throttler slot
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
@@ -260,11 +261,11 @@ public:
       TransactionRef transaction;
 
       ceph::os::Transaction::iterator iter;
-      std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
+      seastar::lowres_clock::time_point begin_timestamp = seastar::lowres_clock::now();
 
-      std::chrono::steady_clock::duration build_time{0};
-      std::chrono::steady_clock::duration get_onode_time{0};
-      std::chrono::steady_clock::duration submit_time{0};
+      seastar::lowres_clock::duration build_time{0};
+      seastar::lowres_clock::duration get_onode_time{0};
+      seastar::lowres_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
         tm.reset_transaction_preserve_handle(*transaction);
@@ -286,7 +287,7 @@ public:
       op_type_t op_type,
       cache_hint_t cache_hint_flags,
       F &&f) const {
-      auto begin_time = std::chrono::steady_clock::now();
+      auto begin_time = seastar::lowres_clock::now();
       return seastar::do_with(
         oid, Ret{}, std::forward<F>(f),
         [this, ch, src, op_type, begin_time, tname, cache_hint_flags
@@ -316,7 +317,7 @@ public:
           });
         }).safe_then([&ret, op_type, begin_time, this] {
           const_cast<Shard*>(this)->add_latency_sample(op_type,
-                     std::chrono::steady_clock::now() - begin_time);
+                     seastar::lowres_clock::now() - begin_time);
           return seastar::make_ready_future<Ret>(ret);
         });
       });
@@ -439,27 +440,34 @@ public:
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
 
-    // Histogram bucket upper bounds in microseconds (0.25ms–20ms).
-    // Ops above 20ms land in the last bucket as overflow.
-    static constexpr std::array<double, 14> lat_hist_bounds_us = {
-      250, 500, 1000,
-      1500, 2000, 3000,
-      5000,
-      7500, 10000,
-      15000, 20000,
-      30000, 50000,
-      100000
+    // Histogram bucket upper bounds in milliseconds (1ms–100ms).
+    // Ops above 100ms land in the last bucket as overflow. The smallest
+    // bucket is 1ms: sub-ms latencies are below lowres_clock resolution
+    // (~task_quota) and cannot be resolved, so no finer buckets are kept.
+    static constexpr std::array<double, 12> lat_hist_bounds_ms = {
+      1,
+      1.5, 2, 3,
+      5,
+      7.5, 10,
+      15, 20,
+      30, 50,
+      100
     };
 
     // Buckets for the per-transaction conflict/replay distribution.
     static constexpr std::size_t REPLAY_BUCKETS = 16;
 
     static constexpr auto STAGE_MAX = static_cast<std::size_t>(txn_stage_t::MAX);
-    // Upper bounds (microseconds) for the per-stage do_transaction latency histograms
-    static constexpr std::array<uint64_t, 14> STAGE_LAT_BUCKETS_US = {
-      250, 500, 1000, 1500, 2000, 3000, 5000, 7500,
-      10000, 15000, 20000, 30000, 50000, 100000
+    // Upper bounds (milliseconds) for the per-stage do_transaction latency
+    // histograms. Smallest bucket is 1ms; sub-ms is below lowres_clock
+    // resolution (~task_quota) and cannot be resolved.
+    static constexpr std::array<double, 12> STAGE_LAT_BUCKETS_MS = {
+      1, 1.5, 2, 3, 5, 7.5,
+      10, 15, 20, 30, 50, 100
     };
+
+    static constexpr double TAIL_SLOW_MS = 5;        // 5 ms
+    static constexpr double TAIL_VERY_SLOW_MS = 10;  // 10 ms
 
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
@@ -472,6 +480,10 @@ public:
       uint64_t onode_updates = 0;
       uint64_t onode_erases = 0;
       int64_t  onode_extents_delta = 0;
+
+      // same metrics collected two more times for high tail txns.
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
+      std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_very_slow;
     } stats;
 
     void add_onode_tree_sample(const Transaction::tree_stats_t& ts) {
@@ -491,14 +503,15 @@ public:
     }
 
     void add_latency_sample(op_type_t op_type,
-        std::chrono::steady_clock::duration dur) {
+        seastar::lowres_clock::duration dur) {
       seastar::metrics::histogram& lat = get_latency(op_type);
-      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
       lat.sample_count++;
-      lat.sample_sum += us;
+      lat.sample_sum += ms;
       bool found = false;
       for (auto& b : lat.buckets) {
-        if (static_cast<double>(us) <= b.upper_bound) {
+        if (ms <= b.upper_bound) {
           ++b.count;
           found = true;
           break;
@@ -524,25 +537,28 @@ public:
       hist.sample_sum += num_replays;
     }
 
-    // Record the latency of one do_transaction stage (microseconds). Buckets are
+    // Record the latency of one do_transaction stage (milliseconds). Buckets are
     // non-cumulative (bucket = first upper_bound >= value); values above the top
     // bound aren't bucketed but still land in sample_count/sample_sum.
-    void add_stage_latency_sample(txn_stage_t stage,
-        std::chrono::steady_clock::duration dur) {
-      auto& hist = stats.stage_lat[static_cast<std::size_t>(stage)];
+    void add_stage_latency_sample(
+        std::array<seastar::metrics::histogram, STAGE_MAX>& arr,
+        txn_stage_t stage,
+        seastar::lowres_clock::duration dur) {
+      auto& hist = arr[static_cast<std::size_t>(stage)];
       if (hist.buckets.empty()) {
         // register_metrics() did not run (store inactive); nothing to record.
         return;
       }
-      auto us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+      auto ms = std::chrono::duration_cast<
+        std::chrono::duration<double, std::milli>>(dur).count();
       for (auto& b : hist.buckets) {
-        if (static_cast<double>(us) <= b.upper_bound) {
+        if (ms <= b.upper_bound) {
           ++b.count;
           break;
         }
       }
       ++hist.sample_count;
-      hist.sample_sum += us;
+      hist.sample_sum += ms;
     }
 
     /*
