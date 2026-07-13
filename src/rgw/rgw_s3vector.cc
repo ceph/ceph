@@ -1991,7 +1991,7 @@ namespace rgw::s3vector {
       return;
     }
     // we are not failing the operation if we cannot notify the background process on index update
-    notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
+    notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name, num_rows);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     ctx->result = 0;
@@ -2451,7 +2451,7 @@ namespace rgw::s3vector {
     lancedb_connection_free(conn);
     if (result == LANCEDB_SUCCESS) {
     // upon deleting vectors, it needs to verify whether to re-build the index
-      notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
+      notify_index_delete(dpp, configuration.vector_bucket_name, configuration.index_name, configuration.keys.size());
     }
     return lancedb_error_to_errno(result);
   }
