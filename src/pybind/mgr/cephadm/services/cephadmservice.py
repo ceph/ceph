@@ -675,11 +675,20 @@ class CephadmService(metaclass=ABCMeta):
         return DaemonDescription()
 
     def get_keyring_with_caps(self, entity: AuthEntity, caps: List[str]) -> str:
+        # try with newer cipher first, it's possible this isn't supported
+        # early in an upgrade
         ret, keyring, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': caps,
+            'key_type': utils.ROTATION_CIPHER
         })
+        if err:
+            ret, keyring, err = self.mgr.mon_command({
+                'prefix': 'auth get-or-create',
+                'entity': entity,
+                'caps': caps,
+            })
         if err:
             ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
