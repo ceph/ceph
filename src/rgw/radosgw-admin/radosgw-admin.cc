@@ -4301,11 +4301,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-index-type", (char*)NULL)) {
       parse(val, bucket_index_type);
       if (! bucket_index_type.has_value()) {
-	std::cerr << "ERROR: --index_type, when specified, must \"hashed\", or \"ordered\"" <<
+	std::cerr << "ERROR: --bucket-index-type, when specified, must \"hashed\", or \"ordered\"" <<
 	  std::endl;
 	return EINVAL;
       } else if (bucket_index_type.value() == rgw::BucketIndexType::Indexless) {
-	std::cerr << "ERROR: --index_type cannot be set to Indexless" << std::endl;
+	std::cerr << "ERROR: --bucket-index-type cannot be set to Indexless" << std::endl;
 	return EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
@@ -4440,7 +4440,10 @@ int main(int argc, const char **argv)
       string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
       if (bi_index_type == BIIndexType::Invalid) {
-        cerr << "ERROR: invalid bucket index entry type" << std::endl;
+        cerr << "ERROR: invalid bucket index entry type \"" <<
+          index_type_str << "\". Expecting \"plain\", \"instance\", "
+          "\"olh\", or \"resharddeleted\". WARNING: This command-line "
+          "option can be confused with \"--bucket-index-type\"." << std::endl;
         return EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--log-type", (char*)NULL)) {
@@ -9140,7 +9143,7 @@ next:
 		     dpp(), null_yield,
                      verbose, &cout, formatter.get());
     return -ret;
-  }
+  } // BUCKET_RESHARD
 
   if (opt_cmd == OPT::RESHARD_ADD) {
     int ret = check_reshard_bucket_params(driver,
@@ -9169,7 +9172,7 @@ next:
     entry.initiator = cls_rgw_reshard_initiator::Admin;
 
     return reshard.add(dpp(), entry, null_yield);
-  }
+  } // RESHARD_ADD
 
   if (opt_cmd == OPT::RESHARD_LIST) {
     int ret;

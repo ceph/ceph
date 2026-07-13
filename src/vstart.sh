@@ -959,6 +959,8 @@ $CCLIENTDEBUG
         rgw crypt require ssl = false
         rgw sts key = abcdefghijklmnop
         rgw s3 auth use sts = true
+        ;rgw_bucket_default_index = ordered
+        rgw_bucket_default_index = foobar
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
