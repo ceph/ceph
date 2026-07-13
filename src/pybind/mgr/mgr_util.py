@@ -424,39 +424,40 @@ class CephFSEarmarkResolver:
         self._mgr = mgr
         self._cephfs_client = client or CephfsClient(mgr)
 
-    def _manage_earmark(self, path: str, volume: str, operation: str, earmark: Optional[str] = None) -> Optional[str]:
-        """
-        Manages (get or set) the earmark for a subvolume based on the provided parameters.
+    @contextlib.contextmanager
+    def _manager(
+        self, path: str, volume: str, raises: bool = True
+    ) -> Iterator[CephFSVolumeEarmarking]:
+        """Returns a context manager object yielding a earmarking manager.
 
         :param path: The path of the subvolume
         :param volume: The volume name
-        :param earmark: The earmark to set (None if only getting the earmark)
-        :return: The earmark if getting, otherwise None
+        :param raises: If false, EarmarkExceptions will be automatically
+                      supressed
+        :yield: The earmark manager
         """
         with open_filesystem(self._cephfs_client, volume) as fs:
-            earmark_manager = CephFSVolumeEarmarking(fs, path)
             try:
-                if operation == 'set' and earmark is not None:
-                    earmark_manager.set_earmark(earmark)
-                    return None
-                elif operation == 'get':
-                    return earmark_manager.get_earmark()
+                yield CephFSVolumeEarmarking(fs, path)
             except EarmarkException as e:
                 logger.error(f"Failed to manage earmark: {e}")
-                return None
-        return None
+                if raises:
+                    raise
 
     def get_earmark(self, path: str, volume: str) -> Optional[str]:
         """
         Get earmark for a subvolume.
         """
-        return self._manage_earmark(path, volume, 'get')
+        with self._manager(path, volume, raises=False) as emgr:
+            return emgr.get_earmark()
+        return None  # in case ctx manager supresses the error
 
     def set_earmark(self, path: str, volume: str, earmark: str) -> None:
         """
         Set earmark for a subvolume.
         """
-        self._manage_earmark(path, volume, 'set', earmark)
+        with self._manager(path, volume, raises=False) as emgr:
+            emgr.set_earmark(earmark)
 
     def check_earmark(self, earmark: str, top_level_scope: EarmarkTopScope) -> bool:
         """
