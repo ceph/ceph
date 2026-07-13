@@ -349,7 +349,8 @@ class NvmeofCLICommand(DBCLICommand):
                  poll: bool = False,
                  success_message_template: Optional[str] = None,
                  success_message_map: Optional[Dict[str, Any]] = None,
-                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None):
+                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None,
+                 deprecated_params: Optional[Dict[str, str]] = None):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
@@ -360,6 +361,7 @@ class NvmeofCLICommand(DBCLICommand):
         self._success_message_map = success_message_map or {}
         self._success_message_fn = success_message_fn
         self._func_defaults: Dict[str, Any] = {}
+        self._deprecated_params: Dict[str, str] = deprecated_params or {}
 
     def __call__(self, func):
         resp = super().__call__(func)
@@ -372,6 +374,7 @@ class NvmeofCLICommand(DBCLICommand):
                 success_message_template=self._success_message_template,
                 success_message_map=self._success_message_map,
                 success_message_fn=self._success_message_fn,
+                deprecated_params=self._deprecated_params,
             )
             self._alias_cmd(func)
             self._alias_cmd._func_defaults = self._alias_cmd._compute_func_defaults()
@@ -495,9 +498,16 @@ class NvmeofCLICommand(DBCLICommand):
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
+        deprecated_warnings = ''
         try:
             out_format = cmd_dict.get('format')
             args_map = self._args_map_from_argspec(cmd_dict, inbuf)
+
+            if out_format == 'plain' or not out_format:
+                for param, msg in self._deprecated_params.items():
+                    if args_map.get(param) is not None:
+                        deprecated_warnings += f"\nWarning: {msg}"
+
             ret = super().call(mgr, cmd_dict, inbuf)
             if ret is None:
                 ret = {}
@@ -519,6 +529,7 @@ class NvmeofCLICommand(DBCLICommand):
                 wrn_msg = ret.get('error_message', '') if isinstance(ret, dict) else ''
                 if wrn_msg:
                     out += f"\nWarning: {wrn_msg}"
+                out += deprecated_warnings
 
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)
@@ -532,4 +543,4 @@ class NvmeofCLICommand(DBCLICommand):
 
         # pylint: disable=broad-except
         except Exception as e:
-            return HandleCommandResult(-errno.EINVAL, '', str(e))
+            return HandleCommandResult(-errno.EINVAL, '', str(e) + deprecated_warnings)
