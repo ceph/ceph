@@ -1,7 +1,7 @@
 import orchestrator
 from .fixtures import wait
 import pytest
-from unittest.mock import patch, PropertyMock
+from unittest.mock import patch, MagicMock, PropertyMock
 
 from rook.module import RookOrchestrator
 from rook.rook_cluster import RookCluster
@@ -118,3 +118,25 @@ class TestRook(object):
                     assert dds[i].last_deployed == pods[i]['created']
                     assert dds[i].started == pods[i]['started']
                     assert dds[i].last_refresh == pods[i]['refreshed']
+
+    def test_available_uses_bounded_pod_list(self):
+        # available() must not fetch the entire pod list. This is needlesslyn
+        # expensive, and all we need is availability.
+        ro = RookOrchestrator('rook', None, self)
+        ro._rook_env.namespace = 'rook-ceph'
+
+        fake_k8s = MagicMock()
+        # kubernetes_imported may be False when the optional `kubernetes`
+        # package isn't installed; force it True so this test exercises the
+        # probe rather than short-circuiting at available()'s first guard.
+        with patch('rook.module.kubernetes_imported', True), \
+                patch('rook.RookOrchestrator.k8s',
+                      new_callable=PropertyMock,
+                      return_value=fake_k8s), \
+                patch.object(ro._rook_env, 'has_namespace', return_value=True):
+            avail, why, details = ro.available()
+
+        assert avail is True
+        assert why == ""
+        assert details == {}
+        fake_k8s.list_namespaced_pod.assert_called_once_with('rook-ceph', limit=1)
