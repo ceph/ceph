@@ -282,19 +282,6 @@ class CephFSVolumeEarmarking:
                 errno.EFAULT, f"Unexpected error {action} earmark: {e}"
             ) from e
 
-    @staticmethod
-    def parse_earmark(value: str) -> Optional[EarmarkContents]:
-        """
-        Parse an earmark value. Returns None if the value is an empty string.
-        Raises EarmarkParseError if the top-level scope is not valid or the earmark
-        string is not properly structured.
-        Returns an EarmarkContents for valid earmark values.
-
-        :param value: The earmark string to parse.
-        :return: An EarmarkContents instance if valid, None if empty.
-        """
-        return parse_earmark(value)
-
     def _validate_earmark(self, earmark: Union[str, EarmarkContents]) -> bool:
         """
         Validates the earmark. If the earmark is a string, it will be parsed
@@ -306,7 +293,7 @@ class CephFSVolumeEarmarking:
         if not isinstance(earmark, str):
             return True
         try:
-            self.parse_earmark(earmark)
+            parse_earmark(earmark)
         except EarmarkParseError:
             return False
         return True
