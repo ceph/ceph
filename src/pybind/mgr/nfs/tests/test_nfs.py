@@ -1867,6 +1867,29 @@ EXPORT {
     def test_nfs_byok_export_enctag_validation_success(self):
         self._do_mock_test(self._do_test_nfs_byok_export_enctag_validation_success)
 
+    def _do_test_nfs_byok_export_enctag_validation_mismatch(self):
+        """Test that export creation fails when kmip_key_id does not match enctag"""
+        from object_format import ErrorResponse
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        with mock.patch('nfs.export.get_enctag_from_path', return_value='ENCTAG-ACTUAL'):
+            with pytest.raises(ErrorResponse) as exc_info:
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name='myfs',
+                    path='/',
+                    pseudo_path='/cephfs_enctag_test2',
+                    read_only=False,
+                    squash='root',
+                    kmip_key_id='KEY-WRONG'
+                )
+            assert "does not match" in str(exc_info.value)
+            assert "ENCTAG-ACTUAL" in str(exc_info.value)
+
+    def test_nfs_byok_export_enctag_validation_mismatch(self):
+        self._do_mock_test(self._do_test_nfs_byok_export_enctag_validation_mismatch)
+
 
 class TestNFSClusterIngressPlacement:
     cluster_id = 'mynfs'

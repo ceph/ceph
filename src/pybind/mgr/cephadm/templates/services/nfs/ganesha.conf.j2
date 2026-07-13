@@ -61,7 +61,6 @@ RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
-
 {% if use_old_nodeid %}
 CEPH {
 	Use_old_uuid = true;
@@ -69,7 +68,6 @@ CEPH {
 
 {% endif %}
 {% if kmip_addrs %}
-
 %plugin ganesha/libkmip_fscrypt.so
 KMIP {
 {% for kmip_addr in kmip_addrs %}
@@ -111,6 +109,7 @@ TLS_CONFIG{
         Enable_debug = {{ tls_debug }};
 {% endif %}
 }
+
 {% endif %}
 
 %url    {{ url }}

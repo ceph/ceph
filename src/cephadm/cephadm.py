@@ -5077,16 +5077,6 @@ def _add_deploy_parser_args(
         help='Additional entrypoint arguments to apply to deamon'
     )
     parser_deploy.add_argument(
-        '--skip-restart-for-reconfig',
-        action='store_true',
-        default=False,
-        help='skip restart for non ceph daemons and perform default action'
-    )
-    parser_deploy.add_argument(
-        '--send-signal-to-daemon',
-        help='Send signal to daemon'
-    )
-    parser_deploy.add_argument(
         '--termination-grace-period-seconds',
         type=int,
         default=None,

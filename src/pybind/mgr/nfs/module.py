@@ -173,11 +173,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
                                 ingress_placement: Optional[str] = None,
-                                inbuf: Optional[str] = None) -> None:
-                                kmip_cert: Optional[str] = None,
-                                kmip_key: Optional[str] = None,
-                                kmip_ca_cert: Optional[str] = None,
-                                kmip_host_list: Optional[List[str]] = None,
                                 inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""

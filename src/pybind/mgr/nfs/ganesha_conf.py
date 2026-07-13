@@ -433,7 +433,7 @@ class Export:
                     for client in client_blocks],
                    sectype=sectype,
                    xprtsec=xprtsec,
-                   qos_block=qos_block
+                   qos_block=qos_block,
                    kmip_key_id=export_block.values.get('kmip_key_id')
                    )
 
@@ -488,7 +488,7 @@ class Export:
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
                    sectype=ex_dict.get("sectype"),
                    xprtsec=ex_dict.get('XprtSec'),
-                   qos_block=qos_block
+                   qos_block=qos_block,
                    kmip_key_id=ex_dict.get('kmip_key_id')
                    )
 

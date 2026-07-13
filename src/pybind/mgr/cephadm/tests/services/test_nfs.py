@@ -7,10 +7,11 @@ import pytest
 from ceph.utils import datetime_now
 from orchestrator import DaemonDescriptionStatus
 
+from cephadm import utils
 from cephadm.serve import CephadmServe
+from cephadm.services.nfs import NFSService
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm import utils
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
     NFSServiceSpec,
@@ -652,7 +653,6 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4;" in ganesha_conf
 
-
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
@@ -686,6 +686,7 @@ class TestNFS:
                     '}'
                 )
                 assert expected_kmip_block in ganesha_conf
+                assert '%plugin ganesha/libkmip_fscrypt.so' in ganesha_conf
                 assert nfs_generated_conf['files']['kmip_cert.pem'] == 'kmip_cert'
                 assert nfs_generated_conf['files']['kmip_key.pem'] == 'kmip_key'
                 assert nfs_generated_conf['files']['kmip_ca_cert.pem'] == 'kmip_ca_cert'
@@ -849,9 +850,112 @@ def test_nfs_choose_next_action(cephadm_module, mock_cephadm):
         # _daemon_action so we can check what action was chosen
         mock_cephadm.serve(cephadm_module)._check_daemons()
         mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
-        # NB: it appears that the code is designed to redeploy unless all
-        # dependencies are prefixed with 'kmip' but I can't find any code
-        # that would produce any dependencies prefixed with 'kmip'!
+
+
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_nfs_byok_choose_next_action(cephadm_module, mock_cephadm):
+    nfs_spec = NFSServiceSpec(
+        service_id="foo",
+        placement=PlacementSpec(hosts=['test']),
+        kmip_cert='kmip_cert_v1',
+        kmip_key='kmip_key',
+        kmip_ca_cert='kmip_ca_cert',
+        kmip_host_list=['test'],
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        stack.enter_context(with_service(cephadm_module, nfs_spec))
+        nfs_spec.kmip_cert = 'kmip_cert_v2'
+        cephadm_module.apply([nfs_spec])
+        mock_cephadm._daemon_action.reset_mock()
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(
+            ANY,
+            action="reconfig",
+            skip_restart_for_reconfig=True,
+            send_signal_to_daemon='SIGHUP',
+        )
+
+
+def test_nfs_choose_next_action_kmip_only_reconfig_with_sighup():
+    mgr = MagicMock()
+    svc = NFSService(mgr)
+    spec = NFSServiceSpec(
+        service_id='foo',
+        placement=PlacementSpec(hosts=['test']),
+        kmip_cert='kmip_cert',
+        kmip_key='kmip_key',
+        kmip_ca_cert='kmip_ca_cert',
+        kmip_host_list=['test'],
+    )
+    curr_deps = NFSService.get_dependencies(mgr, spec)
+    spec.kmip_cert = 'kmip_cert_updated'
+    last_deps = curr_deps
+    curr_deps = NFSService.get_dependencies(mgr, spec)
+    next_step = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        spec,
+        curr_deps=curr_deps,
+        last_deps=last_deps,
+    )
+    assert next_step.action is utils.Action.RECONFIG
+    assert next_step.skip_restart_for_reconfig is True
+    assert next_step.send_signal_to_daemon == 'SIGHUP'
+
+
+def test_nfs_choose_next_action_kmip_and_tls_redeploy():
+    mgr = MagicMock()
+    svc = NFSService(mgr)
+    spec = NFSServiceSpec(
+        service_id='foo',
+        placement=PlacementSpec(hosts=['test']),
+        kmip_cert='kmip_cert',
+        kmip_key='kmip_key',
+        kmip_ca_cert='kmip_ca_cert',
+        kmip_host_list=['test'],
+        tls_ktls=True,
+    )
+    last_deps = NFSService.get_dependencies(mgr, spec)
+    spec.kmip_cert = 'kmip_cert_updated'
+    spec.tls_ktls = False
+    curr_deps = NFSService.get_dependencies(mgr, spec)
+    next_step = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        spec,
+        curr_deps=curr_deps,
+        last_deps=last_deps,
+    )
+    assert next_step.action is utils.Action.REDEPLOY
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
+
+
+def test_nfs_choose_next_action_deps_unchanged():
+    mgr = MagicMock()
+    svc = NFSService(mgr)
+    spec = NFSServiceSpec(
+        service_id='foo',
+        placement=PlacementSpec(hosts=['test']),
+        kmip_cert='kmip_cert',
+        kmip_key='kmip_key',
+        kmip_ca_cert='kmip_ca_cert',
+        kmip_host_list=['test'],
+    )
+    deps = NFSService.get_dependencies(mgr, spec)
+    next_step = svc.choose_next_action(
+        utils.Action.RECONFIG,
+        'nfs',
+        spec,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert next_step.action is utils.Action.RECONFIG
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
 
 
 @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
