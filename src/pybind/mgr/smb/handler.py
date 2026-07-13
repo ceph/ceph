@@ -1541,7 +1541,14 @@ def _save_pending_rgw_config(
         rgw = sc.resource.rgw
         assert rgw is not None
         assert rgw.credential_ref is not None
-        cred = cred_map[rgw.credential_ref]
+        cred = cred_map.get(rgw.credential_ref)
+        if cred is None:
+            log.error(
+                "share %r references missing RGW credential %r",
+                sc.resource.name,
+                rgw.credential_ref,
+            )
+            continue
         access_key = cred.access_key_id or ''
         secret_key = cred.secret_access_key or ''
         merge_shares[sc.resource.name] = {
