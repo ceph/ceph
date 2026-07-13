@@ -1341,7 +1341,36 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             continue
                 else:
                     log.info(f"Applying branch-specific commit {commit.hexsha[:8]} ...")
-                    wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
+                    try:
+                        wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
+                    except git.exc.GitCommandError:
+                        log.error(f"Failed to apply branch-specific commit {commit.hexsha[:8]}! The PR likely has conflicts with the base branch and needs a rebase.")
+                        wt_repo.git.cherry_pick('--abort')
+
+                        if args.ci_mode:
+                            md_text = f"### Automated PR Review - Rebase Required\n\nBranch-specific commit `{commit.hexsha[:8]}` failed to apply cleanly to the base branch during simulation. The PR likely has conflicts and needs a rebase."
+                            report.add("Simulation Failure", md_text)
+                            raise SkipToMerge()
+
+                        while True:
+                            ans = input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
+                            if ans == 'o':
+                                url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
+                                open_in_browser([url])
+                                print(f"Opened {url} in browser.")
+                            elif ans == 'm':
+                                raise SkipToMerge()
+                            elif ans == 'r':
+                                md_text = f"### Automated PR Review - Rebase Required\n\nBranch-specific commit `{commit.hexsha[:8]}` failed to apply cleanly to the base branch during simulation. The PR likely has conflicts and needs a rebase."
+                                report.add("Simulation Failure", md_text)
+                                report.record_failure()
+                                raise SkipToMerge()
+                            elif ans == 'q':
+                                sys.exit(1)
+                            elif ans == 'p':
+                                break
+                            else:
+                                print("Invalid choice. Please enter p, m, r, o, or q.")
             
             if recorded_deviations:
                 md_text = """
