@@ -280,7 +280,7 @@ if(WITH_RADOSGW_NSFS)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_common_srcs
 	      driver/nsfs/rgw_sal_nsfs.cc
-	      driver/nsfs/nsfsDB.cc
+	      driver/posix/posixDB.cc
 	      driver/nsfs/fs_strategy.cc
 	      driver/posix/lmdb-safe.cc
 	      driver/posix/notify.cpp)
