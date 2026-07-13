@@ -683,6 +683,149 @@ def test_bucket_create():
     for zone in zonegroup_conns.zones:
         assert check_all_buckets_exist(zone, buckets)
 
+def _parse_sync_status_json(out):
+    data = json.loads(out)
+    # JSONFormatter drops the root section name; tolerate a wrapped form too.
+    if isinstance(data, dict) and 'metadata_sync' in data:
+        return data
+    if isinstance(data, dict) and isinstance(data.get('sync_status'), dict):
+        return data['sync_status']
+    raise AssertionError('unexpected sync status JSON shape: %r' % (data,))
+
+@attr('sync_status')
+def test_sync_status_json_format():
+    """Validate structured JSON from `radosgw-admin sync status --format=json` on all zones."""
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    meta_master = realm.meta_master_zone()
+
+    for zone_conn in zonegroup_conns.zones:
+        zone = zone_conn.zone
+        cmd = ['sync', 'status', '--format=json'] + zone.zone_args()
+        out, ret = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+        eq(ret, 0)
+        status = _parse_sync_status_json(out)
+        for key in ('realm_id', 'zonegroup_id', 'zone_id', 'current_time',
+                    'metadata_sync', 'data_sync'):
+            assert_true(key in status, 'missing key %s for zone=%s' % (key, zone.name))
+        assert_true(isinstance(status['metadata_sync'], dict))
+        assert_true('status' in status['metadata_sync'])
+        assert_true(isinstance(status['data_sync'], list))
+        assert_true(status['zonegroup_id'])
+        assert_true(status['zone_id'])
+
+        md = status['metadata_sync']
+        assert_true('messages' not in md,
+                    'metadata_sync must use typed fields, not messages, zone=%s' % zone.name)
+        assert_true('sync_status' not in md,
+                    'metadata_sync must not dump per-shard markers for zone=%s' % zone.name)
+        if zone == meta_master:
+            eq(md['status'], 'no sync (zone is master)')
+        else:
+            assert_true(
+                md['status'] in ('init', 'preparing for full sync', 'syncing', 'unknown')
+                or 'error' in md,
+                'unexpected secondary metadata_sync for zone=%s: %r' % (zone.name, md),
+            )
+            # Secondary should expose typed summary detail when sync is healthy.
+            if 'error' not in md:
+                for key in ('full_sync', 'incremental_sync', 'caught_up',
+                            'shards_behind', 'behind_shards'):
+                    assert_true(key in md,
+                                'secondary metadata_sync missing %s for zone=%s: %r'
+                                % (key, zone.name, md))
+                assert_true(isinstance(md['full_sync'].get('shards'), int))
+                assert_true(isinstance(md['full_sync'].get('total_shards'), int))
+                assert_true(isinstance(md['behind_shards'], list))
+                assert_true(isinstance(md['caught_up'], bool))
+
+        for src in status['data_sync']:
+            assert_true('source_zone' in src)
+            assert_true('messages' not in src)
+            assert_true('sync_status' not in src,
+                        'data_sync must not dump per-shard markers')
+            if 'error' in src or src.get('status') == 'not syncing from zone':
+                continue
+            assert_true('status' in src)
+            assert_true('full_sync' in src)
+            assert_true('incremental_sync' in src)
+            assert_true('caught_up' in src)
+            assert_true(isinstance(src['behind_shards'], list))
+            assert_true(isinstance(src.get('shards_recovering'), int))
+            assert_true(isinstance(src.get('recovering_shards'), list))
+
+        # Default (no --format) must stay human-readable; counts agree with JSON.
+        plain, pret = zone.cluster.admin(['sync', 'status'] + zone.zone_args(),
+                                         check_retcode=False, read_only=True)
+        eq(pret, 0)
+        assert_false(plain.lstrip().startswith('{'),
+                     'default sync status must remain plaintext')
+        assert_true(status['zone_id'] in plain)
+        assert_true(status['zonegroup_id'] in plain)
+        if zone != meta_master and 'error' not in md:
+            expected = 'full sync: %d/%d shards' % (
+                md['full_sync']['shards'], md['full_sync']['total_shards'])
+            assert_true(expected in plain,
+                        'JSON full_sync mismatch vs plaintext for zone=%s: expected %r'
+                        % (zone.name, expected))
+            if md.get('caught_up'):
+                assert_true('metadata is caught up with master' in plain)
+
+@attr('sync_status')
+def test_sync_status_json_performance():
+    """JSON path should complete and stay roughly comparable to plaintext."""
+    zone = realm.meta_master_zone()
+    iters = 3
+
+    def mean_runtime(args):
+        times = []
+        for _ in range(iters):
+            start = time.time()
+            out, ret = zone.cluster.admin(args + zone.zone_args(),
+                                          check_retcode=False, read_only=True)
+            elapsed = time.time() - start
+            eq(ret, 0)
+            assert_true(len(out) > 0)
+            times.append(elapsed)
+        return sum(times) / len(times)
+
+    plain_mean = mean_runtime(['sync', 'status'])
+    json_mean = mean_runtime(['sync', 'status', '--format=json'])
+    log.info('sync status perf zone=%s plaintext=%.4fs json=%.4fs (n=%d)',
+             zone.name, plain_mean, json_mean, iters)
+    assert_true(
+        json_mean <= plain_mean * 5.0 + 1.0,
+        'JSON sync status too slow vs plaintext '
+        '(json=%.4fs plain=%.4fs)' % (json_mean, plain_mean),
+    )
+
+@attr('sync_status')
+def test_sync_status_json_secondary_data_sources():
+    """On a non-master zone, data_sync should list at least one source zone."""
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    meta_master = realm.meta_master_zone()
+    secondaries = [zc for zc in zonegroup_conns.zones if zc.zone != meta_master]
+    if not secondaries:
+        raise SkipTest('need a secondary zone in the zonegroup')
+
+    for zone_conn in secondaries:
+        zone = zone_conn.zone
+        out, ret = zone.cluster.admin(
+            ['sync', 'status', '--format=json'] + zone.zone_args(),
+            check_retcode=False, read_only=True)
+        eq(ret, 0)
+        status = _parse_sync_status_json(out)
+        assert_true(isinstance(status['data_sync'], list))
+        # Secondary in a multi-zone zonegroup should see sync sources.
+        assert_true(
+            len(status['data_sync']) >= 1,
+            'expected data_sync sources on secondary zone=%s, got %r'
+            % (zone.name, status['data_sync']),
+        )
+        md = status['metadata_sync']
+        assert_true(md.get('status') != 'no sync (zone is master)')
+
 def test_bucket_create_with_tenant():
 
     ''' create a bucket from secondary zone under tenant namespace. check if it successfully syncs
