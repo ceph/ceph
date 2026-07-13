@@ -150,7 +150,7 @@ target_link_libraries(unittest_http_manager ${rgw_libs})
 # unittest_rgw_curl_client
 add_executable(unittest_rgw_curl_client test_rgw_curl_client.cc)
 add_ceph_unittest(unittest_rgw_curl_client)
-target_link_libraries(unittest_rgw_curl_client ${rgw_libs})
+target_link_libraries(unittest_rgw_curl_client rgw_curl global unit-main)
 
 if(WITH_RADOSGW_RADOS)
 # unittest_rgw_reshard_wait
