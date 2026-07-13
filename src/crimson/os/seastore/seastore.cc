@@ -1866,9 +1866,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     }
     add_latency_sample(op_type_t::DO_TRANSACTION, total);
   }
-  add_latency_sample(
-    op_type_t::DO_TRANSACTION,
-    seastar::lowres_clock::now() - ctx.begin_timestamp);
 
   add_onode_tree_sample(ctx.transaction->get_onode_tree_stats());
 
