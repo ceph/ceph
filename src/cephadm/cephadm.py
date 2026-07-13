@@ -60,6 +60,7 @@ from cephadmlib.constants import (
     SYSCTL_DIR,
     UNIT_DIR,
     DAEMON_FAILED_ERROR,
+    DISABLED_SERVICES,
 )
 from cephadmlib.context import CephadmContext
 from cephadmlib.context_getters import (
@@ -138,7 +139,13 @@ from cephadmlib.logging import (
     Highlight,
     LogDestination,
 )
-from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
+from cephadmlib.systemd import (
+    check_unit,
+    check_units,
+    terminate_service,
+    enable_service,
+    start_disabled_services_after_maintenance_exit,
+)
 from cephadmlib import systemd_unit
 from cephadmlib.signals import send_signal_to_container_entrypoint
 from cephadmlib import runscripts
@@ -1177,7 +1184,7 @@ def deploy_daemon(
             if c:
                 # Disable automatic systemd enable for NFS and keepalived; the mgr
                 # starts them when appropriate (see cephadm serve / DISABLED_SERVICES).
-                enable_daemon = daemon_type not in ('nfs', 'keepalived')
+                enable_daemon = daemon_type not in DISABLED_SERVICES
                 deploy_daemon_units(
                     ctx,
                     ident,
@@ -4803,26 +4810,28 @@ def change_maintenance_mode(ctx: CephadmContext) -> str:
         # return success here or host will be permanently stuck in maintenance mode
         # as no daemons can be deployed so no systemd target will ever exist to disable.
         if not target_exists(ctx):
-            return 'skipped - systemd target not present on this host. Host removed from maintenance mode.'
-        # exit maintenance request
-        if not systemd_target_state(ctx, target):
+            msg = (
+                'skipped - systemd target not present on this host. '
+                'Host removed from maintenance mode.')
+        elif not systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'enable', target],
                                     verbosity=CallVerbosity.DEBUG)
             if code:
                 logger.error(f'Failed to enable the {target} target')
                 return 'failed - unable to enable the target'
-            else:
-                # starting a target waits by default
-                _out, _err, code = call(ctx,
-                                        ['systemctl', 'start', target],
-                                        verbosity=CallVerbosity.DEBUG)
-                if code:
-                    logger.error(f'Failed to start the {target} target')
-                    return 'failed - unable to start the target'
-                else:
-                    return f'success - systemd target {target} enabled and started'
-        return f'success - systemd target {target} enabled and started'
+            _out, _err, code = call(ctx,
+                                    ['systemctl', 'start', target],
+                                    verbosity=CallVerbosity.DEBUG)
+            if code:
+                logger.error(f'Failed to start the {target} target')
+                return 'failed - unable to start the target'
+            msg = f'success - systemd target {target} enabled and started'
+        else:
+            msg = f'success - systemd target {target} enabled and started'
+
+        start_disabled_services_after_maintenance_exit(ctx)
+        return msg
 
 
 @infer_fsid
