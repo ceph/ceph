@@ -382,36 +382,6 @@ class Client::Impl :
     }
   }
 
-  int ext_socket_action(curl_socket_t fd, int what)
-  {
-    if (what == CURL_POLL_REMOVE) {
-      if (auto e = ext_sockets.find(fd); e != ext_sockets.end()) {
-        e->second.release();   // libcurl owns this fd; don't close it
-        ext_sockets.erase(e);
-      }
-      return 0;
-    }
-    auto e = ext_sockets.find(fd);
-    if (e == ext_sockets.end()) {
-      boost::system::error_code ec;
-      boost::asio::posix::stream_descriptor desc{get_executor()};
-      desc.assign(fd, ec);
-      if (ec) {
-        return -1;
-      }
-      e = ext_sockets.emplace(fd, std::move(desc)).first;
-    }
-    if (what & CURL_POLL_IN) {
-      e->second.async_wait(boost::asio::posix::stream_descriptor::wait_read,
-                           socket_wait_handler{this, fd, CURL_CSELECT_IN});
-    }
-    if (what & CURL_POLL_OUT) {
-      e->second.async_wait(boost::asio::posix::stream_descriptor::wait_write,
-                           socket_wait_handler{this, fd, CURL_CSELECT_OUT});
-    }
-    return 0;
-  }
-
   // construct and open a tcp or udp socket
   template <typename Protocol>
   curl_socket_t open_socket(const Protocol& proto)
@@ -487,20 +457,43 @@ class Client::Impl :
   {
     auto impl = static_cast<Impl*>(user);
 
-    auto i = impl->sockets.find(fd);
-    if (i == impl->sockets.end()) {
-      // libcurl opened this fd itself (e.g. resolver socketpair); wait, don't own
-      return impl->ext_socket_action(fd, what);
-    }
-    if (what == CURL_POLL_REMOVE) {
+    // callback on client-managed socket
+    if (auto i = impl->sockets.find(fd); i != impl->sockets.end()) {
+      if (what & CURL_POLL_IN) {
+        std::visit(socket_wait_handler{impl, fd, CURL_CSELECT_IN}, i->second);
+      }
+      if (what & CURL_POLL_OUT) {
+        std::visit(socket_wait_handler{impl, fd, CURL_CSELECT_OUT}, i->second);
+      }
       return 0;
     }
 
+    // callback on curl-managed socket
+    auto i = impl->ext_sockets.find(fd);
+
+    if (what == CURL_POLL_REMOVE) {
+      if (i == impl->ext_sockets.end()) {
+        return -1;
+      }
+      i->second.release(); // libcurl owns this fd; don't close it
+      impl->ext_sockets.erase(i);
+      return 0;
+    }
+
+    if (i == impl->ext_sockets.end()) {
+      boost::system::error_code ec;
+      boost::asio::posix::stream_descriptor desc{impl->get_executor()};
+      desc.assign(fd, ec);
+      if (ec) {
+        return -1;
+      }
+      i = impl->ext_sockets.emplace(fd, std::move(desc)).first;
+    }
     if (what & CURL_POLL_IN) {
-      std::visit(socket_wait_handler{impl, fd, CURL_CSELECT_IN}, i->second);
+      std::invoke(socket_wait_handler{impl, fd, CURL_CSELECT_IN}, i->second);
     }
     if (what & CURL_POLL_OUT) {
-      std::visit(socket_wait_handler{impl, fd, CURL_CSELECT_OUT}, i->second);
+      std::invoke(socket_wait_handler{impl, fd, CURL_CSELECT_OUT}, i->second);
     }
     return 0;
   }
