@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Tuple, Optional, List, Dict, Any, Union
+from typing import Tuple, Optional, List, Dict, Any
 import yaml
 
 from .cli import NFSCLICommand
@@ -190,10 +190,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
                                 ingress_placement: Optional[str] = None,
-                                kmip_cert: Optional[str] = None,
-                                kmip_key: Optional[str] = None,
-                                kmip_ca_cert: Optional[str] = None,
-                                kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
                                 inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""

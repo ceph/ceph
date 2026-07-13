@@ -19,7 +19,7 @@ from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 import cephfs
 
 from mgr_util import CephFSEarmarkResolver, CephfsClient, open_filesystem
-from rados import TimedOut, ObjectNotFound, Rados
+from rados import TimedOut, ObjectNotFound
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
@@ -662,7 +662,7 @@ class ExportMgr:
         nfs_caps = [
             'mon', 'allow r',
             'osd', osd_cap,
-            'mds', f'allow rw path={path}'
+            'mds', f'allow all path={path}'
         ]
 
         ret, out, err = self.mgr.mon_command({
