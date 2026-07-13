@@ -2,7 +2,7 @@
 from unittest.mock import Mock, call, patch
 
 from .. import mgr
-from ..controllers.rgw import Rgw, RgwDaemon, RgwTopic, RgwUser
+from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwTopic, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
@@ -600,3 +600,51 @@ class TestRgwTopicController(ControllerTestCase):
         result = controller.delete(key='RGW22222222222222222:HttpTest')
         mock_delete_topic.assert_called_with(key='RGW22222222222222222:HttpTest')
         self.assertEqual(result, None)
+
+
+class RgwBucketControllerTestCase(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwBucket], '/test')
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_get_bucket_not_found(self, mock_admin_instance):
+        mock_instance = Mock()
+        mock_admin_instance.return_value = mock_instance
+
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_exception = RequestException('RGW REST API failed request')
+        mock_exception.response = mock_response
+        mock_instance.proxy.side_effect = mock_exception
+
+        self._get('/test/api/rgw/bucket/i-do-not-exist')
+        self.assertStatus(404)
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_get_bucket_not_found_with_fallback_attribute(self, mock_admin_instance):
+
+        mock_instance = Mock()
+        mock_admin_instance.return_value = mock_instance
+
+        # mock that lacks a .response but has a direct .status_code attribute.
+        mock_exception = RequestException('RGW REST API failed request')
+        mock_exception.status_code = 404
+
+        mock_instance.proxy.side_effect = mock_exception
+
+        self._get('/test/api/rgw/bucket/i-do-not-exist')
+        self.assertStatus(404)
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_get_bucket_server_error(self, mock_admin_instance):
+        mock_instance = Mock()
+        mock_admin_instance.return_value = mock_instance
+
+        mock_exception = RequestException('Internal Server Error')
+        mock_exception.status_code = 500
+
+        mock_instance.proxy.side_effect = mock_exception
+
+        self._get('/test/api/rgw/bucket/i-do-not-exist')
+        self.assertStatus(500)
