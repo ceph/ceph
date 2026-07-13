@@ -25,7 +25,7 @@ from ceph.deployment.service_spec import (
     SMBSpec,
     SSLParameters,
 )
-from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.earmarking import EarmarkContents, EarmarkTopScope
 
 from . import config_store, external, resources, rgw
 from .enums import (
@@ -175,6 +175,11 @@ class _FakeEarmarkResolver:
         self, earmark: str, top_level_scope: EarmarkTopScope
     ) -> bool:
         return True
+
+    def test_and_set_earmark(
+        self, path: str, volume: str, earmark: EarmarkContents
+    ) -> Tuple[bool, Optional[EarmarkContents]]:
+        return True, earmark
 
 
 class _FakeAuthorizer:

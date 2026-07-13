@@ -15,7 +15,7 @@ from typing import (
 import sys
 
 from ceph.deployment.service_spec import SMBSpec
-from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.earmarking import EarmarkContents, EarmarkTopScope
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.
@@ -225,4 +225,9 @@ class EarmarkResolver(Protocol):
     def check_earmark(
         self, earmark: str, top_level_scope: EarmarkTopScope
     ) -> bool:
+        ...  # pragma: no cover
+
+    def test_and_set_earmark(
+        self, path: str, volume: str, earmark: EarmarkContents
+    ) -> Tuple[bool, Optional[EarmarkContents]]:
         ...  # pragma: no cover
