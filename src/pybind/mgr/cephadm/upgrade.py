@@ -8,8 +8,18 @@ import orchestrator
 from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
-    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
+from cephadm.utils import (
+    ceph_release_to_major,
+    name_to_config_section,
+    CEPH_UPGRADE_ORDER,
+    CEPH_TYPES,
+    CEPH_IMAGE_TYPES,
+    NON_CEPH_IMAGE_TYPES,
+    MONITORING_STACK_TYPES,
+    GATEWAY_TYPES,
+    ALLOWED_CIPHERS,
+    SERVICE_CIPHER,
+)
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
@@ -24,18 +34,6 @@ logger = logging.getLogger(__name__)
 # from ceph_fs.h
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
-
-# allowed ciphers for cephx keyrings in this version.
-# We do not set preferred ciphers as we may potentially
-# brake clusters on upgrade
-ALLOWED_CIPHERS = ['aes', 'aes256k']
-# ROTATION_CIPHER is the cipher the new keys will be set
-# up with after we rotate them
-ROTATION_CIPHER = 'aes256k'
-# cipher mons should use by default for service requests
-# Do not set the service cipher until all core (mon/mgr/osd/mds)
-# daemons have been upgraded
-SERVICE_CIPHER = 'aes256k'
 
 # Health warnings to mute when upgrade starts and unmute
 # when upgrade completes as they could be handled by the

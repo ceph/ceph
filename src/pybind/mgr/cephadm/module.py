@@ -89,7 +89,7 @@ from .inventory import (
     CertKeyStore,
     OrchSecretNotFound,
 )
-from .upgrade import CephadmUpgrade, ROTATION_CIPHER
+from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
     cephadmNoImage, CEPH_UPGRADE_ORDER, SpecialHostLabels
@@ -2475,7 +2475,7 @@ Then run the following:
             'prefix': 'auth rotate',
             'entity': daemon_spec.entity_name(),
             'format': 'json',
-            'key_type': ROTATION_CIPHER
+            'key_type': utils.ROTATION_CIPHER
         })
         if rc:
             raise OrchestratorError(
