@@ -1796,11 +1796,7 @@ int ECBackend::omap_get(
   }
 
   // Remove keys in removed_ranges
-  for (auto out_it = out->begin(); out_it != out->end(); ++out_it) {
-    if (should_be_removed(removed_ranges, out_it->first)) {
-      out->erase(out_it->first);
-    }
-  }
+  remove_keys_in_ranges(removed_ranges, out);
 
   // Apply updates in update_map
   for (const auto &[key, val_opt] : update_map) {
@@ -1874,4 +1870,13 @@ bool ECBackend::should_be_removed(
 
   // No ranges contain the key, return false
   return false;
+}
+
+void ECBackend::remove_keys_in_ranges(
+  const std::map<std::string, std::optional<std::string>>& removed_ranges,
+  std::map<std::string, ceph::buffer::list>* out) {
+  for (const auto& [start, end] : removed_ranges) {
+    out->erase(out->lower_bound(start),
+               end ? out->lower_bound(*end) : out->end());
+  }
 }

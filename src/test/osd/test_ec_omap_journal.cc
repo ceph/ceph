@@ -17,6 +17,7 @@
 #include "test/unit.cc"
 
 #include "osd/ECOmapJournal.h"
+#include "osd/ECBackend.h"
 #include "common/dout.h"
 
 class MockDoutPrefixProvider : public DoutPrefixProvider {
@@ -1450,4 +1451,30 @@ TEST(ecomapjournal, has_omap_updates_after_remove_entry)
   
   // Should not have updates after removing all entries
   ASSERT_FALSE(journal.has_omap_updates(test_hoid));
+}
+
+// A removed range spanning several adjacent keys erases all of them.
+TEST(ecbackend_remove_keys_in_ranges, removes_contiguous_block)
+{
+  std::map<std::string, ceph::buffer::list> out;
+  for (std::string_view k : {"k01", "k02", "k03", "k04", "k05", "k06"}) {
+    out[std::string(k)].append(k);
+  }
+  std::map<std::string, std::optional<std::string>> removed = {
+    {"k02", "k05"},  // -> erases k02, k03, k04
+  };
+
+  ECBackend::remove_keys_in_ranges(removed, &out);
+
+  std::vector<std::string> remaining;
+  for (const auto &[k, v] : out) {
+    remaining.push_back(k);
+  }
+  EXPECT_EQ((std::vector<std::string>{"k01", "k05", "k06"}), remaining);
+
+  // Surviving values must be untouched.
+  ASSERT_TRUE(out.contains("k05"));
+  ceph::buffer::list k05_bl;
+  k05_bl.append("k05");
+  EXPECT_TRUE(out["k05"].contents_equal(k05_bl));
 }
