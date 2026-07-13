@@ -51,6 +51,12 @@ std::string get_oid(uint64_t gen_id, int i) {
 	  fmt::format("shard.{}", i));
 }
 
+// This is a bug in Boost. It's fixed in 1.87 and these pragmata can
+// be removed then.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
 asio::awaitable<void> make_omap(neorados::RADOS& rados,
 				const neorados::IOContext& loc) {
   for (int i = 0; i < SHARDS; ++i) {
@@ -64,7 +70,13 @@ asio::awaitable<void> make_omap(neorados::RADOS& rados,
   }
   co_return;
 }
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
 asio::awaitable<void> make_fifo(const DoutPrefixProvider* dpp,
 				neorados::RADOS& rados,
                                 const neorados::IOContext& loc) {
@@ -74,6 +86,8 @@ asio::awaitable<void> make_fifo(const DoutPrefixProvider* dpp,
     EXPECT_TRUE(fifo);
   }
 }
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 }
 
 CORO_TEST_F(LogBacking, TestOmap, NeoRadosTest)
