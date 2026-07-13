@@ -130,12 +130,23 @@ class NFSService(CephService):
         assert spec
         deps: List[str] = []
         nfs_spec = cast(NFSServiceSpec, spec)
-        deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
-        deps.append(f'rdma_port: {nfs_spec.rdma_port}')
-        deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
-        deps.append(f'tls_debug: {nfs_spec.tls_debug}')
-        deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
-        deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        # choose_next_action() ignores False/None in the symmetric diff, so
+        # False <-> None transitions do not trigger reconfig or redeploy.
+
+        # RDMA related
+        if nfs_spec.enable_rdma:
+            deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
+            if nfs_spec.rdma_port is not None:
+                deps.append(f'rdma_port: {nfs_spec.rdma_port}')
+        # TLS related
+        if nfs_spec.tls_ktls:
+            deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
+        if nfs_spec.tls_debug:
+            deps.append(f'tls_debug: {nfs_spec.tls_debug}')
+        if nfs_spec.tls_min_version is not None:
+            deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
+        if nfs_spec.tls_ciphers is not None:
+            deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -605,9 +616,20 @@ class NFSService(CephService):
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
+        def is_default_value_dep(dep: str) -> bool:
+            # Ignoring False and None as both represent an unset/default option
+            if ':' not in dep:
+                return False
+            return dep.split(':', 1)[1].strip() in ('False', 'None')
+
         if curr_deps == last_deps:
             return utils.NextDaemonStep(scheduled_action)
-        sym_diff = set(curr_deps).symmetric_difference(last_deps)
+        sym_diff = {
+            d for d in set(curr_deps).symmetric_difference(last_deps)
+            if not is_default_value_dep(d)
+        }
+        if not sym_diff:
+            return utils.NextDaemonStep(scheduled_action)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
             spec.service_name() if spec else daemon_type,
