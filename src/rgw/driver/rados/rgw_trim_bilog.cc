@@ -806,7 +806,7 @@ inline int parse_decode_json<StatusShards>(
 int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
-    ldpp_dout(dpp, 4) << "starting trim on bucket=" << bucket_instance << dendl;
+    ldpp_dout(dpp, 1) << "starting trim on bucket=" << bucket_instance << dendl;
 
     get_policy_params.zone = zone_id;
     get_policy_params.bucket = bucket;
@@ -1382,7 +1382,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
 
     // trim bucket instances with limited concurrency
     set_status("trimming buckets");
-    ldpp_dout(dpp, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
+    ldpp_dout(dpp, 1) << "collected " << buckets.size() << " buckets for trim" << dendl;
     yield call(new BucketTrimInstanceCollectCR(store, http, observer, buckets,
                                                config.concurrent_buckets, dpp));
     // ignore errors from individual buckets
@@ -1417,7 +1417,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(retcode);
     }
 
-    ldpp_dout(dpp, 4) << "bucket index log processing completed in "
+    ldpp_dout(dpp, 1) << "bucket index log processing completed in "
         << ceph::mono_clock::now() - start_time << dendl;
     return set_cr_done();
   }
