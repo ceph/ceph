@@ -475,17 +475,15 @@ auto block_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
  // we need real-world experience to tweak this further):
  const auto chunk_size = 4*(1024*1024);
 
- auto split_points = detail::locate_split_points(dbh, selector, chunk_size);
+ auto split_ranges = detail::plan_split_ranges(dbh, selector, chunk_size);
 
- // This can be paralellized, but early benchmarks didn't show it helping:
- for (const auto& sp : split_points) {
-    AssocT block;
-    for (auto&& p : pair_generator(dbh, sp)) {
-      block.emplace(std::move(p));
-    }
+ auto read_block = [txr = make_transactor(dbh)](const auto& range) {
+  return txr([&range](auto& txn) {
+   return pair_generator(txn, range) | std::ranges::to<AssocT>();
+  });
+ };
 
-    co_yield block;
- }
+ co_yield std::ranges::elements_of(split_ranges | std::views::transform(read_block));
 }
 
 } // namespace ceph::libfdb

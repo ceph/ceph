@@ -313,11 +313,11 @@ template <typename AssocT = boost::container::flat_map<std::string, std::string>
 auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
 -> std::generator<AssocT>
 {
- auto split_points = locate_split_points(dbh, selector);
+ auto split_ranges = plan_split_ranges(dbh, selector);
 
  const unsigned local_max_block = 2*2024; // vis-a-vis remote request max
 
- std::transform_reduce(std::begin(split_points), std::end(split_points),
+ std::transform_reduce(std::begin(split_ranges), std::end(split_ranges),
                       AssocT(),
 
                       [](auto&& lhs, auto&& rhs) {

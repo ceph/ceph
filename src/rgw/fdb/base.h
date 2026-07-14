@@ -811,7 +811,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                     ));
 }
 
-inline std::vector<ceph::libfdb::select> locate_split_points(
+inline std::vector<ceph::libfdb::select> plan_split_ranges(
           ceph::libfdb::database_handle dbh, 
           ceph::libfdb::select selector, 
           const std::int64_t remote_chunk_size)
