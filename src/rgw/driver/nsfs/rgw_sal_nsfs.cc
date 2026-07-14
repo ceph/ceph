@@ -3835,7 +3835,12 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
 
-  /* XXXX we should get bucket cache once, ne? hint:  operate functor */
+  /* the bucket cache stores entries with an empty instance for
+   * non-versioned / null-version objects, but NSFS sets instance
+   * to the literal "null" — clear it so the cache key matches */
+  if (key.instance == NULL_VERSION_ID) {
+    key.instance.clear();
+  }
   driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
   if (!key.instance.empty() && !ent->exists()) {
