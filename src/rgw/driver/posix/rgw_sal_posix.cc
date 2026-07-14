@@ -20,6 +20,7 @@
 #include "rgw_s3_filter.h"
 #include <dirent.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <cstdint>
@@ -201,6 +202,27 @@ static inline int copy_dir_fd(int old_fd)
 {
   return openat(old_fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
 }
+
+/* RAII guard for OFD (Open File Description) locks.  OFD locks are
+ * per-open-file-description rather than per-process, so they work
+ * correctly across threads that open independent fds to the same
+ * inode.  Used to serialise xattr writes against concurrent readers
+ * on the same directory or file. */
+struct OFDLockGuard {
+  int fd;
+  OFDLockGuard(int _fd, short type) : fd(_fd) {
+    struct flock fl{};
+    fl.l_type = type;
+    fl.l_whence = SEEK_SET;
+    fcntl(fd, F_OFD_SETLKW, &fl);
+  }
+  ~OFDLockGuard() {
+    struct flock fl{};
+    fl.l_type = F_UNLCK;
+    fl.l_whence = SEEK_SET;
+    fcntl(fd, F_OFD_SETLK, &fl);
+  }
+};
 
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
@@ -429,6 +451,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     return ret;
   }
 
+  OFDLockGuard lock(fd, F_WRLCK);
   need_fsync = true;
 
   /* Set the type */
@@ -437,18 +460,14 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = type_bl;
 
-  /* Remove xattrs that are on disk but no longer in the attrs map */
+  /* Snapshot old xattrs so we can remove genuinely stale ones after
+   * writing — covered by the OFD write lock above. */
   Attrs old_attrs;
-  ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
-  if (ret >= 0) {
-    for (auto& it : old_attrs) {
-      if (attrs.find(it.first) == attrs.end() &&
-          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, it.first, get_name());
-      }
-    }
-  }
+  int old_ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
 
+  /* Write new values first — fsetxattr overwrites in place, so
+   * readers always see either the old or the new value, never
+   * ENODATA for an attr that is being updated. */
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
@@ -465,6 +484,17 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     }
   }
 
+  /* Now remove xattrs that are on disk but genuinely gone from the
+   * new attrs (not just about to be rewritten). */
+  if (old_ret >= 0) {
+    for (auto& it : old_attrs) {
+      if (attrs.find(it.first) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, it.first, get_name());
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -475,6 +505,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
     return ret;
   }
 
+  OFDLockGuard lock(get_fd(), F_RDLCK);
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
@@ -3675,20 +3706,10 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs orig_attrs, extra_attrs;
+  Attrs extra_attrs;
   extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
-
-  ret = dir->read_attrs(dpp, y, orig_attrs);
-
-  for (auto attr : orig_attrs) {
-    if (auto found = attrs.find(attr.first); found == attrs.end()) {
-      /* Attribute needs to be erased */
-      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
-    }
-  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
