@@ -20,6 +20,7 @@
 
 #include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/asio/io_context.hpp>
+#include <chrono>
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 
@@ -170,6 +171,12 @@ class SimpleThrottler : public dmclock::Scheduler {
     if (auto c = counters(); c != nullptr) {
       c->inc(throttle_counters::l_outstanding, -1);
     }
+  }
+
+  void report_completion(std::chrono::nanoseconds rtt, bool dropped) {
+    limit->sample(limiter::ConcurrencyLimiter::Sample{.rtt = rtt,
+        .inflight = outstanding_requests.load(),
+        .dropped = dropped});
   }
 
  private:
