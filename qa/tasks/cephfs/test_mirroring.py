@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 
 
 # Exceptions to retry in test assertions
-RETRY_EXCEPTIONS = (AssertionError, KeyError, IndexError, CommandFailedError)
+RETRY_EXCEPTIONS = (AssertionError, KeyError, IndexError, CommandFailedError,
+                     json.JSONDecodeError)
 # retry decorator
 def retry_assert(timeout=60, interval=1):
     """
@@ -187,48 +188,128 @@ class TestMirroring(CephFSTestCase):
                 if dirmap.get('state') == 'mapped':
                     return
 
+    @retry_assert(timeout=60, interval=1)
+    def _wait_mirroring_enabled(self, fs_name, fs_id, vbefore):
+        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        self.assertEqual(res['peers'], {})
+        self.assertEqual(res['snap_dirs']['dir_count'], 0)
+
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        self.assertEqual(
+            res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]["labels"]["filesystem"],
+            fs_name)
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
+        self.assertGreater(vafter["counters"]["mirrored_filesystems"],
+                           vbefore["counters"]["mirrored_filesystems"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_mirroring_disabled(self, fs_name, fs_id, vbefore):
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                       'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        except (CommandFailedError, json.JSONDecodeError):
+            pass
+        else:
+            raise AssertionError('expected admin socket to be unavailable')
+
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
+        self.assertLess(vafter["counters"]["mirrored_filesystems"],
+                        vbefore["counters"]["mirrored_filesystems"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_mirror_asok_unavailable(self, fs_name, fs_id):
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                       'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        except (CommandFailedError, json.JSONDecodeError):
+            pass
+        else:
+            raise AssertionError('expected admin socket to be unavailable')
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_peer_added(self, fs_name, fs_id, peer_spec, remote_fs_name,
+                         vbefore, check_perf_counter):
+        self.verify_peer_added(fs_name, fs_id, peer_spec, remote_fs_name)
+        if not check_perf_counter:
+            return
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
+        self.assertGreater(vafter["counters"]["mirroring_peers"],
+                           vbefore["counters"]["mirroring_peers"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_peer_removed(self, fs_name, fs_id, vbefore):
+        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        self.assertEqual(res['peers'], {})
+        self.assertEqual(res['snap_dirs']['dir_count'], 0)
+
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
+        self.assertLess(vafter["counters"]["mirroring_peers"],
+                        vbefore["counters"]["mirroring_peers"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_directory_added(self, fs_name, fs_id, dir_count, vbefore,
+                              check_perf_counter):
+        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        new_dir_count = res['snap_dirs']['dir_count']
+        log.debug(f'new dir_count={new_dir_count}')
+        self.assertGreater(new_dir_count, dir_count)
+
+        if not check_perf_counter:
+            return
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
+        self.assertGreater(vafter["counters"]["directory_count"],
+                           vbefore["counters"]["directory_count"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_directory_absent_from_mirror(self, fs_name, dir_name):
+        dirs_list = json.loads(
+            self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "ls", fs_name))
+        self.assertNotIn(dir_name, dirs_list)
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_directory_removed(self, fs_name, fs_id, dir_count, vbefore):
+        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        new_dir_count = res['snap_dirs']['dir_count']
+        log.debug(f'new dir_count={new_dir_count}')
+        self.assertLess(new_dir_count, dir_count)
+
+        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
+        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
+        self.assertLess(vafter["counters"]["directory_count"],
+                        vbefore["counters"]["directory_count"])
+
+    @retry_assert(timeout=30, interval=1)
+    def _wait_mirror_directory_ls(self, fs_name, fs_id, *dir_names):
+        dirs_list = json.loads(
+            self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "ls", fs_name))
+        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        dir_count = res['snap_dirs']['dir_count']
+        self.assertEqual(len(dirs_list), dir_count)
+        for dir_name in dir_names:
+            self.assertIn(dir_name, dirs_list)
+
     def enable_mirroring(self, fs_name, fs_id):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
 
         self.run_ceph_cmd("fs", "snapshot", "mirror", "enable", fs_name)
-        time.sleep(10)
-        # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        self.assertTrue(res['peers'] == {})
-        self.assertTrue(res['snap_dirs']['dir_count'] == 0)
-
-        # verify labelled perf counter
-        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-        self.assertEqual(res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]["labels"]["filesystem"],
-                         fs_name)
-        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
-
-        self.assertGreater(vafter["counters"]["mirrored_filesystems"],
-                           vbefore["counters"]["mirrored_filesystems"])
+        self._wait_mirroring_enabled(fs_name, fs_id, vbefore)
 
     def disable_mirroring(self, fs_name, fs_id):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
 
         self.run_ceph_cmd("fs", "snapshot", "mirror", "disable", fs_name)
-        time.sleep(10)
-        # verify via asok
-        try:
-            self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                       'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        except CommandFailedError:
-            pass
-        else:
-            raise RuntimeError('expected admin socket to be unavailable')
-
-        # verify labelled perf counter
-        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR][0]
-
-        self.assertLess(vafter["counters"]["mirrored_filesystems"],
-                        vbefore["counters"]["mirrored_filesystems"])
+        self._wait_mirroring_disabled(fs_name, fs_id, vbefore)
 
     def verify_peer_added(self, fs_name, fs_id, peer_spec, remote_fs_name=None):
         # verify via asok
@@ -253,13 +334,9 @@ class TestMirroring(CephFSTestCase):
             self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
         else:
             self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_add", fs_name, peer_spec)
-        time.sleep(10)
-        self.verify_peer_added(fs_name, fs_id, peer_spec, remote_fs_name)
-
-        if check_perf_counter:
-            res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-            vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
-            self.assertGreater(vafter["counters"]["mirroring_peers"], vbefore["counters"]["mirroring_peers"])
+        self._wait_peer_added(fs_name, fs_id, peer_spec, remote_fs_name,
+                              vbefore if check_perf_counter else None,
+                              check_perf_counter)
 
     def peer_remove(self, fs_name, fs_id, peer_spec):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
@@ -267,16 +344,7 @@ class TestMirroring(CephFSTestCase):
 
         peer_uuid = self.get_peer_uuid(peer_spec)
         self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_remove", fs_name, peer_uuid)
-        time.sleep(10)
-        # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
-
-        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
-
-        self.assertLess(vafter["counters"]["mirroring_peers"], vbefore["counters"]["mirroring_peers"])
+        self._wait_peer_removed(fs_name, fs_id, vbefore)
 
     def bootstrap_peer(self, fs_name, client_name, site_name):
         outj = json.loads(self.get_ceph_cmd_stdout(
@@ -301,18 +369,9 @@ class TestMirroring(CephFSTestCase):
 
         self.run_ceph_cmd("fs", "snapshot", "mirror", "add", fs_name, dir_name)
 
-        time.sleep(10)
-        # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        new_dir_count = res['snap_dirs']['dir_count']
-        log.debug(f'new dir_count={new_dir_count}')
-        self.assertTrue(new_dir_count > dir_count)
-
-        if check_perf_counter:
-            res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-            vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
-            self.assertGreater(vafter["counters"]["directory_count"], vbefore["counters"]["directory_count"])
+        self._wait_directory_added(fs_name, fs_id, dir_count,
+                                   vbefore if check_perf_counter else None,
+                                   check_perf_counter)
 
     def remove_directory(self, fs_name, fs_id, dir_name):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
@@ -325,18 +384,13 @@ class TestMirroring(CephFSTestCase):
 
         self.run_ceph_cmd("fs", "snapshot", "mirror", "remove", fs_name, dir_name)
 
-        time.sleep(10)
-        # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        new_dir_count = res['snap_dirs']['dir_count']
-        log.debug(f'new dir_count={new_dir_count}')
-        self.assertTrue(new_dir_count < dir_count)
+        if dir_count == 0:
+            # The daemon may already have dropped the directory (e.g. after
+            # blocklist/restart) even though mon config still lists it.
+            self._wait_directory_absent_from_mirror(fs_name, dir_name)
+            return
 
-        res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
-        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
-
-        self.assertLess(vafter["counters"]["directory_count"], vbefore["counters"]["directory_count"])
+        self._wait_directory_removed(fs_name, fs_id, dir_count, vbefore)
 
     @retry_assert(timeout=140, interval=2)
     def check_mirror_status_after_failure(self):
@@ -522,6 +576,56 @@ class TestMirroring(CephFSTestCase):
                 if p.returncode != 0:
                     return
 
+    @retry_assert(timeout=60, interval=2)
+    def _wait_mgr_mirror_policy_ready(self, fs_name):
+        res = self.mgr_mirror_status(fs_name)
+        self.assertIn('metrics', res)
+
+    def prepare_mirror_blocklist_test(self, fs_name, fs_id):
+        """Wait until mgr InstanceWatcher has seen the mirror instance.
+
+        Blocklist tests SIGSTOP the daemon and rely on mgr InstanceWatcher
+        (INSTANCE_TIMEOUT=30s) to blocklist a non-responsive instance.  The
+        watcher only tracks instances that have responded to at least one
+        notify, so wait for mgr policy init and a notify round-trip before
+        freezing the daemon.
+        """
+        self.wait_for_mirror_status_ready(fs_name, fs_id)
+        self._wait_mgr_mirror_policy_ready(fs_name)
+        # NOTIFY_INTERVAL is 1s; allow time for the first notify ack.
+        time.sleep(8)
+        rados_inst = self.get_mirror_rados_addr(fs_name, fs_id)
+        self.assertTrue(rados_inst)
+        return rados_inst
+
+    @retry_assert(timeout=90, interval=2)
+    def wait_for_addr_blocklisted(self, rados_inst):
+        self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
+
+    @retry_assert(timeout=60, interval=2)
+    def wait_for_mirror_rados_restart(self, fs_name, fs_id, old_rados_inst):
+        try:
+            rados_inst = self.get_mirror_rados_addr(fs_name, fs_id)
+        except CommandFailedError as e:
+            raise AssertionError(str(e)) from e
+        self.assertTrue(rados_inst)
+        self.assertNotEqual(rados_inst, old_rados_inst)
+
+    @retry_assert(timeout=45, interval=2)
+    def wait_for_dirmap_state(self, fs_name, dir_path, expected_state):
+        res_json = self.get_ceph_cmd_stdout(
+            "fs", "snapshot", "mirror", "dirmap", fs_name, dir_path)
+        res = json.loads(res_json)
+        self.assertEqual(res['state'], expected_state)
+
+    @retry_assert(timeout=60, interval=2)
+    def wait_for_mirror_status_ready(self, fs_name, fs_id):
+        self.assertTrue(self.get_mirror_rados_addr(fs_name, fs_id))
+        res = self.mirror_daemon_command(
+            f'mirror status for fs: {fs_name}',
+            'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+        self.assertIn('snap_dirs', res)
+
     def restart_mirror_daemon(self):
         # daemon.start() always calls restart(), which skips stop() once proc
         # is cleared.  Stop the real cephfs-mirror via its pid file first so
@@ -553,22 +657,14 @@ class TestMirroring(CephFSTestCase):
         log.debug('starting cephfs-mirror')
         daemon.start()
 
-        time.sleep(60)
-        with safe_while(sleep=2, tries=30,
-                        action='wait for mirror daemon restart') as proceed:
-            while proceed():
-                try:
-                    rados_inst = self.get_mirror_rados_addr(
-                        self.primary_fs_name, self.primary_fs_id)
-                    if rados_inst and rados_inst != rados_inst_before:
-                        break
-                except CommandFailedError:
-                    pass
+        self.wait_for_mirror_rados_restart(
+            self.primary_fs_name, self.primary_fs_id, rados_inst_before)
 
-    def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid):
+    def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid,
+                                        tries=60):
         # A new rados_inst alone does not mean mirroring is ready: wait until the
         # peer is configured, the snap dir is registered, and asok reports it.
-        with safe_while(sleep=2, tries=60,
+        with safe_while(sleep=2, tries=tries,
                         action='wait for mirror daemon recovery') as proceed:
             while proceed():
                 if not self.get_mirror_rados_addr(fs_name, fs_id):
@@ -775,6 +871,10 @@ class TestMirroring(CephFSTestCase):
         log.debug(f'destination snapshot checksum {snap_name} {dest_res}')
         self.assertTrue(source_res == dest_res)
 
+    @retry_assert(timeout=600, interval=10)
+    def wait_for_snapshot_synced(self, dir_name, snap_name):
+        self.verify_snapshot(dir_name, snap_name)
+
     def mirror_dirmap(self, fs_name, dir_name):
         return json.loads(self.get_ceph_cmd_stdout(
             'fs', 'snapshot', 'mirror', 'dirmap', fs_name, dir_name))
@@ -837,6 +937,8 @@ class TestMirroring(CephFSTestCase):
             raise
         res = p.stdout.getvalue().strip()
         log.debug(f'command returned={res}')
+        if not res:
+            raise json.JSONDecodeError("Expecting value", res, 0)
         return json.loads(res)
 
     def get_mirror_daemon_status(self):
@@ -1120,13 +1222,8 @@ class TestMirroring(CephFSTestCase):
         try:
             self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir1}')
             self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir2}')
-            time.sleep(10)
-            dirs_list = json.loads(self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "ls", self.primary_fs_name))
-            # verify via asok
-            res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
-                                             'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-            dir_count = res['snap_dirs']['dir_count']
-            self.assertTrue(len(dirs_list) == dir_count and f'/{dir1}' in dirs_list and f'/{dir2}' in dirs_list)
+            self._wait_mirror_directory_ls(
+                self.primary_fs_name, self.primary_fs_id, f'/{dir1}', f'/{dir2}')
         except CommandFailedError:
             raise RuntimeError('Error listing directories')
         except AssertionError:
@@ -1552,9 +1649,8 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
         peers_1 = set(res['peers'])
 
-        # fetch rados address for blacklist check
-        rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
-        self.assertTrue(rados_inst)
+        rados_inst = self.prepare_mirror_blocklist_test(
+            self.primary_fs_name, self.primary_fs_id)
 
         # simulate non-responding mirror daemon by sending SIGSTOP
         pid = self.get_mirror_daemon_pid()
@@ -1563,7 +1659,7 @@ class TestMirroring(CephFSTestCase):
 
         # wait for blocklist timeout -- the manager module would blocklist
         # the mirror daemon
-        time.sleep(40)
+        self.wait_for_addr_blocklisted(rados_inst)
 
         # wake up the mirror daemon -- at this point, the daemon should know
         # that it has been blocklisted
@@ -1573,19 +1669,10 @@ class TestMirroring(CephFSTestCase):
         # check if the rados addr is blocklisted
         self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
-        # wait for restart, which is after 30 seconds timeout (cephfs_mirror_restart_mirror_on_blocklist_interval)
-        time.sleep(60)
-
-        # get the new rados_inst
-        rados_inst_new = ""
-        with safe_while(sleep=2, tries=20, action='wait for mirror status rados_inst') as proceed:
-            while proceed():
-                rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
-                if rados_inst_new:
-                    break
-
-        # and we should get a new rados instance
-        self.assertTrue(rados_inst != rados_inst_new)
+        # wait for restart, which is after 30 seconds timeout
+        # (cephfs_mirror_restart_mirror_on_blocklist_interval)
+        self.wait_for_mirror_rados_restart(
+            self.primary_fs_name, self.primary_fs_id, rados_inst)
 
         # along with peers that were added
         res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
@@ -1724,18 +1811,16 @@ class TestMirroring(CephFSTestCase):
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
 
-        # fetch rados address for blacklist check
-        rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
-
-        # dump perf counters
-        res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
-        vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
-
         # take a snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
 
         self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
                                          "client.mirror_remote@ceph", '/d0', 'snap0')
+
+        # peer/directory are already configured, so the mgr InstanceWatcher has
+        # seen this instance; grab the addr and freeze the daemon mid-sync.
+        rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        self.assertTrue(rados_inst)
 
         # simulate non-responding mirror daemon by sending SIGSTOP
         pid = self.get_mirror_daemon_pid()
@@ -1744,7 +1829,7 @@ class TestMirroring(CephFSTestCase):
 
         # wait for blocklist timeout -- the manager module would blocklist
         # the mirror daemon
-        time.sleep(40)
+        self.wait_for_addr_blocklisted(rados_inst)
 
         # wake up the mirror daemon -- at this point, the daemon should know
         # that it has been blocklisted
@@ -1754,13 +1839,23 @@ class TestMirroring(CephFSTestCase):
         # check if the rados addr is blocklisted
         self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
-        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
-                               "client.mirror_remote@ceph", '/d0', 'snap0', expected_snap_count=1)
-        self.verify_snapshot('d0', 'snap0')
-        # check snaps_synced
-        res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
-        vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
-        self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
+        # wait for restart, which is after 30 seconds timeout
+        # (cephfs_mirror_restart_mirror_on_blocklist_interval)
+        self.wait_for_mirror_rados_restart(
+            self.primary_fs_name, self.primary_fs_id, rados_inst)
+
+        peer_uuid = self.get_peer_uuid("client.mirror_remote@ceph")
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, '/d0', peer_uuid,
+            tries=90)
+
+        self.wait_for_snapshot_synced('d0', 'snap0')
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    "client.mirror_remote@ceph", '/d0', 'snap0', 1)
+        # peer-level snaps_synced resets on blocklist restart; directory
+        # counters are restored from persisted sync state.
+        dir_counters = self.get_directory_perf_counters('/d0', peer_uuid)
+        self.assertGreaterEqual(dir_counters['snaps_synced'], 1)
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
@@ -1863,15 +1958,8 @@ class TestMirroring(CephFSTestCase):
                     pass
 
         self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
-        time.sleep(10)
-        # verify via asok
-        try:
-            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
-                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-        except CommandFailedError:
-            pass
-        else:
-            raise RuntimeError('expected admin socket to be unavailable')
+        self._wait_mirror_asok_unavailable(
+            self.primary_fs_name, self.primary_fs_id)
 
     def test_mirroring_init_failure_with_recovery(self):
         """Test if the mirror daemon can recover from a init failure"""
@@ -1916,15 +2004,8 @@ class TestMirroring(CephFSTestCase):
         self.assertTrue(res['snap_dirs']['dir_count'] == 0)
 
         self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
-        time.sleep(10)
-        # verify via asok
-        try:
-            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
-                                       'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-        except CommandFailedError:
-            pass
-        else:
-            raise RuntimeError('expected admin socket to be unavailable')
+        self._wait_mirror_asok_unavailable(
+            self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_peer_bootstrap(self):
         """Test importing peer bootstrap token"""
@@ -2031,8 +2112,8 @@ class TestMirroring(CephFSTestCase):
     def test_cephfs_mirror_remove_on_stall(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
-        # fetch rados address for blacklist check
-        rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        rados_inst = self.prepare_mirror_blocklist_test(
+            self.primary_fs_name, self.primary_fs_id)
 
         # simulate non-responding mirror daemon by sending SIGSTOP
         pid = self.get_mirror_daemon_pid()
@@ -2041,7 +2122,7 @@ class TestMirroring(CephFSTestCase):
 
         # wait for blocklist timeout -- the manager module would blocklist
         # the mirror daemon
-        time.sleep(40)
+        self.wait_for_addr_blocklisted(rados_inst)
 
         # make sure the rados addr is blocklisted
         self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
@@ -2086,11 +2167,8 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(['kill', '-SIGCONT', pid])
 
         # wait for restart mirror on blocklist
-        time.sleep(60)
-        res_json = self.get_ceph_cmd_stdout("fs", "snapshot", "mirror", "dirmap", self.primary_fs_name, dir_path_p)
-        res = json.loads(res_json)
-        # there are no mirror daemons
-        self.assertTrue(res['state'], 'mapped')
+        self.wait_for_dirmap_state(
+            self.primary_fs_name, dir_path_p, 'mapped')
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
@@ -3028,7 +3106,6 @@ class TestMirroring(CephFSTestCase):
         try:
             # InstanceWatcher INSTANCE_TIMEOUT is 30s; allow extra time for
             # the mgr notify loop to age out the frozen instance.
-            time.sleep(40)
             self.check_mgr_dir_stat_stale(
                 self.primary_fs_name, '/d0', peer_uuid)
         finally:
@@ -3036,19 +3113,8 @@ class TestMirroring(CephFSTestCase):
             self.mount_a.run_shell(['kill', '-SIGCONT', pid])
 
         # wait for restart mirror on blocklist
-        time.sleep(60)
-        with safe_while(sleep=2, tries=20,
-                        action='wait for mirror daemon recovery after SIGSTOP') as proceed:
-            while proceed():
-                if not self.get_mirror_rados_addr(self.primary_fs_name,
-                                                   self.primary_fs_id):
-                    continue
-                res = self.mirror_daemon_command(
-                    f'mirror status for fs: {self.primary_fs_name}',
-                    'fs', 'mirror', 'status',
-                    f'{self.primary_fs_name}@{self.primary_fs_id}')
-                if 'snap_dirs' in res:
-                    break
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, '/d0', peer_uuid)
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
@@ -3268,6 +3334,8 @@ class TestMirroring(CephFSTestCase):
             self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
 
         self.mount_b.run_shell(['sudo', 'rmdir', remote_snap_path], omit_sudo=False)
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_mgr_snapshot_mirror_status_cache(self):
