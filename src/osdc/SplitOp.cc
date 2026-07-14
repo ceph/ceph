@@ -288,6 +288,10 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
   bufferlist bl_out;
 
   for (auto && [acting_index, sr] : sub_reads) {
+    // Ops with fewer chunks than sub-reads do not use every sub-read.
+    if (!sr.details.contains(ops_index)) {
+      continue;
+    }
     for (auto [off, len] : *sr.details.at(ops_index).e) {
       extents_out.insert(off, len);
     }
@@ -307,6 +311,9 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
  */
 void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   for (auto && [acting_index, sr] : sub_reads) {
+    if (!sr.details.contains(ops_index)) {
+      continue;
+    }
     bl_out.append(sr.details.at(ops_index).bl);
   }
 }
@@ -343,6 +350,9 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
                                    valid_indices.size());
+  // A multi-op request may carry a read shorter than the minimum split
+  // size; serve it whole from the reference OSD.
+  slice_count = std::max<uint64_t>(slice_count, 1);
   // Round up, otherwise chunk_count can exceed slice_count and reuse a
   // sub-read.
   uint64_t chunk_size = p2roundup(div_round_up(length, slice_count),
