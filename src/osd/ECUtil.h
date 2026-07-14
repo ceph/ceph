@@ -1270,5 +1270,15 @@ inline shard_id_set nonprimary_shards(
   }
   return shards;
 }
+
+/**
+ * Merge per-shard shard-space extent maps into a single object-space extent
+ * map.  For each data shard (0 .. k-1), each shard-space extent is translated
+ * to object (RO) space using shard_offset_to_ro_offset() and unioned into the
+ * result.  Parity shards are ignored.
+ */
+std::map<uint64_t, uint64_t> merge_shard_extent_maps(
+    const shard_id_map<std::map<uint64_t, uint64_t>> &shard_extents,
+    const stripe_info_t &sinfo);
 }
 
