@@ -3621,20 +3621,10 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs orig_attrs, extra_attrs;
+  Attrs extra_attrs;
   extra_attrs[RGW_NSFS_ATTR_BUCKET_INFO] = bl;
-
-  ret = dir->read_attrs(dpp, y, orig_attrs);
-
-  for (auto attr : orig_attrs) {
-    if (auto found = attrs.find(attr.first); found == attrs.end()) {
-      /* Attribute needs to be erased */
-      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
-    }
-  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
