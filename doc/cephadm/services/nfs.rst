@@ -283,6 +283,27 @@ The following parameters can be used to configure TLS/SSL encryption for the NFS
    If using ``inline`` certificates, all three certificate fields (``ssl_cert``,
    ``ssl_key``, ``ssl_ca_cert``) must be provided.
 
+Cluster-level QoS can also be configured at deployment time by specifying
+``cluster_qos_config`` and ``cluster_qos_port`` in the service spec.
+See :ref:`mgr-nfs` (Cluster QoS management) for supported keys and
+parameter constraints.
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+        - host1
+    spec:
+      port: 2049
+      cluster_qos_port: 31311
+      cluster_qos_config:
+        qos_type: PerShare
+        enable_bw_control: true
+        max_export_write_bw: 100MB
+        max_export_read_bw: 100MB
+
 The specification can then be applied by running the following command:
 
 .. prompt:: bash #

@@ -292,6 +292,275 @@ This removes the user defined configuration.
    for the new config blocks to be effective.
 
 
+Cluster QoS management
+======================
+
+NFS Ganesha supports cluster-wide and per-export Quality of Service (QoS) for
+bandwidth and IOPS (operations per second).
+
+.. note:: Cluster-level QoS changes take effect after the NFS service is
+   restarted. The ``ceph nfs cluster qos enable`` and ``ceph nfs cluster qos
+   disable`` commands (for both bandwidth control and IOPS control), as well as
+   ``ceph nfs cluster qos set``, restart all NFS Ganesha daemons in the
+   cluster automatically via ``ceph orch restart nfs.<cluster_id>``. Plan for
+   a brief service interruption when running these commands on a live cluster.
+
+``qos_type`` values
+-------------------
+
+All ``qos enable`` commands require a ``qos_type`` argument. Valid values are:
+
+* ``PerShare`` — limits apply per NFS export (share).
+* ``PerClient`` — limits apply per NFS client.
+* ``PerShare_PerClient`` — limits apply per export and per client.
+
+Parameter constraints
+---------------------
+
+Bandwidth parameters (``max_*_bw``) accept human-readable values with the
+following units: ``KiB``, ``MiB``, ``GiB``, ``KB``, ``MB`` and ``GB``
+(for example, ``100MB`` or ``128KiB``). The valid range is
+128 KiB/s to 100 GiB/s.
+
+IOPS parameters (``max_*_iops``) must be integers in the range 10 to 1638400.
+
+The cluster QoS message interval (``cqos_msg_interval``) can be set with
+``ceph nfs cluster qos set``. The valid range is 100 to 300 milliseconds.
+
+Deploy-time QoS via service spec
+--------------------------------
+
+When deploying an NFS cluster with cephadm, cluster-level QoS can be configured
+at creation time using the ``cluster_qos_config`` field in the NFS service
+spec, or via a command of the form ceph nfs cluster create -i foo.yml with a YAML input file.
+
+``cluster_qos_config`` is a dictionary. At least one of
+``enable_bw_control`` or ``enable_iops_control`` must be ``true``. Supported
+keys:
+
+* ``enable_qos`` (bool, default ``true``)
+* ``qos_type`` (required when QoS is enabled): ``PerShare``, ``PerClient``, or
+  ``PerShare_PerClient``
+* ``enable_bw_control`` (bool)
+* ``combined_rw_bw_control`` (bool)
+* ``enable_iops_control`` (bool)
+* ``max_export_write_bw``, ``max_export_read_bw``, ``max_client_write_bw``,
+  ``max_client_read_bw`` (string bandwidth values)
+* ``max_export_combined_bw``, ``max_client_combined_bw`` (string bandwidth
+  values)
+* ``max_export_iops``, ``max_client_iops`` (integer)
+* ``cqos_msg_interval`` (integer, 100–300 milliseconds)
+
+The NFS service spec also accepts ``cluster_qos_port`` (default ``31311``) to specify
+the cluster QoS messaging port used by Ganesha daemons.
+
+Example service spec with cluster QoS:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+        - host1
+    spec:
+      port: 2049
+      cluster_qos_port: 31311
+      cluster_qos_config:
+        qos_type: PerShare
+        enable_bw_control: true
+        combined_rw_bw_control: false
+        max_export_write_bw: 100MB
+        max_export_read_bw: 100MB
+
+Example ``ceph nfs cluster create`` input file:
+
+.. code-block:: yaml
+
+    cluster_qos_config:
+      qos_type: PerShare
+      enable_bw_control: true
+      max_export_write_bw: 100MB
+      max_export_read_bw: 100MB
+
+.. code:: bash
+
+    $ ceph nfs cluster create mynfs "host1" -i cluster_qos.yaml
+
+
+Enable QoS bandwidth control for an NFS Ganesha cluster
+----------------------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster qos enable bandwidth_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>]
+
+This command enables or updates Quality of Service (QoS) bandwidth control for
+an NFS Ganesha cluster, where
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<qos_type>`` is the type of bandwidth control: ``PerShare``, ``PerClient``, or
+``PerShare_PerClient``.
+
+If ``PerShare`` ``qos_type`` is selected, then the cluster-level QoS config is
+applicable to all exports on that NFS Ganesha cluster. It requires
+``max_export_write_bw`` and ``max_export_read_bw`` parameters if
+``--combined-rw-bw-ctrl`` is not set, otherwise ``max_export_combined_bw`` is
+required.
+
+If ``PerClient`` ``qos_type`` is selected, then the cluster-level QoS config is
+applicable to all clients accessing exports on that cluster. It requires
+``max_client_write_bw`` and ``max_client_read_bw`` parameters if
+``--combined-rw-bw-ctrl`` is not set, otherwise ``max_client_combined_bw`` is
+required.
+
+If ``PerShare_PerClient`` ``qos_type`` is selected, then the cluster-level
+config applies to all exports and all clients on that NFS Ganesha cluster.
+It requires ``max_export_write_bw``, ``max_export_read_bw``,
+``max_client_write_bw``, and ``max_client_read_bw`` parameters if
+``--combined-rw-bw-ctrl`` is not set, otherwise ``max_export_combined_bw`` and
+``max_client_combined_bw`` are required.
+
+``--combined-rw-bw-ctrl`` enables combined read and write bandwidth. When set,
+only the combined bandwidth parameters allowed for the selected ``qos_type``
+may be specified.
+
+``--max_export_write_bw`` is the maximum write bandwidth for each export.
+
+``--max_export_read_bw`` is the maximum read bandwidth for each export.
+
+``--max_client_write_bw`` is the maximum write bandwidth for each client.
+
+``--max_client_read_bw`` is the maximum read bandwidth for each client.
+
+``--max_export_combined_bw`` is the maximum combined read/write bandwidth for each export.
+
+``--max_client_combined_bw`` is the maximum combined read/write bandwidth for each client.
+
+The bandwidth value can be specified using any supported bandwidth unit: bytes/s,
+KB/s, KiB/s, MB/s, MiB/s, GB/s, or GiB/s.
+
+For example::
+
+    $ ceph nfs cluster qos enable bandwidth_control nfs_clust PerShare --max_export_write_bw 100MB --max_export_read_bw 100MB
+
+.. note:: If this command is used to update ``qos_type``, update all exports
+   with the required parameters as well.
+
+By default, exports inherit the cluster-level QoS setting when no
+``QOS_BLOCK`` is present in the export block.
+
+Disable QoS bandwidth control for NFS Ganesha cluster
+-----------------------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster qos disable bandwidth_control <cluster_id>
+
+This command disables bandwidth control QoS at the cluster level. If
+cluster-level bandwidth control is disabled, export-level bandwidth control
+has no effect even when enabled on an export.
+
+For example::
+
+    $ ceph nfs cluster qos disable bandwidth_control nfs_clust
+
+Enable QoS IOPS control for NFS Ganesha cluster
+----------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos enable ops_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [--max_export_iops <int>] [--max_client_iops <int>]
+
+This command enables or updates IOPS control for an NFS cluster.
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<qos_type>`` is the type of ops control: ``PerShare``, ``PerClient``, or
+``PerShare_PerClient``.
+
+If ``PerShare`` ``qos_type`` is selected, the cluster-level QoS config applies
+to all exports on that NFS Ganesha cluster and requires ``--max_export_iops``.
+
+If ``PerClient`` ``qos_type`` is selected, the cluster-level QoS config
+applies to all clients accessing exports on that cluster and requires
+``--max_client_iops``.
+
+If ``PerShare_PerClient`` ``qos_type`` is selected, the cluster-level config
+applies to all exports and all clients on that NFS Ganesha cluster and
+requires both ``--max_export_iops`` and ``--max_client_iops``.
+
+``--max_export_iops`` is the IOPS limit per export.
+
+``--max_client_iops`` is the IOPS limit per client.
+
+For example::
+
+    $ ceph nfs cluster qos enable ops_control nfs_clust PerShare --max_export_iops 1000
+
+.. note:: If this command is used to update ``qos_type``, update all exports
+   with the required parameters as well.
+
+Disable QoS IOPS control for NFS Ganesha cluster
+-----------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos disable ops_control <cluster_id>
+
+This command disables IOPS control for an NFS Ganesha cluster. After disabling
+ops control at the cluster level, export-level IOPS control has no effect even
+when enabled on an export.
+
+For example::
+
+    $ ceph nfs cluster qos disable ops_control nfs_clust
+
+Set cluster QoS message interval
+--------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos set <cluster_id> <msg_interval>
+
+This command sets ``cqos_msg_interval``, the message interval (in
+milliseconds) used for cluster QoS synchronization among NFS Ganesha hosts.
+The valid range is 100 to 300. Cluster-level QoS must already be configured
+(using ``enable bandwidth_control`` or ``enable ops_control``) before this
+command can be used.
+
+For example::
+
+    $ ceph nfs cluster qos set nfs_clust 200
+
+Get QoS configuration for NFS Ganesha cluster
+---------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos get <cluster_id>
+
+This command displays the cluster-level QoS configuration. Use ``ceph -f
+json`` (or ``json-pretty``, ``yaml``, etc.) to control output formatting.
+
+For example::
+
+    $ ceph nfs cluster qos get nfs_clust
+     {
+       "combined_rw_bw_control": false,
+       "enable_bw_control": true,
+       "enable_iops_control": true,
+       "enable_qos": true,
+       "max_export_iops": 1000,
+       "max_export_read_bw": "100.0MB",
+       "max_export_write_bw": "100.0MB",
+       "qos_type": "PerShare"
+     }
+
+When ``cqos_msg_interval`` has been set, it also appears in the output.
+
+
 Export Management
 =================
 
@@ -490,6 +759,147 @@ This displays export block for a cluster based on pseudo root name, where:
 
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
+Enable QoS bandwidth control for a specific export
+--------------------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs export qos enable bandwidth_control <cluster_id> <pseudo_path> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>] [--skip-notify-nfs-server]
+
+This command enables or updates QoS bandwidth control for an export. Enable
+cluster-level bandwidth control with ``qos_type`` ``PerShare`` or
+``PerShare_PerClient`` before enabling export-level bandwidth control. This
+creates a ``QOS_BLOCK`` in the export block, where
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the pseudo-root path (must be an absolute path).
+
+``--combined-rw-bw-ctrl`` enables combined read and write bandwidth. When set,
+only the combined bandwidth parameters allowed for the cluster ``qos_type`` may
+be specified.
+
+``--max_export_write_bw`` is the maximum write bandwidth for each export.
+
+``--max_export_read_bw`` is the maximum read bandwidth for each export.
+
+``--max_client_write_bw`` is the maximum write bandwidth for each client.
+
+``--max_client_read_bw`` is the maximum read bandwidth for each client.
+
+``--max_export_combined_bw`` is the maximum combined read/write bandwidth for each export.
+
+``--max_client_combined_bw`` is the maximum combined read/write bandwidth for each client.
+
+``--skip-notify-nfs-server`` skips notifying running NFS Ganesha daemons after
+the change (useful for batch updates).
+
+The bandwidth value can be specified using any supported bandwidth unit: bytes/s,
+KB/s, KiB/s, MB/s, MiB/s, GB/s, or GiB/s.
+
+For example::
+
+   $ ceph nfs export qos enable bandwidth_control nfs_clust /export1 --combined-rw-bw-ctrl --max_export_combined_bw 200MB
+
+.. note:: Export-level bandwidth control cannot be enabled if the cluster-level
+   ``qos_type`` is ``PerClient``.
+
+Disable QoS bandwidth control for a specific export
+---------------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs export qos disable bandwidth_control <cluster_id> <pseudo_path> [--skip-notify-nfs-server]
+
+This disables export-level bandwidth control. After disabling, the export no
+longer has export-specific bandwidth limits. If the export has no
+``QOS_BLOCK``, it inherits cluster-level bandwidth control again.
+
+For example::
+
+   $ ceph nfs export qos disable bandwidth_control nfs_clust /export1
+
+.. note:: To restore cluster-level QoS defaults for an export, use
+   ``ceph nfs export apply <cluster_id>`` with an export definition that does
+   not include a ``QOS_BLOCK``.
+
+Enable QoS IOPS control for a specific export
+---------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs export qos enable ops_control <cluster_id> <pseudo_path> [--max_export_iops <int>] [--max_client_iops <int>] [--skip-notify-nfs-server]
+
+This enables IOPS control for a specified export. The same command can be used
+to update an existing IOPS limit. Enable cluster-level IOPS control with ``qos_type``
+``PerShare`` or ``PerShare_PerClient`` before enabling export-level IOPS control.
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the pseudo-root path (must be an absolute path).
+
+``--max_export_iops`` is the IOPS limit for the export.
+
+``--max_client_iops`` is the IOPS limit per client of the export.
+
+``--skip-notify-nfs-server`` skips notifying running NFS Ganesha daemons after
+the change.
+
+For example::
+
+   $ ceph nfs export qos enable ops_control nfs_clust /export1 --max_export_iops 2000
+
+.. note:: Export-level IOPS control cannot be enabled if the cluster-level
+   ``qos_type`` is ``PerClient``.
+
+Disable QoS IOPS control for a specific export
+----------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs export qos disable ops_control <cluster_id> <pseudo_path> [--skip-notify-nfs-server]
+
+This command disables export-level IOPS control. After disabling, the export no
+longer has export-specific IOPS limits.
+
+For example::
+
+   $ ceph nfs export qos disable ops_control nfs_clust /export1
+
+Get QoS configuration for export
+--------------------------------
+
+.. code:: bash
+
+    $ ceph nfs export qos get <cluster_id> <pseudo_path>
+
+This command displays the export-level QoS configuration. Use ``ceph -f
+json`` (or ``json-pretty``, ``yaml``, ``xml``, ``xml-pretty``) to control output formatting.
+When cluster-level QoS is configured, fields prefixed with ``global_`` show
+the cluster defaults (``global_enable_qos``, ``global_enable_bw_control``,
+``global_enable_iops_control``). Export-specific fields (without the
+``global_`` prefix) are present only when a ``QOS_BLOCK`` exists on the
+export. If the export has no ``QOS_BLOCK``, an empty object ``{}`` is
+returned.
+
+For example::
+
+   $ ceph nfs export qos get nfs_clust /export1
+     {
+       "global_enable_bw_control": true,
+       "global_enable_iops_control": true,
+       "global_enable_qos": true,
+       "combined_rw_bw_control": true,
+       "enable_bw_control": true,
+       "enable_iops_control": true,
+       "enable_qos": true,
+       "max_export_combined_bw": "200.0MB",
+       "max_export_iops": 2000
+     }
+
+Export QoS can also be set via ``ceph nfs export apply`` by including a
+``qos_block`` key in the export JSON, or a ``QOS_BLOCK`` section in a Ganesha
+EXPORT config fragment.
 
 Create or update export via JSON specification
 ----------------------------------------------
