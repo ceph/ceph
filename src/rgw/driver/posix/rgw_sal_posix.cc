@@ -5482,7 +5482,7 @@ int POSIXMultipartWriter::complete(
   }
 
   info.num = part_num;
-  info.size = part_file->get_size();
+  info.size = accounted_size;
   info.etag = etag;
   info.cksum = cksum;
   info.mtime = set_mtime;
