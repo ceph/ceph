@@ -67,9 +67,17 @@ PGPCTRequest::interruptible_future<> PGPCTRequest::with_pg_interruptible(
       });
     co_await interruptor::make_interruptible(std::move(fut));
   }
-
+  // acquire mClock throttle slot before processing PCT
+  auto throttle = co_await interruptor::make_interruptible(
+    pg.shard_services.get_throttle(
+      scheduler::params_t{
+        1,
+        static_cast<unsigned>(req->get_priority()),
+        0,
+        SchedulerClass::repop}));
   // This *must* be a replicated backend, ec doesn't have pct messages
   static_cast<ReplicatedBackend&>(*(pg.backend)).do_pct(*req);
+  // throttle destructs here
 }
 
 seastar::future<> PGPCTRequest::with_pg(
