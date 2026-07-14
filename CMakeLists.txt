@@ -117,13 +117,13 @@ if(WITH_SCCACHE)
         ERROR_VARIABLE sccache_dist_status_error
         GET "${sccache_dist_status}" SchedulerStatus 1 num_cpus
       )
-      string(FIND "${sccache_dist_status}" "disabled" find_result)
-      if(find_result EQUAL -1)
+      if(sccache_dist_status_error)
+        message(WARNING "Using sccache, but it is not configured for distributed "
+          "compilation: ${sccache_dist_status_error}")
+      else()
         message(STATUS "Using sccache with distributed compilation. Effective cores: ${sccache_cores}")
         set(NINJA_MAX_COMPILE_JOBS ${sccache_cores})
         set(NINJA_MAX_LINK_JOBS ${sccache_cores})
-      else()
-        message(WARNING "Using sccache, but it is not configured for distributed complilation")
       endif()
     else()
       message(WARNING "Using sccache, but cannot determine maximum job value since cmake version is <3.19")
