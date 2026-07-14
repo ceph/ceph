@@ -5,6 +5,13 @@ cd-notification-area {
   min-block-size: 0;
 }
 
+:host {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-block-size: 0;
+}
+
 .notification-section-heading {
   margin: 0;
   color: var(--cds-text-primary);
@@ -40,7 +47,25 @@ cd-notification-area {
   color: var(--cds-text-primary);
   line-height: 1.25;
   display: block;
+<<<<<<< HEAD
   overflow-wrap: break-word;
+=======
+  word-break: break-word;
+}
+
+.notification-message {
+  @include type.type-style('body-short-01');
+
+  color: $text-helper;
+  margin: 0;
+  line-height: 1.4;
+  margin-top: -$spacing-01;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+>>>>>>> 8e9c61bcc14 (mgr/dashboard: Fix the footer - view all button css in notification panel)
 }
 
 .notification-empty {
