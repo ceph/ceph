@@ -28,3 +28,7 @@ overrides:
       - MGR_MODULE_ERROR
       - OSD_DOWN
       - osd.* is down
+      # NFS ganesha (libcephfs) may not release caps promptly on export
+      # delete or daemon restart/stop; MDS warns after session timeout.
+      - responding to mclientcaps
+      - MDS_CLIENT_LATE_RELEASE
