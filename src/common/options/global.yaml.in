@@ -5874,13 +5874,15 @@ options:
   type: str
   level: dev
   desc: Enforces specific hardware profile settings
-  long_desc: '''hdd'' enforces settings intended for BlueStore on a rotational
-    drive. ''ssd'' enforces settings intended for BlueStore on an SSD. ''default''
-    indicates that BlueStore is to use settings based on the detected hardware.'
+  long_desc: '''hybrid'' enforces osd settings applicable to hybrid
+    (AKA main=hdd, db/wal=ssd) disk setup.
+    ''ssd'' enforces osd settings applicable to all-flash disk setup.
+    ''default'' specifies automatic settings selection based on real
+    detected hardware.'
   default: default
   enum_values:
   - default
-  - hdd
+  - hybrid
   - ssd
   with_legacy: true
 - name: bluestore_allocator_lookup_policy
