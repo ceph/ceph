@@ -58,7 +58,7 @@ static int objexp_key_shard(const rgw_obj_index_key& key, int num_shards)
 {
   string obj_key = key.name + key.instance;
   // OBI: need to convert this over to BIShardIdent
-  return RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
+  return rgw::rados::HashedBIndexer::get_shard_index(obj_key, num_shards);
 }
 
 static string objexp_hint_get_keyext(const string& tenant_name,

@@ -8046,7 +8046,7 @@ int main(int argc, const char **argv)
       do {
 	obj = fmt::format("{}{:0>20}", prefix, ctr);
         // OBI: need to convert this over to BIShardIdent
-	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
+	shard = rgw::rados::HashedBIndexer::get_shard_index(obj, num_shards);
 	++ctr;
       } while (shard != shard_id);
 
@@ -8058,8 +8058,7 @@ int main(int argc, const char **argv)
       std::vector<std::string> objs(num_shards);
       for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
 	auto key = fmt::format("{}{:0>20}", prefix, ctr);
-        // OBI: need to convert this over to BIShardIdent
-	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+	auto shard = rgw::rados::HashedBIndexer::get_shard_index(key, num_shards);
 	if (objs[shard].empty()) {
 	  objs[shard] = std::move(key);
 	  --shardsleft;
@@ -8084,8 +8083,7 @@ int main(int argc, const char **argv)
       return EINVAL;
     }
     // OBI: need to convert this over to BIShardIdent
-    auto shard =
-      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+    auto shard = rgw::rados::HashedBIndexer::get_shard_index(object, num_shards);
     formatter->open_object_section("obj_shard");
     encode_json("shard", shard, formatter.get());
     formatter->close_section();

@@ -402,10 +402,8 @@ public:
   int get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>&) const override;
 
 
-protected:
-
   static BIShardIndex get_shard_index(const std::string& key,
-				 int num_shards)
+				      int num_shards)
   {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
@@ -426,6 +424,8 @@ protected:
 
     return get_shard_index(sharding_key, num_shards);
   }
+
+protected:
 
   void get_initial_bucket_index_objects(
     uint64_t gen,

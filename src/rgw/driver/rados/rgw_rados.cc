@@ -11622,7 +11622,8 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
     const rgw_obj_key obj_key(entry_key);
     const uint32_t shard = [&obj_key, num_shards]() -> uint32_t {
       // OBI: need to convert this over to BIShardIdent
-      int32_t temp = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
+      int32_t temp =
+        rgw::rados::HashedBIndexer::get_shard_index(obj_key, num_shards);
       return (-1 == temp) ? 0 : (uint32_t) temp;
     }();
 
@@ -12000,7 +12001,8 @@ int RGWRados::get_target_shard_id(const rgw::bucket_index_hashed_layout& layout,
         }
       } else {
         // OBI: need to convert this over to BIShardIdent
-        uint32_t sid = svc.bi_rados->bucket_shard_index(obj_key, layout.num_shards);
+        uint32_t sid =
+          rgw::rados::HashedBIndexer::get_shard_index(obj_key, layout.num_shards);
         if (shard_id) {
           *shard_id = (int)sid;
         }

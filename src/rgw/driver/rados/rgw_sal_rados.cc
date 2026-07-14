@@ -2750,7 +2750,8 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   list<rgw_bi_log_entry> entries;
 
   // OBI: need to convert this over to BIShardIdent
-  const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
+  const int shard_id =
+    rgw::rados::HashedBIndexer::get_shard_index(get_key(), shard_count);
 
   int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
     marker, 1, entries, &truncated);

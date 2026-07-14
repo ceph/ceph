@@ -960,11 +960,3 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
 
   return ret;
 }
-
-// OBI: this should be converted into returning an index object name
-// and be based on index type
-int32_t RGWSI_BucketIndex_RADOS::bucket_shard_index(const rgw_obj_key& obj_key,
-						    int num_shards)
-{
-  return rgw::rados::HashedBIndexer::get_shard_index(obj_key, num_shards);
-}

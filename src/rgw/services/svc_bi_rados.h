@@ -89,11 +89,6 @@ public:
     return rgw_shard_id(key, max_shards);
   }
 
-// OBI: this should be converted into returning an index object name
-// and be based on index type
-  static int32_t bucket_shard_index(const rgw_obj_key& obj_key,
-				    int num_shards);
-
   int init_index(const DoutPrefixProvider *dpp, optional_yield y,
                  std::unique_ptr<rgw::rados::BIndexer>& bindexer,
 		 std::map<std::string, bufferlist>* binfo_map_data,
