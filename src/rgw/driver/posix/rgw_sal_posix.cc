@@ -3955,6 +3955,30 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     return -ret;
   }
 
+  /* check copy-source preconditions against the source object */
+  if (if_match) {
+    std::string if_match_str = rgw_string_unquote(if_match);
+    bufferlist etag_bl;
+    if (get_attr(RGW_ATTR_ETAG, etag_bl) &&
+	if_match_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (if_nomatch) {
+    std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+    bufferlist etag_bl;
+    if (get_attr(RGW_ATTR_ETAG, etag_bl) &&
+	if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (mod_ptr && state.mtime <= *mod_ptr) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+  if (unmod_ptr && state.mtime > *unmod_ptr) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
   if (!get_key().instance.empty() && !has_instance) {
     /* For copy, no instance meance copy all instances.  Clear intance id if it
      * was passed in clear. */
