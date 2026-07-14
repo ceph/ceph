@@ -4246,12 +4246,15 @@ void BlueStore::ExtentMap::ExtentDecoderFull::consume_spanning_blob(
 
 BlueStore::Extent* BlueStore::ExtentMap::ExtentDecoderFull::get_next_extent()
 {
-  return new Extent();
+  pending_extent = std::make_unique<Extent>();
+  return pending_extent.get();
 }
 
 void BlueStore::ExtentMap::ExtentDecoderFull::add_extent(BlueStore::Extent* le)
 {
+  ceph_assert(le == pending_extent.get());
   extent_map.extent_map.insert(*le);
+  pending_extent.release();     // ownership now with the intrusive set
 }
 
 unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
@@ -4959,11 +4962,12 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
   bool use_onode_segmentation)
 {
   ceph_assert(v.length() || allow_empty);
-  Onode* on = new Onode(c.get(), oid, (const mempool::bluestore_cache_meta::string)(key));
+  auto on = std::unique_ptr<Onode>(
+    new Onode(c.get(), oid, (const mempool::bluestore_cache_meta::string)(key)));
 
   if (v.length()) {
     ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
-    decode_raw(on, v, edecoder, use_onode_segmentation);
+    decode_raw(on.get(), v, edecoder, use_onode_segmentation);
 
     for (auto& i : on->onode.attrs) {
       i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
@@ -4986,7 +4990,7 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
     }
     on->onode.segment_size = segment_size;
   }
-  return on;
+  return on.release();
 }
 
 void BlueStore::Onode::flush()
