@@ -282,6 +282,40 @@ public:
     return -EOPNOTSUPP;
   }
 
+  int objects_sparse_read_async(
+    const hobject_t &hoid,
+    uint64_t offset,
+    uint64_t length,
+    uint64_t object_size,
+    uint32_t op_flags,
+    std::map<uint64_t, uint64_t> *out_map,
+    ceph::buffer::list *out_bl,
+    Context *on_complete) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_sparse_read_async(
+        hoid, offset, length, object_size, op_flags, out_map, out_bl,
+        on_complete);
+    }
+    return -EOPNOTSUPP;
+  }
+
+  int objects_mapext_async(
+    const hobject_t &hoid,
+    uint64_t offset,
+    uint64_t length,
+    uint64_t object_size,
+    uint32_t op_flags,
+    std::map<uint64_t, uint64_t> *out_map,
+    Context *on_complete) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_mapext_async(
+        hoid, offset, length, object_size, op_flags, out_map, on_complete);
+    }
+    return -EOPNOTSUPP;
+  }
+
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,

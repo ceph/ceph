@@ -666,6 +666,42 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      return -EOPNOTSUPP;
    }
 
+   /**
+    * Async sparse read for EC pools using per-shard fiemap+readv.
+    * On completion, calls on_complete->complete(r) where r >= 0 means success.
+    * On success, *out_map is populated with the object-space extent map and
+    * *out_bl with the corresponding data.
+    * Returns -EOPNOTSUPP if not supported (non-EC or legacy EC).
+    */
+   virtual int objects_sparse_read_async(
+     const hobject_t &hoid,
+     uint64_t offset,
+     uint64_t length,
+     uint64_t object_size,
+     uint32_t op_flags,
+     std::map<uint64_t, uint64_t> *out_map,
+     ceph::buffer::list *out_bl,
+     Context *on_complete) {
+     return -EOPNOTSUPP;
+   }
+
+   /**
+    * Async mapext for EC pools using per-shard fiemap (no data read).
+    * On completion, calls on_complete->complete(r) where r >= 0 means success.
+    * On success, *out_map is populated with the object-space extent map.
+    * Returns -EOPNOTSUPP if not supported (non-EC or legacy EC).
+    */
+   virtual int objects_mapext_async(
+     const hobject_t &hoid,
+     uint64_t offset,
+     uint64_t length,
+     uint64_t object_size,
+     uint32_t op_flags,
+     std::map<uint64_t, uint64_t> *out_map,
+     Context *on_complete) {
+     return -EOPNOTSUPP;
+   }
+
    virtual std::pair<uint64_t, uint64_t> extent_to_shard_extent(
        uint64_t off, uint64_t len) {
      return std::pair(off, len);
