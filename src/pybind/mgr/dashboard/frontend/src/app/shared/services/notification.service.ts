@@ -28,18 +28,21 @@ export class NotificationService {
   private readonly QUEUE_DELAY = 500;
   private readonly LOCAL_STORAGE_KEY = 'cdNotifications';
   private readonly LOCAL_STORAGE_MUTE_KEY = 'cdNotificationsMuted';
+  private readonly LOCAL_STORAGE_READ_KEY = 'cdNotificationsRead';
 
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
   private panelState = new BehaviorSubject<boolean>(false);
   private muteStateSource = new BehaviorSubject<boolean>(false);
   private activeToastsSource = new BehaviorSubject<ToastContent[]>([]);
   private hasUnreadSource = new BehaviorSubject<boolean>(false);
+  private readMapSource = new BehaviorSubject<Record<string, boolean>>({});
 
   data$ = this.dataSource.asObservable();
   panelState$ = this.panelState.asObservable();
   muteState$ = this.muteStateSource.asObservable();
   activeToasts$ = this.activeToastsSource.asObservable();
   hasUnread$ = this.hasUnreadSource.asObservable();
+  readMap$ = this.readMapSource.asObservable();
 
   private activeToasts: ToastContent[] = [];
   private queued: CdNotificationConfig[] = [];
@@ -51,6 +54,7 @@ export class NotificationService {
     private cdDatePipe: CdDatePipe,
     private ngZone: NgZone
   ) {
+    this._loadReadMap();
     this._loadStoredNotifications();
     this._loadMutedState();
   }
@@ -72,7 +76,24 @@ export class NotificationService {
       }
     }
     this.dataSource.next(notifications);
-    this.hasUnreadSource.next(notifications?.length > 0);
+    this._recomputeHasUnread(notifications);
+  }
+
+  private _loadReadMap() {
+    try {
+      this.readMapSource.next(JSON.parse(localStorage.getItem(this.LOCAL_STORAGE_READ_KEY)) || {});
+    } catch {
+      this.readMapSource.next({});
+    }
+  }
+
+  private _persistReadMap(readMap: Record<string, boolean>) {
+    localStorage.setItem(this.LOCAL_STORAGE_READ_KEY, JSON.stringify(readMap));
+  }
+
+  private _recomputeHasUnread(notifications: CdNotification[]) {
+    const readMap = this.readMapSource.getValue();
+    this.hasUnreadSource.next(notifications.some((n) => !readMap[n.id]));
   }
 
   private _loadMutedState() {
@@ -89,7 +110,7 @@ export class NotificationService {
       localStorage.removeItem(this.LOCAL_STORAGE_KEY);
       localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(fallback));
       this.dataSource.next(fallback);
-      this.hasUnreadSource.next(fallback?.length > 0);
+      this._recomputeHasUnread(fallback);
     }
   }
 
@@ -115,7 +136,7 @@ export class NotificationService {
       .slice(0, this.MAX_NOTIFICATIONS);
 
     this.dataSource.next(limited);
-    this.hasUnreadSource.next(limited?.length > 0);
+    this._recomputeHasUnread(limited);
     this._persistNotifications(limited);
   }
 
@@ -126,7 +147,7 @@ export class NotificationService {
     const notifications = [...this.dataSource.getValue()];
     notifications.splice(index, 1);
     this.dataSource.next(notifications);
-    this.hasUnreadSource.next(notifications?.length > 0);
+    this._recomputeHasUnread(notifications);
     this._persistNotifications(notifications);
   }
 
@@ -135,6 +156,8 @@ export class NotificationService {
    */
   removeAll() {
     localStorage.removeItem(this.LOCAL_STORAGE_KEY);
+    localStorage.removeItem(this.LOCAL_STORAGE_READ_KEY);
+    this.readMapSource.next({});
     this.dataSource.next([]);
     this.hasUnreadSource.next(false);
     this._clearAllToasts();
@@ -350,5 +373,14 @@ export class NotificationService {
 
   getPanelState(): boolean {
     return this.panelState.value;
+  }
+
+  markAsRead(id: string) {
+    const current = this.readMapSource.getValue();
+    if (current[id]) return;
+    const updated = { ...current, [id]: true };
+    this.readMapSource.next(updated);
+    this._persistReadMap(updated);
+    this._recomputeHasUnread(this.dataSource.getValue());
   }
 }

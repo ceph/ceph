@@ -1,0 +1,80 @@
+<!-- ICON / UNREAD DOT -->
+@if (showChevron) {
+  <span
+    class="cd-notification-item__unread-dot"
+    [class.cd-notification-item__unread-dot--visible]="showUnread"
+  ></span>
+} @else {
+  <cd-icon [type]="iconMap[type] || iconMap['default']"></cd-icon>
+}
+<!-- CONTENT -->
+<div class="cd-notification-item__content">
+  <!-- RELATIVE TIMESTAMP -->
+  @if (timestamp) {
+    <span class="cd-notification-item__timestamp cds--type-label-01">
+      {{ timestamp | relativeDate: true }}
+    </span>
+  }
+  <!-- NOTIFICATION TITLE -->
+  @if (title) {
+    <span
+      class="cd-notification-item__title cds--type-body-short-01"
+      [class.cd-notification-item__title--unread]="showUnread"
+      >{{ title }}</span
+    >
+  }
+  <!-- NOTIFICATION MESSAGE -->
+  @if (message) {
+    @if (!showChevron) {
+      <span
+        class="cd-notification-item__message cds--type-body-short-01"
+        [innerHTML]="message | sanitizeHtml"
+      ></span>
+    } @else {
+      <p class="cd-notification-item__preview cds--type-label-01">
+        {{ message }}
+      </p>
+    }
+  }
+</div>
+<!-- RIGHT SECTION -->
+<div class="cd-notification-item__right">
+  <!-- APPLICATION BADGE -->
+  @if (application) {
+    <span class="cd-notification-item__app cds--type-label-01">
+      <img
+        [src]="
+          application === NotificationApplication.Prometheus
+            ? 'assets/prometheus_logo.svg'
+            : 'assets/Ceph_Logo.svg'
+        "
+        [alt]="application"
+        class="cd-notification-item__app-icon"
+      />
+      {{ timestamp | date: 'MMM d, y, h:mm a' }}
+    </span>
+  }
+  <!-- ACTION -->
+  @if (showChevron) {
+    <span class="cd-notification-item__chevron">
+      <cd-icon
+        type="angleDoubleRight"
+        [useDefault]="true"
+      ></cd-icon>
+    </span>
+  } @else {
+    <cds-icon-button
+      kind="ghost"
+      size="sm"
+      class="cd-notification-item__delete"
+      (click)="onDelete($event)"
+      i18n-title
+      title="Delete notification"
+    >
+      <cd-icon
+        type="destroy"
+        [useDefault]="true"
+      ></cd-icon>
+    </cds-icon-button>
+  }
+</div>
