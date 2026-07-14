@@ -543,6 +543,12 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
         need_omap_header = false;
         need_omap_keys = false;
       }
+      if (read_request.want_sparse_read) {
+        messages[shard_read.pg_shard].want_sparse_read.insert(hoid);
+        if (read_request.drop_data) {
+          messages[shard_read.pg_shard].drop_data.insert(hoid);
+        }
+      }
       // Sub-chunks are not supported, but replicas running older code
       // require a whole-chunk sub-chunk entry for every object read.
       static const std::vector default_sub_chunk = {make_pair(0, 1)};
