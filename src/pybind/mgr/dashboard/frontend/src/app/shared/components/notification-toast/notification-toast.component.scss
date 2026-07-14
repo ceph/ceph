@@ -26,6 +26,14 @@
         color: $text-primary;
       }
 
+      .cds--toast-notification__subtitle {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+      }
+
       .cds--toast-notification__close-button {
         color: $icon-primary;
       }

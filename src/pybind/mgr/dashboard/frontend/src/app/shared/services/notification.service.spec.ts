@@ -164,7 +164,7 @@ describe('NotificationService', () => {
       expectSavedNotificationToHave({
         type: NotificationType.error,
         title: '502 - Bad Gateway',
-        message: '<ul><li>Error occurred in path a</li><li>Error occurred in path b</li></ul>'
+        message: 'Error occurred in path a (+1 more)'
       });
       flush();
     }));
