@@ -175,6 +175,8 @@ async fn test_object_create_bad_md5_invalid_garbage_aws2() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: sigv2 content-length mismatch not rejected")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: sigv2 content-length mismatch not rejected")]
 async fn test_object_create_bad_contentlength_mismatch_below_aws2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let mut headers = HashMap::new();
@@ -187,6 +189,8 @@ async fn test_object_create_bad_contentlength_mismatch_below_aws2() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: sigv2 wrong error code for bad auth")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: sigv2 wrong error code for bad auth")]
 async fn test_object_create_bad_authorization_incorrect_aws2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let mut headers = HashMap::new();
@@ -257,6 +261,8 @@ async fn test_object_create_bad_date_empty_aws2() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: missing sigv2 date not rejected")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: missing sigv2 date not rejected")]
 async fn test_object_create_bad_date_none_aws2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let e = remove_header_create_bad_object("x-amz-date").await;
@@ -347,6 +353,8 @@ async fn test_bucket_create_bad_date_empty_aws2() {
 
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: missing sigv2 date not rejected")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: missing sigv2 date not rejected")]
 async fn test_bucket_create_bad_date_none_aws2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let e = remove_header_create_bad_bucket("x-amz-date").await;
