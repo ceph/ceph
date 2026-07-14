@@ -209,7 +209,7 @@ std::ostream& Restore::gen_prefix(std::ostream& out) const
 int Restore::choose_oid(const RestoreEntry& e) {
   int index;
   const auto& name = e.bucket.name + e.obj_key.name + e.obj_key.instance;
-  index = ((ceph_str_hash_linux(name.data(), name.size())) % max_objs);
+  index = ((ceph_str_hash_linux(name.data(), name.size())) % HASH_PRIME % max_objs);
   return static_cast<int>(index);
 }
 
