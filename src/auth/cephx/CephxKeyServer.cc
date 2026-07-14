@@ -591,7 +591,20 @@ int KeyServer::_build_session_auth_info(uint32_t service_id,
   info.ticket.init_timestamps(ceph_clock_now(), ttl);
   info.validity.set_from_double(ttl);
 
-  generate_secret(info.session_key, key_type);
+  /* The session key cipher must be supported by both the requesting client and
+   * the target service. During rolling upgrades, services are typically
+   * upgraded before external clients, but internal cluster daemons (such as
+   * the mgr) acting as RADOS clients may be upgraded before target services
+   * (such as osd). Therefore, we select the minimum (lowest common
+   * denominator) of the client's key type and the target service's rotating
+   * secret key type. This is also (even more) important to consider rolling
+   * upgrades of service daemons where two OSD or two MDS need to talk to each
+   * other.
+   */
+  int ktype = std::min<int>(key_type.value_or(info.service_secret.get_type()),
+                            info.service_secret.get_type());
+
+  generate_secret(info.session_key, ktype);
 
   /* N.B.: the Monitor special cases cap retrieval via a call to
    * CephxServiceHandler::handle_request which fills in the
@@ -617,21 +630,9 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
     return -EACCES;
   }
 
-  /* either use the provided key type, or the one that the service
-   * is using. As things are, there are two different cases:
-   * one that this is being called as a result of a client call
-   * and in which case we'll be provided with the client's key type.
-   * The second case is when the monitor generates tickets to
-   * connects to the manager, in which case we want to use
-   * the manager's key type. In any case, we assume that services
-   * are upgraded first before clients, so we prioritize client's
-   * key type over the service key type.
-   */
-  int ktype = key_type.value_or(info.service_secret.get_type());
-
   std::scoped_lock l{lock};
   return _build_session_auth_info(service_id, parent_ticket,
-                                  ktype, info, ttl);
+                                  key_type, info, ttl);
 }
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
