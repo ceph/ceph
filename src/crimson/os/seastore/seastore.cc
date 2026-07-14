@@ -1618,9 +1618,69 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  assert(store_active);
   LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
+  assert(store_active);
   ++(shard_stats.io_num);
+
+  auto& coll = static_cast<SeastoreCollection&>(*_ch);
+  auto& entry = coll.pending_txns.emplace_back();
+  entry.txn = std::move(_t);
+  auto fut = entry.pr.get_future();
+  DEBUG("enqueue cid={} queue_depth={} in_flight={}",
+        coll.get_cid(), coll.pending_txns.size(), coll.collection_in_flight);
+  if (!coll.collection_in_flight) {
+    coll.collection_in_flight = true;
+    DEBUG("cid={} gate closed, starting dispatch", coll.get_cid());
+    std::ignore = dispatch_collection(_ch);
+  }
+  return fut;
+}
+
+ceph::os::Transaction SeaStore::Shard::build_next_batch(
+  SeastoreCollection& coll,
+  std::vector<seastar::promise<>>& pending_txns_promises)
+{
+  ceph::os::Transaction merged;
+  bool first = true;
+  while (!coll.pending_txns.empty()) {
+    auto e = std::move(coll.pending_txns.front());
+    coll.pending_txns.pop_front();
+    if (first) {
+      merged = std::move(e.txn);
+      first = false;
+    } else {
+      merged.append(e.txn);
+    }
+    pending_txns_promises.push_back(std::move(e.pr));
+  }
+  return merged;
+}
+
+seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
+{
+  LOG_PREFIX(SeaStoreS::dispatch_collection);
+  auto& coll = static_cast<SeastoreCollection&>(*ch);
+  while (!coll.pending_txns.empty()) {
+    std::vector<seastar::promise<>> pending_txns_promises;
+    auto merged = build_next_batch(coll, pending_txns_promises);
+    DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
+          pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
+    co_await run_one_batch(ch, std::move(merged));
+    DEBUG("committed batch of {} txns for cid={}",
+          pending_txns_promises.size(), coll.get_cid());
+    for (auto& p : pending_txns_promises) {
+      p.set_value();
+    }
+  }
+  DEBUG("cid={} drained, gate open", coll.get_cid());
+  coll.collection_in_flight = false;
+}
+
+seastar::future<> SeaStore::Shard::run_one_batch(
+  CollectionRef _ch,
+  ceph::os::Transaction&& _t)
+{
+  LOG_PREFIX(SeaStoreS::run_one_batch);
   ++(shard_stats.pending_io_num);
   ++(shard_stats.starting_io_num);
 
@@ -1635,14 +1695,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
   assert(shard_stats.starting_io_num);
   --(shard_stats.starting_io_num);
-  ++(shard_stats.waiting_collock_io_num);
-
-  co_await ctx.transaction->get_handle().take_collection_lock(
-    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-  );
-
-  assert(shard_stats.waiting_collock_io_num);
-  --(shard_stats.waiting_collock_io_num);
   ++(shard_stats.waiting_throttler_io_num);
 
   co_await throttler.get(1);
@@ -1725,16 +1777,15 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
   ++(shard_stats.flush_num);
   ++(shard_stats.pending_flush_num);
 
-  return seastar::do_with(
-    get_dummy_ordering_handle(),
-    [this, ch](auto &handle) {
-      return handle.take_collection_lock(
-	static_cast<SeastoreCollection&>(*ch).ordering_lock
-      ).then([this, &handle] {
+  return do_transaction_no_callbacks(
+    ch, ceph::os::Transaction{}
+  ).then([this] {
+    return seastar::do_with(
+      get_dummy_ordering_handle(),
+      [this](auto &handle) {
 	return transaction_manager->flush(handle);
       });
-    }
-  ).finally([this] {
+  }).finally([this] {
     assert(shard_stats.pending_flush_num);
     --(shard_stats.pending_flush_num);
   });
