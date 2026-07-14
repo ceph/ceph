@@ -989,7 +989,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
       auto mpu = target->get_multipart_upload(key.name);
-      auto sal_obj = target->get_object(key);
+      auto sal_obj = mpu->get_meta_obj();
 
       string etag;
       ret = sal_obj->load_obj_state(this, y, true);
