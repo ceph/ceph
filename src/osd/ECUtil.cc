@@ -1158,4 +1158,54 @@ bool is_hinfo_key_string(const string &key) {
 const string &get_hinfo_key() {
   return HINFO_KEY;
 }
+
+std::map<uint64_t, uint64_t> merge_shard_extent_maps(
+    const shard_id_map<std::map<uint64_t, uint64_t>> &shard_extents,
+    const stripe_info_t &sinfo)
+{
+  std::map<uint64_t, uint64_t> result;
+  uint64_t chunk_size = sinfo.get_chunk_size();
+
+  for (shard_id_t shard(0); (unsigned)shard < sinfo.get_k(); ++shard) {
+    auto it = shard_extents.find(shard);
+    if (it == shard_extents.end()) {
+      continue;
+    }
+    for (auto [off, len] : it->second) {
+      uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
+      uint64_t to_next_chunk = ((off / chunk_size) + 1) * chunk_size - off;
+      uint64_t ro_len = std::min(to_next_chunk, len);
+      while (len > 0) {
+        // Insert and then merge with any contiguous neighbours.
+        auto ins = result.emplace(ro_offset, ro_len);
+        if (!ins.second) {
+          // Key already present; extend if the existing extent ends here.
+          ins.first->second = std::max(ins.first->second, ro_len);
+        }
+        auto cur = ins.first;
+        // Merge with preceding extent if contiguous.
+        if (cur != result.begin()) {
+          auto prev = std::prev(cur);
+          if (prev->first + prev->second >= cur->first) {
+            prev->second = std::max(prev->second,
+                                    cur->first - prev->first + cur->second);
+            cur = result.erase(cur);
+            cur = std::prev(cur);  // cur now points to the merged entry
+          }
+        }
+        // Merge with following extent if contiguous.
+        auto next = std::next(cur);
+        if (next != result.end() && cur->first + cur->second >= next->first) {
+          cur->second = std::max(cur->second,
+                                 next->first - cur->first + next->second);
+          result.erase(next);
+        }
+        len -= ro_len;
+        ro_offset += ro_len + sinfo.get_stripe_width() - chunk_size;
+        ro_len = std::min(len, chunk_size);
+      }
+    }
+  }
+  return result;
+}
 }

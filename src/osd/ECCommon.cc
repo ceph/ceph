@@ -561,6 +561,12 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
         need_omap_header = false;
         need_omap_keys = false;
       }
+      if (read_request.want_sparse_read) {
+        messages[shard_read.pg_shard].want_sparse_read.insert(hoid);
+        if (read_request.drop_data) {
+          messages[shard_read.pg_shard].drop_data.insert(hoid);
+        }
+      }
       if (shard_read.subchunk) {
         messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
         reads_sent = true;

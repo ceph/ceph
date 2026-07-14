@@ -221,7 +221,7 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(4, 2, bl);
+  ENCODE_START(5, 2, bl);
   encode(from, bl);
   encode(tid, bl);
   encode(to_read, bl);
@@ -229,12 +229,14 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
   encode(subchunks, bl);
   encode(omap_read_from, bl);
   encode(omap_headers_to_read, bl);
+  encode(want_sparse_read, bl);
+  encode(drop_data, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(4, bl);
+  DECODE_START(5, bl);
   decode(from, bl);
   decode(tid, bl);
   if (struct_v == 1) {
@@ -264,6 +266,13 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   } else {
     omap_read_from.clear();
     omap_headers_to_read.clear();
+  }
+  if (struct_v >= 5) {
+    decode(want_sparse_read, bl);
+    decode(drop_data, bl);
+  } else {
+    want_sparse_read.clear();
+    drop_data.clear();
   }
   DECODE_FINISH(bl);
 }
@@ -338,6 +347,8 @@ std::ostream &operator<<(
     << ", attrs_to_read=" << rhs.attrs_to_read
     << ", omap_headers_to_read=" << rhs.omap_headers_to_read
     << ", omap_read_from=" << rhs.omap_read_from
+    << ", want_sparse_read=" << rhs.want_sparse_read
+    << ", drop_data=" << rhs.drop_data
     << ")";
 }
 
@@ -379,6 +390,16 @@ void ECSubRead::dump(Formatter *f) const
 	f.dump_string("start_after", read_from.first);
         f.dump_unsigned("max_bytes", read_from.second);
       });
+
+  // 'want_sparse_read' (set<hobject_t>)
+  f->with_obj_array_section(
+      "want_sparse_read"sv, want_sparse_read,
+      [](Formatter& f, const hobject_t& oid) { f.dump_stream("oid") << oid; });
+
+  // 'drop_data' (set<hobject_t>)
+  f->with_obj_array_section(
+      "drop_data"sv, drop_data,
+      [](Formatter& f, const hobject_t& oid) { f.dump_stream("oid") << oid; });
 }
 
 list<ECSubRead> ECSubRead::generate_test_instances()
@@ -412,7 +433,7 @@ void ECSubReadReply::encode(bufferlist &p_bl,
 			    bufferlist &d_bl,
 			    uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 3 : 1;
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 4 : 1;
   uint8_t compat_ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 2 : 1;
   ENCODE_START(ver, compat_ver, p_bl);
   encode(from, p_bl);
@@ -442,6 +463,7 @@ void ECSubReadReply::encode(bufferlist &p_bl,
     encode(omap_headers_read, p_bl);
     encode(omap_entries_read, p_bl);
     encode(omaps_complete, p_bl);
+    encode(sparse_extents_read, p_bl);
   }
   ENCODE_FINISH(p_bl);
 }
@@ -454,7 +476,7 @@ void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 			    bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(3, p_bl);
+  DECODE_START(4, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
   if (struct_v < 2) {
@@ -495,6 +517,11 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
     omap_entries_read.clear();
     omaps_complete.clear();
   }
+  if (struct_v >= 4) {
+    decode(sparse_extents_read, p_bl);
+  } else {
+    sparse_extents_read.clear();
+  }
 
   DECODE_FINISH(p_bl);
 }
@@ -519,7 +546,9 @@ std::ostream &operator<<(
     }
   }
 
-  lhs << "])";
+  lhs << "]"
+      << ", sparse_extents_read=" << rhs.sparse_extents_read.size()
+      << ")";
   return lhs;
 }
 
@@ -598,6 +627,20 @@ void ECSubReadReply::dump(Formatter* f) const
       [](Formatter& f, const hobject_t& oid, const bool complete) {
 	f.dump_stream("oid") << oid;
         f.dump_unsigned("omap_complete", complete);
+      });
+
+  // "sparse_extents_read": map<hobject_t, map<uint64_t, uint64_t>>
+  f->with_obj_array_section(
+      "sparse_extents_read"sv, sparse_extents_read,
+      [](Formatter& f, const hobject_t& oid,
+  const std::map<uint64_t, uint64_t>& extents) {
+ f.dump_stream("oid") << oid;
+ f.with_obj_array_section(
+     "extent", extents,
+     [](Formatter& f, uint64_t off, uint64_t len) {
+       f.dump_unsigned("off", off);
+       f.dump_unsigned("len", len);
+     });
       });
 }
 

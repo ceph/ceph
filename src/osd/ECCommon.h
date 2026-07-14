@@ -129,6 +129,8 @@ struct ECCommon {
     std::string omap_read_from;
     uint64_t omap_max_bytes = 0;
     uint64_t object_size;
+    bool want_sparse_read = false;
+    bool drop_data = false;
 
     read_request_t(
         const std::list<ec_align_t> &to_read,
@@ -213,10 +215,12 @@ struct ECCommon {
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
+    shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents_read;
 
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo),
-      processed_read_requests(sinfo->get_k_plus_m()) {}
+      processed_read_requests(sinfo->get_k_plus_m()),
+      sparse_extents_read(sinfo->get_k_plus_m()) {}
 
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
@@ -238,7 +242,8 @@ struct ECCommon {
       os << ", omap_complete=" << omap_complete;
       os << ", buffers_read=" << buffers_read;
       os << ", processed_read_requests=" << processed_read_requests;
-      os << ", zero_length_reads=" << zero_length_reads << ")";
+      os << ", zero_length_reads=" << zero_length_reads;
+      os << ", sparse_extents_read=" << sparse_extents_read << ")";
     }
   };
 

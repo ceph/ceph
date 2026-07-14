@@ -1630,3 +1630,90 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+// Tests for merge_shard_extent_maps()
+
+TEST(ECUtil, merge_shard_extent_maps_empty)
+{
+  int k = 2, m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+
+  shard_id_map<std::map<uint64_t, uint64_t>> shard_extents(k + m);
+  auto result = merge_shard_extent_maps(shard_extents, sinfo);
+  ASSERT_TRUE(result.empty());
+}
+
+TEST(ECUtil, merge_shard_extent_maps_contiguous)
+{
+  // k=2, m=1, chunk_size=4096 => stripe_width=8192
+  // Each shard holds one chunk per stripe.
+  // Shard 0: [0, 4096) => RO [0, 4096)
+  // Shard 1: [0, 4096) => RO [4096, 8192)
+  // Together the full stripe [0, 8192) is covered.
+  int k = 2, m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+
+  shard_id_map<std::map<uint64_t, uint64_t>> shard_extents(k + m);
+  shard_extents[shard_id_t(0)][0] = chunk_size;
+  shard_extents[shard_id_t(1)][0] = chunk_size;
+
+  auto result = merge_shard_extent_maps(shard_extents, sinfo);
+  // Shard 0 covers RO [0,4096) and shard 1 covers RO [4096,8192); they are
+  // contiguous so they must be merged into a single extent.
+  ASSERT_EQ(1u, result.size());
+  ASSERT_EQ((uint64_t)chunk_size * 2, result.at(0));
+}
+
+TEST(ECUtil, merge_shard_extent_maps_sparse_one_shard)
+{
+  // Only shard 0 has data; shard 1 is absent (hole).
+  // Shard 0: [0, 4096) => RO [0, 4096)
+  int k = 2, m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+
+  shard_id_map<std::map<uint64_t, uint64_t>> shard_extents(k + m);
+  shard_extents[shard_id_t(0)][0] = chunk_size;
+
+  auto result = merge_shard_extent_maps(shard_extents, sinfo);
+  ASSERT_EQ(1u, result.size());
+  ASSERT_EQ((uint64_t)chunk_size, result.at(0));
+}
+
+TEST(ECUtil, merge_shard_extent_maps_parity_ignored)
+{
+  // Parity shard (shard k=2) should not contribute to the result.
+  int k = 2, m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+
+  shard_id_map<std::map<uint64_t, uint64_t>> shard_extents(k + m);
+  shard_extents[shard_id_t(2)][0] = chunk_size; // parity shard
+
+  auto result = merge_shard_extent_maps(shard_extents, sinfo);
+  ASSERT_TRUE(result.empty());
+}
+
+TEST(ECUtil, merge_shard_extent_maps_multi_stripe)
+{
+  // k=2, m=1, chunk_size=4096.
+  // Two stripes: shards each have two chunks [0,4096) and [4096,8192).
+  // Shard 0, stripe 0: RO [0, 4096); stripe 1: RO [8192, 12288)
+  // Shard 1, stripe 0: RO [4096, 8192); stripe 1: RO [12288, 16384)
+  int k = 2, m = 1;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+
+  shard_id_map<std::map<uint64_t, uint64_t>> shard_extents(k + m);
+  // Two contiguous chunks per shard = [0, 8192) in shard space
+  shard_extents[shard_id_t(0)][0] = chunk_size * 2;
+  shard_extents[shard_id_t(1)][0] = chunk_size * 2;
+
+  auto result = merge_shard_extent_maps(shard_extents, sinfo);
+  // Two full stripes covering RO [0,16384) — all four chunk extents are
+  // contiguous and must be merged into a single extent.
+  ASSERT_EQ(1u, result.size());
+  ASSERT_EQ((uint64_t)chunk_size * 4, result.at(0));
+}

@@ -5610,6 +5610,56 @@ struct ToSparseReadResult : public Context {
   }
 };
 
+struct ECSparseReadResult : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
+  int* result;
+  bufferlist* out_bl;
+  ceph_le64* len;
+  std::map<uint64_t, uint64_t> ext_map;
+  bufferlist data_bl;
+  ECSparseReadResult(PrimaryLogPG *pg, PrimaryLogPG::OpContext *opctx,
+                     int* result, bufferlist* out_bl, ceph_le64* len)
+    : pg(pg), opctx(opctx), result(result), out_bl(out_bl), len(len) {}
+  void finish(int r) override {
+    if (r < 0) {
+      *result = r;
+    } else {
+      uint64_t bytes = 0;
+      for (auto& [off, l] : ext_map) bytes += l;
+      *result = 0;
+      *len = bytes;
+      bufferlist outdata;
+      encode(ext_map, outdata);
+      ::encode_destructively(data_bl, outdata);
+      out_bl->swap(outdata);
+    }
+    opctx->finish_read(pg);
+  }
+};
+
+struct ECMapextResult : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
+  int* result;
+  bufferlist* out_bl;
+  std::map<uint64_t, uint64_t> ext_map;
+  ECMapextResult(PrimaryLogPG *pg, PrimaryLogPG::OpContext *opctx,
+                 int* result, bufferlist* out_bl)
+    : pg(pg), opctx(opctx), result(result), out_bl(out_bl) {}
+  void finish(int r) override {
+    if (r < 0) {
+      *result = r;
+    } else {
+      *result = 0;
+      bufferlist bl;
+      encode(ext_map, bl);
+      out_bl->swap(bl);
+    }
+    opctx->finish_read(pg);
+  }
+};
+
 template<typename V>
 static string list_keys(const map<string, V>& m) {
   string s;
@@ -6149,22 +6199,40 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
   ++ctx->num_read;
   if (pool.info.is_erasure() && !ctx->op->ec_direct_read()) {
-    // translate sparse read to a normal one if not supported
-
     if (length > 0) {
-      ctx->pending_async_reads.push_back(
-        make_pair(
-          boost::make_tuple(offset, length, op.flags),
+      auto *sparse_ctx = new ECSparseReadResult(
+        this, ctx, &osd_op.rval, &osd_op.outdata, &op.extent.length);
+      int r = pgbackend->objects_sparse_read_async(
+        soid, offset, length, size, op.flags,
+        &sparse_ctx->ext_map, &sparse_ctx->data_bl,
+        sparse_ctx);
+      if (r == -EOPNOTSUPP) {
+        // legacy EC: fall back to translating sparse read to a normal async read
+        delete sparse_ctx;
+        ctx->pending_async_reads.push_back(
           make_pair(
-     &osd_op.outdata,
-     new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-  		   &op.extent.length))));
-      dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
-
-      ctx->op_finishers[ctx->current_osd_subop_num].reset(
-        new ReadFinisher(osd_op));
-      // For async reads, op.extent.length will be updated by ToSparseReadResult
-      bytes_read = length;
+            boost::make_tuple(offset, length, op.flags),
+            make_pair(
+              &osd_op.outdata,
+              new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
+                                    &op.extent.length))));
+        dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
+        ctx->op_finishers[ctx->current_osd_subop_num].reset(
+          new ReadFinisher(osd_op));
+        bytes_read = length;
+      } else if (r < 0) {
+        delete sparse_ctx;
+        return r;
+      } else {
+        dout(10) << " ec sparse_read async noted for " << soid << dendl;
+        ctx->op_finishers[ctx->current_osd_subop_num].reset(
+          new ReadFinisher(osd_op));
+        ctx->inflightreads = 1;
+        in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+        ctx->delta_stats.num_rd_kb += shift_round_up(length, 10);
+        ctx->delta_stats.num_rd++;
+        return -EINPROGRESS;
+      }
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
@@ -6173,56 +6241,68 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       encode(data_bl, osd_op.outdata);
     }
   } else {
-    // read into a buffer
-    map<uint64_t, uint64_t> m;
-    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
-    int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
-  			      info.pgid.shard),
-  	       shard_offset, shard_length, m);
-    if (r < 0)  {
-      return r;
-    }
+    if (length == 0) {
+      // Nothing to read: return an empty extent map and empty data.
+      // extent_to_shard_extent() is not safe to call with length == 0
+      // (integer underflow in the end_chunk calculation), so we must
+      // short-circuit here just as the EC non-direct-read branch does.
+      dout(10) << " sparse read ended up empty for " << soid << dendl;
+      map<uint64_t, uint64_t> extents;
+      encode(extents, osd_op.outdata);
+      bufferlist data_bl;
+      encode(data_bl, osd_op.outdata);
+    } else {
+      // read into a buffer
+      map<uint64_t, uint64_t> m;
+      auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
+      int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+    			      info.pgid.shard),
+    	       shard_offset, shard_length, m);
+      if (r < 0)  {
+        return r;
+      }
 
-    bufferlist data_bl;
-    r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
-    if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx);
-    }
-    if (r < 0) {
-      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
-      return r;
-    }
-
-    // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
-    // Maybe at first, there is no much whole objects. With continued use, more
-    // and more whole object exist. So from this point, for spare-read add
-    // checksum make sense.
-    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
-      uint32_t crc = data_bl.crc32c(-1);
-      if (oi.data_digest != crc) {
-        osd->clog->error() << info.pgid << std::hex
-          << " full-object read crc 0x" << crc
-          << " != expected 0x" << oi.data_digest
-          << std::dec << " on " << soid;
+      bufferlist data_bl;
+      r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
+      if (r == -EIO) {
         r = rep_repair_primary_object(soid, ctx);
-        if (r < 0) {
-          return r;
+      }
+      if (r < 0) {
+        dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
+        return r;
+      }
+
+      // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
+      // Maybe at first, there is no much whole objects. With continued use, more
+      // and more whole object exist. So from this point, for spare-read add
+      // checksum make sense.
+      if ((uint64_t)r == oi.size && oi.is_data_digest()) {
+        uint32_t crc = data_bl.crc32c(-1);
+        if (oi.data_digest != crc) {
+          osd->clog->error() << info.pgid << std::hex
+            << " full-object read crc 0x" << crc
+            << " != expected 0x" << oi.data_digest
+            << std::dec << " on " << soid;
+          r = rep_repair_primary_object(soid, ctx);
+          if (r < 0) {
+            return r;
+          }
         }
       }
+
+      bytes_read = r;
+      // Only set op.extent.length for non-EC-direct-read to avoid issues
+      // with recursive calls from operations like CHECKSUM
+      if (!ctx->op->ec_direct_read()) {
+        op.extent.length = r;
+      }
+
+      encode(m, osd_op.outdata); // re-encode since it might be modified
+      ::encode_destructively(data_bl, osd_op.outdata);
+
+      dout(10) << " sparse_read got " << m.size() << " extents and " << r
+               << " bytes from object " << soid << dendl;
     }
-
-    bytes_read = r;
-    // Only set op.extent.length for non-EC-direct-read to avoid issues
-    // with recursive calls from operations like CHECKSUM
-    if (!ctx->op->ec_direct_read()) {
-      op.extent.length = r;
-    }
-
-    encode(m, osd_op.outdata); // re-encode since it might be modified
-    ::encode_destructively(data_bl, osd_op.outdata);
-
-    dout(10) << " sparse_read got " << m.size() << " extents and " << r
-             << " bytes from object " << soid << dendl;
   }
 
   ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
@@ -6375,25 +6455,55 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
       tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.is_erasure()) {
-	result = -EOPNOTSUPP;
-	break;
+      if (pool.info.is_erasure() && !pool.info.allows_ecoptimizations()) {
+ result = -EOPNOTSUPP;
+ break;
       }
       ++ctx->num_read;
-      {
-	// read into a buffer
-	bufferlist bl;
-	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
-						  info.pgid.shard),
-				   op.extent.offset, op.extent.length, bl);
-	auto bl_length = bl.length();
+      if (pool.info.is_erasure()) {
+       // Fast EC: issue async fiemap-only sub-read with drop_data=true
+        if (op_finisher == nullptr) {
+          // A zero-size object has no data extents, so return an empty map
+          if (oi.size == 0) {
+            std::map<uint64_t, uint64_t> empty_map;
+            encode(empty_map, osd_op.outdata);
+            ctx->delta_stats.num_rd++;
+            break;
+          }
+          auto *mapext_ctx = new ECMapextResult(
+            this, ctx, &osd_op.rval, &osd_op.outdata);
+          int r = pgbackend->objects_mapext_async(
+            soid, op.extent.offset, op.extent.length, oi.size, op.flags,
+            &mapext_ctx->ext_map, mapext_ctx);
+         if (r < 0) {
+            delete mapext_ctx;
+            result = r;
+            break;
+          }
+          dout(10) << " ec mapext async noted for " << soid << dendl;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          ctx->inflightreads = 1;
+          in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+          ctx->delta_stats.num_rd++;
+          return -EINPROGRESS;
+        } else {
+          result = op_finisher->execute();
+        }
+      } else {
+        // replicated pool: synchronous fiemap
+        bufferlist bl;
+        int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+    		        info.pgid.shard),
+             op.extent.offset, op.extent.length, bl);
+        auto bl_length = bl.length();
         osd_op.outdata = std::move(bl);
-	if (r < 0)
-	  result = r;
-	else
-	  ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
-	ctx->delta_stats.num_rd++;
-	dout(10) << " map_extents done on object " << soid << dendl;
+        if (r < 0)
+          result = r;
+        else
+          ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
+        ctx->delta_stats.num_rd++;
+        dout(10) << " map_extents done on object " << soid << dendl;
       }
       break;
 
