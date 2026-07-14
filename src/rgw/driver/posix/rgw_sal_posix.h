@@ -1263,8 +1263,12 @@ struct POSIXMPObj {
     int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
     if (mid_pos < 0)
       return false;
+    std::string _upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    if (!_upload_id.starts_with("2~")) {
+      return false;
+    }
     oid = meta.substr(0, mid_pos);
-    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    upload_id = std::move(_upload_id);
     init(oid, upload_id, _owner);
     return true;
   }
