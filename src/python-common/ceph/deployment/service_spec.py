@@ -3105,6 +3105,9 @@ class CustomContainerSpec(ServiceSpec):
             data['spec']['init_containers'] = [ic.to_json() for ic in ics]
         return data
 
+    def get_port_start(self) -> List[int]:
+        return list(self.ports) if self.ports else []
+
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
 
