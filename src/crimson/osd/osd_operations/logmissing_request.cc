@@ -63,6 +63,36 @@ PGRepopPipeline &LogMissingRequest::repop_pipeline(PG &pg)
   return pg.repop_pipeline;
 }
 
+LogMissingRequest::interruptible_future<>
+LogMissingRequest::with_pg_interruptible(
+  ShardServices &shard_services, Ref<PG> pg)
+{
+  LOG_PREFIX(LogMissingRequest::with_pg_interruptible);
+  DEBUGI("{}: pg present", *this);
+  co_await this->template enter_stage<interruptor>(
+    repop_pipeline(*pg).process);
+
+  co_await interruptor::make_interruptible(
+  this->template with_blocking_event<
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+  >([this, pg](auto &&trigger) {
+    return pg->osdmap_gate.wait_for_map(
+      std::move(trigger), req->min_epoch);
+  }));
+
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services.get_throttle(
+      scheduler::params_t{
+        1,
+        static_cast<unsigned>(req->get_priority()),
+        0,
+        SchedulerClass::repop}));
+  co_await pg->do_update_log_missing(req, get_remote_connection());
+  logger().debug("{}: complete", *this);
+  co_await interruptor::make_interruptible(handle.complete());
+  // throttle destructs here
+}
+
 seastar::future<> LogMissingRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
@@ -70,23 +100,9 @@ seastar::future<> LogMissingRequest::with_pg(
   DEBUGI("{}: LogMissingRequest::with_pg", *this);
 
   IRef ref = this;
-  return interruptor::with_interruption([this, pg] {
-    LOG_PREFIX(LogMissingRequest::with_pg);
-    DEBUGI("{}: pg present", *this);
-    return this->template enter_stage<interruptor>(repop_pipeline(*pg).process
-    ).then_interruptible([this, pg] {
-      return this->template with_blocking_event<
-        PG_OSDMapGate::OSDMapBlocker::BlockingEvent
-      >([this, pg](auto &&trigger) {
-        return pg->osdmap_gate.wait_for_map(
-          std::move(trigger), req->min_epoch);
-      });
-    }).then_interruptible([this, pg](auto) {
-      return pg->do_update_log_missing(req, get_remote_connection());
-    }).then_interruptible([this] {
-      logger().debug("{}: complete", *this);
-      return handle.complete();
-    });
+  return interruptor::with_interruption
+    ([this, pg, &shard_services] {
+      return with_pg_interruptible(shard_services, pg);
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pg, pg->get_osdmap_epoch()).finally([this, ref=std::move(ref)] {
