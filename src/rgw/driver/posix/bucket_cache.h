@@ -31,6 +31,48 @@
 
 #include "fmt/format.h"
 
+/* BucketCache — LMDB-backed listing cache for POSIX/NSFS buckets
+ *
+ * Three resource lifecycles must stay in sync:
+ *
+ *   1. LRU entries (BucketCacheEntry, managed by cohort::lru::LRU)
+ *      Bounded by lane_hiwat per lane.  Entries cycle between the
+ *      active list (in-flight request holds a ref) and the q list
+ *      (idle, eligible for eviction).
+ *
+ *   2. AVL tree nodes (TreeX, the lookup index)
+ *      One per live LRU entry.  Removed when the entry is reclaimed
+ *      or deleted via the hiwat discard path.
+ *
+ *   3. LMDB DBI handles (per-partition, bounded by max_dbs_per_partition)
+ *      Each bucket's listing is stored in a named LMDB database,
+ *      accessed through a DBI handle.  Handles are permanent —
+ *      mdb_dbi_close() is unsafe with concurrent readers, so we
+ *      never call it.  The only way to reuse a slot is:
+ *        a. mdb_drop(dbi, 0) — clears data, keeps handle valid
+ *        b. recycle_dbi()    — moves handle to the free pool
+ *        c. get_dbi()        — reuses from the free pool on the
+ *                              next bucket needing a handle
+ *      A recycled handle still points to its original named database
+ *      in LMDB, but data is accessed through the handle (not the
+ *      name), so the name mismatch is harmless as long as all
+ *      lookups go through dbi_map.
+ *
+ * Eviction paths (both must recycle DBIs):
+ *
+ *   - evict_block() → reclaim(): triggered by lru.insert() when a
+ *     lane exceeds hiwat.  Runs with the lane lock DROPPED (safe for
+ *     LMDB I/O).  Recycles via mdb_drop + recycle_dbi in reclaim().
+ *
+ *   - unref() hiwat discard: triggered when an entry returns to the
+ *     q list and q.size() > lane_hiwat.  The LRU tail entry is
+ *     deleted directly.  Recycles via lru_cleanup() (called before
+ *     delete, outside the lane lock).
+ *
+ * NOTE: cohort_lru.h is also used by rgw_file.h (RGWFileHandle).
+ * Changes to eviction semantics should be reviewed for impact there.
+ */
+
 #define dout_subsys ceph_subsys_rgw
 namespace file::listing {
 
@@ -74,6 +116,23 @@ public:
   void set_env(std::shared_ptr<LMDBSafe::MDBEnv>& _env, LMDBSafe::MDBDbi& _dbi) {
     env = _env;
     dbi = _dbi;
+  }
+
+  void lru_cleanup() override {
+    bc->cleanup_count++;
+    if (env) {
+      try {
+	auto txn = env->getRWTransaction();
+	mdb_drop(*txn, dbi, 0);
+	txn->commit();
+	bc->lmdbs.recycle_dbi(this);
+      } catch (const std::exception& e) {
+	lsubdout(bc->driver->ctx(), rgw, 0)
+	  << "BucketCache: hiwat dbi recycle failed for "
+	  << name << ": " << e.what() << dendl;
+      }
+      env.reset();
+    }
   }
 
   virtual ~BucketCacheEntry()
@@ -167,8 +226,24 @@ public:
 
 	flags |= FLAG_DELETED;
 	bc->recycle_count++;
-	lsubdout(bc->driver->ctx(), rgw, 21) << "BucketCache: reclaim evicting bucket=" << name << dendl;
+	lsubdout(bc->driver->ctx(), rgw, 2) << "BucketCache: reclaim evicting bucket=" << name << dendl;
 	bc->un->remove_watch(name);
+
+	/* recycle the DBI handle before dropping env — mdb_drop clears
+	 * the data, then recycle_dbi moves the handle to the free pool
+	 * for reuse by a future bucket */
+	if (env) {
+	  try {
+	    auto txn = env->getRWTransaction();
+	    mdb_drop(*txn, dbi, 0);
+	    txn->commit();
+	    bc->lmdbs.recycle_dbi(this);
+	  } catch (const std::exception& e) {
+	    lsubdout(bc->driver->ctx(), rgw, 0)
+	      << "BucketCache: reclaim dbi recycle failed for "
+	      << name << ": " << e.what() << dendl;
+	  }
+	}
 	env.reset();
 
 	if (bc->cache.is_same_partition(hk, factory->hk)) {
@@ -206,6 +281,7 @@ struct BucketCache : public Notifiable
   std::string bucket_root;
   uint32_t max_buckets;
   std::atomic<uint64_t> recycle_count;
+  std::atomic<uint64_t> cleanup_count;
   std::mutex mtx;
 
   /* the bucket lru cache keeps track of the buckets whose listings are
@@ -222,6 +298,7 @@ struct BucketCache : public Notifiable
    * complex is cleared on restart to preserve consistency */
   class Lmdbs
   {
+    CephContext* cct;
     std::string database_root;
     uint8_t lmdb_count;
     MDB_dbi max_dbs_per_partition;
@@ -236,9 +313,9 @@ struct BucketCache : public Notifiable
     sf::path dbp;
 
   public:
-    Lmdbs(std::string& database_root, uint8_t lmdb_count,
+    Lmdbs(CephContext* cct, std::string& database_root, uint8_t lmdb_count,
 	  uint32_t max_buckets)
-      : database_root(database_root), lmdb_count(lmdb_count),
+      : cct(cct), database_root(database_root), lmdb_count(lmdb_count),
         max_dbs_per_partition((max_buckets / lmdb_count) * 5 / 4 + 16),
         parts(lmdb_count), dbp(database_root) {
 
@@ -273,7 +350,7 @@ struct BucketCache : public Notifiable
 
     /* look up or create a dbi for the given bucket name in its
      * partition; reuses a recycled handle if available, otherwise
-     * opens a new one; returns nullopt on MDB_DBS_FULL */
+     * opens a new one; returns nullopt on failure (e.g. MDB_DBS_FULL) */
     std::optional<LMDBSafe::MDBDbi> get_dbi(
       BucketCacheEntry<D, B>* bucket,
       std::function<LMDBSafe::MDBDbi()> open_fn)
@@ -297,7 +374,12 @@ struct BucketCache : public Notifiable
         auto dbi = open_fn();
         part.dbi_map.emplace(bucket->name, dbi);
         return dbi;
-      } catch (const LMDBSafe::LMDBError&) {
+      } catch (const LMDBSafe::LMDBError& e) {
+	lsubdout(cct, rgw, 0) << "BucketCache: openDB failed for "
+	  << bucket->name << ": " << e.what()
+	  << " (dbi_map size=" << part.dbi_map.size()
+	  << " free_dbis=" << part.free_dbis.size() << ")"
+	  << dendl;
         return std::nullopt;
       }
     }
@@ -316,6 +398,24 @@ struct BucketCache : public Notifiable
     }
 
     const std::string& get_root() const { return database_root; }
+
+    size_t total_dbi_map_size() const {
+      size_t total = 0;
+      for (auto& p : parts) {
+	std::lock_guard lk(const_cast<std::mutex&>(p.mtx));
+	total += p.dbi_map.size();
+      }
+      return total;
+    }
+
+    size_t total_free_dbis() const {
+      size_t total = 0;
+      for (auto& p : parts) {
+	std::lock_guard lk(const_cast<std::mutex&>(p.mtx));
+	total += p.free_dbis.size();
+      }
+      return total;
+    }
   } lmdbs;
 
   std::unique_ptr<Notify> un;
@@ -329,7 +429,7 @@ public:
       lru(max_lanes, max_buckets/max_lanes),
       cache(max_lanes, max_buckets/max_partitions),
       rp(bucket_root),
-      lmdbs(database_root, lmdb_count, max_buckets),
+      lmdbs(driver->ctx(), database_root, lmdb_count, max_buckets),
       un(Notify::factory(this, bucket_root, use_inotify))
     {
       if (! (sf::exists(rp) && sf::is_directory(rp))) {
@@ -412,18 +512,12 @@ public:
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
-#ifndef NDEBUG
-	  /* total = q + active;
-	   * q holds idle entries eligible for eviction,
-	   * active holds entries with an outstanding ref (in-flight request).
-	   * A stable total with "recycled" entries means the LRU is healthy. */
-	  ldpp_dout(dpp, 21) << "BucketCache: "
+	  ldpp_dout(dpp, 2) << "BucketCache: "
 	    << (iflags & cohort::lru::FLAG_RECYCLE ? "recycled" : "allocated new")
 	    << " entry, LRU total=" << lru.get_size()
 	    << " (q=" << lru.get_q_size()
 	    << " active=" << lru.get_active_size() << ")"
 	    << ", bucket=" << name << dendl;
-#endif
 	  b->mtx.lock();
 
 	  /* attach bucket to an lmdb partition and prepare it for i/o */
@@ -550,7 +644,7 @@ public:
     unique_lock ulk{b->mtx, std::adopt_lock};
     if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
       /* bulk load into lmdb cache */
-      ldpp_dout(dpp, 21) << "BucketCache: filling bucket=" << sal_bucket->get_name()
+      ldpp_dout(dpp, 2) << "BucketCache: filling bucket=" << sal_bucket->get_name()
 	<< (flags & BucketCache<D, B>::FLAG_CREATE ? " (new entry)" : " (refill)") << dendl;
       rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
     }
@@ -691,7 +785,7 @@ public:
             [[unlikely]] case EventType::INVALIDATE:
             {
               /* yikes, cache blown */
-              lsubdout(driver->ctx(), rgw, 21) << "BucketCache: notify INVALIDATE (inotify overflow)"
+              lsubdout(driver->ctx(), rgw, 2) << "BucketCache: notify INVALIDATE (inotify overflow)"
                 << " bucket=" << b->name << dendl;
               mdb_drop(*txn, b->dbi, 0);
               txn->commit();
@@ -771,7 +865,7 @@ public:
         txn->del(b->dbi, concat_k);
         txn->commit();
       } catch (const std::exception& e) {
-	ldpp_dout(dpp, 21) << "BucketCache: remove_entry failed for "
+	ldpp_dout(dpp, 2) << "BucketCache: remove_entry failed for "
 	  << bname << ": " << e.what() << dendl;
       }
     } /* b */
@@ -799,7 +893,7 @@ public:
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
 
-      ldpp_dout(dpp, 21) << "BucketCache: invalidate bucket=" << bname
+      ldpp_dout(dpp, 2) << "BucketCache: invalidate bucket=" << bname
 	<< (recycle ? " (recycle)" : "") << dendl;
 
       try {
