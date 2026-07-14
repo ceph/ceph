@@ -70,6 +70,17 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
   req->finish_decode();
+
+  // acquire throttle BEFORE entering exclusive process stage
+  // consistent with LogMissingRequest which shares this stage
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->shard_services.get_throttle(
+      scheduler::params_t{
+        std::max<int>(req->get_cost(), 1),
+        req->get_priority(),
+        static_cast<uint64_t>(req->from.osd),
+        SchedulerClass::immediate}));
+
   co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
   co_await interruptor::make_interruptible(this->template with_blocking_event<
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent
@@ -96,6 +107,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
     pg->shard_services.send_to_osd(
       req->from.osd, std::move(reply), pg->get_osdmap_epoch())
   );
+  // throttle destructs here -> release_throttle()
 }
 
 seastar::future<> RepRequest::with_pg(
