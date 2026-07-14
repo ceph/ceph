@@ -506,3 +506,9 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
 endif()
+
+# unittest_rgw_limiter
+add_executable(unittest_rgw_limiter test_rgw_limiter.cc)
+add_ceph_unittest(unittest_rgw_limiter)
+target_link_libraries(unittest_rgw_limiter
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})

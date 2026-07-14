@@ -3947,6 +3947,21 @@ options:
   see_also:
   - rgw_frontends
   - rgw_thread_pool_size
+- name: rgw_concurrency_limiter
+  type: str
+  level: advanced
+  desc: Set the concurrency limiter, defaults to static which uses rgw_max_concurrent_requests as its limit.
+  default: static
+  enum_values:
+  - static
+  tags:
+  - performance
+  services:
+  - rgw
+  see_also:
+  - rgw_max_concurrent_requests
+  - rgw_thread_pool_size
+  with_legacy: true
 - name: rgw_scheduler_type
   type: str
   level: advanced

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "rgw_limiter.h"
 #include "common/async/completion.h"
 
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -157,59 +158,38 @@ auto AsyncScheduler::async_request(const client_id& client,
       }, token, get_executor(), client, params, time, cost);
 }
 
-class SimpleThrottler : public md_config_obs_t, public dmclock::Scheduler {
-public:
-  SimpleThrottler(CephContext *cct) :
-    max_requests(cct->_conf.get_val<int64_t>("rgw_max_concurrent_requests")),
-    counters(cct, "simple-throttler")
-  {
-    if (max_requests <= 0) {
-      max_requests = std::numeric_limits<int64_t>::max();
-    }
-    cct->_conf.add_observer(this);
-  }
-
-  std::vector<std::string> get_tracked_keys() const noexcept override {
-    return {std::string{"rgw_max_concurrent_requests"}};
-  }
-
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set<std::string>& changed) override
-  {
-    if (changed.count("rgw_max_concurrent_requests")) {
-      auto new_max = conf.get_val<int64_t>("rgw_max_concurrent_requests");
-      max_requests = new_max > 0 ? new_max : std::numeric_limits<int64_t>::max();
-    }
-  }
+class SimpleThrottler : public dmclock::Scheduler {
+ public:
+  SimpleThrottler(CephContext* cct)
+      : limit(rgw::limiter::create_by_name(
+            cct, cct->_conf->rgw_concurrency_limiter)),
+        counters(cct, "simple-throttler") {}
 
   void request_complete() override {
     --outstanding_requests;
-    if (auto c = counters();
-        c != nullptr) {
+    if (auto c = counters(); c != nullptr) {
       c->inc(throttle_counters::l_outstanding, -1);
     }
-
   }
 
-private:
-  int schedule_request_impl(const client_id&, const ReqParams&,
-                            const Time&, const Cost&,
-                            optional_yield) override {
+ private:
+  int schedule_request_impl(const client_id&, const ReqParams&, const Time&,
+      const Cost&, optional_yield) override {
     auto c = counters();
     if (c != nullptr) {
       c->inc(throttle_counters::l_outstanding);
     }
-    if (outstanding_requests++ >= max_requests) {
+    if (outstanding_requests++ >= limit->limit()) {
       if (c != nullptr) {
         c->inc(throttle_counters::l_throttle);
       }
       return -EAGAIN;
     }
 
-    return 0 ;
+    return 0;
   }
 
-  std::atomic<int64_t> max_requests;
+  std::unique_ptr<limiter::ConcurrencyLimiter> limit;
   std::atomic<int64_t> outstanding_requests = 0;
   ThrottleCounters counters;
 };
