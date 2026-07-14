@@ -1,8 +1,7 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewEncapsulation } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { CdNotification } from '../../../../shared/models/cd-notification';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { Mutex } from 'async-mutex';
 import _ from 'lodash';
@@ -16,6 +15,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   selector: 'cd-notification-area',
   templateUrl: './notification-area.component.html',
   styleUrls: ['./notification-area.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class NotificationAreaComponent implements OnInit, OnDestroy {
@@ -26,14 +26,6 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   mutex = new Mutex();
   icons = Icons;
   executingTasks: ExecutingTask[] = [];
-
-  readonly notificationIconMap = {
-    [NotificationType.success]: 'success',
-    [NotificationType.error]: 'error',
-    [NotificationType.info]: 'infoCircle',
-    [NotificationType.warning]: 'warning',
-    default: 'infoCircle'
-  } as const;
 
   constructor(
     private notificationService: NotificationService,
@@ -99,17 +91,5 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
-  }
-
-  removeNotification(notification: CdNotification, event: MouseEvent) {
-    event.stopPropagation();
-    event.preventDefault();
-
-    const notifications = this.notificationService.getNotificationsSnapshot();
-    const index = notifications.findIndex((n) => n.id === notification.id);
-
-    if (index > -1) {
-      this.notificationService.remove(index);
-    }
   }
 }
