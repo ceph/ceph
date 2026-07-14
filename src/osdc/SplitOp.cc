@@ -9,6 +9,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <algorithm>
+
 #include "osdc/SplitOp.h"
 #include "osdc/Objecter.h"
 #include "osd/osd_types.h"
@@ -249,29 +251,27 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 /**
  * @brief Initialize reference_sub_read to a random valid OSD.
  *
- * Counts valid OSDs in the acting set and picks a random acting index.
- * Must be called after _calc_target() populates the acting set.
+ * Collects the valid acting indices and picks one at random. Must be
+ * called after _calc_target() populates the acting set.
  */
 void ReplicaSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
-  
-  // Count valid OSDs in the acting set
-  int valid_osd_count = 0;
+
   for (size_t i = 0; i < target.acting.size(); i++) {
     int direct_osd = target.acting[i];
     if (objecter.osdmap->exists(direct_osd)) {
-      valid_osd_count++;
+      valid_indices.push_back(i);
     }
   }
-  
-  if (valid_osd_count < 2) {
+
+  if (valid_indices.size() < 2) {
     abort = true;
     ldout(cct, DBG_LVL) << __func__ << " ABORT: Not enough valid OSDs" << dendl;
     return;
   }
-  
-  // Pick a random valid acting index
-  reference_sub_read = rand() % valid_osd_count;
+
+  reference_valid_index = rand() % valid_indices.size();
+  reference_sub_read = valid_indices[reference_valid_index];
 }
 
 /**
@@ -332,18 +332,8 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
-  std::set<int> osds;
-  for (int direct_osd : target.acting) {
-    if (objecter.osdmap->exists(direct_osd)) {
-      osds.insert(direct_osd);
-    }
-  }
-
-  if (osds.size() < 2) {
-    ldout(cct, DBG_LVL) << __func__ <<" ABORT: No OSDs" << dendl;
-    abort = true;
-    return;
-  }
+  // init_reference_sub_read() aborts on < 2 valid OSDs; checked by create().
+  ceph_assert(valid_indices.size() >= 2);
 
   uint64_t replica_min_shard_read_size
     = objecter.get_min_split_replica_read_size();
@@ -352,13 +342,23 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t length = op.op.extent.length;
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
-                                   osds.size());
-  uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
-  
-  // Use reference_sub_read (set in constructor) as the starting shard
-  // This provides load balancing while ensuring reference_sub_read is always set
-  for (unsigned i = reference_sub_read; length > 0; i = (i + 1 == osds.size()) ? 0 : i + 1) {
-    int acting_index = i;
+                                   valid_indices.size());
+  // Round up, otherwise chunk_count can exceed slice_count and reuse a
+  // sub-read.
+  uint64_t chunk_size = p2roundup(div_round_up(length, slice_count),
+                                  (uint64_t)CEPH_PAGE_SIZE);
+  uint64_t chunk_count = div_round_up(length, chunk_size);
+
+  // Window starts at reference_sub_read for load balancing; chunks are
+  // assigned in ascending acting-index order to match assemble_buffer_read().
+  std::vector<int> chosen_indices;
+  for (uint64_t i = 0; i < chunk_count; i++) {
+    chosen_indices.push_back(
+      valid_indices[(reference_valid_index + i) % valid_indices.size()]);
+  }
+  std::sort(chosen_indices.begin(), chosen_indices.end());
+
+  for (int acting_index : chosen_indices) {
     if (!sub_reads.contains(acting_index)) {
       sub_reads.emplace(acting_index, orig_op->ops.size() + 1);
     }
@@ -375,6 +375,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     offset += len;
     length -= len;
   }
+  ceph_assert(length == 0);
 }
 
 #undef dout_prefix
