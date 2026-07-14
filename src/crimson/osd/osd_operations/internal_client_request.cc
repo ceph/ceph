@@ -90,6 +90,15 @@ InternalClientRequest::with_interruption()
       std::cref(*pg), FNAME, std::cref(*this), get_target_oid())
   );
 
+  // acquire mClock throttle slot before executing ops
+  // internal client ops are treated same as client class
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->shard_services.get_throttle(
+      scheduler::params_t{
+        1,
+        0,
+        0,
+        SchedulerClass::client}));
   auto params = get_do_osd_ops_params();
   OpsExecuter ox(
     pg, obc_manager.get_obc(), op_info, params, params.get_connection(),
@@ -112,6 +121,7 @@ InternalClientRequest::with_interruption()
 
   DEBUGDPP("{}: complete", *pg, *this);
   co_await interruptor::make_interruptible(handle.complete());
+  // throttle destructs here
   co_return;
 }
 
