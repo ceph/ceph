@@ -557,6 +557,40 @@ options:
   see_also:
   - rgw_lc_counters_cache
   with_legacy: true
+- name: rgw_cloud_tier_retry_limit
+  type: int
+  level: advanced
+  desc: Cloud-tier retry attempt limit
+  long_desc: Maximum number of retry attempts when a remote cloud-tier endpoint
+    signals throttling.
+  default: 8
+  min: 1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_cloud_tier_retry_delay_ms
+  type: int
+  level: advanced
+  desc: Cloud-tier retry initial delay
+  long_desc: Number of milliseconds to wait before the first retry of a throttled
+    cloud-tier request. Subsequent retries grow this delay exponentially up to
+    rgw_cloud_tier_retry_max_ms.
+  default: 500
+  min: 1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_cloud_tier_retry_max_ms
+  type: int
+  level: advanced
+  desc: Cloud-tier retry maximum delay
+  long_desc: Maximum number of milliseconds to wait between retries of a throttled
+    cloud-tier request after exponential backoff.
+  default: 30000
+  min: 1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
   level: dev

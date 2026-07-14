@@ -3929,6 +3929,10 @@ public:
   }
 
   int handle_headers(const map<string, string>& headers, int http_status) override {
+    if (http_status == 503) {
+      return -EBUSY;
+    }
+
     if (src_bucket_perms && http_status != 403 && http_status != 401) {
       auto iter = headers.find("RGWX_PERM_CHECKED");
       // if the header is not present, we need to check the ACL
@@ -5756,9 +5760,11 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                                 attrs, days, glacier_params, in_progress, &cb);
   } else {
     ldpp_dout(dpp, 20) << "Fetching  object:" << dest_obj << "from the cloud" <<  dendl;
-    ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
-                                &set_mtime, etag, accounted_size,
-                                attrs, &cb);
+    ret = retry_on_transient_error(tier_ctx.y, dpp, cct, __func__, [&]() {
+      return rgw_cloud_tier_get_object(tier_ctx, false, headers,
+                                       &set_mtime, etag, accounted_size,
+                                       attrs, &cb);
+    });
     in_progress = false;
   }
 
