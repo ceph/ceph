@@ -2109,10 +2109,16 @@ else:
             nqn: str,
             host_nqn: str,
             gw_group: Optional[str] = None,
+            server_address: Optional[str] = None,
             traddr: Optional[str] = None
         ):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
             return NVMeoFClient(
-                gw_group=gw_group, traddr=traddr
+                gw_group=gw_group,
+                server_address=server_address
             ).stub.get_connection_io_statistics(
                 NVMeoFClient.pb2.get_connection_io_statistics_req(subsystem_nqn=nqn,
                                                                   host_nqn=host_nqn,
@@ -2138,10 +2144,16 @@ else:
             nqn: str,
             host_nqn: str,
             gw_group: Optional[str] = None,
+            server_address: Optional[str] = None,
             traddr: Optional[str] = None
         ):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
             return NVMeoFClient(
-                gw_group=gw_group, traddr=traddr
+                gw_group=gw_group,
+                server_address=server_address
             ).stub.get_connection_io_statistics(
                 NVMeoFClient.pb2.get_connection_io_statistics_req(subsystem_nqn=nqn,
                                                                   host_nqn=host_nqn,
