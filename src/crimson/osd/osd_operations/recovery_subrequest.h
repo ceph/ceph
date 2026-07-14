@@ -67,6 +67,8 @@ private:
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
   Ref<MOSDFastDispatchOp> m;
+  interruptible_future<> with_pg_interruptible(
+    ShardServices &shard_services, Ref<PG> pgref);
 };
 
 }
