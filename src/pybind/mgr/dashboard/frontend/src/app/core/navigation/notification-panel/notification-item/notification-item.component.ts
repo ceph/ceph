@@ -46,10 +46,7 @@ export class NotificationItemComponent {
 
   onDelete(event: Event): void {
     event.stopPropagation();
-    const notifications = this.notificationService.getNotificationsSnapshot();
-    const index = notifications.findIndex((n) => n.id === this.notificationId);
-    if (index > -1) {
-      this.notificationService.remove(index);
+    if (this.notificationService.removeById(this.notificationId)) {
       this.deleted.emit(this.notificationId);
     }
   }

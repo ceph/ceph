@@ -10,6 +10,7 @@ import moment from 'moment';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { TaskMessageService } from '~/app/shared/services/task-message.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'cd-notification-area',
@@ -30,7 +31,8 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   constructor(
     private notificationService: NotificationService,
     private summaryService: SummaryService,
-    private taskMessageService: TaskMessageService
+    private taskMessageService: TaskMessageService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -92,5 +94,18 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
+  }
+
+  navigateToNotification(notification: CdNotification) {
+    this.notificationService.togglePanel(false);
+    this.router.navigate(['/notifications'], {
+      queryParams: { id: notification.id }
+    });
+  }
+
+  removeNotification(notification: CdNotification, event: MouseEvent) {
+    event.stopPropagation();
+    event.preventDefault();
+    this.notificationService.removeById(notification.id);
   }
 }

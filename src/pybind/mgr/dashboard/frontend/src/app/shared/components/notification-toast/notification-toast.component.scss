@@ -1,7 +1,6 @@
 @use '@carbon/styles/scss/theme' as *;
 @use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/styles/scss/layer' as *;
-@use '@carbon/styles/scss/type' as *;
 
 .cds--toast-notification-container {
   position: fixed;
@@ -31,7 +30,20 @@
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
-        word-break: break-word;
+        overflow-wrap: break-word;
+
+        .toast-message {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .toast-duplicate-count {
+          display: block;
+          color: $text-secondary;
+          margin-top: $spacing-02;
+        }
       }
 
       .cds--toast-notification__close-button {
@@ -55,6 +67,16 @@
 
       .toast-caption-container .date {
         flex-shrink: 0;
+      }
+
+      .toast-caption-container .toast-view-more {
+        color: $link-primary;
+        text-decoration: none;
+        margin-inline-start: auto;
+
+        &:hover {
+          text-decoration: underline;
+        }
       }
     }
   }
