@@ -26,3 +26,9 @@ overrides:
       - have.*want.*more
       - fs .* is degraded
       - is offline because no MDS is active for it
+      - AUTH_INSECURE_KEYS_ALLOWED
+      - AUTH_INSECURE_KEYS_CREATABLE
+      - AUTH_INSECURE_SERVICE_TICKETS
+      - AUTH_INSECURE_CLIENT_KEY_TYPE
+      - AUTH_INSECURE_SERVICE_KEY_TYPE
+      - AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
