@@ -48,8 +48,12 @@
   >
     <div class="notification-wrapper">
       <div
-        class="notification-item"
+        class="notification-item notification-item--clickable"
         data-testid="notification-item"
+        role="button"
+        tabindex="0"
+        (click)="navigateToNotification(notification)"
+        (keydown.enter)="navigateToNotification(notification)"
       >
         <cd-notification-item
           [type]="notification.type"

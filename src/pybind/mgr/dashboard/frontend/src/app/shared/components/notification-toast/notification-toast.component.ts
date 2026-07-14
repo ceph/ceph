@@ -1,5 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  AfterViewChecked,
+  HostListener,
+  ElementRef
+} from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
+import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
 import { ToastContent } from 'carbon-components-angular';
 import { NotificationService } from '../../services/notification.service';
@@ -30,13 +37,41 @@ import { NotificationService } from '../../services/notification.service';
   ],
   standalone: false
 })
-export class ToastComponent implements OnInit {
+export class ToastComponent implements OnInit, AfterViewChecked {
   activeToasts$: Observable<ToastContent[]>;
 
-  constructor(private notificationService: NotificationService) {}
+  constructor(
+    private notificationService: NotificationService,
+    private router: Router,
+    private el: ElementRef
+  ) {}
 
   ngOnInit() {
     this.activeToasts$ = this.notificationService.activeToasts$;
+  }
+
+  ngAfterViewChecked() {
+    const toasts = this.el.nativeElement.querySelectorAll('cds-toast');
+    toasts.forEach((toast: HTMLElement) => {
+      const subtitle = toast.querySelector('.cds--toast-notification__subtitle');
+      const viewMore = toast.querySelector('.toast-view-more') as HTMLElement;
+      if (!subtitle || !viewMore) return;
+      const isTruncated = subtitle.scrollHeight > subtitle.clientHeight;
+      viewMore.style.display = isTruncated ? '' : 'none';
+    });
+  }
+
+  @HostListener('click', ['$event'])
+  onViewMoreClick(event: Event) {
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('toast-view-more')) {
+      event.preventDefault();
+      const href = target.getAttribute('href');
+      if (href) {
+        this.router.navigateByUrl(href.replace('#', ''));
+      }
+      this.notificationService.clearAllToasts();
+    }
   }
 
   onToastClose(toast: ToastContent) {

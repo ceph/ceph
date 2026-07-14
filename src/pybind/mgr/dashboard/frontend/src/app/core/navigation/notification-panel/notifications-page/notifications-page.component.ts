@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Location } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
@@ -38,6 +39,13 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     this.notifications().find((n) => n.id === this.selectedNotificationID())
   );
 
+  hasNoNotifications = computed(() => this.notifications().length === 0);
+
+  allRead = computed(() => {
+    const map = this.readMap();
+    return this.notifications().every((n) => map[n.id]);
+  });
+
   private sub: Subscription;
   private interval: number;
 
@@ -46,7 +54,8 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     private prometheusAlertService: PrometheusAlertService,
     private prometheusNotificationService: PrometheusNotificationService,
     private authStorageService: AuthStorageService,
-    private location: Location
+    private location: Location,
+    private route: ActivatedRoute
   ) {
     this.readMap = toSignal(this.notificationService.readMap$, {
       initialValue: {} as Record<string, boolean>
@@ -71,6 +80,15 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
           })
         )
       );
+
+      const id = this.route.snapshot.queryParams['id'];
+      if (id && !this.selectedNotificationID()) {
+        const match = notifications.find((n) => n.id === id);
+        if (match) {
+          this.selectedNotificationID.set(id);
+          this.notificationService.markAsRead(id);
+        }
+      }
     });
   }
 
@@ -85,6 +103,10 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     this.location.back();
   }
 
+  markAllAsRead(): void {
+    this.notificationService.markAllAsRead();
+  }
+
   clearAll(): void {
     this.notificationService.removeAll();
     this.selectedNotificationID.set(null);
@@ -97,9 +119,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
   removeNotification(notification: DisplayNotification, event: MouseEvent): void {
     event.stopPropagation();
-    const index = this.notifications().findIndex((n) => n.id === notification.id);
-    if (index > -1) {
-      this.notificationService.remove(index);
+    if (this.notificationService.removeById(notification.id)) {
       if (this.selectedNotificationID() === notification.id) {
         this.selectedNotificationID.set(null);
       }

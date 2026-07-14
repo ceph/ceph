@@ -26,6 +26,8 @@ export class NotificationService {
   private readonly MAX_NOTIFICATIONS = 10;
   private readonly SHOW_DELAY = 10;
   private readonly QUEUE_DELAY = 500;
+  private readonly ERROR_TOAST_DURATION = 10000;
+  private readonly DEFAULT_TOAST_DURATION = 5000;
   private readonly LOCAL_STORAGE_KEY = 'cdNotifications';
   private readonly LOCAL_STORAGE_MUTE_KEY = 'cdNotificationsMuted';
   private readonly LOCAL_STORAGE_READ_KEY = 'cdNotificationsRead';
@@ -129,7 +131,19 @@ export class NotificationService {
    * Saving a shown notification in local storage
    */
   save(notification: CdNotification) {
-    const notifications = [notification, ...this.dataSource.getValue()];
+    const current = this.dataSource.getValue();
+    const existing = current.find(
+      (n) => n.title === notification.title && n.type === notification.type
+    );
+
+    let notifications: CdNotification[];
+    if (existing) {
+      existing.occurrences = (existing.occurrences || 1) + 1;
+      existing.timestamp = notification.timestamp;
+      notifications = [...current];
+    } else {
+      notifications = [notification, ...current];
+    }
 
     const limited = notifications
       .sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1))
@@ -151,6 +165,14 @@ export class NotificationService {
     this._persistNotifications(notifications);
   }
 
+  removeById(id: string): boolean {
+    const notifications = this.dataSource.getValue();
+    const index = notifications.findIndex((n) => n.id === id);
+    if (index === -1) return false;
+    this.remove(index);
+    return true;
+  }
+
   /**
    * Removes all current saved notifications from storage (and any appearing toasts)
    */
@@ -160,7 +182,7 @@ export class NotificationService {
     this.readMapSource.next({});
     this.dataSource.next([]);
     this.hasUnreadSource.next(false);
-    this._clearAllToasts();
+    this.clearAllToasts();
   }
 
   /**
@@ -261,21 +283,39 @@ export class NotificationService {
     const carbonType = this.NOTIFICATION_TYPE_MAP[notification.type] || 'info';
     const lowContrast = notification.options?.lowContrast || false;
 
+    const existing = this.activeToasts.find(
+      (t) => t.title === notification.title && t.type === carbonType
+    );
+    if (existing) {
+      existing.duplicateCount = (existing.duplicateCount || 1) + 1;
+      const count = existing.duplicateCount - 1;
+      existing.subtitle = `<span class="toast-message">${existing.originalSubtitle}</span><span class="toast-duplicate-count">(+${count} more)</span>`;
+      existing.caption = this._renderTimeAndApplicationHtml(notification);
+      this.activeToastsSource.next([...this.activeToasts]);
+      return;
+    }
+
+    const subtitle = notification.message || '';
     const toast: ToastContent = {
       title: notification.title,
-      subtitle: notification.message || '',
+      subtitle,
       caption: this._renderTimeAndApplicationHtml(notification),
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,
-      duration: notification.options?.timeOut || 5000
+      duration:
+        notification.options?.timeOut ||
+        (notification.type === NotificationType.error
+          ? this.ERROR_TOAST_DURATION
+          : this.DEFAULT_TOAST_DURATION),
+      notificationId: notification.id,
+      duplicateCount: 1,
+      originalSubtitle: subtitle
     };
 
-    // Add new toast to the beginning of the array
     this.activeToasts.unshift(toast);
     this.activeToastsSource.next(this.activeToasts);
 
-    // Handle duration-based auto-dismissal
     if (toast.duration && toast.duration > 0) {
       this.ngZone.runOutsideAngular(() => {
         setTimeout(() => {
@@ -288,14 +328,13 @@ export class NotificationService {
   }
 
   private _renderTimeAndApplicationHtml(notification: CdNotification): string {
-    let html = `<div class="toast-caption-container">
-      <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>`;
-
-    html += '</div>';
-    return html;
+    return `<div class="toast-caption-container">
+      <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>
+      <a class="toast-view-more cds--type-label-01" href="#/notifications?id=${notification.id}" i18n>View more</a>
+    </div>`;
   }
 
-  private _clearAllToasts() {
+  clearAllToasts() {
     this.activeToasts = [];
     this.activeToastsSource.next(this.activeToasts);
   }
@@ -382,5 +421,14 @@ export class NotificationService {
     this.readMapSource.next(updated);
     this._persistReadMap(updated);
     this._recomputeHasUnread(this.dataSource.getValue());
+  }
+
+  markAllAsRead() {
+    const notifications = this.dataSource.getValue();
+    const updated = { ...this.readMapSource.getValue() };
+    notifications.forEach((n) => (updated[n.id] = true));
+    this.readMapSource.next(updated);
+    this._persistReadMap(updated);
+    this._recomputeHasUnread(notifications);
   }
 }
