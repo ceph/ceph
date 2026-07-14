@@ -245,9 +245,14 @@ namespace rgw::s3vector {
                          << " endpoint=" << s3_endpoint << " region=" << s3_region << dendl;
     }
 
-    LanceDBConnection* conn = lancedb_connect_builder_execute(builder);
-    if (!conn) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << uri << dendl;
+    LanceDBConnection* conn = nullptr;
+    char* error_message = nullptr;
+    const auto rc = lancedb_connect_builder_execute(builder, &conn, &error_message);
+    if (rc != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect to: " << uri
+        << " error: " << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return nullptr;
     }
     return conn;
   }
@@ -292,9 +297,14 @@ namespace rgw::s3vector {
     }
 
     builder = lancedb_connect_builder_session(builder, session_sp.get());
-    LanceDBConnection* conn = lancedb_connect_builder_execute(builder);
-    if (!conn) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect using session to: " << uri << " falling back to connect without session" << dendl;
+    LanceDBConnection* conn = nullptr;
+    char* error_message = nullptr;
+    const auto rc = lancedb_connect_builder_execute(builder, &conn, &error_message);
+    if (rc != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to connect using session to: " << uri
+        << " error: " << (error_message ? error_message : "unknown")
+        << " falling back to connect without session" << dendl;
+      lancedb_free_string(error_message);
       return LanceDBSessionConnHandle{
         .conn = connect(dpp, vector_bucket_name)
       };
