@@ -9,16 +9,16 @@
 
     <div>
       @if (showForm) {
-        <cd-osd-form [hideTitle]="true"
-                     (emitDriveGroup)="setDriveGroup($event)"
-                     (emitDeploymentOption)="setDeploymentOptions($event)"
-                     (emitMode)="setDeploymentMode($event)"
-                     (osdCreated)="onOsdCreated()"
-                     (cancelled)="onFormCancelled()"></cd-osd-form>
+      <cd-osd-form [hideTitle]="true"
+                   (emitDriveGroup)="setDriveGroup($event)"
+                   (emitDeploymentOption)="setDeploymentOptions($event)"
+                   (emitMode)="setDeploymentMode($event)"
+                   (osdCreated)="onOsdCreated()"
+                   (cancelled)="onFormCancelled()"></cd-osd-form>
       } @else {
-        <cd-osd-list [showTabs]="false"
-                     [inlineCreate]="true"
-                     (createAction)="onCreateAction()"></cd-osd-list>
+      <cd-osd-list [showTabs]="false"
+                   [inlineCreate]="true"
+                   (createAction)="onCreateAction()"></cd-osd-list>
       }
     </div>
 

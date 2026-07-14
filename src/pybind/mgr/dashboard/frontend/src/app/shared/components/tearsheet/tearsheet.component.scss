@@ -40,18 +40,18 @@
 
 // FULL TEARSHEET
 .tearsheet--full {
-  height: 100%;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  margin: 0;
   min-height: 0;
+  padding: 0;
 
   .tearsheet-cols--full {
-    flex: 1 1 auto;
-    min-height: 0;
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
+    min-height: 0;
   }
 
   .tearsheet-body {
@@ -65,9 +65,9 @@
 
   .tearsheet-content--full {
     flex: 1 1 auto;
-    min-height: 0;
-    min-block-size: 0;
     max-block-size: none;
+    min-block-size: 0;
+    min-height: 0;
   }
 }
 

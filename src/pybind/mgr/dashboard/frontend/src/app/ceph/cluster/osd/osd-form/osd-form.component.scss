@@ -1,8 +1,8 @@
 .osd-tearsheet-content {
-  padding: var(--cds-spacing-05) var(--cds-spacing-06);
   max-height: calc(100vh - 300px);
-  overflow-y: auto;
   overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--cds-spacing-05) var(--cds-spacing-06);
 }
 
 .osd-alert-block {

@@ -14,7 +14,7 @@ describe('Create Cluster Review page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    onboarding.selectStep('Review');
+    createCluster.selectStep('Review');
   });
 
   describe('fields check', () => {
