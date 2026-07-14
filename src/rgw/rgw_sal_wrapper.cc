@@ -105,7 +105,7 @@ extern "C" {
 
 int rgw_put_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
       RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
-      const uint8_t* data, size_t len, const char* content_type) {
+      const uint8_t* data, size_t len) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
@@ -155,12 +155,6 @@ int rgw_put_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
   }
 
   rgw::sal::Attrs attrs;
-  if (content_type && strlen(content_type) > 0) {
-    bufferlist ct_bl;
-    ct_bl.append(content_type);
-    attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
-  }
-
   ceph::real_time mtime = ceph::real_clock::now();
   req_context rctx{dpp, y, nullptr};
 
@@ -173,7 +167,7 @@ int rgw_put_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
 
 int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
       RGWYieldContext* yield_ctx, const char* bucket_name, const RGWObject* obj_id,
-      const uint8_t* data, size_t len, const char* content_type,
+      const uint8_t* data, size_t len,
       const char* if_match, const char* if_nomatch, int* canceled) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
@@ -225,12 +219,6 @@ int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* d
   }
 
   rgw::sal::Attrs attrs;
-  if (content_type && strlen(content_type) > 0) {
-    bufferlist ct_bl;
-    ct_bl.append(content_type);
-    attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
-  }
-
   ceph::real_time mtime = ceph::real_clock::now();
   req_context rctx{dpp, y, nullptr};
   bool was_canceled = false;

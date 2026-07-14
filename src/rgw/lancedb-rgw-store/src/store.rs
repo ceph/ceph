@@ -219,8 +219,6 @@ impl ObjectStore for RGWObjectStore {
         let bucket = self.bucket_cstr()?;
         let key = self.path_to_cstr(location)?;
         let obj = Self::make_obj(&key);
-        let content_type = str_to_cstring("application/octet-stream")?;
-
         let bytes: Bytes = payload.into();
 
         match opts.mode {
@@ -234,7 +232,6 @@ impl ObjectStore for RGWObjectStore {
                         &obj,
                         bytes.as_ptr(),
                         bytes.len(),
-                        content_type.as_ptr(),
                     )
                 };
 
@@ -260,7 +257,6 @@ impl ObjectStore for RGWObjectStore {
                         &obj,
                         bytes.as_ptr(),
                         bytes.len(),
-                        content_type.as_ptr(),
                         std::ptr::null(),
                         if_nomatch.as_ptr(),
                         &mut canceled,
@@ -303,7 +299,6 @@ impl ObjectStore for RGWObjectStore {
                         &obj,
                         bytes.as_ptr(),
                         bytes.len(),
-                        content_type.as_ptr(),
                         if_match.as_ptr(),
                         std::ptr::null(),
                         &mut canceled,

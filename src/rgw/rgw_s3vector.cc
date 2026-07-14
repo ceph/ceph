@@ -164,6 +164,8 @@ namespace rgw::s3vector {
       // SAL backend requires a regular S3 bucket with the same name as the
       // vector bucket to exist before vector operations.
       rgw::sal::Driver* driver = rgw::s3vector::get_driver();
+      // TODO: disable cache for short-lived sessions once LanceDB supports it
+      // (currently 0 = default cache size, no way to disable)
       LanceDBSession* session = create_sal_session(dpp, driver);
       if (!session) {
         return nullptr;

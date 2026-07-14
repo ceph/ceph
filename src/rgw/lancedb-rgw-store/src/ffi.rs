@@ -169,7 +169,6 @@ extern "C" {
         obj: *const RGWObject,
         data: *const u8,
         len: usize,
-        content_type: *const c_char,
     ) -> c_int;
 
     /// Write an object with conditional preconditions
@@ -181,7 +180,6 @@ extern "C" {
         obj: *const RGWObject,
         data: *const u8,
         len: usize,
-        content_type: *const c_char,
         if_match: *const c_char,
         if_nomatch: *const c_char,
         canceled: *mut c_int,

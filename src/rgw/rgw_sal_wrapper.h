@@ -125,8 +125,7 @@ typedef struct RGWListResult {
  * @return 0 on success, negative errno on failure
  */
 int rgw_put_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
-  const char* bucket, const RGWObject* obj, const uint8_t* data, size_t len,
-  const char* content_type);
+  const char* bucket, const RGWObject* obj, const uint8_t* data, size_t len);
 
 /**
  * Write an object with conditional preconditions.
@@ -138,7 +137,7 @@ int rgw_put_object( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldCont
  */
 int rgw_put_object_conditional( RGWSalDriver* driver, const RGWDoutPrefix* dpp, RGWYieldContext* yield_ctx,
   const char* bucket, const RGWObject* obj, const uint8_t* data, size_t len,
-  const char* content_type, const char* if_match, const char* if_nomatch, int* canceled);
+  const char* if_match, const char* if_nomatch, int* canceled);
 
 /**
  * Read an object (or a byte range) from storage.
