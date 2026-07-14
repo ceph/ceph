@@ -8070,6 +8070,10 @@ int main(int argc, const char **argv)
       formatter->close_section();
       formatter->flush(cout);
     }
+
+    cerr << "NOTE: The output of this command is only applicable to "
+      "buckets that use hashed bucket index sharding and not buckets "
+      "that use ordered bucket index sharding." << std::endl;
   }
 
   if (opt_cmd == OPT::BUCKET_OBJECT_SHARD) {
@@ -8088,6 +8092,10 @@ int main(int argc, const char **argv)
     encode_json("shard", shard, formatter.get());
     formatter->close_section();
     formatter->flush(cout);
+
+    cerr << "NOTE: The output of this command is only applicable to "
+      "buckets that use hashed bucket index sharding and not buckets "
+      "that use ordered bucket index sharding." << std::endl;
   }
 
 #ifdef WITH_RADOSGW_RADOS
