@@ -901,7 +901,14 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
+  // No shard to pin on a replicated pool; _op_submit() computes the target.
+  if (!pi->is_erasure()) {
+    debug_op_summary("reuse_op:", op, cct);
+    return;
+  }
+
   objecter._calc_target(&op->target, op);
+
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
@@ -1015,7 +1022,9 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  // Populate the target, to extract the acting set from it.
+  // Populate the target, to extract the acting set from it. _calc_target()
+  // short-circuits once pgid is set.
+  const auto saved_target = target;
   target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
   objecter._calc_target(&op->target, op);
 
@@ -1025,9 +1034,10 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (split_read->reference_sub_read == -1) {
     split_read->abort = true;
   }
-  
+
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED after init_reference_sub_read" << dendl;
+    target = saved_target;
     return false;
   }
 
@@ -1042,6 +1052,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // STAGE 5: Final abort check - discard split op if problems were detected
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED 2" << dendl;
+    target = saved_target;
     return false;
   }
 
@@ -1049,6 +1060,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // fails, then this will catch the cases (albeit less efficiently).
   if (split_read->sub_reads.size() <= 1) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op - inefficient" << dendl;
+    target = saved_target;
     prepare_single_op(op, objecter, cct);
     split_read->abort = true; // Required for destructor.
     return false;

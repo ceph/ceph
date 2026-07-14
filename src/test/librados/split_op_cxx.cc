@@ -157,6 +157,31 @@ TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
   }
 }
 
+TEST_P(LibRadosSplitOpPP, SingleChunkAfterPageRoundup) {
+  if (!split_ops) {
+    GTEST_SKIP() << "Needs split_ops!";
+  }
+  ASSERT_EQ(0, cluster.conf_set("osd_min_split_replica_read_size", "1024"));
+
+  bufferlist bl = make_pattern_bl(2048);
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+  ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
+
+  // validate() accepts 2048 (>= 2 * 1024), but chunk_size rounds up to 4096,
+  // so the read serves whole off one replica instead of splitting.
+  ObjectReadOperation read;
+  bufferlist read_bl;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &read, &read_bl,
+                                          balanced_read_flags));
+  ASSERT_TRUE(read_bl.contents_equal(bl));
+
+  // Restore what SetUp() installed; later /0 tests read this value.
+  ASSERT_EQ(0, cluster.conf_set("osd_min_split_replica_read_size", "262144"));
+}
+
 TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
