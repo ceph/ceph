@@ -54,8 +54,6 @@ public:
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
 
-  seastar::shared_mutex ordering_lock;
-
   struct batch_entry_t {
     ceph::os::Transaction txn;
     seastar::promise<> pr;

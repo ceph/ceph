@@ -806,14 +806,13 @@ seastar::future<> SeaStore::report_stats()
          calc_conflicts(io_total.read_num, io_total.repeat_read_num),
          calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
     INFO("trans outstanding: {},{},{},{} "
-         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
+         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
          io_total.pending_io_num,
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
          (double)io_total.pending_io_num/seastar::smp::count,
          (double)io_total.starting_io_num/seastar::smp::count,
-         (double)io_total.waiting_collock_io_num/seastar::smp::count,
          (double)io_total.waiting_throttler_io_num/seastar::smp::count,
          (double)io_total.processing_inlock_io_num/seastar::smp::count,
          (double)io_total.processing_postlock_io_num/seastar::smp::count,
@@ -825,7 +824,6 @@ seastar::future<> SeaStore::report_stats()
     for (const auto &s : shard_io_stats) {
       oss_pending << s.pending_io_num
                  << "(" << s.starting_io_num
-                 << "," << s.waiting_collock_io_num
                  << "," << s.waiting_throttler_io_num
                  << "," << s.processing_inlock_io_num
                  << "," << s.processing_postlock_io_num
@@ -2891,7 +2889,7 @@ shard_stats_t SeaStore::Shard::get_io_stats(
     };
     INFO("iops={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f} "
          "conflicts={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}) "
-         "outstanding={}({},{},{},{},{}),{},{},{}",
+         "outstanding={}({},{},{},{}),{},{},{}",
          // iops
          ret.io_num/seconds,
          ret.read_num/seconds,
@@ -2912,7 +2910,6 @@ shard_stats_t SeaStore::Shard::get_io_stats(
          // outstanding
          ret.pending_io_num,
          ret.starting_io_num,
-         ret.waiting_collock_io_num,
          ret.waiting_throttler_io_num,
          ret.processing_inlock_io_num,
          ret.processing_postlock_io_num,
