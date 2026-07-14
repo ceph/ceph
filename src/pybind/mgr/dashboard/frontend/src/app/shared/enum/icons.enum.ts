@@ -166,7 +166,19 @@ export const ICON_TYPE = {
   arrowUpRight: ' arrow--up-right',
   inProgress: 'in-progress',
   arrowDown: 'arrow--down',
-  warning: 'warning'
+  warning: 'warning',
+  destroy: 'close',
+  launch: 'launch',
+  cubes: 'cube',
+  angleDoubleLeft: 'chevron--left',
+  angleDoubleRight: 'chevron--right',
+  leftArrow: 'caret--left',
+  rightArrow: 'caret--right',
+  locked: 'locked',
+  cloudMonitoring: 'cloud--monitoring',
+  trash: 'trash-can',
+  temperature: 'temperature',
+  left: 'arrow--left'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
