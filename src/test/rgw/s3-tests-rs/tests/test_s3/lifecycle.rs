@@ -37,8 +37,6 @@ fn check_lifecycle_expiration_header(
     duration.num_days() == delta_days && got_rule_id == rule_id
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -84,8 +82,6 @@ async fn test_lifecycle_set() {
         .unwrap();
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_get() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -145,8 +141,6 @@ async fn test_lifecycle_get() {
 }
 
 /* filter round-trip */
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_empty_filter() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -198,8 +192,6 @@ async fn test_lifecycle_empty_filter() {
 
 } /* test-empty-filter */
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_get_no_id() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -255,8 +247,6 @@ async fn test_lifecycle_get_no_id() {
     assert_eq!(response.rules().len(), 2);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_date() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -290,8 +280,6 @@ async fn test_lifecycle_set_date() {
         .unwrap();
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_noncurrent() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -337,8 +325,6 @@ async fn test_lifecycle_set_noncurrent() {
         .unwrap();
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_filter() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -371,8 +357,6 @@ async fn test_lifecycle_set_filter() {
         .unwrap();
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_empty_filter() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -405,8 +389,6 @@ async fn test_lifecycle_set_empty_filter() {
         .unwrap();
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_delete() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -457,8 +439,6 @@ async fn test_lifecycle_delete() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -516,8 +496,6 @@ async fn test_lifecycle_expiration() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecyclev2_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -575,8 +553,6 @@ async fn test_lifecyclev2_expiration() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_date() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -634,8 +610,6 @@ async fn test_lifecycle_expiration_date() {
 }
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_versioning_enabled() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -686,8 +660,6 @@ async fn test_lifecycle_expiration_versioning_enabled() {
     assert_eq!(response.delete_markers().len(), 1);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_header_put() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -729,8 +701,6 @@ async fn test_lifecycle_expiration_header_put() {
     assert!(response.expiration().is_some());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_id_too_long() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -759,8 +729,6 @@ async fn test_lifecycle_id_too_long() {
     assert!(result.is_err());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_same_id() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -798,8 +766,6 @@ async fn test_lifecycle_same_id() {
     assert!(result.is_err());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_days0() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -829,8 +795,6 @@ async fn test_lifecycle_expiration_days0() {
     assert!(result.is_err());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_deletemarker() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -869,8 +833,6 @@ async fn test_lifecycle_set_deletemarker() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_noncur_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -948,8 +910,6 @@ async fn test_lifecycle_noncur_expiration() {
 }
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_tags1() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1035,8 +995,6 @@ async fn test_lifecycle_expiration_tags1() {
     assert!(response.contents().is_empty());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_multipart() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1084,8 +1042,6 @@ async fn test_lifecycle_set_multipart() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_tags2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1205,8 +1161,6 @@ async fn test_lifecycle_expiration_tags2() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_versioned_tags2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1328,8 +1282,6 @@ async fn test_lifecycle_expiration_versioned_tags2() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_noncur_tags1() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1438,8 +1390,6 @@ async fn test_lifecycle_expiration_noncur_tags1() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_newer_noncurrent() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1503,8 +1453,6 @@ async fn test_lifecycle_expiration_newer_noncurrent() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_size_gt() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1574,8 +1522,6 @@ async fn test_lifecycle_expiration_size_gt() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_size_lt() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1645,8 +1591,6 @@ async fn test_lifecycle_expiration_size_lt() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_deletemarker_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1746,8 +1690,6 @@ async fn test_lifecycle_deletemarker_expiration() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_multipart_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1814,8 +1756,6 @@ async fn test_lifecycle_multipart_expiration() {
     assert_eq!(expired_uploads.len(), 1);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_invalid_status() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1867,8 +1807,6 @@ async fn test_lifecycle_invalid_status() {
     assert!(err.is_err());
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_header_head() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -1911,8 +1849,6 @@ async fn test_lifecycle_expiration_header_head() {
     assert!(check_lifecycle_expiration_header(response.expiration(), now, "rule1", 1));
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_header_tags_head() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2005,8 +1941,6 @@ async fn test_lifecycle_expiration_header_tags_head() {
     assert!(!check_lifecycle_expiration_header(response.expiration(), now, "rule1", 1));
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_expiration_header_and_tags_head() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2075,8 +2009,6 @@ async fn test_lifecycle_expiration_header_and_tags_head() {
     assert!(!check_lifecycle_expiration_header(response.expiration(), now, "rule1", 1));
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_set_invalid_date() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2130,8 +2062,6 @@ async fn test_lifecycle_set_invalid_date() {
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_deletemarker_expiration_with_days_tag() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2244,8 +2174,6 @@ fn sc_count(map: &HashMap<String, Vec<String>>, class: &str) -> usize {
     map.get(class).map(|v| v.len()).unwrap_or(0)
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 async fn test_lifecycle_transition_set_invalid_date() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2306,10 +2234,10 @@ async fn test_lifecycle_transition_set_invalid_date() {
     assert!(result.is_err(), "expected error for invalid transition date");
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no storage class pools")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no storage class pools")]
 async fn test_lifecycle_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let sc = configured_storage_classes();
@@ -2390,10 +2318,10 @@ async fn test_lifecycle_transition() {
     assert_eq!(sc_count(&classes, &sc[2]), 2);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no storage class pools")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no storage class pools")]
 async fn test_lifecycle_transition_single_rule_multi_trans() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let sc = configured_storage_classes();
@@ -2463,9 +2391,9 @@ async fn test_lifecycle_transition_single_rule_multi_trans() {
     assert_eq!(sc_count(&classes, &sc[2]), 2);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no storage class pools")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no storage class pools")]
 async fn test_lifecycle_set_noncurrent_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let sc = configured_storage_classes();
@@ -2531,10 +2459,10 @@ async fn test_lifecycle_set_noncurrent_transition() {
     drop(response);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no storage class pools")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no storage class pools")]
 async fn test_lifecycle_noncur_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let sc = configured_storage_classes();
@@ -2624,9 +2552,9 @@ async fn test_lifecycle_noncur_transition() {
     assert_eq!(sc_count(&classes, &sc[2]), 0);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no storage class pools")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no storage class pools")]
 async fn test_lifecycle_plain_null_version_current_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let sc = configured_storage_classes();
@@ -2723,10 +2651,10 @@ fn get_cloud_config_or_skip() -> s3_tests_rs::config::CloudConfig {
     }
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no cloud tiering endpoint")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no cloud tiering endpoint")]
 async fn test_lifecycle_cloud_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cloud_cfg = get_cloud_config_or_skip();
@@ -2825,10 +2753,10 @@ async fn test_lifecycle_cloud_transition() {
     }
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no cloud tiering endpoint")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no cloud tiering endpoint")]
 async fn test_lifecycle_cloud_multiple_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cloud_cfg = get_cloud_config_or_skip();
@@ -2931,10 +2859,10 @@ async fn test_lifecycle_cloud_multiple_transition() {
     assert_eq!(sc_count(&classes, cloud_sc), 0);
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no cloud tiering endpoint")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no cloud tiering endpoint")]
 async fn test_lifecycle_noncur_cloud_transition() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cloud_cfg = get_cloud_config_or_skip();
@@ -3024,10 +2952,10 @@ async fn test_lifecycle_noncur_cloud_transition() {
     }
 }
 
-#[cfg_attr(feature = "fails_on_posix", ignore = "posix: lifecycle not implemented")]
-#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: lifecycle not implemented")]
 #[tokio::test]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: no cloud tiering endpoint")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: no cloud tiering endpoint")]
 async fn test_lifecycle_cloud_transition_large_obj() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cloud_cfg = get_cloud_config_or_skip();
