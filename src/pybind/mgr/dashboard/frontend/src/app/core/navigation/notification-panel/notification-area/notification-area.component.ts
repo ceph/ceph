@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { CdNotification } from '../../../../shared/models/cd-notification';
@@ -38,7 +38,6 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   constructor(
     private notificationService: NotificationService,
     private summaryService: SummaryService,
-    private cdRef: ChangeDetectorRef,
     private taskMessageService: TaskMessageService
   ) {}
 
@@ -84,8 +83,6 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
             this.notificationService.save(notification);
           });
-
-          this.cdRef.detectChanges();
 
           release();
         });
