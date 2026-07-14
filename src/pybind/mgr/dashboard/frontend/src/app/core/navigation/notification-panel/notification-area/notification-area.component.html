@@ -1,9 +1,4 @@
-<div
-  [ngClass]="{
-    'empty-body': todayNotifications.length === 0 && previousNotifications.length === 0
-  }"
-  class="notification-area"
->
+<div class="notification-area">
   @if (executingTasks.length > 0) {
     <div
       class="notification-section-heading"
