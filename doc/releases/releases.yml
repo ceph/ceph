@@ -29,6 +29,8 @@ releases:
   squid:
     target_eol: 2026-09-19
     releases:
+      - version: 19.2.5
+        released: 2026-07-14
       - version: 19.2.4
         released: 2026-06-01
       - version: 19.2.3
