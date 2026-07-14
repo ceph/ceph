@@ -41,6 +41,7 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
+  LayoutModule,
   TilesModule,
   ThemeModule
 } from 'carbon-components-angular';
@@ -89,6 +90,7 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
+import { DetailsCardComponent } from './details-card/details-card.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
 
 // Icons
@@ -168,6 +170,7 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TagModule,
     LinkModule,
     LayerModule,
+    LayoutModule,
     TilesModule,
     ThemeModule
   ],
@@ -215,6 +218,7 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    DetailsCardComponent,
     SidePanelComponent,
     SidebarLayoutComponent
   ],
@@ -259,6 +263,7 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    DetailsCardComponent,
     SidePanelComponent,
     SidebarLayoutComponent
   ]
