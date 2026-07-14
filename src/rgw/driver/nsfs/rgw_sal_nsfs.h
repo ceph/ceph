@@ -1147,8 +1147,20 @@ struct NSFSMPObj {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
     } else if (!_oid.empty()) {
-      init_gen(driver, _oid, _owner);
+      if (!from_meta(_oid, _owner)) {
+	init_gen(driver, _oid, _owner);
+      }
     }
+  }
+  /* parse <objname>.<uploadid> — the format produced by get_meta() */
+  bool from_meta(const std::string& meta_name, ACLOwner& _owner) {
+    auto pos = meta_name.rfind('.');
+    if (pos == std::string::npos || pos == 0) return false;
+    std::string _oid = meta_name.substr(0, pos);
+    std::string _upload_id = meta_name.substr(pos + 1);
+    if (_upload_id.empty()) return false;
+    init(_oid, _upload_id, _owner);
+    return true;
   }
   void init(const std::string& _oid, const std::string& _upload_id, ACLOwner& _owner) {
     oid = _oid;

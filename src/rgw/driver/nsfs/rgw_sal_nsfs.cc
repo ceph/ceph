@@ -3297,6 +3297,36 @@ int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
 int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 		    int max, ListResults& results, optional_yield y)
 {
+  /* multipart namespace: incomplete uploads live in staging directories
+   * that aren't in the LMDB cache — delegate to list_multiparts() and
+   * format results using RADOS naming conventions so the LC processor
+   * can parse them via rgw_obj_key::parse_index_key() */
+  if (params.ns == mp_ns) {
+    std::vector<std::unique_ptr<MultipartUpload>> uploads;
+    std::string marker;
+    int ret = list_multiparts(dpp, "", marker, "",
+			      max, uploads, nullptr,
+			      &results.is_truncated, y);
+    if (ret < 0)
+      return ret;
+    for (auto& upload : uploads) {
+      const auto& obj_name = upload->get_key();
+      if (!params.prefix.empty() &&
+	  !obj_name.starts_with(params.prefix)) {
+	continue;
+      }
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = fmt::format("_{}_{}",
+				 mp_ns,
+				 upload->get_meta());
+      bde.meta.mtime = upload->get_mtime();
+      bde.meta.category = RGWObjCategory::MultiMeta;
+      bde.exists = true;
+      results.objs.push_back(std::move(bde));
+    }
+    return 0;
+  }
+
 int count{0};
 bool in_prefix{false};
 // Names in the cache are in OID format
@@ -3739,12 +3769,19 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
     d_name.remove_prefix(mp_pre.size());
 
+    /* use the staging directory's mtime as the upload creation time */
+    struct statx stx;
+    if (statx(dir->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MTIME, &stx) < 0) {
+      return 0;
+    }
+    auto mtime = from_statx_timestamp(stx.stx_mtime);
+
     ACLOwner owner;
     std::string upload_id{d_name};
     std::unique_ptr<MultipartUpload> upload =
         std::make_unique<NSFSMultipartUpload>(
             driver, this, std::string(), upload_id, owner,
-            real_clock::now());
+            mtime);
     rgw_placement_rule* rule{nullptr};
     int ret = upload->get_info(dpp, y, &rule, nullptr);
     if (ret < 0)
