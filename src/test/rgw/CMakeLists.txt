@@ -532,3 +532,13 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
 endif()
+
+# unittest_rgw_inventory_parquet
+# Tests for S3 Inventory parquet writer
+# Requires Arrow/Parquet support — gated on the same flags as s3select
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  add_catch2_test_rgw(rgw_inventory_parquet)
+  target_link_libraries(unittest_rgw_inventory_parquet
+    PRIVATE
+      ${ARROW_LIBRARIES})
+endif()
