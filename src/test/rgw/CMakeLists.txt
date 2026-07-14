@@ -492,3 +492,13 @@ target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
 add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_inventory_parquet
+# Tests for S3 Inventory parquet writer
+# Requires Arrow/Parquet support — gated on the same flags as s3select
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  add_catch2_test_rgw(rgw_inventory_parquet)
+  target_link_libraries(unittest_rgw_inventory_parquet
+    PRIVATE
+      ${ARROW_LIBRARIES})
+endif()
