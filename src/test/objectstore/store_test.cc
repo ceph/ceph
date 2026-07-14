@@ -11749,6 +11749,154 @@ TEST_P(CorruptedOnodesTest, Recover_TolerateMissingHeadShard)
   cleanup_store();
 }
 
+// Replaces the named object's onode value and drops its extent-map shard
+// keys (replacements are non-sharded; leftover "...x" shards would be
+// flagged stray and keep the post-repair fsck dirty).
+static bool corrupt_onode(BlueStore* bs, const std::string& name,
+                          const bufferlist& new_val)
+{
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  auto trans = pdb->get_transaction();
+  bool corrupted = false;
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains(name)) {
+      if (it->key().ends_with("o")) {
+        trans->set("O", it->key(), new_val);
+        corrupted = true;
+      } else if (it->key().ends_with("x")) {
+        trans->rm_single_key("O", it->key());
+      }
+    }
+    it->next();
+  }
+  pdb->submit_transaction_sync(trans);
+  return corrupted;
+}
+
+enum class BadKind { truncated, version, blobid, spanning_id };
+
+// truncated:   garbage header -> buffer::error from onode decode
+// version:     spanning-blobs struct_v neither 1 nor 2
+//              -> ceph_assert_decode in decode_spanning_blobs()
+// blobid:      extent references blobs[0] which was never defined
+//              -> ceph_assert_decode in ExtentDecoderFull::consume_blobid()
+// spanning_id: extent references spanning blob #1 which doesn't exist
+//              -> ceph_assert_decode in ExtentMap::get_spanning_blob()
+static bufferlist make_bad_onode_val(BadKind kind)
+{
+  bufferlist val;
+  if (kind == BadKind::truncated) {
+    val.append(std::string(4, '\xff'));
+    return val;
+  }
+  const uint64_t flag = bluestore_onode_t::FLAG_DEBUG_FORCE_V2;
+  bluestore_onode_t on;
+  on.nid = 1;
+  size_t bound = 0;
+  denc(on, bound, flag);
+  {
+    auto ap = val.get_contiguous_appender(bound, true);
+    denc(on, ap, flag);                 // valid onode header
+  }
+  if (kind == BadKind::version) {
+    val.append(static_cast<char>(0xff));
+    return val;
+  }
+  bufferlist inner;  // inline extent map: v2, one extent with a bad reference
+  {
+    auto ap = inner.get_contiguous_appender(8, true);
+    denc((__u8)2, ap);                  // extent-map struct_v
+    denc_varint(uint32_t(1), ap);       // num extents
+    // low bits: CONTIGUOUS|ZEROOFFSET|SAMELENGTH(|SPANNING); id = 1
+    denc_varint(uint32_t((1 << 4) | 0x7 |
+                         (kind == BadKind::spanning_id ? 0x8 : 0)), ap);
+  }
+  bufferlist tail;
+  {
+    auto ap = tail.get_contiguous_appender(8 + inner.length(), true);
+    denc((__u8)2, ap);                  // spanning-blobs struct_v (valid)
+    denc_varint(uint32_t(0), ap);       // no spanning blobs
+    denc(inner, ap);                    // inline_bl
+  }
+  val.append(tail);
+  return val;
+}
+
+// One victim object per corruption shape, all in one store: fsck reports
+// them all without aborting, repair fixes, healthy objects survive.
+TEST_P(CorruptedOnodesTest, Fsck_TolerateCorruptedOnodes)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  // deterministic onode encoding: segment_size==0 => FLAG_DEBUG_FORCE_V2
+  SetVal(g_conf(), "bluestore_debug_onode_segmentation_random", "false");
+  SetVal(g_conf(), "bluestore_onode_segment_size", "0");
+  g_conf().apply_changes(nullptr);
+  prepare_store();
+
+  mount();
+  const BadKind kinds[] = {BadKind::truncated, BadKind::version,
+                           BadKind::blobid, BadKind::spanning_id};
+  ch = store->open_collection(cid);
+  for (int i = 0; i < 4; i++) {
+    ghobject_t hoid(hobject_t(sobject_t("victim" + std::to_string(i),
+                                        CEPH_NOSNAP), "", 1, 222, ""));
+    hoid.hobj.set_hash(0x10000000u * (i + 1));
+    ASSERT_EQ(write_object(cid, ch, hoid, 0x1000), 0);
+  }
+  ch.reset();
+  umount();                            // flush kv queue so onodes hit rocksdb
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+
+  for (int i = 0; i < 4; i++) {
+    ASSERT_TRUE(corrupt_onode(bs, "victim" + std::to_string(i),
+                              make_bad_onode_val(kinds[i])));
+  }
+  umount();
+
+  // Deliverable: all four corrupt onodes are detected and fsck returns
+  // instead of aborting on the decode assert. Report-only in this change —
+  // the onodes are not removed (physical removal would orphan their blocks:
+  // the extent map is undecodable, so reclamation is the -EIO follow-up,
+  // tracker #77325), so fsck keeps reporting them rather than reaching a
+  // clean store.
+  ASSERT_GE(store->fsck(false), 4);    // all four reported, no abort()
+  cleanup_store();
+}
+
+// Regular I/O has no tolerant_guard: the same corruption must still abort
+// via ceph_assert (coredump/backtrace preserved).
+TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
+{
+  testing::FLAGS_gtest_death_test_style = "threadsafe";
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  SetVal(g_conf(), "bluestore_debug_onode_segmentation_random", "false");
+  SetVal(g_conf(), "bluestore_onode_segment_size", "0");
+  g_conf().apply_changes(nullptr);
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  ASSERT_TRUE(corrupt_onode(bs, "my_special_object",
+                            make_bad_onode_val(BadKind::version)));
+  umount();
+
+  mount();                             // cold cache: read must decode
+  ch = store->open_collection(cid);
+  ghobject_t hoid(
+    hobject_t(sobject_t("my_special_object", CEPH_NOSNAP), "", 1, 222, ""));
+  hoid.hobj.set_hash(0x80000000);
+  bufferlist bl;
+  EXPECT_DEATH((void)store->read(ch, hoid, 0, 4, bl), "");
+  ch.reset();
+  umount();
+  cleanup_store();
+}
+
 TEST_P(CorruptedOnodesTest, Fsck_FixMissingHeadShard)
 {
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
