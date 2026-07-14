@@ -215,8 +215,6 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   );
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
-    {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
-    {txn_stage_t::COLLOCK_HOLD,          sm::label_instance("stage", "collock_hold")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
@@ -921,14 +919,13 @@ seastar::future<> SeaStore::report_stats()
          calc_conflicts(io_total.read_num, io_total.repeat_read_num),
          calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
     INFO("trans outstanding: {},{},{},{} "
-         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
+         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
          io_total.pending_io_num,
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
          (double)io_total.pending_io_num/seastar::smp::count,
          (double)io_total.starting_io_num/seastar::smp::count,
-         (double)io_total.waiting_collock_io_num/seastar::smp::count,
          (double)io_total.waiting_throttler_io_num/seastar::smp::count,
          (double)io_total.processing_inlock_io_num/seastar::smp::count,
          (double)io_total.processing_postlock_io_num/seastar::smp::count,
@@ -940,7 +937,6 @@ seastar::future<> SeaStore::report_stats()
     for (const auto &s : shard_io_stats) {
       oss_pending << s.pending_io_num
                  << "(" << s.starting_io_num
-                 << "," << s.waiting_collock_io_num
                  << "," << s.waiting_throttler_io_num
                  << "," << s.processing_inlock_io_num
                  << "," << s.processing_postlock_io_num
@@ -1889,8 +1885,6 @@ seastar::future<> SeaStore::Shard::run_one_batch(
     const std::array<
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
-        {txn_stage_t::COLLOCK_WAIT,          seastar::lowres_clock::duration::zero()},
-        {txn_stage_t::COLLOCK_HOLD,          seastar::lowres_clock::duration::zero()},
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
@@ -3051,7 +3045,7 @@ shard_stats_t SeaStore::Shard::get_io_stats(
     };
     INFO("iops={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f} "
          "conflicts={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}) "
-         "outstanding={}({},{},{},{},{}),{},{},{}",
+         "outstanding={}({},{},{},{}),{},{},{}",
          // iops
          ret.io_num/seconds,
          ret.read_num/seconds,
@@ -3072,7 +3066,6 @@ shard_stats_t SeaStore::Shard::get_io_stats(
          // outstanding
          ret.pending_io_num,
          ret.starting_io_num,
-         ret.waiting_collock_io_num,
          ret.waiting_throttler_io_num,
          ret.processing_inlock_io_num,
          ret.processing_postlock_io_num,

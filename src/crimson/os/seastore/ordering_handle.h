@@ -123,45 +123,12 @@ struct OrderingHandle {
   // we can easily optimize this dynalloc out as all concretes are
   // supposed to have exactly the same size.
   std::unique_ptr<OperationProxy> op;
-  seastar::shared_mutex *collection_ordering_lock = nullptr;
-
-  seastar::lowres_clock::time_point lock_acquire_time{};
-  seastar::lowres_clock::duration lock_hold_time{0};
 
   // in the future we might add further constructors / template to type
   // erasure while extracting the location of tracking events.
   OrderingHandle(std::unique_ptr<OperationProxy> op) : op(std::move(op)) {}
   OrderingHandle(OrderingHandle &&other)
-    : op(std::move(other.op)),
-      collection_ordering_lock(other.collection_ordering_lock),
-      lock_acquire_time(other.lock_acquire_time),
-      lock_hold_time(other.lock_hold_time) {
-    other.collection_ordering_lock = nullptr;
-  }
-
-  seastar::future<> take_collection_lock(seastar::shared_mutex &mutex) {
-    ceph_assert(!collection_ordering_lock);
-    collection_ordering_lock = &mutex;
-    return collection_ordering_lock->lock();
-  }
-
-  void set_lock_acquire_time(seastar::lowres_clock::time_point tp) {
-    lock_acquire_time = tp;
-  }
-
-  seastar::lowres_clock::duration get_lock_hold_time() const {
-    return lock_hold_time;
-  }
-
-  void maybe_release_collection_lock() {
-    if (collection_ordering_lock) {
-      if (lock_acquire_time != seastar::lowres_clock::time_point{}) {
-        lock_hold_time = seastar::lowres_clock::now() - lock_acquire_time;
-      }
-      collection_ordering_lock->unlock();
-      collection_ordering_lock = nullptr;
-    }
-  }
+    : op(std::move(other.op)) {}
 
   template <typename T>
   seastar::future<> enter(T &t) {
@@ -174,10 +141,6 @@ struct OrderingHandle {
 
   seastar::future<> complete() {
     return op->complete();
-  }
-
-  ~OrderingHandle() {
-    maybe_release_collection_lock();
   }
 };
 
