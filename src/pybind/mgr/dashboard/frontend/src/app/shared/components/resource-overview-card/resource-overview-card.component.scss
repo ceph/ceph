@@ -59,3 +59,14 @@
 .cd-status-text--info {
   color: var(--cds-support-info);
 }
+
+.cd-overview-password {
+  display: block;
+
+  input {
+    border: none;
+    background: transparent;
+    max-width: 10rem;
+    padding: 0;
+  }
+}
