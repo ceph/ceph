@@ -15444,7 +15444,6 @@ struct C_PoolMigrationReservationCallback : public Context {
   PrimaryLogPGRef pg;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  ceph::buffer::list outbl;
 
   C_PoolMigrationReservationCallback(PrimaryLogPG *p, epoch_t lpr)
     : pg(p), last_peering_reset(lpr), tid(0)
@@ -15459,18 +15458,6 @@ struct C_PoolMigrationReservationCallback : public Context {
     if (last_peering_reset != pg->get_last_peering_reset()) {
       pg->pool_migration_reservation_tid = 0;
       return;
-    }
-
-    pg_pool_migration_reservation_response_t response;
-    if (r == 0 && outbl.length() > 0) {
-      try {
-        auto p = outbl.cbegin();
-        decode(response, p);
-        r = response.result;
-      } catch (const ceph::buffer::error& e) {
-        ldpp_dout(pg, 1) << "C_PoolMigrationReservationCallback::finish() ERROR: unable to decode response" << dendl;
-        r = -EINVAL;
-      }
     }
 
     if (r != 0) {
