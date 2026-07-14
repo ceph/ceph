@@ -419,6 +419,64 @@ if(WITH_RADOSGW_DAOS)
 endif()
 
 if(WITH_RADOSGW_LANCEDB)
+  include(ExternalProject)
+
+  # Both Rust crates share a Cargo workspace (src/rgw/Cargo.toml) with a
+  # single Cargo.lock, guaranteeing identical dependency versions.
+
+  # lancedb-c: upstream LanceDB C FFI bindings (git submodule)
+  set(LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c")
+  set(LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-c-prefix/src/lancedb-c-build")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/debug")
+  else()
+    set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/release")
+  endif()
+
+  ExternalProject_Add(lancedb-c
+    SOURCE_DIR ${LANCEDB_C_SOURCE_DIR}
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+               -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/lancedb-c-install
+    BUILD_ALWAYS OFF
+    BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RUST_TARGET_DIR}/liblancedb.so
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_C_SOURCE_DIR}/include/lancedb.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb.h
+  )
+
+  # lancedb-rgw-store: SAL backend for LanceDB
+  set(LANCEDB_RGW_STORE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-rgw-store")
+  set(LANCEDB_RGW_STORE_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-rgw-store-prefix/src/lancedb-rgw-store-build")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(LANCEDB_RGW_STORE_TARGET_DIR "${LANCEDB_RGW_STORE_BUILD_DIR}/target/debug")
+    set(LANCEDB_RGW_STORE_CARGO_FLAG "")
+  else()
+    set(LANCEDB_RGW_STORE_TARGET_DIR "${LANCEDB_RGW_STORE_BUILD_DIR}/target/release")
+    set(LANCEDB_RGW_STORE_CARGO_FLAG "--release")
+  endif()
+
+  ExternalProject_Add(lancedb-rgw-store
+    SOURCE_DIR ${LANCEDB_RGW_STORE_SOURCE_DIR}
+    BINARY_DIR ${LANCEDB_RGW_STORE_BUILD_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ${CMAKE_COMMAND} -E env
+          CARGO_TARGET_DIR=${LANCEDB_RGW_STORE_BUILD_DIR}/target
+          cargo build ${LANCEDB_RGW_STORE_CARGO_FLAG}
+          --manifest-path ${LANCEDB_RGW_STORE_SOURCE_DIR}/Cargo.toml
+    BUILD_ALWAYS OFF
+    BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RGW_STORE_TARGET_DIR}/liblancedb_rgw_store.so
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb_rgw_store.so
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    ${LANCEDB_RGW_STORE_SOURCE_DIR}/include/lancedb_rgw_store.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb_rgw_store.h
+  )
+  add_dependencies(lancedb-rgw-store lancedb-c)
+
   # Create imported library target for liblancedb
   add_library(lancedb SHARED IMPORTED)
   set_target_properties(lancedb PROPERTIES

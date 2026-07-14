@@ -86,12 +86,11 @@ namespace rgw::s3vector {
   // Create a LanceDB session with RGW SAL provider.
   // Returns a new session on success, nullptr on failure.
   LanceDBSession* create_sal_session(const DoutPrefixProvider* dpp,
+      rgw::sal::Driver* driver,
       const void* options) {
 #ifdef WITH_RADOSGW_LANCEDB
-    rgw::sal::Driver* driver = rgw::s3vector::get_driver();
-    const DoutPrefixProvider* manager_dpp = rgw::s3vector::get_dpp();
-    if (!driver || !manager_dpp) {
-      ldpp_dout(dpp, 1) << "ERROR: SAL backend requires initialized manager" << dendl;
+    if (!driver) {
+      ldpp_dout(dpp, 1) << "ERROR: SAL backend requires a valid driver" << dendl;
       return nullptr;
     }
 
@@ -101,7 +100,7 @@ namespace rgw::s3vector {
       return nullptr;
     }
 
-    LanceDBObjectStoreProvider* provider = rgw_lancedb_create_provider(driver, manager_dpp);
+    LanceDBObjectStoreProvider* provider = rgw_lancedb_create_provider(driver, dpp);
     if (!provider) {
       ldpp_dout(dpp, 1) << "ERROR: failed to create RGW LanceDB provider" << dendl;
       lancedb_registry_free(registry);
@@ -109,7 +108,7 @@ namespace rgw::s3vector {
     }
 
     char* reg_error = nullptr;
-    if (lancedb_registry_insert_provider(registry, "s3", provider, &reg_error) != LANCEDB_SUCCESS) {
+    if (lancedb_registry_insert_provider(registry, "rgw", provider, &reg_error) != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: failed to insert provider: "
                         << (reg_error ? reg_error : "unknown") << dendl;
       if (reg_error)
@@ -126,7 +125,7 @@ namespace rgw::s3vector {
     }
     return session;
 #else
-    ldpp_dout(dpp, 1) << "ERROR: SAL backend requires WITH_RADOSGW_LANCEDB build option" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: no LanceDB SAL backend support" << dendl;
     return nullptr;
 #endif
   }
@@ -162,18 +161,15 @@ namespace rgw::s3vector {
       }
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to local backend: " << uri << dendl;
     } else if (is_sal_backend(backend_type)) {
-      // To store LanceDB data, SAL and S3 backends both require a regular
-      // S3 bucket with the same name as the vector bucket to exist before
-      // vector operations.
-      // TODO: For SAL backend, auto-create the regular bucket internally
-      // maybe with the vector bucket owner itself. This
-      // would make SAL self-contained without requiring external bucket setup.
-      LanceDBSession* session = create_sal_session(dpp);
+      // SAL backend requires a regular S3 bucket with the same name as the
+      // vector bucket to exist before vector operations.
+      rgw::sal::Driver* driver = rgw::s3vector::get_driver();
+      LanceDBSession* session = create_sal_session(dpp, driver);
       if (!session) {
         return nullptr;
       }
 
-      uri = fmt::format("s3://{}/", vector_bucket_name);
+      uri = fmt::format("rgw://{}/", vector_bucket_name);
       builder = lancedb_connect(uri.c_str());
       if (!builder) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
@@ -258,7 +254,11 @@ namespace rgw::s3vector {
     CephContext* cct = dpp->get_cct();
     const auto& conf = cct->_conf;
     const std::string backend_str = conf.get_val<std::string>("rgw_s3vector_backend");
-    const auto backend_type = get_backend_type(backend_str);
+    BackendType backend_type;
+    if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      return {};
+    }
 
     // Try to get session from pool
     auto session_sp = rgw::s3vector::get_session(dpp, vector_bucket_name);
@@ -275,8 +275,9 @@ namespace rgw::s3vector {
     if (is_local_backend(backend_type)) {
       const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
       uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+    } else if (is_sal_backend(backend_type)) {
+      uri = fmt::format("rgw://{}/", vector_bucket_name);
     } else {
-      // S3 or SAL backend - both use s3:// URIs
       uri = fmt::format("s3://{}/", vector_bucket_name);
     }
 

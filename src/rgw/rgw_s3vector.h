@@ -90,6 +90,7 @@ inline bool is_s3_backend(BackendType type) {
 
 // Create a LanceDB session with RGW SAL provider
 LanceDBSession* create_sal_session(const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver,
     const void* options = nullptr);
 
 /*

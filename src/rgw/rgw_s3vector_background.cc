@@ -21,10 +21,6 @@
 #include "rgw_s3vector.h"
 #include "lancedb.h"
 
-#ifdef WITH_RADOSGW_LANCEDB
-#include "lancedb_rgw_store.h"
-#endif
-
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::s3vector {
@@ -192,14 +188,18 @@ private:
               }
 
               const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
-              const auto backend_type = get_backend_type(backend_str);
+              BackendType backend_type;
+              if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+                ldpp_dout(this, 1) << "ERROR: unrecognized backend type: " << backend_str << dendl;
+                return;
+              }
               LanceDBSession* session = nullptr;
 
               // To pass custom LanceDBSessionOptions for cache sizes etc.
               const LanceDBSessionOptions* options = nullptr;
 
               if (is_sal_backend(backend_type)) {
-                session = create_sal_session(this, options);
+                session = create_sal_session(this, driver, options);
               } else {
                 session = lancedb_session_new(options);
               }
