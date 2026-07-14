@@ -22,6 +22,9 @@
 #                       (requires podman)
 #   --with-vault        Start a local HashiCorp Vault for SSE-KMS / SSE-S3
 #                       testing (requires podman, curl)
+#   --with-lifecycle     Set rgw_lc_debug_interval=10 so lifecycle
+#                       expiration tests complete in seconds, and
+#                       uncomment lc_debug_interval in s3tests.conf
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --foreground        Print the radosgw command instead of running it;
@@ -40,6 +43,7 @@ CLEAN=false
 KEYCLOAK=false
 KAFKA=false
 VAULT=false
+LIFECYCLE=false
 INOTIFY=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
@@ -55,6 +59,7 @@ while [[ $# -gt 0 ]]; do
 		--with-keycloak) KEYCLOAK=true; shift ;;
 		--with-kafka) KAFKA=true; shift ;;
 		--with-vault) VAULT=true; shift ;;
+		--with-lifecycle) LIFECYCLE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
@@ -151,6 +156,10 @@ VSTART_OPTS=(
 	-o "rgw_${STORE}_cache_max_buckets=500"
 	-o 'rgw_multipart_min_part_size=32'
 )
+
+if $LIFECYCLE; then
+	VSTART_OPTS+=(-o 'rgw_lc_debug_interval=10')
+fi
 
 if $INOTIFY; then
 	VSTART_OPTS+=(-o "rgw_${STORE}_inotify=true")
@@ -304,6 +313,12 @@ if $KAFKA; then
 	S3TEST_CONF="$S3CONF" "$SRC_DIR/src/script/rgw/kafka-vstart.sh"
 fi
 
+if $LIFECYCLE; then
+	if [[ -f "$S3CONF" ]]; then
+		sed -i 's/^#lc_debug_interval = .*/lc_debug_interval = 10/' "$S3CONF"
+	fi
+fi
+
 if $VAULT; then
 	echo "==> starting Vault sidecar"
 	"$SRC_DIR/src/script/rgw/vault-vstart.sh"
@@ -331,6 +346,9 @@ fi
 echo ""
 echo "==> radosgw up on port 8000 ($STORE, data on $DATA_DIR)"
 echo "    s3tests.conf: $S3CONF"
+if $LIFECYCLE; then
+	echo "    Lifecycle: rgw_lc_debug_interval=10"
+fi
 if $KEYCLOAK; then
 	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
 fi
