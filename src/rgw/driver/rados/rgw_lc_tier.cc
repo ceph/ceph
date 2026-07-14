@@ -15,10 +15,12 @@
 #include "rgw_rest.h"
 #include "svc_zone.h"
 #include "rgw_rados.h"
+#include "common/async/shared_mutex.h"
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/any_io_executor.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1559,29 +1561,62 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   return 0;
 }
 
+namespace {
+thread_local std::optional<
+    ceph::async::SharedMutex<boost::asio::any_io_executor>> tls_create_mtx;
+thread_local boost::asio::any_io_executor tls_create_mtx_ex;
+
+/*
+ * Rebound when the run's executor changes; that only happens at a run
+ * boundary, where no coroutine holds the lock.
+ */
+ceph::async::SharedMutex<boost::asio::any_io_executor>*
+cloud_target_create_mutex(boost::asio::any_io_executor ex)
+{
+  if (!tls_create_mtx || tls_create_mtx_ex != ex) {
+    tls_create_mtx.emplace(ex);
+    tls_create_mtx_ex = ex;
+  }
+  return &*tls_create_mtx;
+}
+} // namespace
+
 int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
   int ret = 0;
+  const std::string& name = tier_ctx.target_bucket_name;
 
-  // check if target bucket is in local cache
-  auto it = cloud_targets.find(tier_ctx.target_bucket_name);
-  tier_ctx.target_bucket_created = (it != cloud_targets.end());
+  if (cloud_targets.find(name) == cloud_targets.end()) {
+    std::optional<std::unique_lock<
+        ceph::async::SharedMutex<boost::asio::any_io_executor>>> lk;
+    if (tier_ctx.y) {
+      auto* mtx = cloud_target_create_mutex(
+          tier_ctx.y.get_yield_context().get_executor());
+      boost::system::error_code ec;
+      lk = mtx->async_lock(tier_ctx.y.get_yield_context()[ec]);
+      if (ec) {
+        ldpp_dout(tier_ctx.dpp, 5) << "cloud tier: target-bucket lock aborted: "
+                                   << ec.message() << dendl;
+        return -ECANCELED;
+      }
+    }
 
-  if (!tier_ctx.target_bucket_created) {
-    // not in cache; check if bucket exists on remote
-    ret = cloud_tier_bucket_exists(tier_ctx);
-    if (ret == -ENOENT) {
-      ret = cloud_tier_create_bucket(tier_ctx);
-      if (ret < 0) {
-        ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+    if (cloud_targets.find(name) == cloud_targets.end()) {
+      // not in cache; check if bucket exists on remote
+      ret = cloud_tier_bucket_exists(tier_ctx);
+      if (ret == -ENOENT) {
+        ret = cloud_tier_create_bucket(tier_ctx);
+        if (ret < 0) {
+          ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+          return ret;
+        }
+      } else if (ret < 0) {
+        ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check target bucket on the cloud endpoint ret=" << ret << dendl;
         return ret;
       }
-    } else if (ret < 0) {
-      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check target bucket on the cloud endpoint ret=" << ret << dendl;
-      return ret;
+      cloud_targets.insert(name);
     }
-    tier_ctx.target_bucket_created = true;
-    cloud_targets.insert(tier_ctx.target_bucket_name);
   }
+  tier_ctx.target_bucket_created = true;
 
   /* Since multiple zones may try to transition the same object to the cloud,
    * verify if the object is already transitioned. And since its just a best
