@@ -20,6 +20,15 @@
       padding-left: var(--cds-spacing-07);
     }
   }
+
+  &:has(.sidebar-layout--full) {
+    padding-left: 0;
+    padding-right: 0;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-07);
+    }
+  }
 }
 
 .rgw-dashboard {

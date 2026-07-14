@@ -197,8 +197,12 @@ export class NvmeofService {
   }
 
   deleteSubsystem(subsystemNQN: string, group: string) {
-    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`, {
-      observe: 'response'
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
+      observe: 'response',
+      params: {
+        gw_group: group,
+        force: 'true'
+      }
     });
   }
 

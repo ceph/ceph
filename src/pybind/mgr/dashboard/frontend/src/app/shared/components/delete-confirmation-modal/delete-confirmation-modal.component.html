@@ -82,6 +82,16 @@
                 <ng-container i18n>Enter the correct resource name.</ng-container>
               </span>
             </ng-template>
+            @if (bodyContext?.forceDeleteAcknowledgementMessage) {
+            <div class="form-item cds-mt-3">
+              <cds-checkbox id="force_delete_ack"
+                            formControlName="forceDeleteAck"
+                            [required]="true"
+                            ariaLabel="Forced delete acknowledgement">
+                {{ bodyContext.forceDeleteAcknowledgementMessage }}
+              </cds-checkbox>
+            </div>
+            }
           </ng-template>
         </div>
       </div>
@@ -92,7 +102,7 @@
                         [form]="deletionForm"
                         [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
                         [modalForm]="true"
-                        [disabled]="(submitDisabled$ | async) || deletionForm.disabled || (impact === impactEnum.high ? !deletionForm.controls.confirmInput.value : !deletionForm.controls.confirmation.value)"
+                        [disabled]="(submitDisabled$ | async) || deletionForm.disabled || (impact === impactEnum.high ? (!deletionForm.controls.confirmInput.value || !forceDeleteAckSatisfied) : !deletionForm.controls.confirmation.value)"
                         [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>
 
 </cds-modal>
