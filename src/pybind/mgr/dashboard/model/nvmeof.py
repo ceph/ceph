@@ -136,6 +136,35 @@ class ConnectionList(NamedTuple):
     connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST]
 
 
+class LatencyStats(NamedTuple):
+    min: int
+    max: int
+    mean: int
+
+
+class LatencyGroup(NamedTuple):
+    io_count: int
+    total: LatencyStats
+    bdev: LatencyStats
+    net: LatencyStats
+    qos: LatencyStats
+
+
+class BucketInfo(NamedTuple):
+    size: int
+    read: LatencyGroup
+    write: LatencyGroup
+
+
+class ConnectionIOStatistics(NamedTuple):
+    status: int
+    error_message: str
+    subsystem_nqn: str
+    host_nqn: str
+    total_num_ios: int
+    buckets: Annotated[List[BucketInfo], CliFlags.EXCLUSIVE_LIST]
+
+
 class NamespaceCreation(NamedTuple):
     status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str
