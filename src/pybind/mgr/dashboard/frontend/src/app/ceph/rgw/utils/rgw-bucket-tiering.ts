@@ -2,6 +2,7 @@ import {
   Target,
   TierTarget,
   TIER_TYPE,
+  TIER_TYPE_DISPLAY,
   ZoneGroup,
   ZoneGroupDetails,
   StorageClassDetails,
@@ -9,6 +10,19 @@ import {
 } from '../models/rgw-storage-class.model';
 
 export class BucketTieringUtils {
+  static mapTierTypeDisplay(tierType: string): string {
+    switch (tierType?.toLowerCase()) {
+      case TIER_TYPE.CLOUD_TIER:
+        return TIER_TYPE_DISPLAY.CLOUD_TIER;
+      case TIER_TYPE.LOCAL:
+        return TIER_TYPE_DISPLAY.LOCAL;
+      case TIER_TYPE.GLACIER:
+        return TIER_TYPE_DISPLAY.GLACIER;
+      default:
+        return tierType;
+    }
+  }
+
   static filterAndMapTierTargets(zonegroupData: ZoneGroupDetails) {
     return zonegroupData.zonegroups.flatMap((zoneGroup: ZoneGroup) =>
       zoneGroup.placement_targets.flatMap((target: Target) => {

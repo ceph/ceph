@@ -59,3 +59,14 @@
 :host ::ng-deep .cd-overview-grid.cds--css-grid {
   padding-inline: 0;
 }
+
+.cd-overview-password {
+  display: block;
+
+  input {
+    border: none;
+    background: transparent;
+    max-width: 10rem;
+    padding: 0;
+  }
+}
