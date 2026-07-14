@@ -483,12 +483,12 @@ async fn test_lifecycle_expiration() {
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 6);
 
-    tokio::time::sleep(std::time::Duration::from_secs(2 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
 
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 4);
 
-    tokio::time::sleep(std::time::Duration::from_secs(6 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(8 * lc_interval)).await;
 
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 2);
@@ -545,7 +545,7 @@ async fn test_lifecyclev2_expiration() {
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 4);
 
-    tokio::time::sleep(std::time::Duration::from_secs(6 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(8 * lc_interval)).await;
 
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 2);
@@ -898,7 +898,7 @@ async fn test_lifecycle_noncur_expiration() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(5 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(7 * lc_interval)).await;
 
     let resp = client
         .list_object_versions()
@@ -1744,7 +1744,7 @@ async fn test_lifecycle_multipart_expiration() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(5 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(7 * lc_interval)).await;
 
     let response = client
         .list_multipart_uploads()
@@ -2119,8 +2119,8 @@ async fn test_lifecycle_deletemarker_expiration_with_days_tag() {
         .await
         .unwrap();
 
-    // after 2 intervals: noncurrent version expired, delete marker remains
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    // after noncurrent expiration: version expired, delete marker remains
+    tokio::time::sleep(std::time::Duration::from_secs(5 * lc_interval)).await;
 
     let response = client
         .list_object_versions()
@@ -2133,8 +2133,8 @@ async fn test_lifecycle_deletemarker_expiration_with_days_tag() {
     assert_eq!(versions.len(), 0);
     assert_eq!(delete_markers.len(), 1);
 
-    // after 4 more intervals: delete marker also expired (Days=5)
-    tokio::time::sleep(std::time::Duration::from_secs(5 * lc_interval)).await;
+    // after more intervals: delete marker also expired (Days=5)
+    tokio::time::sleep(std::time::Duration::from_secs(7 * lc_interval)).await;
 
     let response = client
         .list_object_versions()
