@@ -21,11 +21,11 @@ describe('when cluster creation is completed', () => {
 
     // Explicitly skip OSD Creation Step so that it prevents from
     // deploying OSDs to the hosts automatically.
-    onboarding.selectStep('Create OSDs');
+    createCluster.selectStep('Create OSDs');
     cy.get('#skipStepBtn').click();
 
-    onboarding.selectStep('Review');
-    onboarding.submitStorage();
+    createCluster.selectStep('Review');
+    createCluster.submitStorage();
     cy.get('cd-overview').should('exist');
   });
 

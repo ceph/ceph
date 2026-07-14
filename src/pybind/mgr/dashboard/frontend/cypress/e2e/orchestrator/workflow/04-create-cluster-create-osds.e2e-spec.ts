@@ -10,9 +10,9 @@ describe('Create cluster create osds page', () => {
 
   beforeEach(() => {
     cy.login();
-    onboarding.navigateTo();
-    onboarding.onboarding();
-    onboarding.selectStep('Create OSDs');
+    createCluster.navigateTo();
+    createCluster.onboarding();
+    createCluster.selectStep('Create OSDs');
   });
 
   it('should check if title contains Create OSDs', () => {
@@ -28,12 +28,12 @@ describe('Create cluster create osds page', () => {
         // Go to the Review section and Expand the cluster
         // because the drive group spec is only stored
         // in frontend and will be lost when refreshed
-        onboarding.selectStep('Review');
-        onboarding.submitStorage();
+        createCluster.selectStep('Review');
+        createCluster.submitStorage();
         cy.get('cd-overview').should('exist');
-        onboarding.navigateTo();
-        onboarding.onboarding();
-        onboarding.selectStep('Create OSDs');
+        createCluster.navigateTo();
+        createCluster.onboarding();
+        createCluster.selectStep('Create OSDs');
       }
     });
   });

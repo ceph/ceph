@@ -7,6 +7,7 @@ const pages = {
   index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' }
 };
 export class CreateClusterWizardHelper extends PageHelper {
+  [x: string]: any;
   pages = pages;
 
   onboarding() {

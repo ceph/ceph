@@ -414,7 +414,7 @@
         }
       </div>
 
-       <div
+      <div
           cdsCol
           [columnNumbers]="{ sm: 4, md: 8, lg: 12 }"
           class="cds-mt-7">
@@ -423,43 +423,29 @@
           i18n>Device Groups</h4>
       </div>
 
-       <div
+      <div
           cdsCol
           [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
           class="cds-mt-5">
-          <p
-            class="cds--type-label-01"
-            i18n>Service Type</p>
-          <p
-            class="cds--type-label-02 cds-mt-2"
-            i18n>{{driveGroup.spec.service_type}}</p>   
-        </div>
+        <p
+          class="cds--type-label-01"
+          i18n>Service Type</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>{{driveGroup.spec.service_type}}</p>
+      </div>
 
-        <div
-          cdsCol
-          [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
-          class="cds-mt-5">
-          <p
-            class="cds--type-label-01"
-            i18n>Service ID</p>
-          <p
-            class="cds--type-label-02 cds-mt-2"
-            i18n>{{driveGroup.spec.service_id}}</p>       
-        </div>
-
-        <!-- <div
-          cdsCol
-          [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
-          class="cds-mt-5">
-          <p
-            class="cds--type-label-01"
-            i18n>Data devices</p>
-           <div class="osd-review-section cds-pl-4 cds-mt-3">
-              <p class="cds--type-label-01 cds-mb-2">Rotational</p>
-              <p class="cds--type-label-02 cds-mt-1">{{ driveGroup.spec.data_devices.rotational }}</p>
-            </div>       
-        </div> -->
-
+      <div
+        cdsCol
+        [columnNumbers]="{ sm: 4, md: 4, lg: 4 }"
+        class="cds-mt-5">
+        <p
+          class="cds--type-label-01"
+          i18n>Service ID</p>
+        <p
+          class="cds--type-label-02 cds-mt-2"
+          i18n>{{driveGroup.spec.service_id}}</p>
+      </div>
       }
 
       <div

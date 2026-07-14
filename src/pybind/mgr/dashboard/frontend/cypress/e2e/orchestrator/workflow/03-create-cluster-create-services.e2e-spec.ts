@@ -20,7 +20,7 @@ describe('Create cluster create services page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    onboardingPage.selectStep('Create Services');
+    createCluster.selectStep('Create Services');
   });
 
   it('should check if title contains Create Services', () => {
