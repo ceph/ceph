@@ -1103,8 +1103,15 @@ class RgwUser(RgwRESTController):
                 raise DashboardException(msg='Unable to delete "{}" - this user '
                                              'account is required for managing the '
                                              'Object Gateway'.format(uid))
-            # Finally redirect request to the RGW proxy.
-            return self.proxy(daemon_name, 'DELETE', 'user', {'uid': uid}, json_response=False)
+            daemon_name_to_use = daemon_name if daemon_name else instance.daemon.name
+            user_instance = RgwClient.get_cached_user_instance(daemon_name_to_use, uid)
+            result = self.proxy(daemon_name, 'DELETE', 'user', {'uid': uid}, json_response=False)
+            # Only invalidate cache after successful deletion to prevent negative cache hits
+            # when the user is recreated with the same UID. This fixes the issue where
+            # Dashboard fails to authenticate after deleting and recreating a user.
+            if user_instance:
+                RgwClient.drop_instance(user_instance)
+            return result
         except (DashboardException, RequestException) as e:  # pragma: no cover
             raise DashboardException(e, component='rgw')
 
