@@ -1323,6 +1323,8 @@ async fn test_encryption_sse_c_multipart_bad_download() {
 }
 
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw — needs SSE-S3 key configured")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "needs Vault sidecar for SSE-S3")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "needs Vault sidecar for SSE-S3")]
 #[tokio::test]
 async fn test_bucket_policy_put_obj_s3_incorrect_algo_sse_s3() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();

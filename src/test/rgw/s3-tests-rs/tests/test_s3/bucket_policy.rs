@@ -1827,6 +1827,8 @@ async fn test_lifecyclev2_expiration() {
 
 // VERIFY: RGW rejects Allow+NotPrincipal ("Allow with NotPrincipal is not allowed")
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: Allow+NotPrincipal rejected")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: Allow+NotPrincipal rejected")]
 #[tokio::test]
 async fn test_get_nonpublicpolicy_deny_bucket_policy_status() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2227,6 +2229,8 @@ async fn test_bucket_policy_put_obj_grant() {
 }
 
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "rgw core: IfExists condition modifier not enforced")]
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "rgw core: IfExists condition modifier not enforced")]
 #[tokio::test]
 async fn test_bucket_policy_set_condition_operator_end_with_if_exists() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
