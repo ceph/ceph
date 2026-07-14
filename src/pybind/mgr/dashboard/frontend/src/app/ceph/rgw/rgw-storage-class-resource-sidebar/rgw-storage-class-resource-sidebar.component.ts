@@ -1,4 +1,15 @@
-import { Component, inject, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import {
+  Component,
+  inject,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  SimpleChanges,
+  ViewEncapsulation
+} from '@angular/core';
+import { ActivatedRoute, ParamMap } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   ALLOW_READ_THROUGH_TEXT,
@@ -24,15 +35,24 @@ import {
 } from '../models/rgw-storage-class.model';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
+import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 @Component({
-  selector: 'cd-rgw-storage-class-details',
-  templateUrl: './rgw-storage-class-details.component.html',
-  styleUrls: ['./rgw-storage-class-details.component.scss'],
+  selector: 'cd-rgw-storage-class-resource-sidebar',
+  templateUrl: './rgw-storage-class-resource-sidebar.component.html',
+  styleUrls: ['./rgw-storage-class-resource-sidebar.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
-export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
+export class RgwStorageClassResourceSidebarComponent implements OnChanges, OnInit, OnDestroy {
   @Input()
-  selection: StorageClassDetails;
+  selection!: StorageClassDetails;
+  private sub = new Subscription();
+  readonly basePath = '/rgw/storage-class';
+  isResourcePage = false;
+  storageClassTitle = '';
+  zonegroupName = '';
+  placementTarget = '';
+  sidebarItems: SidebarItem[] = [];
   columns: CdTableColumn[] = [];
   allowReadThroughText = ALLOW_READ_THROUGH_TEXT;
   retainHeadObjectText = RETAIN_HEAD_OBJECT_TEXT;
@@ -55,6 +75,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   loading = false;
 
   private rgwZoneService = inject(RgwZoneService);
+  private route = inject(ActivatedRoute);
 
   ngOnChanges(changes: SimpleChanges): void {
     if (
@@ -72,32 +93,48 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   }
 
   ngOnInit() {
+    this.sub.add(
+      this.route.paramMap.subscribe((pm: ParamMap) => {
+        this.zonegroupName = pm.get('zonegroup_name') ?? '';
+        this.placementTarget = pm.get('placement_target') ?? '';
+        this.storageClassTitle = pm.get('storage_class') ?? '';
+        this.isResourcePage =
+          !!this.zonegroupName && !!this.placementTarget && !!this.storageClassTitle;
+
+        if (this.isResourcePage) {
+          this.buildSidebarItems();
+        }
+      })
+    );
+
     this.groupedACLs = this.groupByType(this.selection?.acl_mappings);
   }
 
+  ngOnDestroy(): void {
+    this.sub.unsubscribe();
+  }
+
   isTierMatch(...types: string[]): boolean {
-    const tier_type = this.selection.tier_type?.toLowerCase();
+    const tier_type = this.selection?.tier_type?.toLowerCase();
     return types.some((type) => type.toLowerCase() === tier_type);
   }
 
   getZoneInfo() {
     this.loading = true;
-    this.rgwZoneService.getAllZonesInfo().subscribe({
-      next: (data: AllZonesResponse) => {
-        this.localStorageClassDetails = BucketTieringUtils.getZoneInfoHelper(
-          data.zones,
-          this.selection
-        );
+    this.rgwZoneService.getAllZonesInfo().subscribe(
+      (data: object) => {
+        const zones = (data as AllZonesResponse)?.zones ?? [];
+        this.localStorageClassDetails = BucketTieringUtils.getZoneInfoHelper(zones, this.selection);
         this.loading = false;
       },
-      error: () => {
+      () => {
         this.loading = false;
       }
-    });
+    );
   }
 
-  groupByType(acls: ACL[]): GroupedACLs {
-    return acls?.reduce((groupAcls: GroupedACLs, item: ACL) => {
+  groupByType(acls?: ACL[]): GroupedACLs {
+    return (acls || []).reduce((groupAcls: GroupedACLs, item: ACL) => {
       const type = item.val?.type?.toUpperCase();
       groupAcls[type] = groupAcls[type] ?? [];
       groupAcls[type].push({
@@ -106,5 +143,32 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
       });
       return groupAcls;
     }, {});
+  }
+
+  private buildSidebarItems(): void {
+    this.sidebarItems = [
+      {
+        label: $localize`Overview`,
+        route: [
+          this.basePath,
+          this.zonegroupName,
+          this.placementTarget,
+          this.storageClassTitle,
+          'overview'
+        ],
+        routerLinkActiveOptions: { exact: true }
+      },
+      {
+        label: $localize`Policy`,
+        route: [
+          this.basePath,
+          this.zonegroupName,
+          this.placementTarget,
+          this.storageClassTitle,
+          'policy'
+        ],
+        routerLinkActiveOptions: { exact: true }
+      }
+    ];
   }
 }
