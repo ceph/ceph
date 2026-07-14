@@ -1244,8 +1244,11 @@ seastar::future<> OSD::committed_osd_maps(
         co_return;
       }
       DEBUG("osd.{}: mark osd.{} down", whoami, osd_id);
+      // osd_id came from old_map->get_all_osds(); if it was purged in the new
+      // osdmap, osdmap->get_cluster_addrs(osd_id) would ceph_assert(exists()).
+      // old_map is guaranteed to contain osd_id and holds its last-known addr.
       co_await cluster_msgr->mark_down(
-        osdmap->get_cluster_addrs(osd_id).front());
+        old_map->get_cluster_addrs(osd_id).front());
     });
 
     co_await pg_shard_manager.update_map(std::move(o));
