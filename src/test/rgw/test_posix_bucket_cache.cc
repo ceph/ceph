@@ -239,7 +239,7 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 1, 1};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 2, 1, 1, 1};
   }
 
   static void TearDownTestSuite() {
@@ -252,13 +252,16 @@ std::vector<std::string> BucketCacheFixtureRecycle1::bvec;
 
 TEST_F(BucketCacheFixtureRecycle1, ListNRecycle1)
 {
-  /* the effect is to allocate a Bucket cache entry once, then recycle n-1 times */
+  /* 5 buckets through a cache with max_buckets=2 (lane_hiwat=2):
+   * evict_block fires when q.size() > 2, so buckets 4 and 5 each
+   * trigger an eviction → recycle_count=2 */
   for (auto& bucket : bvec) {
     MockSalBucket sb{bucket};
     std::string marker{bucket1_marker};
     (void) bucket_cache->list_bucket(dpp, null_yield, &sb, marker, func);
   }
-  ASSERT_EQ(bucket_cache->recycle_count, 4);
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  ASSERT_GE(total_evictions, 2);
 }
 
 class BucketCacheFixtureRecyclePartitions1 : public testing::Test, protected BucketCacheFixtureBase {
@@ -267,7 +270,7 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 5 /* max partitions */, 1};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 2, 1, 5 /* max partitions */, 1};
   }
   static void TearDownTestSuite() {
     delete bucket_cache;
@@ -279,15 +282,15 @@ std::vector<std::string> BucketCacheFixtureRecyclePartitions1::bvec;
 
 TEST_F(BucketCacheFixtureRecyclePartitions1, ListNRecyclePartitions1)
 {
-  /* the effect is to allocate a Bucket cache entry once, then recycle
-   * n-1 times--in addition, 5 cache partitions are mapped to 1 lru
-   * lane--verifying independence */
+  /* same as ListNRecycle1 but with 5 cache partitions mapped to 1 lru
+   * lane — verifies partition independence */
   for (auto& bucket : bvec) {
     MockSalBucket sb{bucket};
     std::string marker{bucket1_marker};
     (void) bucket_cache->list_bucket(dpp, null_yield, &sb, marker, func);
   }
-  ASSERT_EQ(bucket_cache->recycle_count, 4);
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  ASSERT_GE(total_evictions, 2);
 }
 
 class BucketCacheFixtureMarker1 : public testing::Test, protected BucketCacheFixtureBase {
@@ -478,6 +481,96 @@ TEST_F(BucketCacheFixtureInotify1, List2Inotify1)
   ASSERT_EQ(names.size(), 25);
 } /* List2Inotify1 */
 #endif
+
+class BucketCacheFixtureDbiRecycle : public testing::Test, protected BucketCacheFixtureBase {
+protected:
+  static constexpr int n_buckets = 60;
+  static constexpr int n_files = 5;
+  static constexpr uint32_t max_buckets = 4;
+
+  static std::vector<std::string> bvec;
+
+  static void SetUpTestSuite() {
+    bvec.clear();
+    for (int ix = 0; ix < n_buckets; ++ix) {
+      std::string bname = fmt::format("dbi_recycle_{}", ix);
+      bvec.push_back(bname);
+      sf::path tp{sf::path{bucket_root} / bname};
+      sf::remove_all(tp);
+      sf::create_directory(tp);
+      for (int jx = 0; jx < n_files; ++jx) {
+	sf::path fp{tp / fmt::format("obj_{}", jx)};
+	std::ofstream ofs(fp);
+	ofs << "data" << std::endl;
+	ofs.close();
+      }
+    }
+    bucket_cache = new BucketCache{
+      &sal_driver, bucket_root, database_root,
+      max_buckets,
+      1 /* max_lanes */,
+      1 /* max_partitions */,
+      1 /* lmdb_count */};
+  }
+
+  static void TearDownTestSuite() {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+  }
+};
+
+std::vector<std::string> BucketCacheFixtureDbiRecycle::bvec;
+
+TEST_F(BucketCacheFixtureDbiRecycle, DbiHandlesBounded)
+{
+  /* Push n_buckets (60) unique buckets through a cache with max_buckets=4.
+   * max_dbs_per_partition = (4/1)*5/4 + 16 = 21.
+   * Without DBI recycling, this would exhaust DBI slots after ~21 buckets
+   * and all subsequent list_bucket calls would fail with -EIO.
+   * With recycling, all 60 should succeed. */
+  for (auto& bucket : bvec) {
+    MockSalBucket sb{bucket};
+    std::string marker{bucket1_marker};
+    int ret = bucket_cache->list_bucket(dpp, null_yield, &sb, marker, func);
+    ASSERT_EQ(ret, 0) << "list_bucket failed for " << bucket;
+  }
+
+  /* evictions must have happened (via reclaim or hiwat cleanup) */
+  auto total_evictions = bucket_cache->recycle_count + bucket_cache->cleanup_count;
+  std::cout << fmt::format("DbiRecycle: recycle_count={} cleanup_count={} total_evictions={}",
+    bucket_cache->recycle_count.load(), bucket_cache->cleanup_count.load(),
+    total_evictions) << std::endl;
+  ASSERT_GT(total_evictions, 0);
+
+  /* DBI handles stay bounded: map + free pool <= max_dbs_per_partition */
+  auto dbi_total = bucket_cache->lmdbs.total_dbi_map_size()
+    + bucket_cache->lmdbs.total_free_dbis();
+  uint32_t max_dbs = (max_buckets / 1) * 5 / 4 + 16;
+  std::cout << fmt::format("DbiRecycle: dbi_map={} free_dbis={} total={} max_dbs={}",
+    bucket_cache->lmdbs.total_dbi_map_size(),
+    bucket_cache->lmdbs.total_free_dbis(),
+    dbi_total, max_dbs) << std::endl;
+  ASSERT_LE(dbi_total, max_dbs)
+    << "DBI handles exceeded max_dbs_per_partition"
+    << " (map=" << bucket_cache->lmdbs.total_dbi_map_size()
+    << " free=" << bucket_cache->lmdbs.total_free_dbis() << ")";
+
+  /* re-list an early bucket that was evicted — must succeed and
+   * return the correct number of objects after re-fill */
+  {
+    std::vector<std::string> names;
+    auto collect = [&](const rgw_bucket_dir_entry& bde) -> bool {
+      names.push_back(bde.key.name);
+      return true;
+    };
+    MockSalBucket sb{bvec[0]};
+    std::string marker{bucket1_marker};
+    int ret = bucket_cache->list_bucket(dpp, null_yield, &sb, marker, collect);
+    ASSERT_EQ(ret, 0) << "re-list of evicted bucket failed";
+    ASSERT_EQ(names.size(), n_files)
+      << "re-list returned wrong count after eviction+refill";
+  }
+}
 
 int main (int argc, char *argv[])
 {

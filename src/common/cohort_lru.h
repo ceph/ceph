@@ -93,6 +93,8 @@ namespace cohort {
 
       virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
+      virtual void lru_cleanup() {}
+
       virtual ~Object() {}
 
     private:
@@ -208,7 +210,6 @@ namespace cohort {
 
       ~LRU() { delete[] qlane; }
 
-#ifndef NDEBUG
       bool get_last_evict_recycled() const {
 	return last_evict_recycled.load(std::memory_order_relaxed);
       }
@@ -236,7 +237,6 @@ namespace cohort {
 	}
 	return total;
       }
-#endif
 
       bool ref(Object* o, uint32_t flags) {
 	if (o->evicting.test()) {
@@ -314,8 +314,10 @@ namespace cohort {
 	  lane.lock.unlock();
 	}
 	/* delete out-of-line && !LOCKED */
-	if (tdo)
+	if (tdo) {
+	  tdo->lru_cleanup();
 	  delete tdo;
+	}
       } /* unref */
 
       Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
