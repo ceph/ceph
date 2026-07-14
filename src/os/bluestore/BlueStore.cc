@@ -2334,7 +2334,7 @@ void BlueStore::Blob::get_ref(
   // references.  Otherwise one is neither unable to determine required
   // amount of counters in case of per-au tracking nor obtain min_release_size
   // for single counter mode.
-  ceph_assert(get_blob().get_logical_length() != 0);
+  ceph_assert_decode(get_blob().get_logical_length() != 0);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << std::dec << " " << *this << dendl;
 
@@ -4160,7 +4160,7 @@ unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level below.
-  ceph_assert(struct_v == 1 || struct_v == 2);
+  ceph_assert_decode(struct_v == 1 || struct_v == 2);
   denc_varint(num, p);
 
   extent_pos = 0;
@@ -4169,7 +4169,7 @@ unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
     decode_extent(le, struct_v, p, c);
     add_extent(le);
   }
-  ceph_assert(extent_pos == num);
+  ceph_assert_decode(extent_pos == num);
   return num;
 }
 
@@ -4181,7 +4181,7 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
-  ceph_assert(struct_v == 1 || struct_v == 2);
+  ceph_assert_decode(struct_v == 1 || struct_v == 2);
 
   unsigned n;
   denc_varint(n, p);
@@ -4215,7 +4215,7 @@ void BlueStore::ExtentMap::ExtentDecoderFull::consume_blobid(
   if (spanning) {
     le->assign_blob(extent_map.get_spanning_blob(blobid));
   } else {
-    ceph_assert(blobid < blobs.size());
+    ceph_assert_decode(blobid < blobs.size());
     le->assign_blob(blobs[blobid]);
     // we build ref_map dynamically for non-spanning blobs
     le->blob->get_ref(
@@ -20794,7 +20794,7 @@ void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
   auto &blob = b->get_blob();
   if(spanning) {
     dout(20) << __func__ << " " << spanning << " " << b->id << dendl;
-    ceph_assert(b->id >= 0);
+    ceph_assert_decode(b->id >= 0);
     spanning_blobs[b->id] = b;
     ++stats.spanning_blob_count;
   } else {
@@ -20863,7 +20863,7 @@ void BlueStore::ExtentDecoderPartial::consume_blobid(Extent* le,
   dout(20) << __func__ << " " << spanning << " " << blobid << dendl;
   auto &map = spanning ? spanning_blobs : blobs;
   auto it = map.find(blobid);
-  ceph_assert(it != map.end());
+  ceph_assert_decode(it != map.end());
   per_pool_statfs->stored() += le->length;
   if (it->second->get_blob().is_compressed()) {
     per_pool_statfs->compressed_original() += le->length;
