@@ -509,8 +509,8 @@ void bluestore_blob_use_tracker_t::release(uint32_t au_count, uint32_t* ptr) {
 void bluestore_blob_use_tracker_t::init(
   uint32_t full_length, uint32_t _au_size) {
   ceph_assert(!au_size || is_empty()); 
-  ceph_assert(_au_size > 0);
-  ceph_assert(full_length > 0);
+  ceph_assert_decode(_au_size > 0);
+  ceph_assert_decode(full_length > 0);
   clear();  
   uint32_t _num_au = round_up_to(full_length, _au_size) / _au_size;
   au_size = _au_size;
