@@ -28,6 +28,23 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 
+namespace bluestore_decode {
+
+thread_local bool tolerate_failures = false;
+
+[[noreturn]] void assert_fail(const char* assertion, const char* file,
+                              int line, const char* func)
+{
+  if (tolerate_failures) {
+    throw ceph::buffer::malformed_input(
+      std::string("decode assert failure: ") + assertion +
+      " at " + file + ":" + std::to_string(line));
+  }
+  ::ceph::__ceph_assert_fail(assertion, file, line, func);
+}
+
+} // namespace bluestore_decode
+
 //bluestore_stats_t
 
 std::ostream& operator<<(std::ostream& out, const bluestore_stats_t& s)
