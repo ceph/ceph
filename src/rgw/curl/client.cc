@@ -20,7 +20,6 @@
 #include <curl/curl.h>
 
 #include "common/async/service.h"
-#include "common/dout.h"
 
 #if !CURL_AT_LEAST_VERSION(7, 17, 1)
 #error "requires libcurl >= 7.17.1 for CURLOPT_OPENSOCKETFUNCTION"
@@ -165,21 +164,6 @@ static int socket_callback(CURL* easy, curl_socket_t fd, int what,
                            void* user, void* socket);
 static int timer_callback(CURLM* multi, long timeout_ms, void* user);
 
-// route libcurl's own connection trace into the rgw log
-static int debug_callback(CURL*, curl_infotype type, char* data,
-                          size_t size, void*)
-{
-  if (type == CURLINFO_TEXT) {
-    size_t len = size;
-    while (len > 0 && (data[len-1] == '\n' || data[len-1] == '\r')) {
-      --len;
-    }
-    lsubdout(g_ceph_context, rgw, 20) << "curl: "
-        << std::string_view{data, len} << dendl;
-  }
-  return 0;
-}
-
 
 // This implementation uses the 'multi_socket' flavor of the libcurl multi API:
 // https://curl.se/libcurl/c/libcurl-multi.html
@@ -310,19 +294,6 @@ class Client::Impl :
 
   void add_handle(CURL* easy, error_code& ec)
   {
-    // capture libcurl's connection trace when rgw logging is verbose
-    if (g_ceph_context &&
-        g_ceph_context->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      easy_setopt(easy, CURLOPT_VERBOSE, 1L, ec);
-      if (ec) {
-        return;
-      }
-      easy_setopt(easy, CURLOPT_DEBUGFUNCTION, debug_callback, ec);
-      if (ec) {
-        return;
-      }
-    }
-
     // attach socket callbacks to the easy handle
     easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback, ec);
     if (ec) {

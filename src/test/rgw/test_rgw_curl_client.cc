@@ -50,11 +50,22 @@ auto accept_connection(ip::tcp::acceptor& acceptor, size_t keepalive_count)
   }
 }
 
+static int debug_callback(CURL*, curl_infotype type,
+                          char* data, size_t size, void*)
+{
+  if (type == CURLINFO_TEXT) {
+    std::cout.write(data, size);
+  }
+  return 0;
+}
+
 auto perform(Client& client, const char* url)
     -> asio::awaitable<void>
 {
   auto easy = easy_init();
   ::curl_easy_setopt(easy.get(), CURLOPT_URL, url);
+  ::curl_easy_setopt(easy.get(), CURLOPT_VERBOSE, 1L);
+  ::curl_easy_setopt(easy.get(), CURLOPT_DEBUGFUNCTION, debug_callback);
 
   co_await client.async_perform(easy.get(), asio::use_awaitable);
 }
@@ -64,6 +75,8 @@ auto perform(const char* url)
 {
   auto easy = easy_init();
   ::curl_easy_setopt(easy.get(), CURLOPT_URL, url);
+  ::curl_easy_setopt(easy.get(), CURLOPT_VERBOSE, 1L);
+  ::curl_easy_setopt(easy.get(), CURLOPT_DEBUGFUNCTION, debug_callback);
 
   co_await async_perform(co_await asio::this_coro::executor,
                          easy.get(), asio::use_awaitable);
