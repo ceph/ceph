@@ -229,6 +229,10 @@
   With this dashboard no longer relies on `rgw_dns_name`.
 * Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
 
+* NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
+  dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
+  simplifying initial setup and ensuring the pool is created consistently across deployments.
+  
 * MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
   users and orchestration tools to determine a safe set of OSDs within a CRUSH
   bucket to upgrade simultaneously without impacting data availability. To help
