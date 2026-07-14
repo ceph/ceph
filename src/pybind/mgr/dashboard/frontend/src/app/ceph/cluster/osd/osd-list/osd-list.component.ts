@@ -494,7 +494,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   configureFlagsAction() {
-    this.bsModalRef = this.modalService.show(OsdFlagsModalComponent);
+    this.bsModalRef = this.cdsModalService.show(OsdFlagsModalComponent);
   }
 
   configureFlagsIndivAction() {

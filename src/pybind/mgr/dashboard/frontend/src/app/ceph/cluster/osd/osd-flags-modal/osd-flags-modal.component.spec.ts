@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { ModalService } from 'carbon-components-angular';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
@@ -34,7 +34,7 @@ describe('OsdFlagsModalComponent', () => {
       ToastrModule.forRoot()
     ],
     declarations: [OsdFlagsModalComponent],
-    providers: [NgbActiveModal]
+    providers: [ModalService]
   });
 
   beforeEach(() => {
@@ -62,7 +62,6 @@ describe('OsdFlagsModalComponent', () => {
   describe('test submitAction', function () {
     let notificationType: NotificationType;
     let notificationService: NotificationService;
-    let bsModalRef: NgbActiveModal;
 
     beforeEach(() => {
       notificationService = TestBed.inject(NotificationService);
@@ -70,8 +69,7 @@ describe('OsdFlagsModalComponent', () => {
         notificationType = type;
       });
 
-      bsModalRef = TestBed.inject(NgbActiveModal);
-      spyOn(bsModalRef, 'close').and.callThrough();
+      spyOn(component, 'closeModal');
       component.unknownFlags = ['foo'];
     });
 
@@ -83,7 +81,7 @@ describe('OsdFlagsModalComponent', () => {
       expect(req.request.body).toEqual({ flags: ['pause', 'purged_snapdirs', 'foo'] });
 
       expect(notificationType).toBe(NotificationType.success);
-      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+      expect(component.closeModal).toHaveBeenCalledTimes(1);
     });
 
     it('should hide modal if request fails', () => {
@@ -93,7 +91,7 @@ describe('OsdFlagsModalComponent', () => {
       req.flush([], { status: 500, statusText: 'failure' });
 
       expect(notificationService.show).toHaveBeenCalledTimes(0);
-      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+      expect(component.closeModal).toHaveBeenCalledTimes(1);
     });
   });
 });
