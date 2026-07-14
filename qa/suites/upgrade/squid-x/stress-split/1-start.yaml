@@ -159,3 +159,4 @@ second-half-sequence:
           - ceph versions
           - ceph versions | jq -e '.overall | length == 1'
           - ceph versions | jq -e '.overall | keys' | grep $sha1
+          - ceph osd require-osd-release umbrella
