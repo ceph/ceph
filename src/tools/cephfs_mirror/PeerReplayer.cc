@@ -2142,7 +2142,10 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->dump_string("name", (*sync_stat.last_synced_snap).second);
       if (sync_stat.last_sync_duration) {
         f->dump_float("sync_duration", *sync_stat.last_sync_duration);
-        f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+      }
+      if (!sync_stat.last_synced.is_zero()) {
+        // ISO-8601 local time with offset (matches utime_t::localtime)
+        f->dump_string("sync_time_stamp", stringify(sync_stat.last_synced));
       }
       if (sync_stat.last_sync_bytes) {
 	f->dump_unsigned("sync_bytes", *sync_stat.last_sync_bytes);

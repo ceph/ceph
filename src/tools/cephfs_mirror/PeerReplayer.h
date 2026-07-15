@@ -4,8 +4,10 @@
 #ifndef CEPHFS_MIRROR_PEER_REPLAYER_H
 #define CEPHFS_MIRROR_PEER_REPLAYER_H
 
+#include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/Thread.h"
+#include "include/utime.h"
 #include "mds/FSMap.h"
 #include "ServiceDaemon.h"
 #include "Types.h"
@@ -251,7 +253,7 @@ private:
     uint64_t synced_snap_count = 0;
     uint64_t deleted_snap_count = 0;
     uint64_t renamed_snap_count = 0;
-    monotime last_synced = clock::zero();
+    utime_t last_synced;
     boost::optional<double> last_sync_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
     uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
@@ -339,7 +341,7 @@ private:
     std::scoped_lock locker(m_lock);
     _set_last_synced_snap(dir_root, snap_id, snap_name);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
-    sync_stat.last_synced = clock::now();
+    sync_stat.last_synced = ceph_clock_now();
     sync_stat.last_sync_duration = duration;
     sync_stat.last_sync_bytes = sync_stat.sync_bytes;
     ++sync_stat.synced_snap_count;
