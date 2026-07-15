@@ -10786,6 +10786,9 @@ paths:
                 rados_namespace:
                   description: RADOS namespace name
                   type: string
+                rbd_data_pool:
+                  description: RBD data pool name
+                  type: string
                 rbd_image_name:
                   description: RBD image name
                   type: string
