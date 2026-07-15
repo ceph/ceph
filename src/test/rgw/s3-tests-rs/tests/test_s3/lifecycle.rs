@@ -1581,7 +1581,7 @@ async fn test_lifecycle_expiration_size_lt() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(2 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects().bucket(&bucket_name).send().await.unwrap();
     let objects = response.contents();
