@@ -12458,6 +12458,19 @@ bool Server::build_snap_diff(
     }
   } before;
 
+  auto snapflush_pending = [&](CInode *in) -> bool {
+    if (!in->is_head() && !in->client_snap_caps.empty())
+      return true;
+    CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    if (!head)
+      return true;
+    for (const auto& p : head->client_need_snapflush) {
+      if (p.first >= snapid_prev && p.first <= snapid && !p.second.empty())
+	return true;
+    }
+    return false;
+  };
+
   auto rdlock_file_mtime = [&](CInode *in, utime_t &mtime) -> bool {
     if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
       dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
@@ -12566,8 +12579,40 @@ bool Server::build_snap_diff(
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
+	if (!snapflush_pending(in)) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	if (before.dn) {
+	  if (!insert_deleted(before)) {
+	    break;
+	  }
+	  before.reset();
+	}
+	CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+	if (!head) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	utime_t mtime = in->get_inode()->mtime;
+	if (!rdlock_file_mtime(in, mtime))
+	  return false;
+	CInode *in_prev = mdcache->pick_inode_snap(head, snapid_prev);
+	CInode *in_snap = mdcache->pick_inode_snap(head, snapid);
+	if (in_prev->get_inode()->mtime != in_snap->get_inode()->mtime) {
+	  dout(30) << __func__ << " timestamp changed on unchanged span "
+	    << dn->get_name() << " " << dn->first << "/" << dn->last
+	    << " " << in_prev->get_inode()->mtime << " vs. "
+	    << in_snap->get_inode()->mtime << dendl;
+	  if (!add_result_cb(dn, in, true)) {
+	    break;
+	  }
+	  continue;
+	}
+	dout(20) << __func__ << " skipping unchanged after snapflush check "
+	  << dn->get_name() << " " << dn->first << "/" << dn->last << dendl;
 	continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
@@ -12605,19 +12650,16 @@ bool Server::build_snap_diff(
 		       << dendl;
 	      before.reset();
 	    } else {
-          /*If mtime matches, rdlock the filelock which waits for pending snap flush
-           *so that latest mtime is fetched
-           */
-          if (!rdlock_file_mtime(in, mtime))
-            return false;
-          if (mtime == before.mtime) {
-            dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-                 << dn->first << "/" << dn->last
-                 << " " << mtime
-                 << dendl;
-            before.reset();
-            continue;
-          }
+	      if (!rdlock_file_mtime(in, mtime))
+		return false;
+	      if (mtime == before.mtime) {
+		dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+			 << dn->first << "/" << dn->last
+			 << " " << mtime
+			 << dendl;
+		before.reset();
+		continue;
+	      }
 	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
 		       << dn->first << "/" << dn->last
 		       << " " << before.mtime << " vs. " << mtime
