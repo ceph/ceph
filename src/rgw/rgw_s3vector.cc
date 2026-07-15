@@ -2088,28 +2088,11 @@ namespace rgw::s3vector {
     return populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
   }
 
-  struct GetVectorsCtx {
-    const get_vectors_t* configuration;
-    rgw::sal::Driver* driver;
-    const rgw::sal::User* user;
-    const std::string* tenant;
-    DoutPrefixProvider* dpp;
-    get_vectors_reply_t* reply;
-    int result;
-  };
-
-  static void get_vectors_impl(void* user_data) {
-    auto* ctx = static_cast<GetVectorsCtx*>(user_data);
-    auto* dpp = ctx->dpp;
-    auto* driver = ctx->driver;
-    auto* user = ctx->user;
-    const auto& tenant = ctx->tenant;
-    const auto& configuration = *ctx->configuration;
-
+  int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
+    log_configuration(dpp, "GetVectors", configuration);
     auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table_handle) {
-      ctx->result = -EIO;
-      return;
+      return -EIO;
     }
     LanceDBTable* table = table_handle.table;
     LanceDBConnection* conn = table_handle.conn_handle.conn;
@@ -2119,8 +2102,7 @@ namespace rgw::s3vector {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create query for index: " << configuration.index_name << dendl;
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = -EIO;
-      return;
+      return -EIO;
     }
 
     char* error_message;
@@ -2132,29 +2114,46 @@ namespace rgw::s3vector {
         lancedb_query_free(query);
         lancedb_table_free(table);
         lancedb_connection_free(conn);
-        ctx->result = lancedb_error_to_errno(result);
-        return;
+        return lancedb_error_to_errno(result);
       }
     }
 
-    // build where filter for keys
-    std::ostringstream oss;
-    const auto keys_size = configuration.keys.size();
-    for (size_t i = 0; i < keys_size; ++i) {
-      oss << "key = \"" << configuration.keys[i] << "\"";
-      if (i < keys_size - 1) {
-        oss << " OR ";
+    // build datafusion expression: key IN ("k1", "k2", ...)
+    std::vector<LanceDBExpr*> key_exprs(configuration.keys.size());
+    for (size_t i = 0; i < configuration.keys.size(); ++i) {
+      key_exprs[i] = lancedb_expr_literal_string(configuration.keys[i].c_str());
+      if (!key_exprs[i]) {
+        for (size_t j = 0; j < i; ++j) {
+          lancedb_expr_free(key_exprs[j]);
+        }
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create literal expression for key: " << configuration.keys[i] << dendl;
+        lancedb_query_free(query);
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+        return -EINVAL;
       }
     }
-
-    if (const LanceDBError result = lancedb_query_where_filter(query, oss.str().c_str(), &error_message); result != LANCEDB_SUCCESS) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set where filter for query on index: " << configuration.index_name << ". error: " << error_message << dendl;
+    LanceDBExpr* in_expr = lancedb_expr_in_list(
+        lancedb_expr_column(key_field),
+        key_exprs.data(),
+        key_exprs.size(),
+        false,
+        &error_message);
+    if (!in_expr) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to build filter expression for index: " << configuration.index_name << ". error: " << error_message << dendl;
       lancedb_free_string(error_message);
       lancedb_query_free(query);
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = lancedb_error_to_errno(result);
-      return;
+      return -EINVAL;
+    }
+    if (const LanceDBError result = lancedb_query_df_filter(query, in_expr, &error_message); result != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set filter expression for query on index: " << configuration.index_name << ". error: " << error_message << dendl;
+      lancedb_free_string(error_message);
+      lancedb_query_free(query);
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return lancedb_error_to_errno(result);
     }
 
     LanceDBQueryResult* query_result = lancedb_query_execute(query);
@@ -2163,20 +2162,13 @@ namespace rgw::s3vector {
       lancedb_query_free(query);
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = -EIO;
-      return;
+      return -EIO;
     }
 
-    ctx->result = populate_vectors_from_query(dpp, query_result, ctx->reply->vectors, configuration.index_name, configuration.return_data, false, false, configuration.return_metadata);
+    const auto result = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, configuration.return_data, false, false, configuration.return_metadata);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
-  }
-
-  int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
-    log_configuration(dpp, "GetVectors", configuration);
-    GetVectorsCtx ctx{&configuration, driver, user, tenant, dpp, &reply, 0};
-    lancedb_run_on_stack(get_vectors_impl, &ctx, 256*1024, 1024*1024);
-    return ctx.result;
+    return result;
   }
 
   // list vectors
