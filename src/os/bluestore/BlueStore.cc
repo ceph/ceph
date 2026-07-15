@@ -17815,7 +17815,7 @@ void BlueStore::_do_write_data(
 	_do_write_big(txc, c, o, write_offset, segment_end - write_offset, p, wctx);
 	write_offset = segment_end;
       }
-    } else {
+    } else if (middle_length > 0) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
     }
 
