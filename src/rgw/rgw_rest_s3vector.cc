@@ -191,9 +191,18 @@ private:
     rgw::sal::VectorBucket::CreateParams createparams;
     createparams.owner = s->user->get_id();
     createparams.zonegroup_id = zonegroup.id;
-    // vector buckets are indexless
-    createparams.index_type = rgw::BucketIndexType::Indexless;
     createparams.placement_rule.storage_class = s->info.storage_class;
+    op_ret = select_bucket_placement(this, zonegroup, s->user->get_info(),
+                                     createparams.placement_rule);
+    if (op_ret < 0) {
+      return;
+    }
+    createparams.zone_placement = rgw::find_zone_placement(
+        this, s->penv.site->get_zone_params(), createparams.placement_rule);
+    if (!createparams.zone_placement) {
+      op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
+      return;
+    }
     if (!driver->is_meta_master()) {
       // apply bucket creation on the master zone first
       JSONParser jp;

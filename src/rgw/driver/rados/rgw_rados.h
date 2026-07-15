@@ -673,9 +673,12 @@ public:
                     const rgw_owner& owner,
                     const std::string& zonegroup_id,
                     const rgw_placement_rule& placement_rule,
+                    const RGWZonePlacementInfo* zone_placement,
                     const std::map<std::string, bufferlist>& attrs,
                     const std::optional<RGWQuotaInfo>& quota,
                     std::optional<ceph::real_time> creation_time,
+                    std::optional<rgw::BucketIndexType> index_type,
+                    std::optional<uint32_t> index_shards,
                     obj_version* pep_objv,
                     RGWBucketInfo& info);
 

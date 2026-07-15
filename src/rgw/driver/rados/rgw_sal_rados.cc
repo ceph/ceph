@@ -746,8 +746,9 @@ int RadosVectorBucket::create(const DoutPrefixProvider* dpp,
 
   int ret = store->getRados()->create_vector_bucket(
       dpp, y, key, params.owner, params.zonegroup_id,
-      params.placement_rule, params.attrs,
-      params.quota, params.creation_time, &bucket_version, info);
+      params.placement_rule, params.zone_placement, params.attrs,
+      params.quota, params.creation_time, params.index_type,
+      params.index_shards, &bucket_version, info);
 
   bool existed = false;
   if (ret == -EEXIST) {
@@ -994,6 +995,22 @@ int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time
 int RadosVectorBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
   return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs, store->ctl()->vector_bucket);
+}
+
+int RadosVectorBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                        RGWBucketEnt* ent)
+{
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  return store->ctl()->vector_bucket->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
+}
+
+int RadosVectorBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+{
+  for(auto& it : new_attrs) {
+    attrs[it.first] = it.second;
+  }
+  return store->ctl()->vector_bucket->set_bucket_instance_attrs(get_info(),
+                  attrs, &get_info().objv_tracker, y, dpp);
 }
 
 int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,

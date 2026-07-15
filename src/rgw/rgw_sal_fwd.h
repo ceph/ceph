@@ -40,6 +40,7 @@ using Attrs = std::map<std::string, ceph::buffer::list>;
   class User;
   struct UserList;
   class Bucket;
+  using VectorBucket = Bucket;
   struct BucketList;
   class Object;
   class MultipartUpload;
