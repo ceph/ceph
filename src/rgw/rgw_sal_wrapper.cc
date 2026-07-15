@@ -233,9 +233,11 @@ int rgw_put_object_conditional( RGWSalDriver* driver_ptr, const RGWDoutPrefix* d
   return ret;
 }
 
-// TODO: callers are expected to do ranged reads (offset/length) for large
-// objects. Streaming reads via callback-based Rust FFI could be explored
-// in a follow-up.
+// Callers are expected to issue ranged reads (via offset/length) for large
+// objects that may not fit in a single buffer. The Rust ObjectStore trait
+// already supports this through its get_range() method.
+// TODO: explore streaming reads via callback-based Rust FFI as an
+// alternative for very large objects.
 int rgw_get_object( RGWSalDriver* driver_ptr, const RGWDoutPrefix* dpp_ptr,
       RGWYieldContext* yield_ctx, const RGWBucket* bucket_id, const RGWObject* obj_id,
       uint64_t offset, uint64_t length, RGWBuffer* buffer) {
