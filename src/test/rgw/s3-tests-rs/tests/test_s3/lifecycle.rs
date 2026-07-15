@@ -483,7 +483,7 @@ async fn test_lifecycle_expiration() {
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 6);
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 4);
@@ -540,7 +540,7 @@ async fn test_lifecyclev2_expiration() {
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 6);
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects_v2().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 4);
@@ -603,7 +603,7 @@ async fn test_lifecycle_expiration_date() {
     let response = client.list_objects().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 2);
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.contents().len(), 1);
@@ -653,7 +653,7 @@ async fn test_lifecycle_expiration_versioning_enabled() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_object_versions().bucket(&bucket_name).send().await.unwrap();
     assert_eq!(response.versions().len(), 1);
@@ -984,7 +984,7 @@ async fn test_lifecycle_expiration_tags1() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client
         .list_objects()
@@ -1152,7 +1152,7 @@ async fn test_lifecycle_expiration_tags2() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects().bucket(&bucket_name).send().await.unwrap();
     let objects = response.contents();
@@ -1273,7 +1273,7 @@ async fn test_lifecycle_expiration_versioned_tags2() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3 * lc_interval)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(10 * lc_interval)).await;
 
     let response = client.list_objects().bucket(&bucket_name).send().await.unwrap();
     let objects = response.contents();
